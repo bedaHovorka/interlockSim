@@ -96,6 +96,18 @@ object StationTopologySerializer {
 	private const val MAX_ROUTES_PER_PAIR = 16
 
 	/**
+	 * Token budget of the "Routes" section, estimated with [PromptTokenEstimate] (Issue #1155).
+	 *
+	 * The route list is path context only — every route request the model makes is copied from a
+	 * NEXT SECTION line of the cycle message — yet it is the one section that grows with the station:
+	 * unbounded, Praha hlavní nádraží's 216 routes cost about 28,700 Qwen2.5 tokens, almost twice the
+	 * whole 16,384-token context window ([cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig.contextWindowTokens]),
+	 * and Ollama trims an over-long prompt silently instead of rejecting it. vyhybna (4 routes) and
+	 * Červený Újezd (32 routes) stay far below this budget and render every route, unchanged.
+	 */
+	internal const val MAX_ROUTE_SECTION_TOKENS = 3_000
+
+	/**
 	 * Stand-in for the train-name argument in the worked examples.
 	 *
 	 * Deliberately shaped so it cannot be mistaken for, or copied as, a real train id: it is
@@ -167,7 +179,9 @@ object StationTopologySerializer {
 	 * `vyhybna.xml` where Block IDs are literally `"k" + <InOut name>`. Three changes address this
 	 * directly, rather than relying solely on the general instruction in the system prompt:
 	 * 1. The anti-hallucination warning is repeated here, at the point of use, naming the specific
-	 *    confusable pattern instead of only appearing once, upstream, in the system prompt.
+	 *    confusable pattern instead of only appearing once, upstream, in the system prompt. The pair
+	 *    it names is this network's own ([confusableBlockExample]); until Issue #1155 it was
+	 *    vyhybna's `"kA"` vs `"A"` on every station.
 	 * 2. Each name in the InOuts/Signals/Blocks lists is quoted ([joinQuoted]) so the model has an
 	 *    unambiguous boundary for "copy this exact string," instead of relying on comma-splitting.
 	 * 3. A worked example using this network's own (and specifically confusable, if any) names is
@@ -191,11 +205,23 @@ object StationTopologySerializer {
 	fun toPromptText(topology: StationTopology): String {
 		val sb = StringBuilder()
 		sb.append("=== STATION TOPOLOGY (static) ===\n")
-		sb.append(
-			"Copy names character-for-character from the lists below. A Block ID that looks " +
-				"similar to an InOut name (e.g. \"kA\" vs InOut \"A\") is still NOT a valid " +
-				"request_route argument.\n"
-		)
+		sb.append("Copy names character-for-character from the lists below. A Block ID that looks ")
+		val confusable =
+			confusableBlockExample(
+				inOuts = topology.inOuts,
+				blocks = topology.blocks.map { it.name },
+				endpointNames = (topology.inOuts + topology.signals.map { it.name }).toSet()
+			)
+		sb.append("similar to an InOut name")
+		if (confusable?.inOut != null) {
+			sb
+				.append(" (e.g. \"")
+				.append(confusable.block)
+				.append("\" vs InOut \"")
+				.append(confusable.inOut)
+				.append("\")")
+		}
+		sb.append(" is still NOT a valid request_route argument.\n")
 		sb.append("Valid request_route endpoint names — BOTH lists below are accepted:\n")
 		sb.append("  InOuts (entry/exit): ").append(joinQuoted(topology.inOuts)).append('\n')
 		sb.append("  Signals (section boundaries): ").append(joinQuoted(topology.signals.map { it.name })).append('\n')
@@ -215,15 +241,7 @@ object StationTopologySerializer {
 		if (topology.routes.isEmpty()) {
 			sb.append(" none")
 		} else {
-			for (route in topology.routes) {
-				sb
-					.append("\n  ")
-					.append(route.from)
-					.append("->")
-					.append(route.to)
-					.append(": ")
-					.append(joinOrNone(route.blocks.map { it.name }))
-			}
+			appendRoutesWithinBudget(sb, topology.routes)
 		}
 		appendWorkedExample(sb, topology)
 		return sb.toString()
@@ -267,7 +285,10 @@ object StationTopologySerializer {
 			appendEntryRouteExample(sb, exampleFrom, exampleTo, entryTarget)
 		}
 		appendSectionHopExample(sb, topology)
-		val exampleWrongBlock = topology.blocks.firstOrNull { it.name != exampleFrom && it.name != exampleTo }
+		// Never a name that is also a valid endpoint: on Červený Újezd a block next to an unnamed
+		// switch takes its signal's name, and calling that a Block ID contradicted the Signals list.
+		val endpointNames = topology.inOuts.toSet() + topology.signals.map { it.name }
+		val exampleWrongBlock = topology.blocks.firstOrNull { it.name !in endpointNames }
 		if (exampleWrongBlock != null) {
 			sb
 				.append(" Do NOT pass \"")
@@ -421,6 +442,93 @@ object StationTopologySerializer {
 			is DynamicTrackBlock -> BlockIdentity.stableBlockId(block)
 			else -> block.name?.takeIf { it.isNotBlank() } ?: "unknown"
 		}
+
+	/**
+	 * A Block ID to warn about, paired with the InOut name it is easiest to confuse with (Issue #1155).
+	 *
+	 * @property block A name from the Blocks list that is not itself a valid endpoint name.
+	 * @property inOut The InOut name [block] resembles, or `null` when no block resembles one.
+	 */
+	internal data class ConfusableBlock(
+		val block: String,
+		val inOut: String?
+	)
+
+	/**
+	 * Picks the Block ID the anti-hallucination warnings name, from this network's own lists — the
+	 * warnings used to carry vyhybna's literal `"kA"` (Issue #1155).
+	 *
+	 * A block whose name ends with an InOut name is the confusable pattern: `Station` names every
+	 * entry/exit block `k` + InOut name (`kA` for InOut `A`, `kN-Bypass` for `N-Bypass`). The pair with
+	 * the fewest extra characters wins, ties broken by InOut name and then block name, so vyhybna still
+	 * renders `"kA"` vs InOut `"A"`. A block that is also a valid endpoint name (on Červený Újezd a
+	 * block next to an unnamed switch takes its signal's name) is never offered as the wrong example.
+	 * Without any resembling block the first remaining block is returned with no InOut; without any
+	 * block at all the result is `null`.
+	 */
+	internal fun confusableBlockExample(
+		inOuts: Collection<String>,
+		blocks: Collection<String>,
+		endpointNames: Set<String>
+	): ConfusableBlock? {
+		val candidates = blocks.filter { it !in endpointNames }.distinct().sorted()
+		val pair =
+			inOuts
+				.distinct()
+				.sorted()
+				.flatMap { inOut ->
+					candidates
+						.filter { it != inOut && it.endsWith(inOut) }
+						.map { ConfusableBlock(it, inOut) }
+				}.minByOrNull { it.block.length - requireNotNull(it.inOut).length }
+		return pair ?: candidates.firstOrNull()?.let { ConfusableBlock(it, null) }
+	}
+
+	/**
+	 * Appends the route lines, bounded by [MAX_ROUTE_SECTION_TOKENS] (Issue #1155).
+	 *
+	 * When every route fits, the lines are appended in their original order, byte for byte as before
+	 * the budget existed. Otherwise every ordered InOut pair gets its first route before any pair gets
+	 * its second (a stable sort on the route's index within its pair), lines are appended while they
+	 * fit, and one closing line states how many routes were left out and where the requests come from.
+	 */
+	private fun appendRoutesWithinBudget(
+		sb: StringBuilder,
+		routes: List<RouteDescriptor>
+	) {
+		val lines = routes.map { routeLine(it) }
+		if (PromptTokenEstimate.of(lines.joinToString("")) <= MAX_ROUTE_SECTION_TOKENS) {
+			lines.forEach { sb.append(it) }
+			return
+		}
+		val rankInPair = mutableMapOf<Pair<String, String>, Int>()
+		val ranked =
+			routes
+				.map { route ->
+					val key = route.from to route.to
+					val rank = rankInPair.getOrDefault(key, 0)
+					rankInPair[key] = rank + 1
+					rank to routeLine(route)
+				}.sortedBy { it.first }
+				.map { it.second }
+		var spent = 0
+		var shown = 0
+		for (line in ranked) {
+			val cost = PromptTokenEstimate.of(line)
+			if (spent + cost > MAX_ROUTE_SECTION_TOKENS) break
+			sb.append(line)
+			spent += cost
+			shown++
+		}
+		sb
+			.append("\n  (")
+			.append(routes.size - shown)
+			.append(" more routes not shown, to keep this prompt within its token budget. Every route ")
+			.append("request a train needs is named on its NEXT SECTION line in the cycle message.)")
+	}
+
+	private fun routeLine(route: RouteDescriptor): String =
+		"\n  " + route.from + "->" + route.to + ": " + joinOrNone(route.blocks.map { it.name })
 
 	private fun joinOrNone(items: List<String>): String = if (items.isEmpty()) "none" else items.joinToString(", ")
 

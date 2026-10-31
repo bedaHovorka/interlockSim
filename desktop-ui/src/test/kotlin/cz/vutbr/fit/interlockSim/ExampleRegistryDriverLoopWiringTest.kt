@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createExampleContext
@@ -107,6 +108,16 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 		checkNotNull(loop.controlStepListener) { "no ControlStepListener was wired" }.onControlStep()
 
 		assertThat(signal.signalCount).isGreaterThanOrEqualTo(before + 1)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("the loop's admission cap is declared in scope for the agent's prompt (#1155)")
+	fun stationCapacityIsDeclaredFromTheLoop() {
+		val context = createShuntingLoopAIContext()
+		val loop = context.mainProcess as ShuntingLoop
+
+		assertThat(context.scope.getOrNull<StationCapacity>()?.value).isEqualTo(loop.stationCapacity)
 	}
 
 	@Test
