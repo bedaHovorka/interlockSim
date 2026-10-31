@@ -34,6 +34,13 @@ name stays `cerveny_ujezd` everywhere: the file `cerveny_ujezd.xml`, `NetworkRes
   "identical exit order" is compared as generation ordinals (first, second, third generated train).
 - **The seed is a generator seed only.** It fixes arrivals and the InOut pairs. The dispatcher is
   deterministic by construction, so the exit order is a function of the seed.
+- **Trains left by the wrong exit (2026-10-31, Issue #1278).** With two exits per side the
+  nearest-exit rule of `ReservationTargetPolicy` ignored the timetable's `out`, and `Train` reported
+  `ends in wrong out`: 4 of the first 7 journeys of the first GUI run, 2 of the 3 seeded trains of
+  `CervenyUjezdRunTest`. The interlocking stayed consistent; it was a policy mismatch. The policy now
+  prefers the timetable's exit when it is an available candidate, which leaves 1 of 3 (the own exit
+  was blocked by another train's route at the moment of the pick). Detail and the open part:
+  [SP5 — D2 Destination awareness](SP5-target-selection-path.md#d2--destination-awareness).
 
 ## Railway conflicts the scenario exposes
 

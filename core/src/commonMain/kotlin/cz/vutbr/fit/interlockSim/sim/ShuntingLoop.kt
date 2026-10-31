@@ -463,7 +463,8 @@ class ShuntingLoop(
 	 * [to] with its availability ([ReservationTargetQuery.findReservationTargetCandidates]) — the
 	 * read-only twin of the pre-#729 `reservePathToAnyNextSemaphore(to)` call; the
 	 * [Dispatcher] chooses among them (Issue #970), and that list is the only target-selection
-	 * input it gets (Issue #1152).
+	 * input it gets (Issue #1152). [BlockInputObservation.destinationName] carries the owning
+	 * train's timetable exit next to it (Issue #1278).
 	 */
 	private fun toBlockInputObservation(
 		block: DynamicTrackBlock,
@@ -503,6 +504,13 @@ class ShuntingLoop(
 				awaitingRouteExtension,
 				ownerTrainId
 			)
+		// Issue #1278: the owner's timetable exit, resolved only where candidates were searched for.
+		val destinationName =
+			if (candidateTargets.isEmpty()) {
+				null
+			} else {
+				approwedTrains.firstOrNull { it.name == ownerTrainId }?.timetableDestinationName
+			}
 		return BlockInputObservation(
 			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
 			towardSemaphoreName = to.name,
@@ -513,7 +521,8 @@ class ShuntingLoop(
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
 			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
 			awaitingRouteExtension = awaitingRouteExtension,
-			heldRouteEndName = heldRouteEndName
+			heldRouteEndName = heldRouteEndName,
+			destinationName = destinationName
 		)
 	}
 
