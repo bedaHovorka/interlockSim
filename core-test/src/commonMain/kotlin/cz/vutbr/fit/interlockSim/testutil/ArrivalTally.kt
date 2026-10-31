@@ -37,15 +37,26 @@ class ArrivalTally {
 		val TRAIN_NUMBER_REGEX = Regex("""Train #(\d+)""")
 	}
 
-	private val numbers = mutableSetOf<Int>()
+	// LinkedHashSet: insertion-ordered set — the iteration order IS the first-sighting order,
+	// so the tally carries one collection for both the distinct numbers and their order.
+	private val numbers = LinkedHashSet<Int>()
 
 	/** Number of arrival messages recorded so far. */
 	var count: Int = 0
 		private set
 
-	/** Train numbers that completed at least one journey. */
+	/** Train numbers that completed at least one journey, in no guaranteed order. */
 	val arrivedTrainNumbers: Set<Int>
 		get() = numbers
+
+	/**
+	 * The numbers of [arrivedTrainNumbers] in the order their reports were FIRST seen — emission
+	 * order, since `record` is called from a report listener on the sim thread. Used as one run's
+	 * exit order (the Cerveny Ujezd determinism test). A repeated report freezes the order and
+	 * grows [count] only.
+	 */
+	val arrivalOrder: List<Int>
+		get() = numbers.toList()
 
 	/** Records [message] if it is a completed-journey report; every other message is ignored. */
 	fun record(message: String) {

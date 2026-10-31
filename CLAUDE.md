@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**Last Updated:** 2026-08-29
+**Last Updated:** 2026-10-29
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this
 repository. It holds repo-wide rules only; module-specific guidance lives in the per-subproject
@@ -62,7 +62,7 @@ and rules. Claude Code loads them automatically when working with files in that 
 - [core/CLAUDE.md](core/CLAUDE.md) — KMP domain model, simulation engine, XML;
   **sim/ package rules**; purity gate; known issues
 - [core-test/CLAUDE.md](core-test/CLAUDE.md) — shared test-fixture library
-  (fixtures in `commonMain`/`jvmMain`; 25 XML fixture networks)
+  (fixtures in `commonMain`/`jvmMain`; 26 XML fixture networks)
 - [dispatcher-agent/CLAUDE.md](dispatcher-agent/CLAUDE.md) — Goal 10 LLM dispatcher,
   Ollama setup, **manual-only `aiSweep`**
 - [desktop-ui/CLAUDE.md](desktop-ui/CLAUDE.md) — Swing GUI, entry point and its six
@@ -180,6 +180,9 @@ JUnit 5 with AssertK assertions. Tag vocabulary:
 - `heavy-test` - manual-only stress tests; run with `heavyTest` (policy below)
 - `ollama-test` - needs a live Ollama; `:dispatcher-agent` only (see
   [its guide](dispatcher-agent/CLAUDE.md))
+- `full-simulation` - marker only (no task filters on it; `:core` `SimulationExecutionTest`)
+- `cap-fixture` - `:core-test` only; fixtures of `RepeatedTestCapExtensionTest`, excluded from
+  its `jvmTest` task
 
 The default pre-push gate is `test` + `integrationTest`.
 
@@ -199,17 +202,9 @@ The default pre-push gate is `test` + `integrationTest`.
 ./gradlew :dispatcher-agent:heavyTest
 ```
 
-Repetition caps follow the tag: a `heavy-test` test may repeat up to **1000** times, every
-other test up to **50** times per test method. JUnit has no such setting of its own;
-`:core-test`'s `RepeatedTestCapExtension` fails any `@RepeatedTest(n)` above its cap before
-the body runs. The cap values are configurable through gradle.properties
-(`testRepeatMaxCount` / `heavyTestRepeatMaxCount`); `DEFAULT_CAP`/`HEAVY_CAP` are only the
-in-code fallbacks. The root `build.gradle.kts` passes both values to every `Test` task and
-turns on `junit.jupiter.extensions.autodetection.enabled`, so the extension runs in all
-modules; `RepeatedTestCapExtensionTest` in `:core-test` proves the wiring, and each JVM
-module keeps a `RepeatedTestCapWiringTest` tripwire that fails if its tests would run
-uncapped. Every JVM unit-test task (including `:core-test:jvmTest`) also calls
-`excludeTags("heavy-test")`, so a heavy test cannot regress into CI.
+Repetition caps follow the tag (`heavy-test` up to **1000** repeats, everything else **50**);
+`:core-test`'s `RepeatedTestCapExtension` enforces them — see
+[core-test/CLAUDE.md](core-test/CLAUDE.md).
 
 The manual-only `aiSweep` dispatcher sweep belongs to the same category — see
 [dispatcher-agent/CLAUDE.md](dispatcher-agent/CLAUDE.md).
@@ -255,6 +250,9 @@ Dual-level detekt:
 
 SonarQube/SonarCloud analysis and JaCoCo configuration:
 [docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md) under "Code Quality Enforcement".
+
+Doc rule: reference code in `docs/**/*.md` by symbol, never by `Name.kt:123` line anchors; the
+`:core:docLineAnchorCheck` tripwire (`DocLineAnchorTripwireTest`) fails on them.
 
 The clean-code trinity: **ktlint** (format), **detekt** (code smells), **SonarCloud**
 (bugs, coverage, duplication). All three must pass before merge.

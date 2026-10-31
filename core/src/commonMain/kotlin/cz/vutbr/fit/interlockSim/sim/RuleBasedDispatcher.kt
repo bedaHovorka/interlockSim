@@ -30,7 +30,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    among the next separators one section ahead that the shell reports with their
  *    availability ([BlockInputObservation.candidateTargets]), through
  *    [ReservationTargetPolicy] (Issue #970) — destination-agnostic; see
- *    [BlockInputObservation.toSeparatorName] for the compatibility projection of that pick.
+ *    [BlockInputObservation.candidateTargets], the dispatcher's only target-selection input
+ *    (Issue #1152). A train awaiting a route extension is never offered the route it already
+ *    holds: when the pick is [BlockInputObservation.heldRouteEndName], no reservation is
+ *    requested, because the re-grant would only re-clear the signal the reservation expiry has
+ *    just put back to STOP (Issue #1244).
  *
  * The shell ([ShuntingLoop]) calls [decide] once per tick with a single
  * [DispatchObservation] whose fields are all populated together (SP0.11,
@@ -93,7 +97,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @param maxConcurrentTrains Maximum number of simultaneously approved trains.
  *   Defaults to [DEFAULT_MAX_CONCURRENT_TRAINS] which matches the physical capacity
- *   of the `vyhybna.xml` shunting loop (2 parallel tracks).
+ *   of the `vyhybna.xml` shunting loop (2 parallel tracks). [wireSynchronousDispatcher] passes
+ *   [ShuntingLoop.stationCapacity] instead, so other stations get their own track count
+ *   (Issue #1162).
  *
  * @see Dispatcher
  * @see ShuntingLoop
@@ -182,7 +188,8 @@ class RuleBasedDispatcher(
 	 *   [BlockInputObservation.candidateTargets], and that separator has not already been
 	 *   claimed this tick; `null` when the state requires no action (FREE, or occupied/reserved
 	 *   but not eligible toward this input, or already extended, or no available candidate one
-	 *   section ahead, or the chosen separator was already claimed by an earlier input this tick).
+	 *   section ahead, or an awaiting train's pick is the end of the route it already holds
+	 *   (Issue #1244), or the chosen separator was already claimed by an earlier input this tick).
 	 */
 	private fun checkInput(
 		input: BlockInputObservation,
@@ -222,20 +229,27 @@ class RuleBasedDispatcher(
 
 	/**
 	 * Shared tail of the OCCUPIED/RESERVED [checkInput] branches: chooses the target among
-	 * [BlockInputObservation.candidateTargets] through [ReservationTargetPolicy] (Issue #970) and
-	 * emits a [DispatchDecision.ReservePath] toward it, unless no candidate is available or the
-	 * chosen separator was already claimed by an earlier input this tick (see [checkAllInputs]).
-	 * The [BlockInputObservation.toSeparatorName] projection is never read here.
+	 * [BlockInputObservation.candidateTargets] through [chosenTargetName] (Issue #970) and emits
+	 * a [DispatchDecision.ReservePath] toward it, unless no candidate is available or the chosen
+	 * separator was already claimed by an earlier input this tick (see [checkAllInputs]).
+	 * [BlockInputObservation.candidateTargets] is the only target input read here.
 	 */
 	private fun reserveOrDefer(
 		input: BlockInputObservation,
 		claimedSeparators: MutableSet<String>
 	): DispatchDecision.ReservePath? {
-		val target = ReservationTargetPolicy.pick(input.candidateTargets)?.name
+		val target = input.chosenTargetName()
 		if (target == null) {
 			logger.debug {
 				"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +
 					"deferring reservation"
+			}
+			return null
+		}
+		if (input.awaitingRouteExtension && target == input.heldRouteEndName) {
+			logger.debug {
+				"Train ${input.ownerTrainId} stands at ${input.towardSemaphoreName} awaiting an extension, but its " +
+					"route already ends at $target; not re-requesting the route it holds (Issue #1244)"
 			}
 			return null
 		}

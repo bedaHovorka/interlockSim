@@ -12,6 +12,8 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.testutil.inOutCandidate
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidate
 import kotlin.test.Test
 
 /**
@@ -24,42 +26,37 @@ import kotlin.test.Test
  * @since Issue #970
  */
 class ReservationTargetPolicyTest {
-	private fun inOut(
-		name: String,
-		available: Boolean
-	) = CandidateTarget(name, SeparatorKind.IN_OUT, available)
-
-	private fun semaphore(
-		name: String,
-		available: Boolean
-	) = CandidateTarget(name, SeparatorKind.SEMAPHORE, available)
-
 	@Test
 	fun `picks the first available candidate`() {
-		val candidates = listOf(semaphore("doB1", true), semaphore("doB2", true))
+		val candidates = listOf(semaphoreCandidate("doB1", true), semaphoreCandidate("doB2", true))
 
-		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(semaphore("doB1", true))
+		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(semaphoreCandidate("doB1", true))
 	}
 
 	@Test
 	fun `skips an unavailable prefix`() {
-		val candidates = listOf(semaphore("doB1", false), semaphore("doB2", false), semaphore("doB3", true))
+		val candidates =
+			listOf(
+				semaphoreCandidate("doB1", false),
+				semaphoreCandidate("doB2", false),
+				semaphoreCandidate("doB3", true)
+			)
 
-		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(semaphore("doB3", true))
+		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(semaphoreCandidate("doB3", true))
 	}
 
 	@Test
 	fun `an InOut listed after an available semaphore wins`() {
-		val candidates = listOf(semaphore("zB", true), inOut("B", true))
+		val candidates = listOf(semaphoreCandidate("zB", true), inOutCandidate("B", true))
 
-		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(inOut("B", true))
+		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(inOutCandidate("B", true))
 	}
 
 	@Test
 	fun `an unavailable InOut does not shadow an available semaphore`() {
-		val candidates = listOf(semaphore("zB", true), inOut("B", false))
+		val candidates = listOf(semaphoreCandidate("zB", true), inOutCandidate("B", false))
 
-		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(semaphore("zB", true))
+		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(semaphoreCandidate("zB", true))
 	}
 
 	@Test
@@ -69,22 +66,32 @@ class ReservationTargetPolicyTest {
 
 	@Test
 	fun `all candidates unavailable gives null`() {
-		val candidates = listOf(inOut("A", false), semaphore("doB1", false), semaphore("doB2", false))
+		val candidates =
+			listOf(
+				inOutCandidate("A", false),
+				semaphoreCandidate("doB1", false),
+				semaphoreCandidate("doB2", false)
+			)
 
 		assertThat(ReservationTargetPolicy.pick(candidates)).isNull()
 	}
 
 	@Test
 	fun `candidates of one kind keep their search order`() {
-		val candidates = listOf(semaphore("doB2", false), semaphore("doB1", true), semaphore("doB3", true))
+		val candidates =
+			listOf(
+				semaphoreCandidate("doB2", false),
+				semaphoreCandidate("doB1", true),
+				semaphoreCandidate("doB3", true)
+			)
 
-		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(semaphore("doB1", true))
+		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(semaphoreCandidate("doB1", true))
 	}
 
 	@Test
 	fun `InOuts keep their search order among themselves`() {
-		val candidates = listOf(semaphore("zB", true), inOut("B2", true), inOut("B1", true))
+		val candidates = listOf(semaphoreCandidate("zB", true), inOutCandidate("B2", true), inOutCandidate("B1", true))
 
-		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(inOut("B2", true))
+		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(inOutCandidate("B2", true))
 	}
 }

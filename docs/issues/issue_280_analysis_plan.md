@@ -2,7 +2,9 @@
 
 **Issue:** https://github.com/bedaHovorka/interlockSim/issues/280
 **Date:** 2026-01-24
-**Status:** Planning Phase (No Implementation Yet)
+**Status:** Executed and closed — the fix landed in `b6814546` (#286) and issue #280 was closed on 2026-01-25.
+This page is history and is not maintained; it was moved here from `docs/ISSUE_280_ANALYSIS_PLAN.md` on 2026-10-25.
+The "AWAITING APPROVAL" status at the end of the page is the state of 2026-01-24.
 
 ## Team Assignment
 
@@ -20,7 +22,7 @@ After fixing train deadlock #275 (path reservation conflict), a NEW deadlock app
                    ↑ acceleration is ZERO!                               ↑ distance to semaphore is ZERO!
 ```
 
-**Root Cause Hypothesis:** `distanceToSemaphore()` returns 0, causing motor to stop accelerating (Train.kt:542).
+**Root Cause Hypothesis:** `distanceToSemaphore()` returns 0, causing motor to stop accelerating (then `Train.Motor.derivatives`; `Engine.derivatives` since `96abea8e`, #1059).
 
 ## Timeline and Versions
 
@@ -81,10 +83,10 @@ This allows:
 3. **Analyze pathToNextSemaphore Implementation** (Task #5)
    - File: `src/main/kotlin/cz/vutbr/fit/interlockSim/context/DefaultSimulationContext.kt`
    - Check if wrapper identity changes affect path retrieval
-   - Verify semaphore cache (ShuntingLoop.kt:63) correctness
+   - Verify semaphore cache (the `semaphoreCache` field of `ShuntingLoop`, removed by the #280 fix `b6814546`) correctness
 
 4. **Verify Path Consumption Logic** (Task #3)
-   - Why `removeFirst()` called twice? (Train.kt:341-344)
+   - Why `removeFirst()` called twice? (`Train`, the `pathToSemaphore?.removeFirst()` calls)
    - Is path being consumed too quickly?
    - Are path elements matching separator positions correctly?
 

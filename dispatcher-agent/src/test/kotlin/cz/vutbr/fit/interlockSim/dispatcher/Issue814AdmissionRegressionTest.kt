@@ -425,7 +425,7 @@ class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 	 * idempotency guard specifically. That distinction was established empirically, not assumed:
 	 * disabling the guard in `DefaultPathReservationService` leaves every test below green, while
 	 * it immediately fails
-	 * `PathReservationServiceTest.RedundantReservationIdempotency` — which is where the guard's
+	 * `PathReservationRedundantReservationIdempotencyTest` — which is where the guard's
 	 * own contract (PathInfo must not be re-merged) is directly locked down.
 	 *
 	 * So what these tests add is the outcome #814 actually asks about, which no unit test can
@@ -435,7 +435,7 @@ class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 	 * change that stopped the replay from happening would fail loudly rather than turn these into
 	 * vacuous passes.
 	 *
-	 * @see cz.vutbr.fit.interlockSim.context.navigation.PathReservationServiceTest for the guard's
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.PathReservationRedundantReservationIdempotencyTest for the guard's
 	 *   own unit-level regression test
 	 */
 	@Nested

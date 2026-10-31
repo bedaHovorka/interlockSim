@@ -25,8 +25,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  * [nextBlock] must bound [semaphore]; for a non-adjacent pair `DefaultSimulationContext.getSegment`
  * throws instead of returning `null`.
  *
- * Shared by the reservation service (G4/G8 and the intermediate-signal rule of Issue #566) and by the
- * registry's PathInfo trim (Issue #1067 gap 2), so both always agree on which way a signal faces.
+ * Shared by [RouteSignalConfigurator] (G4/G8 and the intermediate-signal rule of Issue #566) and by
+ * [PathInfoStore]'s PathInfo trim (Issue #1067 gap 2), so both always agree on which way a signal faces.
  *
  * @since Issue #1067
  */

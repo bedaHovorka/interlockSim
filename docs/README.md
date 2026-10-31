@@ -58,6 +58,25 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 - [GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md](GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md) - paused-clock feasibility and headless-pacing ruling (SP2c.26, #849, 2026-08).
 - [GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md](GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md) - Ollama capability audit: seed, format and tools, `num_ctx`, `maxIterations` (SP2c.27, #850).
 
+## Goal 9B demand list
+
+- [goal9b-demands/SP1-fail-fast-harness.md](goal9b-demands/SP1-fail-fast-harness.md) - reservation cost per entry attempt and attempt counts on Praha (Goal 1B SP1, #1148).
+- [goal9b-demands/SP2-station-abstraction.md](goal9b-demands/SP2-station-abstraction.md) - which station facts a dispatcher takes from the topology (capacity rule, platform tracks, entry/exit blocks) and which still come from per-scenario configuration (Goal 1B SP2, #1149).
+- [goal9b-demands/SP3-cerveny-ujezd-scenario.md](goal9b-demands/SP3-cerveny-ujezd-scenario.md) - the Červený Újezd scenario runs deterministically on the `Station` abstraction and launches by name (CLI, GUI, native); the run's Goal 9B demands D1–D6 (route conflict set, line-clear consent, shunting, per-line capacity, agent capacity, signal names) (Goal 1B SP3, #1150).
+- [goal9b-demands/SP4-bounded-route-search.md](goal9b-demands/SP4-bounded-route-search.md) - route-search size and time per Praha pair, the node budget, and why incremental reservation is not needed for search cost (Goal 1B SP4, #1151).
+- [goal9b-demands/SP5-target-selection-path.md](goal9b-demands/SP5-target-selection-path.md) - what a dispatcher still cannot express through `CandidateTarget` (cost, destination, unavailability reason, horizon, time), recorded as Goal 9B demands (Goal 1B SP5, #1152).
+- [goal9b-demands/SP9-kdisco-review.md](goal9b-demands/SP9-kdisco-review.md) - kDisco deadlock and race review, scanner survey, and the Goal 9B engine-guarantee demands (Goal 1B SP9, #1156, 2026-10).
+- [goal9b-demands/SP12-routing-decomposition.md](goal9b-demands/SP12-routing-decomposition.md) - SP12 close-out report (SP12 closed 2026-10-29): cross-reference of SP12.1-SP12.10, the Goal 9B list of routing seams a dispatcher may call and those that stay private, the duplicate-check report, the size outcome and the open follow-ups (Goal 1B SP12, #1159).
+- [goal9b-demands/SP12.1-contention-tracking.md](goal9b-demands/SP12.1-contention-tracking.md) - which contention and blocked-tracking seams a dispatcher may call and which stay private, plus the open-contention snapshot demand (Goal 1B SP12.1, #1167).
+- [goal9b-demands/SP12.2-release-rollback.md](goal9b-demands/SP12.2-release-rollback.md) - route release and rollback moved into `RouteReleaser`; the release seams a Goal 9B dispatcher may call and those that stay private (Goal 1B SP12.2, #1168).
+- [goal9b-demands/SP12.3-signal-configuration.md](goal9b-demands/SP12.3-signal-configuration.md) - which signal seams a Goal 9B dispatcher may call and which stay private after the signal-configuration extraction (`ClearedSignalLedger`, `RouteSignalConfigurator`), with the #895 re-baseline (Goal 1B SP12.3, #1169).
+- [goal9b-demands/SP12.4-switch-configuration.md](goal9b-demands/SP12.4-switch-configuration.md) - switch-configuration seams extracted into `SwitchConfigurator`: which a Goal 9B dispatcher may surface (the `Locked` outcome's holder and positions) and which must stay private, plus the `registerSwitches` rule (Goal 1B SP12.4, #1170).
+- [goal9b-demands/SP12.5-target-discovery.md](goal9b-demands/SP12.5-target-discovery.md) - target discovery extracted from `DefaultPathReservationService`: which discovery seams a Goal 9B dispatcher may call and which stay private, with the #895 re-baseline (Goal 1B SP12.5, #1171).
+- [goal9b-demands/SP12.6-registry-split.md](goal9b-demands/SP12.6-registry-split.md) - `PathReservationRegistry` split into block, switch and PathInfo units; which registry seams a dispatcher may call (Goal 1B SP12.6, #1172).
+- [goal9b-demands/SP12.8-reservation-expiry.md](goal9b-demands/SP12.8-reservation-expiry.md) - kernel-side reservation expiry (progress = newest block registration, 60 s simulation-time TTL, only trains that occupy nothing): the expiry seam a dispatcher may call, the failure-mode table, and the falling sweeper `staleReleaseCount` (Goal 1B SP12.8, #1174; phase 2 #1220).
+- [goal9b-demands/SP12.9-candidate-screen.md](goal9b-demands/SP12.9-candidate-screen.md) - candidate geometry screening extracted into `RouteCandidateScreen`: which screening seams stay private (Goal 1B SP12.9, #1210).
+- [goal9b-demands/SP12.10-candidate-commit.md](goal9b-demands/SP12.10-candidate-commit.md) - candidate commit, finalize and rollback extracted into `CandidateCommitter`, the rollback contract and the removal of `@Suppress("LargeClass")` (Goal 1B SP12.10, #1211).
+
 ## History
 
 Dated summaries, retrospectives, decisions, and reports. Kept for context; do not treat as current.
@@ -97,7 +116,7 @@ Dated summaries, retrospectives, decisions, and reports. Kept for context; do no
 - [INTEGRATION_TESTS_SUMMARY.md](INTEGRATION_TESTS_SUMMARY.md) - end-to-end integration test implementation summary (history).
 - [TEST_COVERAGE_SUMMARY.md](TEST_COVERAGE_SUMMARY.md) - context package coverage improvement summary (history).
 - [TEST_COVERAGE_POLISH.md](TEST_COVERAGE_POLISH.md) - coverage polish for cells, tracks, and xml packages (history).
-- [ISSUE_280_ANALYSIS_PLAN.md](ISSUE_280_ANALYSIS_PLAN.md) - analysis plan for the zero-acceleration train deadlock, issue #280 (history, 2026-01).
+- [issues/issue_280_analysis_plan.md](issues/issue_280_analysis_plan.md) - analysis plan for the zero-acceleration train deadlock, issue #280 (history, 2026-01).
 
 ### Planning and backlog analysis
 
@@ -122,4 +141,4 @@ Superseded: the Kalasim migration plan was dropped on 2026-08-24; kDisco is the 
 - `superpowers/plans/` - dated implementation plans, 2026-03 to 2026-06 (history).
 - `superpowers/specs/` - dated design specs that accompany those plans, 2026-03 to 2026-06 (history).
 - `election/` - the 2026-04-14 backlog election record (history, 2026-04).
-- `issues/` - write-ups of individual resolved or investigated issues (#80, #291, #311), with its own README (history, 2026-02 to 2026-03).
+- `issues/` - write-ups of individual resolved or investigated issues (#80, #280, #291, #311), with its own README (history, 2026-02 to 2026-03).

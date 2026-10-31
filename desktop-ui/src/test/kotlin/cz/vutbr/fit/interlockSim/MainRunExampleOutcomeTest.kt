@@ -43,7 +43,7 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("a run that reaches its end time reports COMPLETED")
 	fun completedRunReportsCompleted() {
-		val outcome = get<Main>().runExample(arrayOf("example", "shuntingLoop", "30"))
+		val outcome = get<Main>().runExample(arrayOf("example", ExampleNames.SHUNTING_LOOP, "30"))
 
 		assertThat(outcome).isEqualTo(RunOutcome.COMPLETED)
 	}
@@ -64,7 +64,7 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("a missing end-time argument reports NOT_STARTED")
 	fun missingEndTimeReportsNotStarted() {
-		val outcome = get<Main>().runExample(arrayOf("example", "shuntingLoop"))
+		val outcome = get<Main>().runExample(arrayOf("example", ExampleNames.SHUNTING_LOOP))
 
 		assertThat(outcome).isEqualTo(RunOutcome.NOT_STARTED)
 	}

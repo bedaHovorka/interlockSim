@@ -13,22 +13,15 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -71,23 +64,14 @@ import java.util.concurrent.TimeUnit
  * @see Issue742RegressionTest for the reservation-time guard that rejects the phantom route.
  */
 @DisplayName("Switch-blind isPathAvailable selects the occupied k1 target over the free k2")
-class SwitchBlindTargetSelectionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var service: PathReservationService
-
+class SwitchBlindTargetSelectionTest : PathReservationServiceTestBase() {
 	private lateinit var semaphoreZA: DynamicPathSeparator // zA at (14,8), faces vA
 	private lateinit var semaphoreDoA1: DynamicPathSeparator // doA1 at (16,8), k1 A-side
 	private lateinit var semaphoreDoB1: DynamicPathSeparator // doB1 at (25,8), k1 B-side
 	private lateinit var semaphoreDoB2: DynamicPathSeparator // doB2 at (24,9), k2 B-side
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-		service = simulationContext.getRoutingServices().getPathReservationService()
-
+	fun setUpFixtures() {
 		val grid = simulationContext.getRailWayNetGrid()
 		semaphoreZA = simulationContext.separatorAt(14, 8)
 		semaphoreDoA1 = simulationContext.separatorAt(16, 8)
@@ -106,11 +90,6 @@ class SwitchBlindTargetSelectionTest : KoinTestBase() {
 			.filterIsInstance<DynamicTrackBlock>()
 			.firstOrNull { block -> block.ends().toSet() == setOf(a, b) }
 			?: throw IllegalStateException("No block found between $a and $b")
-
-	@AfterEach
-	fun tearDown() {
-		simulationContext.close()
-	}
 
 	@Test
 	@Timeout(10, unit = TimeUnit.SECONDS)

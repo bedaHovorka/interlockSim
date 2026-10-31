@@ -31,13 +31,13 @@ class ExampleRegistryLlmDispatcherFlagTest {
 	@Test
 	@DisplayName("shuntingLoopAI is driven by the LLM dispatcher")
 	fun shuntingLoopAiIsLlmDriven() {
-		assertThat(registry.usesLlmDispatcher("shuntingLoopAI")).isTrue()
+		assertThat(registry.usesLlmDispatcher(ExampleNames.SHUNTING_LOOP_AI)).isTrue()
 	}
 
 	@Test
 	@DisplayName("the plain shunting loop is not driven by the LLM dispatcher")
 	fun plainShuntingLoopIsNotLlmDriven() {
-		assertThat(registry.usesLlmDispatcher("shuntingLoop")).isFalse()
+		assertThat(registry.usesLlmDispatcher(ExampleNames.SHUNTING_LOOP)).isFalse()
 	}
 
 	@Test

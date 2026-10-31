@@ -280,4 +280,20 @@ class XmlRoundTripNetworkResourcesTest {
 			assertThat(inOut.getName()).isEqualTo("OnlyOne")
 		}
 	}
+
+	// --- PRAHA_HLAVNI_NADRAZI_XML / CERVENY_UJEZD_XML (Issue #1148: commonMain accessors) ---
+
+	@Test
+	fun prahaAccessorParsesElevenInOuts() {
+		CommonTestFixtures.parseEditingContext(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML).use { ctx ->
+			assertThat(ctx.getInOuts()).hasSize(11)
+		}
+	}
+
+	@Test
+	fun cervenyUjezdAccessorParsesFourInOuts() {
+		CommonTestFixtures.parseEditingContext(NetworkResources.CERVENY_UJEZD_XML).use { ctx ->
+			assertThat(ctx.getInOuts()).hasSize(4)
+		}
+	}
 }
