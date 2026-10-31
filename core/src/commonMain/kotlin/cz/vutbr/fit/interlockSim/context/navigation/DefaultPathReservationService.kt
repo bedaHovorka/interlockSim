@@ -107,6 +107,9 @@ class DefaultPathReservationService(
 	// for why AllPathsBlocked is routine contention and only unresolved-at-end-of-run is reported.
 	private val contention = ReservationContentionTracker(registry)
 
+	/** The block-owner query and the per-candidate blocked-by record (Issue #1269). */
+	private val blockerScan = CandidateBlockerScan(registry)
+
 	/**
 	 * The ids of the trains that currently have at least one blocked-path contention tracked.
 	 *
@@ -318,6 +321,10 @@ class DefaultPathReservationService(
 		val (divergentFailures, usableCandidates) =
 			candidateScreen.screenDivergentCandidates(trainId, start, target, rearFacingUsable)
 
+		// Issue #1269: what held each candidate refused on contention, for the AllPathsBlocked
+		// result (a candidate refused for a permanent reason is not recorded).
+		val blockedBy = mutableListOf<PathReservationService.BlockedCandidate>()
+
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in usableCandidates) {
 			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
@@ -340,6 +347,7 @@ class DefaultPathReservationService(
 			if (!forwardBlocks.areAllFreeOrOwnedBy(trainId)) {
 				// Capture a blocked (block, owner) pair for the AllPathsBlocked conflict warning.
 				firstBlockedConflict = contention.findFirstBlockedConflict(forwardBlocks, trainId)
+				blockedBy += blockerScan.scan(trainId, index, blocks)
 				continue
 			}
 
@@ -358,6 +366,7 @@ class DefaultPathReservationService(
 					// Conflict indicates serious error, don't try other paths
 					return reservationResult
 				}
+				blockedBy += blockerScan.scan(trainId, index, blocks)
 				continue
 			}
 
@@ -369,8 +378,13 @@ class DefaultPathReservationService(
 					CandidateRequest(trainId, start, target, path, blocks, forwardBlocks, index),
 					geometricFailures
 				)
-			geometricFailures = updatedGeometricFailures
 			candidateOutcome?.let { return it }
+			// A rejection that recorded no geometric failure is contention (a locked switch, a
+			// merge abort): record what held the candidate (Issue #1269).
+			if (updatedGeometricFailures.count == geometricFailures.count) {
+				blockedBy += blockerScan.scan(trainId, index, blocks)
+			}
+			geometricFailures = updatedGeometricFailures
 		}
 
 		// All paths tried, all were blocked or impossible: classifyExhaustedAttempt applies the
@@ -381,7 +395,8 @@ class DefaultPathReservationService(
 			geometricFailures,
 			divergentFailures,
 			firstBlockedConflict,
-			candidatePaths.size
+			candidatePaths.size,
+			blockedBy
 		)
 	}
 
@@ -487,7 +502,8 @@ class DefaultPathReservationService(
 		geometricFailures: GeometricFailures,
 		divergentFailures: GeometricFailures,
 		firstBlockedConflict: Pair<DynamicTrackBlock, String>?,
-		attemptedPaths: Int
+		attemptedPaths: Int,
+		blockedBy: List<PathReservationService.BlockedCandidate>
 	): PathReservationService.ReservationResult {
 		// Issue #1066: a divergent candidate (it does not continue the held route) is as permanent as
 		// a geometric one, so the two together satisfy the permanence gate. When any candidate is
@@ -511,7 +527,7 @@ class DefaultPathReservationService(
 		firstBlockedConflict?.let { (blockedBlock, owningTrain) ->
 			contention.recordContentionAndEmitIfNew(trainId, blockedBlock, owningTrain)
 		}
-		return PathReservationService.ReservationResult.AllPathsBlocked(attemptedPaths)
+		return PathReservationService.ReservationResult.AllPathsBlocked(attemptedPaths, blockedBy)
 	}
 
 	/** Delegates to [ReservationContentionTracker.flushUnresolvedConflicts] (Issue #612, #1167). */
@@ -831,6 +847,8 @@ class DefaultPathReservationService(
 	 * Get all blocks currently reserved by a train.
 	 */
 	override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> = registry.getBlocks(trainId)
+
+	override fun getBlockOwner(block: DynamicTrackBlock): String? = blockerScan.ownerOf(block)
 
 	/**
 	 * Get all blocks currently physically occupied by a train.
