@@ -210,6 +210,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		val outcome = DefaultRunSnapshotStore(root).readAll(root).first().railwayOutcome
 		assertThat(outcome.journeysCompleted, "journeys completed").isNotNull()
 		assertThat(outcome.conflicts, "conflicts").isNotNull()
+		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isNotNull()
 		assertThat(outcome.trainsEntered, "trains entered").isNotNull()
 		assertThat(outcome.trainsExited, "trains exited").isNotNull()
 		assertThat(outcome.maxConcurrentTrains, "max concurrent trains").isNotNull()
@@ -242,6 +243,28 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		// Metrics are context-scoped, so they remain measurable for any main process.
 		assertThat(outcome.journeysCompleted, "journeys completed").isNotNull()
 		assertThat(outcome.conflicts, "conflicts").isNotNull()
+		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isNotNull()
+	}
+
+	/**
+	 * Issue #1280: an end-time cutoff with trains still queued flushes their open contentions, and
+	 * the run summary must not report them as conflicts. The cervenyUjezd run that motivated it
+	 * printed `conflicts=2` although nothing double-booked; with the split, the same metrics read
+	 * as `conflicts=0` and two contentions unresolved at run end.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("railwayOutcomeFrom reports run-end contentions apart from conflicts (Issue #1280)")
+	fun railwayOutcomeFromKeepsRunEndContentionsApartFromConflicts() {
+		val context = createAiContext()
+		context.scope.declare<MetricsCollectionService>(
+			FakeMetricsCollectionService(conflictCount = 0, unresolvedAtRunEndCount = 2)
+		)
+
+		val outcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
+
+		assertThat(outcome.conflicts, "conflicts").isEqualTo(0L)
+		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isEqualTo(2L)
 	}
 
 	// ── Leak-gauge wiring (Issue #936, review Minor #5) ──────────────────────

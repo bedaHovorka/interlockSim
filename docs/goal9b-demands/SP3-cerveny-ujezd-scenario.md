@@ -133,3 +133,27 @@ from the Goal 1B tip ef61e908; the "after" jar from the SP3 head.
 Every run: `NATURAL_COMPLETION`, control gate PASS, C7 clean. before == after: the generator change keeps
 the vyhybna draws, so the vyhybna scenario is unchanged. The sweep reports live in the agent scratchpad,
 not in `docs/`, per the sweep's keep-measurements-out-of-`docs/` policy.
+
+### Run-end accounting split (#1280, 2026-10-31)
+
+The first GUI run of `cervenyUjezd 600` ended with `endCause=NATURAL_COMPLETION ... conflicts=2`
+although nothing double-booked: the two "conflicts" were train #19's contentions behind train #18,
+still open when the end time cut the run off and reported by the end-of-run flush
+(`PathReservationService.flushUnresolvedConflicts`). The scenario's generator never stops, so every
+run limited by its end time leaves the last trains on the network and reports them this way.
+
+The run summary now keeps the two signals apart:
+
+- `BlockEvent.ReservationConflictDetected.atRunEnd` marks the events of the end-of-run flush.
+- `MetricsSnapshot.conflictCount` counts only the double-bookings the registry caught while the run
+  was live (`CandidateCommitter`); `MetricsSnapshot.unresolvedAtRunEndCount` counts the flushed
+  contentions.
+- `RailwayOutcome.unresolvedAtRunEnd` carries the second figure into the run JSON (schema version
+  10), the final summary line prints `unresolvedAtRunEnd=N`, and the sweep report's Railway Outcomes
+  table has an "Unresolved at run end" column, appended last. Files of version 9 or older load with
+  the figure absent and keep their `conflicts` as stored.
+
+The motivating run now reads `conflicts=0 unresolvedAtRunEnd=2`. The end cause stays
+`NATURAL_COMPLETION`: a new end cause for "cut off with trains on the network" would mark every
+`cervenyUjezd` run as not passing, and the #895 vyhybna baseline (all journeys finish before the end
+time, `conflicts=0`, no open contention at the end) is unchanged by the split.

@@ -162,8 +162,8 @@ class ReservationContentionTrackerTest {
 			tracker.recordContentionAndEmitIfNew("other", busyB, "owner")
 
 			assertThat(tracker.flushUnresolvedConflicts(10.0)).containsExactly(
-				BlockEvent.ReservationConflictDetected(busyA, "me", "registered", 10.0),
-				BlockEvent.ReservationConflictDetected(busyB, "other", "owner", 10.0)
+				BlockEvent.ReservationConflictDetected(busyA, "me", "registered", 10.0, atRunEnd = true),
+				BlockEvent.ReservationConflictDetected(busyB, "other", "owner", 10.0, atRunEnd = true)
 			)
 		}
 

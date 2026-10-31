@@ -121,6 +121,10 @@ internal class ReservationContentionTracker(
 	 * would reintroduce the original false-positive-pause bug this design avoids, so it
 	 * must only be called once, after the run has fully stopped.
 	 *
+	 * Every returned event is marked [BlockEvent.ReservationConflictDetected.atRunEnd], so the metrics
+	 * count it apart from a mid-run conflict (Issue #1280): a contention open at an end-time cutoff
+	 * is a train still queued, not a double-booking.
+	 *
 	 * @param simulationEndTime Simulation clock value to stamp on the returned event(s).
 	 * @since Issue #612 (Goal 3 SP2 follow-up)
 	 */
@@ -134,7 +138,8 @@ internal class ReservationContentionTracker(
 				block = block,
 				trainId = trainId,
 				conflictingTrainId = owner,
-				time = simulationEndTime
+				time = simulationEndTime,
+				atRunEnd = true
 			)
 		}
 	}

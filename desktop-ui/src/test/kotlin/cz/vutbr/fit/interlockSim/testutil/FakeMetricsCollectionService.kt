@@ -27,11 +27,13 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
  *
  * @param completedTrains journeys the snapshot reports as finished
  * @param conflictCount conflicts the snapshot reports
+ * @param unresolvedAtRunEndCount contentions the snapshot reports as still open at run end (Issue #1280)
  * @param unreleasedReservations what the leak gauge returns
  */
 class FakeMetricsCollectionService(
 	private val completedTrains: Int = 0,
 	private val conflictCount: Int = 0,
+	private val unresolvedAtRunEndCount: Int = 0,
 	private val unreleasedReservations: Set<String> = emptySet()
 ) : MetricsCollectionService {
 	/** `true` once [reportUnreleasedReservations] has been called at least once. */
@@ -48,7 +50,8 @@ class FakeMetricsCollectionService(
 			averageWaitSeconds = 0.0,
 			occupiedBlocks = 0,
 			totalBlocks = 0,
-			utilization = 0.0
+			utilization = 0.0,
+			unresolvedAtRunEndCount = unresolvedAtRunEndCount
 		)
 
 	override fun onSnapshot(listener: (MetricsSnapshot) -> Unit) = Unit

@@ -24,13 +24,14 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing. Current version: **9** (version 2 added
+ * handle old JSON files without crashing. Current version: **10** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
  * version 7 added [RunEndCause.STARVED], Issue #930; version 8 added circuit-breaker end
  * state, Issue #1074; version 9 added [TickOutcome.LLM_SILENT_ALL_MOVING] to the outcome
- * vocabulary, Issue #988).
+ * vocabulary, Issue #988; version 10 split [RailwayOutcome.unresolvedAtRunEnd] out of
+ * [RailwayOutcome.conflicts], Issue #1280).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -255,8 +256,15 @@ data class DispatcherRunSnapshot(
 		 *   runs scored the same ticks as [TickOutcome.LLM_SILENT_NONACTIONABLE]
 		 *   (the only outcome possible with `RuleBasedDispatcher` as the fallback), so their rates
 		 *   are not comparable.
+		 * - **10** — Issue #1280, added [RailwayOutcome.unresolvedAtRunEnd] and took the
+		 *   contentions still open at run end out of [RailwayOutcome.conflicts], which now counts
+		 *   only the double-bookings caught while the run was live. The new field defaults to
+		 *   `null`, so every version 1-9 file still decodes, with the figure absent. Their
+		 *   `conflicts` counted both and is kept as stored: on a run cut off at its end time with
+		 *   trains still queued it is higher than a version-10 run's for the same railway, so the
+		 *   two are not comparable on that column.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 9
+		const val CURRENT_SCHEMA_VERSION: Int = 10
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

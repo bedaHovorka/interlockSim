@@ -117,7 +117,7 @@ class RunReportAggregator(
 		private const val HYGIENE_TABLE_COLUMNS = 24
 
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
-		private const val OUTCOMES_TABLE_COLUMNS = 19
+		private const val OUTCOMES_TABLE_COLUMNS = 20
 
 		/**
 		 * Column headers of the "Arm Comparison" table — the single source for both its header row
@@ -676,7 +676,7 @@ class RunReportAggregator(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
 				"Breaker Threshold | Breaker Cooldown s | " +
 				"Runs | Journeys completed | Trains entered | Trains exited (authoritative) | Max concurrent | " +
-				"Block transitions | Conflicts | Failed reservations |"
+				"Block transitions | Conflicts | Failed reservations | Unresolved at run end |"
 		)
 		sb.appendLine("|" + "---|".repeat(OUTCOMES_TABLE_COLUMNS))
 
@@ -690,7 +690,8 @@ class RunReportAggregator(
 					"| ${fmtNullableLong(outcome.maxConcurrentTrains)} " +
 					"| ${fmtNullableLong(outcome.blockTransitions)} " +
 					"| ${fmtNullableLong(outcome.conflicts)} " +
-					"| ${fmtNullableLong(outcome.failedReservations)} |"
+					"| ${fmtNullableLong(outcome.failedReservations)} " +
+					"| ${fmtNullableLong(outcome.unresolvedAtRunEnd)} |"
 			)
 		}
 		sb.appendLine()
@@ -743,10 +744,18 @@ class RunReportAggregator(
 		)
 		sb.appendLine(
 			"- **Journeys completed / Trains entered / Trains exited / Max concurrent / Block transitions / " +
-				"Conflicts / Failed reservations** — RailwayOutcome fields, summed across the cell's runs " +
+				"Conflicts / Failed reservations / Unresolved at run end** — RailwayOutcome fields, summed " +
+				"across the cell's runs " +
 				"(max, for \"max concurrent\"), skipping any run where the figure was not measured. `n/a` " +
 				"when no run in the cell measured it — never rendered as `0`, which would misrepresent " +
 				"\"not measured\" as \"measured as none\"."
+		)
+		sb.appendLine(
+			"- **Conflicts / Unresolved at run end (issue #1280)** — **Conflicts** counts only double-bookings " +
+				"the reservation registry caught while the run was live. **Unresolved at run end** counts trains " +
+				"still waiting for a block another train held when the run stopped: a deadlock or starvation " +
+				"sign, or queueing an end-time cutoff interrupted, never a double-booking. Runs written before " +
+				"schema version 10 counted both in Conflicts and show `n/a` for Unresolved at run end."
 		)
 		sb.appendLine(
 			"- **Ranking (issue #906)** — both tables are ranked by **Trains exited**, descending, cells " +
@@ -776,7 +785,8 @@ class RunReportAggregator(
 			maxConcurrentTrains = reduceOrNull(outcomes.map { it.maxConcurrentTrains }) { it.max() },
 			blockTransitions = reduceOrNull(outcomes.map { it.blockTransitions }) { it.sum() },
 			conflicts = reduceOrNull(outcomes.map { it.conflicts }) { it.sum() },
-			failedReservations = reduceOrNull(outcomes.map { it.failedReservations }) { it.sum() }
+			failedReservations = reduceOrNull(outcomes.map { it.failedReservations }) { it.sum() },
+			unresolvedAtRunEnd = reduceOrNull(outcomes.map { it.unresolvedAtRunEnd }) { it.sum() }
 		)
 	}
 
