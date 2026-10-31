@@ -69,7 +69,12 @@ import org.koin.core.component.KoinComponent
 class ShuntingLoop(
 	context: SimulationContext,
 	private val endTime: Long,
-	private val enableRealTimeSync: Boolean = false,
+	/**
+	 * Whether [startAction] activates [RealTimeSynch], pacing simulated time to the wall clock (GUI
+	 * examples pass `true`; headless runs keep the default `false`). Read-only, so a caller can
+	 * verify an example's real-time wiring (Issue #1277).
+	 */
+	val enableRealTimeSync: Boolean = false,
 	initialSpeedMultiplier: Double = 1.0,
 	/**
 	 * Per-scenario override of the station capacity — the maximum number of trains that may be

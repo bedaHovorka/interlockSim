@@ -16,8 +16,10 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsAtLeast
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -44,7 +46,7 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 	}
 
 	@Test
-	fun `CLI map resolves cervenyUjezd to a ShuntingLoop on the four-track station`() {
+	fun `CLI map resolves cervenyUjezd to a ShuntingLoop on the four-track station without real-time sync`() {
 		val registry = get<ExampleRegistry>()
 
 		assertThat(registry.examples.keys).contains(ExampleNames.CERVENY_UJEZD)
@@ -52,10 +54,11 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 		val loop = ctx.mainProcess
 		assertThat(loop).isNotNull().isInstanceOf<ShuntingLoop>()
 		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_CAPACITY)
+		assertThat(loop.enableRealTimeSync).isFalse()
 	}
 
 	@Test
-	fun `GUI map resolves cervenyUjezd to a ShuntingLoop on the four-track station`() {
+	fun `GUI map resolves cervenyUjezd to a real-time ShuntingLoop on the four-track station`() {
 		val registry = get<ExampleRegistry>()
 
 		assertThat(registry.guiExamples.keys).contains(ExampleNames.CERVENY_UJEZD)
@@ -63,6 +66,7 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 		val loop = ctx.mainProcess
 		assertThat(loop).isNotNull().isInstanceOf<ShuntingLoop>()
 		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_CAPACITY)
+		assertThat(loop.enableRealTimeSync).isTrue()
 	}
 
 	/**

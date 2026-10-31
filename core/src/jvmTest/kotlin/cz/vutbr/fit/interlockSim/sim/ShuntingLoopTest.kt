@@ -16,6 +16,7 @@ import assertk.assertions.isFailure
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -283,24 +284,24 @@ class ShuntingLoopTest : KoinTestBase() {
 		}
 
 		@Test
-		fun constructor_enableRealTimeSync_true_succeeds() {
+		fun constructor_enableRealTimeSync_true_reportsRealTimeSync() {
 			// GUI mode: real-time synchronization enabled
 			val shuntingLoop = ShuntingLoop(validContext, 60L, enableRealTimeSync = true)
-			assertThat(shuntingLoop).isNotNull()
+			assertThat(shuntingLoop.enableRealTimeSync).isTrue()
 		}
 
 		@Test
-		fun constructor_enableRealTimeSync_false_succeeds() {
+		fun constructor_enableRealTimeSync_false_reportsNoRealTimeSync() {
 			// Console mode: real-time synchronization disabled (default)
 			val shuntingLoop = ShuntingLoop(validContext, 60L, enableRealTimeSync = false)
-			assertThat(shuntingLoop).isNotNull()
+			assertThat(shuntingLoop.enableRealTimeSync).isFalse()
 		}
 
 		@Test
-		fun constructor_enableRealTimeSync_default_succeeds() {
+		fun constructor_enableRealTimeSync_default_reportsNoRealTimeSync() {
 			// Default behavior: real-time synchronization disabled
 			val shuntingLoop = ShuntingLoop(validContext, 60L)
-			assertThat(shuntingLoop).isNotNull()
+			assertThat(shuntingLoop.enableRealTimeSync).isFalse()
 		}
 
 		@Test
