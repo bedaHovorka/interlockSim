@@ -17,6 +17,7 @@ interface-versus-capacity audit (posted on #992 before the first prompt change),
 | Block-ID example in both `request_route` endpoint descriptions (`such as "kA"`) | vyhybna literal | The same rendered block |
 | "Do NOT pass X as an endpoint" in the worked example | First block that is not one of two InOuts | First block that is not an endpoint name. On Červený Újezd a block bounded by an unnamed switch takes its signal's name (`e30`), so the old rule called a valid Signal a Block ID |
 | `approve_train` description ("…into the active ShuntingLoop simulation") | Class name of the vyhybna loop | "…into the active simulation" |
+| Origin of a route for a queued train (`request_route`) | Any InOut other than the destination — pins the entry only on a two-InOut station | On a station with more than two InOuts every route for a queued train is refused (`TRAIN_NOT_ADMITTED`); its first route comes on its NEXT SECTION line once it runs. In the #1276 Červený Újezd baseline all 6 early terminations were a queued train holding a route from the wrong InOut, whose own entry then failed as non-contiguous |
 | Route list size | Every route, up to 16 per ordered InOut pair | Every route while the section fits `MAX_ROUTE_SECTION_TOKENS` (3,000 estimated tokens); above it one route per pair first, then a note with the number left out |
 
 The frozen BASELINE text and vyhybna's whole assembled REVISED system prompt are byte-identical to
@@ -63,6 +64,14 @@ work: it ranges from 1.5 (Praha's ids such as `SW10-S_8_8`) to 3.9 (prose).
   and `S11 -> S12`, which are not adjacent. A real first section starts at the train's home signal
   (`Station.entryExitBlocks[].signals`), and NEXT SECTION never offers an InOut origin at all.
   Changing the examples changes vyhybna's prompt, so it needs a measured A/B arm (follow-up).
+- **The entry point of a queued train.** `QueuedTrainObservation` carries the destination only, so
+  a tool cannot check a queued train's origin on a station with more than two InOuts and SP8 refuses
+  such requests instead. A dispatcher that plans a train's entry route before admission needs the
+  entry InOut in the observation.
+- **Exit hints that respect the destination.** The NEXT SECTION target for the final section comes
+  from `CandidateTarget` and can name an exit other than the train's destination (the #1276
+  baseline counted 29 of 51 final-section hints; trains "end in wrong out" in the rule-based arm
+  too). That is target selection, not prompt text (#1278).
 - **Capacity per line and per train** (SP2 D3, SP3 D4): the prompt states one number per station.
 - **A legality gate for "acted but skipped a train".** A cycle that emits anything (one `no_op` is
   enough) skips the rule-based fallback, so a train whose NEXT SECTION was offered and ignored waits
