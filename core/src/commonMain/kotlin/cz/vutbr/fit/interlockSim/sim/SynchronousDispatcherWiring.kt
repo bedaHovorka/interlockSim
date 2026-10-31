@@ -97,6 +97,11 @@ fun wireSynchronousDispatcher(
 		)
 	val actuatorPort = DefaultNetworkActuatorPort(env = env, interlockingFacade = interlockingFacade)
 	val dispatcher = RuleBasedDispatcher(maxConcurrentTrains = maxConcurrentTrains)
+	// Issue #1304: the cap this dispatcher decides with, next to the station's topology capacity.
+	env
+		.getMetricsServices()
+		.getMetricsCollectionService()
+		.recordCapacity(dispatcher.maxConcurrentTrains, loop.topologyCapacity)
 
 	loop.snapshotCaptureHook = perceptionPort::captureSnapshot
 	loop.controlStepListener =
@@ -179,7 +184,7 @@ internal fun applyDecision(
 					"wireSynchronousDispatcher: ReservePath ${decision.fromSemaphoreName} → " +
 						"${decision.toTargetName} for ${decision.trainId} not applied: $result"
 				}
-				loop.incrementFailedReservation()
+				loop.incrementFailedReservation(decision.trainId, result)
 			}
 		}
 	}

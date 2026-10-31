@@ -52,6 +52,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * for all three. [TrainJourneyEvent]s (subscribed through [onTrainJourneyEvent]) feed a
  * [JourneyRecorder], read through [journeys]; they publish no snapshot.
  *
+ * ## Run-end accounting (Issue #1304, Goal 6 SP6)
+ *
+ * A [RunEndAccounting] collaborator counts the run-end figures and classifies how the run ended,
+ * from events alone; [runEndSummary] reads it, [recordCapacity] feeds it at wiring time.
+ *
  * ## Thread safety
  *
  * Not thread-safe, with one exception: [latestSnapshot] is safe from any thread. The service is
@@ -166,11 +171,19 @@ class DefaultMetricsCollectionService(
 
 	private val journeysEnabled: Boolean = config.isEnabled(MetricGroup.JOURNEYS)
 
+	/**
+	 * Run-end counters and the end-cause classification (Issue #1304): the CORE group, always on. It
+	 * subscribes to the journey events itself, so it works with [MetricGroup.JOURNEYS] off.
+	 */
+	internal val runEndAccounting = RunEndAccounting()
+
 	// ── Subscription ─────────────────────────────────────────────────────────
 
 	init {
 		env?.onBlockEvent { event -> handleBlockEvent(event) }
 		if (journeysEnabled) env?.onTrainJourneyEvent { event -> handleJourneyEvent(event) }
+		// CORE (Issue #1304): subscribed whatever the groups, journey events included.
+		env?.let(runEndAccounting::subscribe)
 	}
 
 	// ── Interface implementation ──────────────────────────────────────────────
@@ -232,6 +245,13 @@ class DefaultMetricsCollectionService(
 	override fun history(): MetricsHistory = history
 
 	override fun journeys(): List<TrainJourneyRecord> = journeyRecorder.records()
+
+	override fun runEndSummary(): RunEndSummary = runEndAccounting.summary(getSnapshot())
+
+	override fun recordCapacity(
+		shownToDispatcher: Int,
+		topologyCapacity: Int
+	) = runEndAccounting.recordCapacity(shownToDispatcher, topologyCapacity)
 
 	// ── Internal event handler (internal for test access) ────────────────────
 

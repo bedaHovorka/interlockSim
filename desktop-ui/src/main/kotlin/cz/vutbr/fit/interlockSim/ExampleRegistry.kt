@@ -810,11 +810,20 @@ class ExampleRegistry {
 		// The rule-based planner is synchronous and exempt.
 		assertPlannerPacingCompatible(planner, controller)
 
+		// Issue #1304: the cap this stack decides with is the vyhybna-derived default, whatever the
+		// station (Issue #1276: 2 against a topology capacity of 4 on Cerveny Ujezd) -- the applier
+		// below, the scoped observation projector (the prompt's `capacity:` line) and the singleton
+		// RuleBasedDispatcher all use it. Passed to the applier explicitly so the recorded value is
+		// the applier's own; the value itself is unchanged (SP8, Issue #1155, owns raising it).
+		val shownCapacity = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+		context.getMetricsServices().getMetricsCollectionService().recordCapacity(shownCapacity, loop.topologyCapacity)
+
 		val applier =
 			DispatchDecisionApplier(
 				queue = queue,
 				networkActuator = actuatorPort,
 				onApproveTrain = loop::approveQueuedTrain,
+				maxConcurrentTrains = shownCapacity,
 				// SP2c.18 (#841): live active-train count provider for apply-time cap enforcement.
 				// loop.getApprovedTrains() returns the sim-thread-owned list as a snapshot; calling
 				// .size on it on the sim thread (inside onControlStep) is safe and gives the live

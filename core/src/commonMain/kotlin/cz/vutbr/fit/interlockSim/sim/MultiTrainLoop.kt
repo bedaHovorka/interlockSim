@@ -477,6 +477,10 @@ open class MultiTrainLoop(
 		override fun placeTrain(train: Train) {
 			unapprovedTrains.addLast(train)
 			trainsEnteredCount++
+			// Goal 6 SP6 (Issue #1304): the train waits at its entry InOut from here; record only.
+			emitTrainJourneyEvent(
+				TrainJourneyEvent.Queued(train.name, train.timetableOriginName, train.timetableDestinationName, time())
+			)
 		}
 
 		override suspend fun interLoopSleep() {
@@ -670,6 +674,8 @@ open class MultiTrainLoop(
 		val report = SimulationStalled(persisted, watchdog.reportedTicks(), time(), knot?.members ?: persisted.toSet())
 		stall = report
 		logger.error { "MultiTrainLoop: ${report.message}" }
+		// Issue #1304: the stall as data for the metrics, before the run is aborted; record only.
+		emitRunAccountingEvent(RunAccountingEvent.Stalled.of(report))
 		env.errorStop(report)
 	}
 
@@ -722,6 +728,7 @@ open class MultiTrainLoop(
 		entryAttempts.remove(train)
 		lastBlockedBy.remove(train)
 		entryFailures.add(failure)
+		emitRunAccountingEvent(RunAccountingEvent.EntryFailed(failure)) // Issue #1304; record only
 		logger.error {
 			"MultiTrainLoop: giving up entry of ${failure.trainName} " +
 				"(${failure.inName} -> ${failure.outName}) after ${failure.attempts} attempt(s): " +
@@ -833,12 +840,31 @@ open class MultiTrainLoop(
 			}
 			val result = pathReservationService.reservePath(train.name, inIo, outIo)
 			logReservationFailure(train, inIo, outIo, result)
+			announceReservation(train, result)
 			return result
 		} finally {
 			for (resource in acquired) {
 				releaseIfOccupied(resource)
 			}
 		}
+	}
+
+	/**
+	 * Announces the entry reservation's outcome to the run-end accounting (Issue #1304): a granted
+	 * entry-to-exit route, or a refusal with its kind. Record only.
+	 */
+	private fun announceReservation(
+		train: Train,
+		result: PathReservationService.ReservationResult
+	) {
+		val refusal = FailedReservationKind.of(result)
+		emitRunAccountingEvent(
+			if (refusal == null) {
+				RunAccountingEvent.RouteGranted(train.name, time())
+			} else {
+				RunAccountingEvent.ReservationRefused(train.name, refusal, time())
+			}
+		)
 	}
 
 	private fun logReservationFailure(
@@ -928,6 +954,7 @@ open class MultiTrainLoop(
 				simTime = now
 			)
 		entryFailures.add(failure)
+		emitRunAccountingEvent(RunAccountingEvent.EntryFailed(failure)) // Issue #1304; record only
 		logger.error {
 			"MultiTrainLoop: no train generated for ${spec.inName} -> ${spec.outName}: " +
 				"the context has no DynamicInOut with one of these names"
@@ -943,6 +970,8 @@ open class MultiTrainLoop(
 	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
 			reportRunEndResidue()
+			// Issue #1304: tell the run end that the end time, not an early stop, ended the run.
+			emitRunAccountingEvent(RunAccountingEvent.EndTimeReached(time()))
 			generator.terminate()
 			env.stop()
 			return

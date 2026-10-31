@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.testutil
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNull
@@ -77,6 +78,8 @@ object StaleTailReclaimHarness {
 	class Outcome internal constructor(
 		val loop: ShuntingLoop,
 		val partialReleaseCount: Int,
+		/** The partial releases the metrics service counted from events (Issue #1304). */
+		val meteredPartialReleaseCount: Int,
 		val barrierTimedOut: Boolean,
 		val driverFailure: Throwable?,
 		/** Exceptions a simulation process let escape — a FATAL kills the process, not the run. */
@@ -114,6 +117,12 @@ object StaleTailReclaimHarness {
 		return Outcome(
 			loop = loop,
 			partialReleaseCount = stack.sweeper.partialReleaseCount,
+			meteredPartialReleaseCount =
+				context
+					.getMetricsServices()
+					.getMetricsCollectionService()
+					.runEndSummary()
+					.partialReleaseCount,
 			barrierTimedOut = barrier.timedOut.get(),
 			driverFailure = barrier.failure.get(),
 			uncaught = run.uncaught
@@ -249,7 +258,7 @@ object StaleTailReclaimHarness {
 }
 
 /**
- * The four invariants every healthy [StaleTailReclaimHarness.Outcome] must satisfy (Issue #1025):
+ * The invariants every healthy [StaleTailReclaimHarness.Outcome] must satisfy (Issue #1025):
  * no train process died (a FATAL kills the process, not the run), at least one tail was actually
  * reclaimed, and neither side of the lock-step barrier failed. The stale-tail light/heavy pair and
  * the deferred-tail test assert these on every run through this one helper, so they cannot drift
@@ -262,6 +271,9 @@ fun StaleTailReclaimHarness.Outcome.assertHealthyReclaim() {
 	).isEmpty()
 	assertThat(partialReleaseCount, name = "un-travelled tails actually reclaimed")
 		.isGreaterThan(0)
+	// Issue #1304: the metrics count the same releases from the sweeper's events.
+	assertThat(meteredPartialReleaseCount, name = "partial releases the metrics counted")
+		.isEqualTo(partialReleaseCount)
 	assertThat(barrierTimedOut)
 		.withMessage("the sim thread must never wait out the driver barrier")
 		.isFalse()
