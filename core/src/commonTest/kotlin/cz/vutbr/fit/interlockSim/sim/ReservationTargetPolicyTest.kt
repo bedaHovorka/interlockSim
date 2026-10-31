@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.inOutCandidate
 import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidate
 import kotlin.test.Test
@@ -93,5 +94,75 @@ class ReservationTargetPolicyTest {
 		val candidates = listOf(semaphoreCandidate("zB", true), inOutCandidate("B2", true), inOutCandidate("B1", true))
 
 		assertThat(ReservationTargetPolicy.pick(candidates)).isEqualTo(inOutCandidate("B2", true))
+	}
+
+	// Destination preference (Issue #1278): the timetable's exit wins when it is an available
+	// station-exit candidate; in every other case the order above is kept unchanged.
+
+	@Test
+	fun `the destination exit wins over an exit listed before it`() {
+		val candidates = listOf(inOutCandidate("B2", true), inOutCandidate("B1", true))
+
+		assertThat(ReservationTargetPolicy.pick(candidates, destinationName = "B1"))
+			.isEqualTo(inOutCandidate("B1", true))
+	}
+
+	@Test
+	fun `the destination exit wins over an available semaphore listed first`() {
+		val candidates = listOf(semaphoreCandidate("zB", true), inOutCandidate("B2", true), inOutCandidate("B1", true))
+
+		assertThat(ReservationTargetPolicy.pick(candidates, destinationName = "B1"))
+			.isEqualTo(inOutCandidate("B1", true))
+	}
+
+	@Test
+	fun `an unavailable destination exit falls back to the current order`() {
+		val candidates = listOf(semaphoreCandidate("zB", true), inOutCandidate("B2", true), inOutCandidate("B1", false))
+
+		assertThat(ReservationTargetPolicy.pick(candidates, destinationName = "B1"))
+			.isEqualTo(inOutCandidate("B2", true))
+	}
+
+	@Test
+	fun `a destination that is not among the candidates keeps the current order`() {
+		val candidates = listOf(semaphoreCandidate("zB", true), inOutCandidate("B2", true))
+
+		assertThat(ReservationTargetPolicy.pick(candidates, destinationName = "B1"))
+			.isEqualTo(inOutCandidate("B2", true))
+	}
+
+	@Test
+	fun `a signal that shares the destination's name is not preferred`() {
+		val candidates = listOf(inOutCandidate("B2", true), semaphoreCandidate("B1", true))
+
+		assertThat(ReservationTargetPolicy.pick(candidates, destinationName = "B1"))
+			.isEqualTo(inOutCandidate("B2", true))
+	}
+
+	@Test
+	fun `no destination keeps the current order`() {
+		val candidates = listOf(inOutCandidate("B2", true), inOutCandidate("B1", true))
+
+		assertThat(ReservationTargetPolicy.pick(candidates, destinationName = null))
+			.isEqualTo(inOutCandidate("B2", true))
+	}
+
+	@Test
+	fun `chosenTargetName prefers the observation's destination`() {
+		val input =
+			BlockInputObservation(
+				blockId = "block",
+				towardSemaphoreName = "zB",
+				state = TrackFacility.State.OCCUPIED,
+				ownerTrainId = "Train #1",
+				isApproachingThisInput = true,
+				pathSetUpTowardThisInput = false,
+				pathAlreadyExtendedBeyond = false,
+				candidateTargets = listOf(inOutCandidate("B2", true), inOutCandidate("B1", true)),
+				destinationName = "B1"
+			)
+
+		assertThat(input.chosenTargetName()).isEqualTo("B1")
+		assertThat(input.copy(destinationName = null).chosenTargetName()).isEqualTo("B2")
 	}
 }

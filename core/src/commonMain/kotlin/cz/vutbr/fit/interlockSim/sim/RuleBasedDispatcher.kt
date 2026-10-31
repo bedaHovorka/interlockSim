@@ -29,8 +29,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    as a from→to [DispatchDecision.ReservePath] whose `to` this dispatcher **chooses**
  *    among the next separators one section ahead that the shell reports with their
  *    availability ([BlockInputObservation.candidateTargets]), through
- *    [ReservationTargetPolicy] (Issue #970) — destination-agnostic; see
- *    [BlockInputObservation.candidateTargets], the dispatcher's only target-selection input
+ *    [ReservationTargetPolicy] (Issue #970) — the train's own exit when it is an available
+ *    candidate ([BlockInputObservation.destinationName], Issue #1278), otherwise the fixed order;
+ *    see [BlockInputObservation.candidateTargets], the dispatcher's only target-selection input
  *    (Issue #1152). A train awaiting a route extension is never offered the route it already
  *    holds: when the pick is [BlockInputObservation.heldRouteEndName], no reservation is
  *    requested, because the re-grant would only re-clear the signal the reservation expiry has
@@ -80,7 +81,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * into explicit [DispatchDecision.SetSwitchPosition] and [DispatchDecision.SetSignalAspect]
  * commands that the interlocking independently validates before the path is reserved.
  * This per-tick [decide] currently reserves a single section per input, chosen by the
- * placeholder [ReservationTargetPolicy] (exit first, then first available signal), and does
+ * placeholder [ReservationTargetPolicy] (the train's own exit if available, else exit first, then
+ * first available signal), and does
  * not yet route through [CandidatePathRuleEngine]; SP2b.5 (Issue #560) shipped only the
  * rationale API ([CandidatePathRuleEngine.selectWithRationale], [DispatchDecision.rationale]).
  * Wiring the engine into multi-route selection here remains open — the SP2b.2/SP2b.3 stage is
