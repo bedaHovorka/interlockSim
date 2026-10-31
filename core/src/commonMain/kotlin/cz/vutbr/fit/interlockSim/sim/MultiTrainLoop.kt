@@ -91,14 +91,18 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * ## Deadlock watchdog (Issue #1154)
  *
  * On each tick the loop builds a wait-for graph and aborts the run with [SimulationStalled] when
- * the wait-for cycle persists while the clock advances. A waiting train points at the trains that
+ * a deadlock persists while the clock advances. A waiting train points at the trains that
  * refused its last attempt (Issue #1269): the current owner
  * ([PathReservationService.getBlockOwner]) of each block its last
  * [PathReservationService.ReservationResult.AllPathsBlocked] named, and the holder of each switch
  * claim it named. Holders need not be waiting, or even be trains of this loop: a started train
- * that keeps a waiter out is an edge. The cycle rule: the same cycle for [stallPersistTicks]
- * ticks, or any cycle for ten times [stallPersistTicks] ticks (the churn bound). A frozen clock never reaches
- * a tick, so it is bounded by the route-search node budget instead (Issue #1151).
+ * that keeps a waiter out is an edge. The blockers are kept per refused candidate route, and a
+ * deadlock is a knot (Issue #1270): a set of waiters in which every route of every member is
+ * blocked by a member. A waiter needs only one free route, so one route blocked by nobody, or only
+ * by trains outside the set, rules it out. The persistence rule, on the cycle the knot contains:
+ * the same cycle for [stallPersistTicks] ticks, or any cycle for ten times [stallPersistTicks] ticks
+ * (the churn bound). A frozen clock never reaches a tick, so it is bounded by the route-search node
+ * budget instead (Issue #1151).
  *
  * ## Determinism
  *
@@ -147,11 +151,14 @@ open class MultiTrainLoop(
 		internal const val DEFAULT_MAX_ENTRY_ATTEMPTS: Int = 3600
 
 		/**
-		 * Default number of successive dispatcher ticks (two simulated seconds each) a wait-for
-		 * cycle must persist before the watchdog aborts the run (Issue #1154): ten seconds, far
-		 * longer than any transient state of the atomic full-path reservation.
+		 * Default number of successive dispatcher ticks (two simulated seconds each) a deadlock must
+		 * persist before the watchdog aborts the run (Issue #1154): four seconds. It was five ticks
+		 * while the watchdog read an AND graph, whose cycles were not always deadlocks; the knot
+		 * search made the check exact for OR waits (Issue #1270), so the guard covers only transient
+		 * state: a switch holder taken from a refusal that the retry, woken at the same instant,
+		 * has not replaced yet. Two ticks at strictly later clock values outlast that.
 		 */
-		internal const val DEFAULT_STALL_PERSIST_TICKS: Int = 5
+		internal const val DEFAULT_STALL_PERSIST_TICKS: Int = 2
 
 		/** Report types enabled by the multi-train scenario. */
 		internal val ENABLED_REPORT_TYPES =
@@ -632,20 +639,21 @@ open class MultiTrainLoop(
 	}
 
 	/**
-	 * Watchdog tick (Issue #1154): builds the wait-for graph and aborts the run when its cycle has
-	 * persisted. A train waits for the trains that refused its last attempt (see [buildWaitForGraph]).
-	 * Only two or more unstarted trains can form a cycle: a started train waits for nobody here (its
-	 * whole path was reserved before it started), so it can be the target of an edge but never the
-	 * source.
+	 * Watchdog tick (Issue #1154): builds the wait-for graph and aborts the run when a deadlock has
+	 * persisted. A train waits for the trains that refused its last attempt (see [buildWaitForGraph]);
+	 * the deadlock is the knot of that graph (Issue #1270), and the persistence rule follows the cycle
+	 * inside the knot. Only two or more unstarted trains can form a knot: a started train waits for
+	 * nobody here (its whole path was reserved before it started), so it can block a route but never
+	 * be a member.
 	 */
 	private fun checkForStall() {
 		if (stall != null) {
 			return
 		}
 		val waiters = unstartedTrains()
-		val cycle = if (waiters.size < 2) null else buildWaitForGraph(waiters).findCycle()
-		val persisted = watchdog.observe(time(), cycle) ?: return
-		val report = SimulationStalled(persisted, watchdog.reportedTicks(), time())
+		val knot = if (waiters.size < 2) null else buildWaitForGraph(waiters).findKnot()
+		val persisted = watchdog.observe(time(), knot?.cycle) ?: return
+		val report = SimulationStalled(persisted, watchdog.reportedTicks(), time(), knot?.members ?: persisted.toSet())
 		stall = report
 		logger.error { "MultiTrainLoop: ${report.message}" }
 		env.errorStop(report)
@@ -664,20 +672,19 @@ open class MultiTrainLoop(
 	 * The wait-for graph (Issue #1269): each of [waiters] points at what refused its last attempt --
 	 * the owner [PathReservationService.getBlockOwner] names NOW for each block that refusal named
 	 * (a block freed since has no owner and adds no edge), and the holder of each switch claim it
-	 * named. Edges are the union over the refused candidates (an AND model of an OR wait: see
-	 * `docs/goal9b-demands/SP7-retry-and-watchdog.md`). A waiter whose last attempt was not an
-	 * [PathReservationService.ReservationResult.AllPathsBlocked] has no edge.
+	 * named. Each refused candidate is one route of the waiter (Issue #1270), so the knot search can
+	 * treat the wait as OR over routes; the edges are the union over the routes. A waiter whose last
+	 * attempt was not an [PathReservationService.ReservationResult.AllPathsBlocked] has no route and
+	 * no edge.
 	 */
 	private fun buildWaitForGraph(waiters: List<Train>): WaitForGraph {
 		val graph = WaitForGraph()
 		for (waiter in waiters) {
 			for (candidate in lastBlockedBy[waiter].orEmpty()) {
-				for (block in candidate.blockedBlocks.keys) {
-					pathReservationService.getBlockOwner(block)?.let { graph.addEdge(waiter.name, it) }
-				}
-				for (holder in candidate.lockedSwitches.values) {
-					graph.addEdge(waiter.name, holder)
-				}
+				val blockers =
+					candidate.blockedBlocks.keys.mapNotNull { pathReservationService.getBlockOwner(it) } +
+						candidate.lockedSwitches.values
+				graph.addRoute(waiter.name, blockers)
 			}
 		}
 		return graph
