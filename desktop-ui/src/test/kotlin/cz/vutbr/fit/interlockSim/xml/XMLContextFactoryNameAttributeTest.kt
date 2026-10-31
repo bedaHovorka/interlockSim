@@ -93,10 +93,11 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 
 		editingContextFactory.createContext(xml).use { context ->
 			assertThat(context).isNotNull()
-			// Elements without names should have empty names (auto-naming happens in GUI)
+			// Issue #1273: an unnamed semaphore is named after its grid position so a dispatcher can
+			// address it; an unnamed switch stays unnamed (its names are written by hand, #1279).
 			val semaphore = context.getRailWayNetGrid().getCellAt(15, 10) as RailSemaphore
 			val railSwitch = context.getRailWayNetGrid().getCellAt(20, 10) as RailSwitch
-			assertThat(semaphore.getName()).isEmpty()
+			assertThat(semaphore.getName()).isEqualTo("S_15_10")
 			assertThat(railSwitch.getName()).isEmpty()
 		}
 	}
