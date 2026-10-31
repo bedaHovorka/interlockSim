@@ -107,6 +107,56 @@ class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 	}
 
 	@Test
+	fun `with HISTORY disabled nothing is appended but the latest snapshot and listeners still work`() {
+		val service = DefaultMetricsCollectionService(config = MetricsConfig(setOf(MetricGroup.JOURNEYS)))
+		val block = realBlock()
+		val received = mutableListOf<MetricsSnapshot>()
+		service.onSnapshot { received += it }
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.ReservationConflictDetected(block, "T2", "T1", time = 2.0))
+
+		assertThat(service.history().size).isZero()
+		assertThat(received.size).isEqualTo(2)
+		assertThat(service.latestSnapshot().conflictCount).isEqualTo(1)
+		assertThat(service.getSnapshot().conflictCount).isEqualTo(1)
+	}
+
+	@Test
+	fun `with JOURNEYS disabled journey events add no records`() {
+		val service = DefaultMetricsCollectionService(config = MetricsConfig(setOf(MetricGroup.HISTORY)))
+
+		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
+		service.handleJourneyEvent(TrainJourneyEvent.Exited("T1", "B", 40.0))
+
+		assertThat(service.journeys()).isEmpty()
+	}
+
+	@Test
+	fun `core only collects neither history nor journeys`() {
+		val service = DefaultMetricsCollectionService(config = MetricsConfig.coreOnly())
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
+
+		assertThat(service.history().size).isZero()
+		assertThat(service.journeys()).isEmpty()
+	}
+
+	@Test
+	fun `the default config collects history and journeys`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
+
+		assertThat(service.history().size).isEqualTo(1)
+		assertThat(service.journeys().size).isEqualTo(1)
+	}
+
+	@Test
 	fun `journey events become journey records`() {
 		val service = DefaultMetricsCollectionService()
 
