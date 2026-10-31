@@ -10,12 +10,14 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.ArrivalTally
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
@@ -39,6 +41,11 @@ import kotlin.test.Test
  * [ArrivalTally.arrivalOrder] is the report emission order. (The PR #1267 review rejected the
  * first recording, through the control-step callbacks: a tick's outgoing approvals were sorted,
  * so two trains swapping order inside one control tick would not have shown.)
+ *
+ * The exit side is pinned too (Issue #1278): per train, in generation order, its origin, its
+ * timetable destination and the station exit its last route actually ended at, plus the number of
+ * `ends in wrong out` reports. Červený Újezd has two exits per side, so the exit a train takes is
+ * the dispatcher's choice, not a topological given.
  */
 class CervenyUjezdRunTest : CommonKoinTestBase() {
 	private companion object {
@@ -52,18 +59,47 @@ class CervenyUjezdRunTest : CommonKoinTestBase() {
 
 		/** Track blocks in the pinned `cerveny_ujezd.xml` fixture: every one gets the zero-state checks. */
 		private const val GRAPH_BLOCKS: Int = 32
+
+		/** `Train`'s tail reports this TRAIN_EVENTS text when the train leaves by another exit than its timetable's. */
+		private const val WRONG_OUT_SUFFIX: String = " ends in wrong out"
+
+		/** The fixture's InOut names (`cerveny_ujezd.xml`): two exits per side. */
+		private const val WEST_ENTRY_1: String = "west_entry_1"
+		private const val WEST_ENTRY_2: String = "west_entry_2"
+		private const val EAST_EXIT_1: String = "east_exit_1"
+		private const val EAST_EXIT_2: String = "east_exit_2"
 	}
+
+	/**
+	 * One journey's exit side: where the train came from, where its timetable sends it, and the
+	 * station exit its last route ended at (the exit it physically left by).
+	 */
+	private data class Journey(
+		val origin: String,
+		val destination: String,
+		val exitTaken: String?
+	)
+
+	/**
+	 * The run's exit side: the exit order (generation ordinals in arrival-report order), every
+	 * [Journey] in generation order, and the `ends in wrong out` report count.
+	 */
+	private data class ExitSide(
+		val order: List<Int>,
+		val journeys: List<Journey>,
+		val wrongOutReports: Int
+	)
 
 	private class RunResult(
 		val entered: Int,
 		val exited: Int,
 		val arrivalReports: Int,
-		val exitOrder: List<Int>,
 		val occupiedBlocks: Int,
 		val ownedBlocks: Int,
 		val graphBlockCount: Int,
 		val stationBlocksInsideGraph: Boolean,
-		val maxSwitchesOnARoute: Int
+		val maxSwitchesOnARoute: Int,
+		val exitSide: ExitSide
 	)
 
 	private fun runOnce(): RunResult {
@@ -77,18 +113,30 @@ class CervenyUjezdRunTest : CommonKoinTestBase() {
 
 		val dispatcherStep = checkNotNull(loop.controlStepListener)
 		var maxSwitches = 0
+		// Keyed by train number; a train's last route that ends at an InOut is the exit it leaves by.
+		val origins = mutableMapOf<Int, String>()
+		val destinations = mutableMapOf<Int, String>()
+		val exitsTaken = mutableMapOf<Int, String>()
 		loop.controlStepListener =
 			ControlStepListener {
 				dispatcherStep.onControlStep()
 				for (train in loop.getApprovedTrains()) {
 					maxSwitches = maxOf(maxSwitches, registry.getSwitches(train.name).size)
+					origins[train.trainNumber] = train.originInOut.name
+					destinations[train.trainNumber] = train.timetableDestinationName
+					val target = registry.getPathInfo(train.name)?.target
+					if (target is DynamicInOut) exitsTaken[train.trainNumber] = target.name
 				}
 			}
 		ctx.setMainProcess(loop)
 
 		val arrivals = ArrivalTally()
+		var wrongOutReports = 0
 		val startMs = currentTimeMillisKMP()
-		runSampled(ctx) { message -> message?.let(arrivals::record) }
+		runSampled(ctx) { message ->
+			message?.let(arrivals::record)
+			if (message?.endsWith(WRONG_OUT_SUFFIX) == true) wrongOutReports++
+		}
 		val wallSeconds = (currentTimeMillisKMP() - startMs) / 1000.0
 
 		// Within one run the train number IS the generation order: the name ("Train #4") carries
@@ -98,6 +146,14 @@ class CervenyUjezdRunTest : CommonKoinTestBase() {
 		val arrivalNumbers = arrivals.arrivalOrder
 		val sortedArrivalNumbers = arrivalNumbers.sorted()
 		val exitOrder = arrivalNumbers.map { sortedArrivalNumbers.indexOf(it) }
+		val journeys =
+			destinations.keys.sorted().map { number ->
+				Journey(
+					origin = checkNotNull(origins[number]),
+					destination = checkNotNull(destinations[number]),
+					exitTaken = exitsTaken[number]
+				)
+			}
 
 		// Zero state over EVERY block of the network graph — not only the platform + entry/exit
 		// blocks `Station.allBlocks` derives (8 of 32 here): the throat blocks are where route
@@ -110,17 +166,18 @@ class CervenyUjezdRunTest : CommonKoinTestBase() {
 				entered = loop.getTrainsEntered(),
 				exited = loop.getTrainsExited(),
 				arrivalReports = arrivals.count,
-				exitOrder = exitOrder,
 				occupiedBlocks = graphBlocks.count { registry.isOccupied(it) },
 				ownedBlocks = graphBlocks.count { registry.getOwner(it) != null },
 				graphBlockCount = graphBlocks.size,
 				stationBlocksInsideGraph = stationBlocks.all { it in graphBlocks },
-				maxSwitchesOnARoute = maxSwitches
+				maxSwitchesOnARoute = maxSwitches,
+				exitSide = ExitSide(exitOrder, journeys, wrongOutReports)
 			)
 		logger.info {
 			"Cerveny Ujezd run done: seed=$SEED entered=${result.entered} exited=${result.exited} " +
-				"arrivalReports=${result.arrivalReports} exitOrder=${result.exitOrder} " +
-				"occupied=${result.occupiedBlocks} maxSwitchesOnARoute=${result.maxSwitchesOnARoute} wall=${wallSeconds}s"
+				"arrivalReports=${result.arrivalReports} exitOrder=${result.exitSide.order} " +
+				"occupied=${result.occupiedBlocks} maxSwitchesOnARoute=${result.maxSwitchesOnARoute} " +
+				"exitSide=${result.exitSide} wall=${wallSeconds}s"
 		}
 		return result
 	}
@@ -137,21 +194,30 @@ class CervenyUjezdRunTest : CommonKoinTestBase() {
 		assertThat(first.entered, name = "trains entered").isEqualTo(TRAINS)
 		assertThat(first.exited, name = "trains exited").isEqualTo(TRAINS)
 		assertThat(first.arrivalReports, name = "journey-completion reports").isEqualTo(TRAINS)
-		assertThat(first.exitOrder, name = "exit order").hasSize(TRAINS)
+		assertThat(first.exitSide.order, name = "exit order").hasSize(TRAINS)
 		assertThat(first.graphBlockCount, name = "blocks in the graph").isEqualTo(GRAPH_BLOCKS)
 		assertThat(first.stationBlocksInsideGraph, name = "station blocks are part of the graph").isTrue()
 		assertThat(first.occupiedBlocks, name = "occupied blocks").isEqualTo(0)
 		assertThat(first.ownedBlocks, name = "reserved blocks").isEqualTo(0)
 		assertThat(first.maxSwitchesOnARoute, name = "switches on the longest route")
 			.isGreaterThanOrEqualTo(MIN_ROUTE_SWITCHES)
+		// Exit side as the nearest-exit-first policy produces it (Issue #1278): trains 2 and 3
+		// leave by the other east exit than their timetable names, and each reports it.
+		assertThat(first.exitSide.journeys, name = "journeys in generation order").containsExactly(
+			Journey(origin = WEST_ENTRY_1, destination = EAST_EXIT_1, exitTaken = EAST_EXIT_1),
+			Journey(origin = WEST_ENTRY_2, destination = EAST_EXIT_1, exitTaken = EAST_EXIT_2),
+			Journey(origin = WEST_ENTRY_1, destination = EAST_EXIT_2, exitTaken = EAST_EXIT_1)
+		)
+		assertThat(first.exitSide.wrongOutReports, name = "'ends in wrong out' reports").isEqualTo(2)
 
 		assertThat(second.entered, name = "trains entered, second run").isEqualTo(TRAINS)
 		assertThat(second.exited, name = "trains exited, second run").isEqualTo(TRAINS)
 		assertThat(second.arrivalReports, name = "journey-completion reports, second run").isEqualTo(TRAINS)
-		assertThat(second.exitOrder, name = "exit order of the second run").isEqualTo(first.exitOrder)
+		assertThat(second.exitSide.order, name = "exit order of the second run").isEqualTo(first.exitSide.order)
 		assertThat(second.occupiedBlocks, name = "occupied blocks, second run").isEqualTo(0)
 		assertThat(second.ownedBlocks, name = "reserved blocks, second run").isEqualTo(0)
 		assertThat(second.maxSwitchesOnARoute, name = "longest route of the second run")
 			.isEqualTo(first.maxSwitchesOnARoute)
+		assertThat(second.exitSide, name = "exit side of the second run").isEqualTo(first.exitSide)
 	}
 }
