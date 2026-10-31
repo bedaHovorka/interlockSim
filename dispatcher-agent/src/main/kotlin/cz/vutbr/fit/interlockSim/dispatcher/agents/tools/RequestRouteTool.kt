@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
@@ -122,6 +123,18 @@ class RequestRouteTool(
 
 	override val name: String = "request_route"
 
+	/**
+	 * The `, such as "<block>"` clause of the two endpoint descriptions, naming one of this network's
+	 * own Block IDs — the one [StationTopologySerializer.confusableBlockExample] picks for the STATION
+	 * TOPOLOGY warning, so both name the same block. Empty when [blockIds] is empty. Before Issue #1155
+	 * both descriptions carried vyhybna's literal `"kA"` on every station.
+	 */
+	private val blockIdExample: String =
+		StationTopologySerializer
+			.confusableBlockExample(inOutNames, blockIds, validEndpointNames)
+			?.let { ", such as \"${it.block}\"" }
+			.orEmpty()
+
 	override val description: String =
 		"Request the interlocking to find and atomically reserve a free path for a named train, between " +
 			"any two endpoints from the InOuts or Signals lists. Reserve ONE section at a time: at least " +
@@ -151,7 +164,7 @@ class RequestRouteTool(
 						"Signals list in the STATION TOPOLOGY section of your system prompt. Do not " +
 						"abbreviate, translate, or invent a name — if the name you want isn't listed " +
 						"there, do not call this tool. Do NOT pass a Block ID (e.g. a name from the " +
-						"Blocks list, such as \"kA\") — a Block ID names a piece of track, not an endpoint.",
+						"Blocks list$blockIdExample) — a Block ID names a piece of track, not an endpoint.",
 				type = DomainToolParameterType.String,
 				required = true
 			),
@@ -167,7 +180,7 @@ class RequestRouteTool(
 						"the train itself. Exact name, copied verbatim from the InOuts or Signals list in " +
 						"the STATION TOPOLOGY section of your system prompt. Do not abbreviate, translate, " +
 						"or invent a name — if the name you want isn't listed there, do not call this " +
-						"tool. Do NOT pass a Block ID (e.g. a name from the Blocks list, such as \"kA\") — " +
+						"tool. Do NOT pass a Block ID (e.g. a name from the Blocks list$blockIdExample) — " +
 						"a Block ID names a piece of track, not an endpoint.",
 				type = DomainToolParameterType.String,
 				required = true
@@ -373,7 +386,8 @@ class RequestRouteTool(
 	 * may be added for it. The enforceable rule is therefore
 	 * the weaker "a queued train's origin must be an InOut, not a Signal". Combined with the
 	 * existing "cannot depart FROM the destination" rule this pins the origin exactly on a
-	 * two-InOut network such as `vyhybna.xml`, and is a strict improvement on larger ones. This is
+	 * two-InOut network such as `vyhybna.xml`. On a larger one it does not, so there every route
+	 * for a queued train is refused ([ambiguousEntryError], Issue #1155). This is
 	 * the only guard for a queued train (its footprint is empty, so the kernel's contiguity check
 	 * passes vacuously); see the table at
 	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
@@ -388,11 +402,14 @@ class RequestRouteTool(
 		fromEndpointName: String
 	): ToolResult.Error? {
 		if (inOutNames.isEmpty()) return null
-		if (fromEndpointName in inOutNames) return null
 		val isQueued = sensorPort?.getQueuedTrains()?.any { it.trainId == trainId } ?: false
 		if (!isQueued || activePerceptionOf(trainId) != null) return null
 		val destination = declaredDestinationOf(trainId)
 		val candidateOrigins = inOutNames.filter { it != destination }.sorted()
+		// More than two InOuts: the entry is not pinned. Two (vyhybna) keep the rule below unchanged,
+		// including when the destination is unknown.
+		if (inOutNames.size > 2 && candidateOrigins.size > 1) return ambiguousEntryError(trainId)
+		if (fromEndpointName in inOutNames) return null
 		val legalOrigins = if (candidateOrigins.isEmpty()) inOutNames.sorted() else candidateOrigins
 		return ToolResult.Error(
 			"Train '$trainId' has not entered the network yet, so its route must start at its entry " +
@@ -403,6 +420,24 @@ class RequestRouteTool(
 			rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
 		)
 	}
+
+	/**
+	 * Refuses any route for a queued train whose entry point this tool cannot pin (Issue #1155).
+	 *
+	 * "An InOut other than the destination" pins the entry only on a two-InOut station. With more
+	 * InOuts (Červený Újezd has four) a route from the wrong one is accepted, the train later enters
+	 * at its real InOut holding blocks elsewhere, and its own path setup fails as non-contiguous —
+	 * the cause of all 6 early terminations in the #1276 Červený Újezd baseline. The cycle message
+	 * already tells the model a queued train "needs approve_train only"; its first route is offered
+	 * on its NEXT SECTION line once it runs, so refusing here loses nothing.
+	 */
+	private fun ambiguousEntryError(trainId: String): ToolResult.Error =
+		ToolResult.Error(
+			"Train '$trainId' has not entered the network yet and this station has several entry " +
+				"points, so no route can be placed for it now. Call approve_train for it; its first " +
+				"route is named on its NEXT SECTION line once it is running. Do not retry this request.",
+			rejection = RejectionCode.TRAIN_NOT_ADMITTED
+		)
 
 	/**
 	 * This train's last captured first-person perception, or `null` if it is not active.
