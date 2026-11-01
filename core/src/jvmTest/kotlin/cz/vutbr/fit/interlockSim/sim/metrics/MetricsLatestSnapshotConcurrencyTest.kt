@@ -104,9 +104,16 @@ class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 				}
 			}
 
-		context.run()
-		runFinished.set(true)
-		reader.join(TimeUnit.SECONDS.toMillis(HANDOVER_TIMEOUT_SECONDS))
+		try {
+			context.run()
+		} finally {
+			// A failed or timed-out run must not leave the daemon reader spinning for the rest of the
+			// JVM, nor a publisher parked behind a full handover queue (Issue #1309 Copilot thread).
+			runFinished.set(true)
+			handover.clear()
+			handoverRead.clear()
+			reader.join(TimeUnit.SECONDS.toMillis(HANDOVER_TIMEOUT_SECONDS))
+		}
 
 		assertThat(reader.isAlive, "reader still running").isFalse()
 		assertThat(handoverTimedOut.get(), "a handover timed out").isFalse()
