@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.toRailwayOutcome
@@ -39,7 +40,9 @@ import java.util.concurrent.TimeUnit
  * with no dispatcher at all -- are persisted when a sweep configured a store for them (Issue #676,
  * Goal 6 SP5). Before, only runs with an `AgentDriverLoop` wrote a JSON, so the sweep found no file
  * for such a run and recorded it as `CRASH` (the #1276 `cervenyUjezdRuleBased` control-arm
- * workaround). The persisted figures are the run record's.
+ * workaround). The persisted figures are the run record's. A run on the synchronous rule-based
+ * wiring is recorded under [DispatcherArm.RULE_BASED]; a run that wired no dispatcher at all under
+ * [DispatcherArm.NO_DISPATCHER], which the arm gate never passes (fix round 1).
  *
  * @since Issue #676 (Goal 6 SP5)
  */
@@ -63,7 +66,8 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 	private fun assertPersistedFromTheRecord(
 		context: DefaultSimulationContext,
 		root: Path,
-		expected: RunEndClassification
+		expected: RunEndClassification,
+		expectedArm: DispatcherArm
 	) {
 		val record = context.getMetricsServices().getRunRecordSource().runRecord()
 		assertThat(record, name = "run record").isNotNull()
@@ -78,6 +82,8 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 		assertThat(file.fileName.toString(), name = "file name").endsWith("-$RUN_ID.json")
 		val snapshot = DefaultRunSnapshotStore(root).readAll(root).single()
 		assertThat(snapshot.runId, name = "run id").isEqualTo(RUN_ID)
+		assertThat(snapshot.arm, name = "arm").isEqualTo(expectedArm)
+		assertThat(file.parent.fileName.toString(), name = "arm directory").isEqualTo(expectedArm.name.lowercase())
 		assertThat(snapshot.endCause, name = "end cause").isEqualTo(RunEndCause.NATURAL_COMPLETION)
 		assertThat(snapshot.railwayOutcome, name = "persisted outcome").isEqualTo(record.toRailwayOutcome())
 		assertThat(snapshot.railwayOutcome.endClassification, name = "end classification").isEqualTo(expected)
@@ -93,7 +99,12 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 		val context = sweepChild(ExampleNames.CERVENY_UJEZD, root)
 		context.use {
 			it.run()
-			assertPersistedFromTheRecord(it, root, RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS)
+			assertPersistedFromTheRecord(
+				it,
+				root,
+				RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS,
+				DispatcherArm.RULE_BASED
+			)
 		}
 	}
 
@@ -107,7 +118,12 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 		val context = sweepChild(ExampleNames.MULTI_TRAIN_LOOP, root)
 		context.use {
 			it.run()
-			assertPersistedFromTheRecord(it, root, RunEndClassification.NATURAL_COMPLETION)
+			assertPersistedFromTheRecord(
+				it,
+				root,
+				RunEndClassification.NATURAL_COMPLETION,
+				DispatcherArm.NO_DISPATCHER
+			)
 		}
 	}
 

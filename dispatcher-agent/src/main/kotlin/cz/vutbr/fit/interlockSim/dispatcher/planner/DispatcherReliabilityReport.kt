@@ -37,16 +37,8 @@ internal fun renderDispatcherReliabilityReport(root: Path): Path {
 
 	val aggregator = RunReportAggregator(store)
 
-	val byArm = snapshots.groupBy { it.arm }
-
-	// Produce one ArmReport per known arm (even if no snapshots exist for that arm yet)
-	val reports =
-		DispatcherArm.entries.map { arm ->
-			aggregator.aggregate(byArm[arm] ?: emptyList()).let {
-				// Override the arm field when the snapshot list was empty (aggregate returns RULE_BASED)
-				if (it.runCount == 0) it.copy(arm = arm) else it
-			}
-		}
+	// One ArmReport per dispatcher arm, even without runs; NO_DISPATCHER only with runs (Issue #676).
+	val reports = aggregator.aggregateByArm(snapshots)
 
 	val markdown = aggregator.renderMarkdown(reports)
 

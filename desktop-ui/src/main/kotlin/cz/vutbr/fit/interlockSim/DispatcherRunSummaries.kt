@@ -14,7 +14,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DecisionRateReport
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayProgress
@@ -180,7 +182,7 @@ object DispatcherRunSummaries {
 			return Persisted(null, effectiveCause, outcome)
 		}
 		return try {
-			Persisted(store.write(snapshot), effectiveCause, outcome)
+			Persisted(store.write(withDispatcherArm(scope, snapshot)), effectiveCause, outcome)
 		} catch (e: IOException) {
 			// A run whose measurement file cannot be written is a lost data point, not a failed
 			// simulation: the run itself completed and its console summary is already logged. #847's
@@ -274,6 +276,23 @@ object DispatcherRunSummaries {
 		metricsService.reportUnreleasedReservations()
 		return metricsService.runRecord()?.toRailwayOutcome()
 			?: metricsService.runEndSummary().toUnfinishedRunOutcome()
+	}
+
+	/**
+	 * [snapshot] under [DispatcherArm.NO_DISPATCHER] when the run had no dispatcher at all (Issue #676
+	 * fix round 1): no dispatcher agent and no capacity recorded, which every dispatcher wiring does
+	 * (`recordCapacity` in `wireSynchronousDispatcher` and `wireDispatcherAgent`). The recorder's
+	 * default arm is [DispatcherArm.RULE_BASED], which would count such a run, `multiTrainLoop` for
+	 * one, towards the rule-based arm gate. A synchronous rule-based run keeps its arm.
+	 */
+	private fun withDispatcherArm(
+		scope: Scope,
+		snapshot: DispatcherRunSnapshot
+	): DispatcherRunSnapshot {
+		val dispatcherWired =
+			scope.getOrNull<AgentDriverLoop>() != null ||
+				scope.getOrNull<MetricsCollectionService>()?.runEndSummary()?.capacityShownToDispatcher != null
+		return if (dispatcherWired) snapshot else snapshot.copy(arm = DispatcherArm.NO_DISPATCHER)
 	}
 
 	/** Whether a sweep pointed this run at its own output directory (`DispatcherRunConfig.runsRoot`). */
