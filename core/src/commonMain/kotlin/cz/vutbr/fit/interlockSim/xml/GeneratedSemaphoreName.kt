@@ -24,6 +24,9 @@ import cz.vutbr.fit.interlockSim.util.Point
  * another node in the context writes the same name, so saving a loaded network does not write
  * names the user never wrote; the next load regenerates the omitted ones. Switches are not
  * auto-named (their names are written by hand, Issue #1279).
+ *
+ * The format is a file-format contract (Issue #1332): saved files with omitted names depend on the
+ * next load regenerating the same name, so changing [at] would rename their signals.
  */
 internal object GeneratedSemaphoreName {
 	/** The name format, for log and error messages. */

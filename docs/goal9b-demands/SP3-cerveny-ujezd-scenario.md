@@ -130,6 +130,8 @@ owned by SP8 (#1155). Signal direction in the station-track rule (SP2 demand D4)
 
 A loaded network with unnamed signals cannot be dispatched (see the finding above). The XML loader and the
 editor should give every semaphore a stable name, or the dispatcher should address signals by position.
+**Resolved** for the loader by the 2026-10-31 decision below; the 2026-11-01 decision settles how a save
+treats the generated names.
 
 #### Decision 2026-10-31 (#1273): the loader names unnamed semaphores by grid position
 
@@ -151,6 +153,33 @@ Effect: all 37 Praha signals are addressable by name (19 explicit, 18 generated)
 `ReservePath` and the LLM topology prompt can use every one of them. No fixture changed, and the golden
 outputs (fully named `vyhybna.xml`) are unchanged. Pinned by `XmlContextReaderSemaphoreAutoNameTest` and
 `UnnamedSemaphoreRoutingTest`.
+
+#### Decision 2026-11-01 (#1332): keep the writer-side inference
+
+PR #1283 made `XmlContextWriter.generate()` decide statelessly: it omits a semaphore's name when the name
+is the generated name of the semaphore's own position and no other node in the context writes the same
+name. Two variants were open after its review; the owner chose to keep this behavior.
+
+- **Not taken: reader-side provenance.** `XmlContextReader` would record which names it generated, the
+  context would carry that set (with an empty default for contexts the editor creates), and the writer
+  would omit exactly that set. It would make the omission exact instead of inferred, at the cost of new
+  state on `DefaultEditingContext`.
+- **Kept: the silent-drop variant.** A user who types a generated-form name (`S_15_10` on the semaphore at
+  (15,10)) with no other node sharing it gets a file without that name attribute; the next load
+  regenerates the identical name. The round trip is therefore stable, and no fixture or resource has the
+  case (checked by grep in the PR #1283 review).
+- A semaphore whose name is the generated form of **another** position (for example one moved from
+  (14,10) to (15,10) that kept `S_14_10`) does not match its own position, so its name is written and
+  survives the reload.
+- `S_<X>_<Y>` is a position id, not a railway designation. A real signal name tells its role, track and
+  direction; a generated name carries none of that, so it says nothing about whether the signal is a home
+  (*vjezdové*) or a departure (*odjezdové*) signal.
+- The "reload regenerates it" argument holds only while the `GeneratedSemaphoreName` format stays frozen.
+  Files saved with dropped names depend on it, so the format is a file-format contract: changing it would
+  rename the signals of every such file on the next load.
+
+Pinned by `XmlContextReaderSemaphoreAutoNameTest` (`aTypedGeneratedFormNameWithNoSharerIsOmittedOnSaveAndRegeneratedOnReload`,
+`aGeneratedFormNameOfAnotherPositionIsWrittenExplicitly`, next to the existing save tests).
 
 ## Evidence
 
