@@ -209,7 +209,7 @@ class RunEndAccountingTest {
 		admit("T1")
 		exit("T1")
 		queue("T2", time = 590.0)
-		accounting.onRunEnded(RunEnded(601.0, endTimeReached = true))
+		accounting.onRunEnded(RunEnded(601.0, endTimeReached = true, wallSeconds = 1.0))
 
 		val s = summary()
 		assertThat(s.endTime).isEqualTo(601.0)
@@ -222,7 +222,7 @@ class RunEndAccountingTest {
 		admit("T1")
 		admit("T2")
 		exit("T1")
-		accounting.onRunEnded(RunEnded(601.0, endTimeReached = true))
+		accounting.onRunEnded(RunEnded(601.0, endTimeReached = true, wallSeconds = 1.0))
 
 		assertThat(summary().unfinishedJourneys).isEqualTo(1)
 		assertThat(summary().classification).isEqualTo(RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS)
@@ -232,7 +232,7 @@ class RunEndAccountingTest {
 	fun `a stall wins over everything else`() {
 		admit("T1")
 		accounting.onAccounting(RunAccountingEvent.Stalled(listOf("T2", "T3"), setOf("T2", "T3"), 2, 9.0))
-		accounting.onRunEnded(RunEnded(9.0, endTimeReached = false))
+		accounting.onRunEnded(RunEnded(9.0, endTimeReached = false, wallSeconds = 1.0))
 
 		assertThat(summary().classification).isEqualTo(RunEndClassification.STALLED)
 	}
@@ -241,7 +241,7 @@ class RunEndAccountingTest {
 	fun `a run that stopped before its end time without a stall terminated early`() {
 		admit("T1")
 		exit("T1")
-		accounting.onRunEnded(RunEnded(42.0, endTimeReached = false))
+		accounting.onRunEnded(RunEnded(42.0, endTimeReached = false, wallSeconds = 1.0))
 
 		assertThat(summary().classification).isEqualTo(RunEndClassification.TERMINATED_EARLY)
 	}

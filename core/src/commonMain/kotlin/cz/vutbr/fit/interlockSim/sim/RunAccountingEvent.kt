@@ -119,6 +119,38 @@ sealed interface RunAccountingEvent {
 	data class EndTimeReached(
 		override val time: Double
 	) : RunAccountingEvent
+
+	/**
+	 * A caller entered the public `PathReservationService.reservePath` (Issue #1306, Goal 6 SP8): one
+	 * route request, whatever its answer. The internal per-target attempts of `reservePathToAny` and
+	 * `reservePathToAnyNextSemaphore` are not counted; this is the call the Goal 1B B5 cap counts.
+	 *
+	 * @property trainId Name of the train that asked.
+	 * @since Issue #1306 (Goal 6 SP8)
+	 */
+	data class ReservePathCalled(
+		val trainId: String,
+		override val time: Double
+	) : RunAccountingEvent
+
+	/**
+	 * A switch-constrained route search stopped at its node budget and the pair is treated as having
+	 * no route (Issue #1306, Goal 6 SP8; the search of Issue #1151). Announced once per search, where
+	 * the budget WARN line is logged; a cached search answered again is not announced again.
+	 *
+	 * @property start Start separator of the search, as the WARN line names it.
+	 * @property target Target separator of the search, as the WARN line names it.
+	 * @property nodeBudget The budget that was exhausted.
+	 * @property expandedNodes Nodes expanded before the stop.
+	 * @since Issue #1306 (Goal 6 SP8)
+	 */
+	data class RouteSearchBudgetExceeded(
+		val start: String,
+		val target: String,
+		val nodeBudget: Int,
+		val expandedNodes: Int,
+		override val time: Double
+	) : RunAccountingEvent
 }
 
 /**
@@ -146,11 +178,15 @@ enum class SweeperReleaseKind {
  * @property endTimeReached `true` when the main loop announced [RunAccountingEvent.EndTimeReached]:
  *   it stopped the run at its end time, rather than the run ending early (queue drained, watchdog,
  *   manual or error stop).
+ * @property wallSeconds Wall-clock seconds the kDisco kernel ran, read from the platform's monotonic
+ *   clock by the simulation context around the kernel run (Issue #1306, Goal 6 SP8): the one place
+ *   every harness passes through. Context set-up, XML loading and JVM start-up are not included.
  * @since Issue #1304 (Goal 6 SP6)
  */
 data class RunEnded(
 	val time: Double,
-	val endTimeReached: Boolean
+	val endTimeReached: Boolean,
+	val wallSeconds: Double
 )
 
 private val logger = KotlinLogging.logger {}

@@ -99,6 +99,8 @@ internal class RunEndAccounting {
 				}
 			// Carried to the run end by RunEnded.endTimeReached, which the context derives from it.
 			is RunAccountingEvent.EndTimeReached -> Unit
+			// Performance facts (Issue #1306): counted by RunPerformanceAccounting, not run-end figures.
+			is RunAccountingEvent.ReservePathCalled, is RunAccountingEvent.RouteSearchBudgetExceeded -> Unit
 		}
 	}
 
@@ -134,8 +136,14 @@ internal class RunEndAccounting {
 	 */
 	fun capacityShown(): Int? = capacityShown
 
-	/** The figures so far, with the snapshot-owned ones taken from [snapshot]. */
-	fun summary(snapshot: MetricsSnapshot): RunEndSummary {
+	/**
+	 * The figures so far, with the snapshot-owned ones taken from [snapshot] and the performance row,
+	 * counted elsewhere (Issue #1306), from [performance].
+	 */
+	fun summary(
+		snapshot: MetricsSnapshot,
+		performance: RunPerformance? = null
+	): RunEndSummary {
 		val ended = runEnded
 		return RunEndSummary(
 			journeysCompleted = snapshot.completedTrains,
@@ -160,7 +168,8 @@ internal class RunEndAccounting {
 			unfinishedJourneys = onNetwork.size,
 			endTime = ended?.time,
 			endTimeReached = ended?.endTimeReached ?: false,
-			classification = ended?.let(::classification)
+			classification = ended?.let(::classification),
+			performance = performance
 		)
 	}
 

@@ -21,7 +21,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
+import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.sim.emitRunAccountingEvent
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -250,6 +252,8 @@ class DefaultPathReservationService(
 		target: DynamicPathSeparator,
 		maxDepth: Int
 	): PathReservationService.ReservationResult {
+		// Issue #1306 (Goal 6 SP8): one public route request, counted in the run's performance row.
+		emitRunAccountingEvent(RunAccountingEvent.ReservePathCalled(trainId, currentSimulationTime()))
 		// Issue #1174: a stale holding of another train must not refuse this request.
 		expireStaleReservations(exceptTrainId = trainId)
 		return reservePath(trainId, start, target, maxDepth, topologicalPaths = null)
