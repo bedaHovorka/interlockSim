@@ -54,6 +54,8 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
  * @property endTime Kernel clock at run end; `null` before the run ended.
  * @property endTimeReached Whether the main loop reached its end time.
  * @property classification How the run ended; `null` before the run ended.
+ * @property performance The performance row (Issue #1306, Goal 6 SP8); `null` before the run ended
+ *   and whenever [MetricGroup.PERFORMANCE] is off.
  * @since Issue #1304 (Goal 6 SP6)
  */
 data class RunEndSummary(
@@ -79,7 +81,8 @@ data class RunEndSummary(
 	val unfinishedJourneys: Int,
 	val endTime: Double?,
 	val endTimeReached: Boolean,
-	val classification: RunEndClassification?
+	val classification: RunEndClassification?,
+	val performance: RunPerformance? = null
 )
 
 /**

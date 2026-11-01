@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.fastsim
 import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
+import cz.vutbr.fit.interlockSim.sim.metrics.performanceLine
 import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.github.oshai.kotlinlogging.Level
 import org.koin.core.context.startKoin
@@ -62,12 +63,29 @@ class NativeRunRecordTest {
 		}
 	}
 
+	/** Issue #1306 (Goal 6 SP8): the CLI prints the performance row too; presence and units only. */
+	@Test
+	fun `a native cervenyUjezd run prints its performance row`() {
+		NativeExampleRegistry.create(ExampleNames.CERVENY_UJEZD, END_TIME, NativeContextFactory()).use { ctx ->
+			ctx.run()
+
+			val record = assertNotNull(ctx.getMetricsServices().getRunRecordSource().runRecord(), "run record")
+			assertNotNull(record.performance, "performance row")
+			val line = runPerformanceLine(ctx)
+			assertEquals(record.performanceLine(), line)
+			assertTrue(line.contains("real-time ratio "), line)
+			assertTrue(line.contains("reservePath calls "), line)
+		}
+	}
+
 	@Test
 	fun `before the run ended the CLI line says the record is not available`() {
 		NativeExampleRegistry.create(ExampleNames.SHUNTING_LOOP, END_TIME, NativeContextFactory()).use { ctx ->
 			val line = runRecordLine(ctx)
 
 			assertTrue(line.startsWith("Run record: not available"), line)
+			val performance = runPerformanceLine(ctx)
+			assertTrue(performance.startsWith("Performance: not available"), performance)
 		}
 	}
 }

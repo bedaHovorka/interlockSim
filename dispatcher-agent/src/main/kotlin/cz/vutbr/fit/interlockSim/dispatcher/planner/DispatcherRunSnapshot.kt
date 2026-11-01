@@ -24,7 +24,7 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing. Current version: **11** (version 2 added
+ * handle old JSON files without crashing. Current version: **12** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
@@ -33,7 +33,7 @@ import kotlinx.serialization.Serializable
  * vocabulary, Issue #988; version 10 split [RailwayOutcome.unresolvedAtRunEnd] out of
  * [RailwayOutcome.conflicts], Issue #1280; version 11 added
  * [staleOriginRefusalsAfterSilentCycle], Issue #1365, and persisted the run record figures in
- * [railwayOutcome], Issue #676).
+ * [railwayOutcome], Issue #676; version 12 added the performance row and [example], Issue #1306).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -170,6 +170,13 @@ import kotlinx.serialization.Serializable
  *   made. A count, not a verdict: a refusal can also have another cause the counter cannot see.
  *   `null` means *not measured* — a run JSON written before this field existed, or a synthetic
  *   `TIMEOUT_ABORT` / `CRASH` snapshot whose child JVM never reported it; `0` is a measured none.
+ * @property example The registered example the run ran (`shuntingLoop`, `cervenyUjezd`, ...), so the
+ *   report's Performance table never pools wall time across networks (Issue #1306); `null` when the
+ *   caller did not name one (a GUI run, a file before schema version 12).
+ * @property processWallSeconds Wall seconds of the whole forked run as the `aiSweep` driver timed it,
+ *   from launching the child JVM to its exit: JVM start, network loading, the run and its persistence
+ *   (Issue #1306). The kernel-only wall is [RailwayOutcome.wallSeconds]. Present for an aborted run
+ *   too (a timed-out run carries its timeout); `null` outside a sweep and in files before version 12.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -223,7 +230,9 @@ data class DispatcherRunSnapshot(
 	val circuitBreakerState: LlmCircuitBreaker.State? = null,
 	val circuitBreakerTotalSkips: Long? = null,
 	val circuitBreakerOpenCount: Long? = null,
-	val staleOriginRefusalsAfterSilentCycle: Long? = null
+	val staleOriginRefusalsAfterSilentCycle: Long? = null,
+	val example: String? = null,
+	val processWallSeconds: Double? = null
 ) {
 	companion object {
 		/**
@@ -295,8 +304,15 @@ data class DispatcherRunSnapshot(
 		 *   instead of the `ShuntingLoop` counter. In version 10 and older files those figures were
 		 *   `null` for a non-`ShuntingLoop` run. The arm vocabulary gained
 		 *   [DispatcherArm.NO_DISPATCHER] for runs that wired no dispatcher at all.
+		 * - **12** — Issue #1306 (Goal 6 SP8), [railwayOutcome] gained the run record's performance row
+		 *   ([RailwayOutcome.wallSeconds], [RailwayOutcome.simulationSeconds],
+		 *   [RailwayOutcome.realTimeRatio], [RailwayOutcome.routeSearchBudgetExceeded],
+		 *   [RailwayOutcome.reservePathCalls]) and the snapshot gained [example] and
+		 *   [processWallSeconds]. Every new field
+		 *   defaults to `null`, so every version 1-11 file still decodes, with them absent; no existing
+		 *   field changed meaning.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 11
+		const val CURRENT_SCHEMA_VERSION: Int = 12
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

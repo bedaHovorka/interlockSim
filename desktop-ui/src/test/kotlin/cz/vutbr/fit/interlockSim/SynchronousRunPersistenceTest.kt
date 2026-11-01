@@ -67,13 +67,15 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 		context: DefaultSimulationContext,
 		root: Path,
 		expected: RunEndClassification,
-		expectedArm: DispatcherArm
+		expectedArm: DispatcherArm,
+		exampleName: String
 	) {
 		val record = context.getMetricsServices().getRunRecordSource().runRecord()
 		assertThat(record, name = "run record").isNotNull()
 		checkNotNull(record)
 
-		val persisted = DispatcherRunSummaries.finishAndPersist(context.scope, RunEndCause.NATURAL_COMPLETION)
+		val persisted =
+			DispatcherRunSummaries.finishAndPersist(context.scope, RunEndCause.NATURAL_COMPLETION, exampleName)
 
 		val file = persisted.file
 		assertThat(file, name = "written path").isNotNull()
@@ -87,6 +89,10 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 		assertThat(snapshot.endCause, name = "end cause").isEqualTo(RunEndCause.NATURAL_COMPLETION)
 		assertThat(snapshot.railwayOutcome, name = "persisted outcome").isEqualTo(record.toRailwayOutcome())
 		assertThat(snapshot.railwayOutcome.endClassification, name = "end classification").isEqualTo(expected)
+		// Issue #1306: the example and the performance row reach the JSON (presence only, no wall number).
+		assertThat(snapshot.example, name = "example").isEqualTo(exampleName)
+		assertThat(snapshot.railwayOutcome.wallSeconds, name = "wall seconds").isNotNull()
+		assertThat(snapshot.railwayOutcome.reservePathCalls, name = "reservePath calls").isNotNull()
 	}
 
 	@Test
@@ -103,7 +109,8 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 				it,
 				root,
 				RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS,
-				DispatcherArm.RULE_BASED
+				DispatcherArm.RULE_BASED,
+				ExampleNames.CERVENY_UJEZD
 			)
 		}
 	}
@@ -122,7 +129,8 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 				it,
 				root,
 				RunEndClassification.NATURAL_COMPLETION,
-				DispatcherArm.NO_DISPATCHER
+				DispatcherArm.NO_DISPATCHER,
+				ExampleNames.MULTI_TRAIN_LOOP
 			)
 		}
 	}

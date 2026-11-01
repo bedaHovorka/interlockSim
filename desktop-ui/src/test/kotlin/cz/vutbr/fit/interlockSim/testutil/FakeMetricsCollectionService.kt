@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsHistory
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
+import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
 import cz.vutbr.fit.interlockSim.sim.metrics.TrainJourneyRecord
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -150,6 +151,14 @@ class FakeMetricsCollectionService(
 	var contentions: List<OpenContention> = emptyList()
 
 	override fun latestOpenContentions(): List<OpenContention> = contentions
+
+	/**
+	 * What [runRecord] returns; `null` (the run has not ended) unless a test sets it. Overridden so
+	 * no read of the record goes through [runEndSummary] by way of the interface default.
+	 */
+	var record: RunRecord? = null
+
+	override fun runRecord(): RunRecord? = record
 
 	private companion object {
 		const val GATE_TIMEOUT_SECONDS = 10L
