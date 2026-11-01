@@ -21,7 +21,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
+import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.sim.emitRunAccountingEvent
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -250,10 +252,19 @@ class DefaultPathReservationService(
 		target: DynamicPathSeparator,
 		maxDepth: Int
 	): PathReservationService.ReservationResult {
+		announceRouteRequest(trainId)
 		// Issue #1174: a stale holding of another train must not refuse this request.
 		expireStaleReservations(exceptTrainId = trainId)
 		return reservePath(trainId, start, target, maxDepth, topologicalPaths = null)
 	}
+
+	/**
+	 * Announce one public route request ([reservePath], [reservePathToAny] or
+	 * [reservePathToAnyNextSemaphore]) for the run's performance row (Issue #1306, Goal 6 SP8). Called
+	 * once per public call; the internal per-target attempts never call it.
+	 */
+	private fun announceRouteRequest(trainId: String) =
+		emitRunAccountingEvent(RunAccountingEvent.ReservePathCalled(trainId, currentSimulationTime()))
 
 	/**
 	 * [reservePath] with the topological candidate paths supplied by the caller (Issue #966).
@@ -586,6 +597,19 @@ class DefaultPathReservationService(
 		start: DynamicPathSeparator,
 		next: TrackSection
 	): PathReservationService.ReservationResult {
+		announceRouteRequest(trainId)
+		return reserveToAnyNextSemaphoreVia(trainId, start, next)
+	}
+
+	/**
+	 * The body of [reservePathToAnyNextSemaphore] for a known forward [next] section, shared by both
+	 * public overloads; it announces nothing itself, so each public call is counted once (Issue #1306).
+	 */
+	private fun reserveToAnyNextSemaphoreVia(
+		trainId: String,
+		start: DynamicPathSeparator,
+		next: TrackSection
+	): PathReservationService.ReservationResult {
 		logger.debug {
 			"reservePathToAnyNextSemaphore: ENTRY POINT for $trainId - " +
 				"start=$start (${start::class.simpleName}), " +
@@ -818,6 +842,7 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Finding path from oriented separator $start for $trainId"
 		}
 
+		announceRouteRequest(trainId)
 		// Steps 1–3: resolve the forward track section from the separator's orientation
 		val (dynamicStart, next) =
 			targetDiscovery.resolveForwardSection(start, "reservePathToAnyNextSemaphore")
@@ -827,11 +852,11 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Selected next track section: $next"
 		}
 
-		// Step 4: Delegate to existing overload
+		// Step 4: Delegate to the shared body (not the public overload: this call is already counted)
 		logger.debug {
-			"reservePathToAnyNextSemaphore: Delegating to existing overload with next=$next"
+			"reservePathToAnyNextSemaphore: Continuing with the resolved forward section next=$next"
 		}
-		return reservePathToAnyNextSemaphore(trainId, dynamicStart, next)
+		return reserveToAnyNextSemaphoreVia(trainId, dynamicStart, next)
 	}
 
 	override fun findNextReservationTarget(
@@ -887,6 +912,7 @@ class DefaultPathReservationService(
 		trainId: String,
 		start: DynamicPathSeparator
 	): PathReservationService.ReservationResult {
+		announceRouteRequest(trainId)
 		logger.debug {
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}

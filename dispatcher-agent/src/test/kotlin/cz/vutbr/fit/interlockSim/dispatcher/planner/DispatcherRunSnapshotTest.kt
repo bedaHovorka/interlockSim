@@ -17,6 +17,7 @@ import assertk.assertions.hasMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
@@ -177,9 +178,28 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 11`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS)
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_RUN_RECORD)
+	fun `current schema version is 12`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW)
+	}
+
+	/** Issue #1306 (schema version 12): the performance row and the example survive encode→decode. */
+	@Test
+	fun `serialization round-trips the performance row and the example`() {
+		val snap =
+			snapshotWith(
+				railwayOutcome =
+					RailwayOutcome(
+						wallSeconds = 1.25,
+						simulationSeconds = 601.0,
+						realTimeRatio = 480.8,
+						routeSearchBudgetExceeded = 0L,
+						reservePathCalls = 32L
+					)
+			).copy(example = ExampleNames.SHUNTING_LOOP, processWallSeconds = 1.8)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"reservePathCalls\": 32")
+		assertThat(json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)).isEqualTo(snap)
 	}
 
 	/** Issue #1365 (schema version 11): the stale-origin refusal count survives the JSON round-trip. */
@@ -529,11 +549,8 @@ class DispatcherRunSnapshotTest {
 		/** Issue #1280 split the contentions still open at run end out of the conflict count. */
 		private const val SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END: Int = 10
 
-		/** Issue #1365 added the stale-origin refusal count after silent non-idle LLM cycles. */
-		private const val SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS: Int = 11
-
-		/** Issue #676 persisted the run record figures next to the row. */
-		private const val SCHEMA_VERSION_WITH_RUN_RECORD: Int = 11
+		/** Issue #1306 added the performance row and the example name. */
+		private const val SCHEMA_VERSION_WITH_PERFORMANCE_ROW: Int = 12
 
 		private val json =
 			Json {

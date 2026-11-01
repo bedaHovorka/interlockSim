@@ -67,6 +67,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * [journeys] and samples the capacity pressure into every published snapshot; it also publishes
  * [latestOpenContentions]. With the group off it does not exist.
  *
+ * ## Performance row (Issue #1306, Goal 6 SP8)
+ *
+ * With [MetricGroup.PERFORMANCE] on, a [RunPerformanceAccounting] collaborator counts the
+ * `reservePath` calls and the route-search budget stops and takes the wall and simulated seconds from
+ * the run's end; the summary and the record carry the result as [RunEndSummary.performance]. With the
+ * group off nothing subscribes and the row is `null`.
+ *
  * ## Thread safety
  *
  * Not thread-safe, with three exceptions. The service is driven solely by the kDisco event stream —
@@ -86,7 +93,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param config The active metric groups; read once here, so fixed for the run. With
  *   [MetricGroup.HISTORY] off nothing is appended to [history]; with [MetricGroup.JOURNEYS] off no
  *   journey records are kept and [journeys] stays empty (Issue #674). The CORE run-end accounting
- *   ([runEndSummary], Issue #1304) still reads the journey events itself.
+ *   ([runEndSummary], Issue #1304) still reads the journey events itself. With
+ *   [MetricGroup.PERFORMANCE] off the run has no performance row (Issue #1306).
  *
  * @since Issue #672 (Goal 6 SP1)
  */
@@ -199,6 +207,10 @@ class DefaultMetricsCollectionService(
 			null
 		}
 
+	/** The performance row (Issue #1306); `null` with [MetricGroup.PERFORMANCE] off. */
+	private val performanceAccounting: RunPerformanceAccounting? =
+		if (config.isEnabled(MetricGroup.PERFORMANCE)) RunPerformanceAccounting() else null
+
 	/** The run record, filled when the run ends (Issue #676); `null` before. Read across threads. */
 	@kotlin.concurrent.Volatile
 	private var runRecord: RunRecord? = null
@@ -211,6 +223,8 @@ class DefaultMetricsCollectionService(
 		// CORE (Issue #1304): subscribed whatever the groups, journey events included.
 		env?.let(runEndAccounting::subscribe)
 		trainWait?.let { wait -> env?.let(wait::subscribe) }
+		// PERFORMANCE (Issue #1306): also before the record, whose RunEnded reads its row.
+		performanceAccounting?.let { accounting -> env?.let(accounting::subscribe) }
 		// Issue #676: registered after the accounting, so its RunEnded has set the classification.
 		env?.onRunEnded { runRecord = runEndSummary().toRunRecord() }
 	}
@@ -282,7 +296,8 @@ class DefaultMetricsCollectionService(
 
 	override fun latestOpenContentions(): List<OpenContention> = trainWait?.latestOpenContentions().orEmpty()
 
-	override fun runEndSummary(): RunEndSummary = runEndAccounting.summary(getSnapshot())
+	override fun runEndSummary(): RunEndSummary =
+		runEndAccounting.summary(getSnapshot(), performanceAccounting?.performance())
 
 	override fun runRecord(): RunRecord? = runRecord
 

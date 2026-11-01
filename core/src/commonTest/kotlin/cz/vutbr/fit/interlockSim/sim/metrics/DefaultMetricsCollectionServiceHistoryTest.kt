@@ -142,17 +142,17 @@ class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 	fun `enabling JOURNEYS adds exactly one simulation-event listener`() {
 		val disabledEnv = mock<SimulationEnvironment>(MockMode.autofill)
 		val enabledEnv = mock<SimulationEnvironment>(MockMode.autofill)
+		// Both sides collect PERFORMANCE too (it subscribes by itself, Issue #1306): only JOURNEYS differs.
+		val withoutJourneys = MetricsConfig(setOf(MetricGroup.HISTORY, MetricGroup.PERFORMANCE))
+		val withJourneys = MetricsConfig(setOf(MetricGroup.HISTORY, MetricGroup.PERFORMANCE, MetricGroup.JOURNEYS))
 
-		DefaultMetricsCollectionService(env = disabledEnv, config = MetricsConfig(setOf(MetricGroup.HISTORY)))
-		DefaultMetricsCollectionService(
-			env = enabledEnv,
-			config = MetricsConfig(setOf(MetricGroup.HISTORY, MetricGroup.JOURNEYS))
-		)
+		DefaultMetricsCollectionService(env = disabledEnv, config = withoutJourneys)
+		DefaultMetricsCollectionService(env = enabledEnv, config = withJourneys)
 
 		// The always-on run-end accounting (CORE) subscribes by itself, so compare the two runs
 		// instead of expecting zero: only the journey recorder's own listener may differ.
-		val withoutJourneys = countSimulationEventListeners(disabledEnv)
-		assertThat(countSimulationEventListeners(enabledEnv)).isEqualTo(withoutJourneys + 1)
+		val listenersWithoutJourneys = countSimulationEventListeners(disabledEnv)
+		assertThat(countSimulationEventListeners(enabledEnv)).isEqualTo(listenersWithoutJourneys + 1)
 	}
 
 	private fun countSimulationEventListeners(env: SimulationEnvironment): Int {

@@ -132,7 +132,7 @@ class TrainWaitAccountingTest {
 	@Test
 	fun `a train never admitted is queued up to the run end`() {
 		queue("T1", 4.0)
-		accounting.onRunEnded(RunEnded(time = 30.0, endTimeReached = true))
+		accounting.onRunEnded(RunEnded(time = 30.0, endTimeReached = true, wallSeconds = 0.0))
 
 		assertThat(accounting.decorate(listOf(recordOf("T1", entryTime = 4.0))).single().queueSeconds)
 			.isEqualTo(26.0)
@@ -146,7 +146,7 @@ class TrainWaitAccountingTest {
 				MultiTrainLoop.EntryFailure("T1", "A", "B", MultiTrainLoop.EntryFailureKind.NO_ROUTE, 1, null, 6.0)
 			)
 		)
-		accounting.onRunEnded(RunEnded(time = 30.0, endTimeReached = true))
+		accounting.onRunEnded(RunEnded(time = 30.0, endTimeReached = true, wallSeconds = 0.0))
 
 		assertThat(accounting.decorate(listOf(recordOf("T1", entryTime = 4.0))).single().queueSeconds)
 			.isEqualTo(2.0)
@@ -162,7 +162,7 @@ class TrainWaitAccountingTest {
 			)
 		)
 		queue("T1", 10.0)
-		accounting.onRunEnded(RunEnded(time = 20.0, endTimeReached = true))
+		accounting.onRunEnded(RunEnded(time = 20.0, endTimeReached = true, wallSeconds = 0.0))
 
 		val records = accounting.decorate(listOf(recordOf("T1", entryTime = 0.0), recordOf("T1", entryTime = 10.0)))
 
@@ -215,7 +215,7 @@ class TrainWaitAccountingTest {
 		refuse("T1", FailedReservationKind.NO_ROUTE, 2.0)
 		refuse("T2", FailedReservationKind.NO_ROUTE, 3.0)
 		accounting.onJourney(TrainJourneyEvent.Exited("T1", "B", 7.0))
-		accounting.onRunEnded(RunEnded(time = 10.0, endTimeReached = true))
+		accounting.onRunEnded(RunEnded(time = 10.0, endTimeReached = true, wallSeconds = 0.0))
 
 		val records = accounting.decorate(listOf(recordOf("T1"), recordOf("T2")))
 
@@ -240,7 +240,7 @@ class TrainWaitAccountingTest {
 	@Test
 	fun `blocked time comes from the contention query measured up to the run end`() {
 		contentions.blocked = mapOf("T1" to 12.5)
-		accounting.onRunEnded(RunEnded(time = 40.0, endTimeReached = false))
+		accounting.onRunEnded(RunEnded(time = 40.0, endTimeReached = false, wallSeconds = 0.0))
 
 		val (t1, t2) = accounting.decorate(listOf(recordOf("T1"), recordOf("T2")))
 
