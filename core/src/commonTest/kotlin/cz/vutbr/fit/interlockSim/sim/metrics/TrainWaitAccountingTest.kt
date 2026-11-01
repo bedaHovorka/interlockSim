@@ -341,6 +341,20 @@ class TrainWaitAccountingTest {
 	}
 
 	@Test
+	fun `a refusal with no later block event still samples the pressure the flush will keep`() {
+		val block = realBlock()
+		contentions.open = listOf(OpenContention("T2", block, "T1", 10.0))
+		refuse("T2", FailedReservationKind.ALL_PATHS_BLOCKED, 10.0)
+		// The run-end flush clears the tracker before its events arrive.
+		contentions.open = emptyList()
+
+		accounting.onBlockEvent(BlockEvent.ReservationConflictDetected(block, "T2", "T1", 600.0, atRunEnd = true))
+
+		assertThat(accounting.pressure()).isEqualTo(CapacityPressure(0, 1, 1))
+		assertThat(accounting.latestOpenContentions()).single().isEqualTo(OpenContention("T2", block, "T1", 10.0))
+	}
+
+	@Test
 	fun `only accounting events that can change the open contentions or end the run refresh them`() {
 		val refreshing =
 			listOf(
