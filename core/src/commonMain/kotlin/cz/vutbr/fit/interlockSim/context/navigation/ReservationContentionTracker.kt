@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.isFreeOrOwnedBy
@@ -70,6 +71,14 @@ internal class ReservationContentionTracker(
 	 * back by the tracking itself. One entry per train ever blocked, so bounded by the trains of the run.
 	 */
 	private val closedBlockedSeconds: MutableMap<String, Double> = mutableMapOf()
+
+	/**
+	 * Episodes cleared while no kernel was running, so with no clock to close them at, per train: the
+	 * earliest start (Issue #1305). [flushUnresolvedConflicts] closes them at the run's end time; until
+	 * then [blockedSeconds] counts them up to its `now`. Without this a clear outside a run would close
+	 * the episode at the clock's 0.0 fallback and lose it.
+	 */
+	private val unclosedSince: MutableMap<String, Double> = mutableMapOf()
 
 	/**
 	 * Record a blocked-path contention for [trainId] on [blockedBlock], and emit [ConflictDetectedEvent]
@@ -134,6 +143,9 @@ internal class ReservationContentionTracker(
 	 * @since Issue #612 (Goal 3 SP2 follow-up)
 	 */
 	fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected> {
+		// Issue #1305: episodes cleared with no running kernel end with the run.
+		unclosedSince.forEach { (trainId, since) -> addClosed(trainId, simulationEndTime - since) }
+		unclosedSince.clear()
 		if (blockedSince.isEmpty()) return emptyList()
 		val unresolved = blockedSince.keys.toList()
 		// Issue #1305: every train still blocked stood blocked to the end, ownerless block or not.
@@ -163,11 +175,21 @@ internal class ReservationContentionTracker(
 	 * conflating a stale, already-resolved contention with a fresh one on the same block
 	 * later, and keeps [flushUnresolvedConflicts] from reporting contention that actually
 	 * resolved.
+	 *
+	 * Records the closed blocked episode for [blockedSeconds] (Issue #1305) at the simulation clock. With no
+	 * running kernel there is no clock: the episode is then kept apart, still forgotten as a contention, and
+	 * the end-of-run [flushUnresolvedConflicts] closes it at the run's end time.
 	 */
 	fun clearBlockedTracking(trainId: String) {
-		// Issue #1305: record the closed episode; the clock is read only when the train was blocked.
-		if (blockedSince.keys.none { it.first == trainId }) return
-		closeEpisode(trainId, currentSimulationTime())
+		// Issue #1305: record the closed episode; the clock is read only when the train was blocked. With no
+		// running kernel there is no close time, so the flush closes the episode at the end time instead.
+		val since = earliestOpenSince()[trainId] ?: return
+		val now = runCatching { Process.time() }.getOrNull()
+		if (now != null) {
+			addClosed(trainId, now - since)
+		} else {
+			unclosedSince[trainId] = minOf(unclosedSince[trainId] ?: since, since)
+		}
 		blockedSince.keys.removeAll { it.first == trainId }
 	}
 
@@ -185,8 +207,10 @@ internal class ReservationContentionTracker(
 	 */
 	fun blockedSeconds(now: Double): Map<String, Double> {
 		val total = closedBlockedSeconds.toMutableMap()
-		for ((trainId, since) in earliestOpenSince()) {
-			total[trainId] = (total[trainId] ?: 0.0) + (now - since).coerceAtLeast(0.0)
+		for (episodes in listOf(earliestOpenSince(), unclosedSince)) {
+			for ((trainId, since) in episodes) {
+				total[trainId] = (total[trainId] ?: 0.0) + (now - since).coerceAtLeast(0.0)
+			}
 		}
 		return total
 	}
@@ -197,7 +221,14 @@ internal class ReservationContentionTracker(
 		until: Double
 	) {
 		val since = earliestOpenSince()[trainId] ?: return
-		closedBlockedSeconds[trainId] = (closedBlockedSeconds[trainId] ?: 0.0) + (until - since).coerceAtLeast(0.0)
+		addClosed(trainId, until - since)
+	}
+
+	private fun addClosed(
+		trainId: String,
+		seconds: Double
+	) {
+		closedBlockedSeconds[trainId] = (closedBlockedSeconds[trainId] ?: 0.0) + seconds.coerceAtLeast(0.0)
 	}
 
 	/** The earliest open-contention start of every blocked train. */

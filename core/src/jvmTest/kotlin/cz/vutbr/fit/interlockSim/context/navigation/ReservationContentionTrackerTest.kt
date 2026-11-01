@@ -332,6 +332,24 @@ class ReservationContentionTrackerTest {
 		}
 
 		@Test
+		fun `a clear with no running kernel leaves the episode to the flush to close at the end time`() {
+			withClock(10.0) { tracker.recordContentionAndEmitIfNew("me", busyA, "owner") }
+			mockkObject(Process.Companion)
+			try {
+				every { Process.time() } throws IllegalStateException("no running simulation")
+				tracker.clearBlockedTracking("me")
+			} finally {
+				unmockkObject(Process.Companion)
+			}
+
+			// Cleared, so no longer open; until the flush the episode counts up to now.
+			assertThat(tracker.openContentions { null }).isEmpty()
+			assertThat(tracker.blockedSeconds(now = 12.0)).isEqualTo(mapOf("me" to 2.0))
+			assertThat(tracker.flushUnresolvedConflicts(30.0)).isEmpty()
+			assertThat(tracker.blockedSeconds(now = 99.0)).isEqualTo(mapOf("me" to 20.0))
+		}
+
+		@Test
 		fun `clearing a train with no contention reads no clock and records nothing`() {
 			mockkObject(Process.Companion)
 			try {
