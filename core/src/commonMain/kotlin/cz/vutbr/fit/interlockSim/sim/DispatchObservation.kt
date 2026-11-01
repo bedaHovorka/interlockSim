@@ -155,11 +155,11 @@ data class QueuedTrainObservation(
  *   **Destination-agnostic**: `ReservationTargetQuery.findReservationTargetCandidates`
  *   takes only a start separator, so it cannot know where the train is headed —
  *   like a real interlocking granting *"postav jízdní cestu od X k Y"*, start and
- *   end are given to it; knowing the destination is the dispatcher's job. Because
- *   [ReservationTargetPolicy] always prioritises InOuts, the nearest exit wins whenever a
- *   branch terminating at an InOut competes with one continuing into the station; on
- *   `vyhybna.xml`'s two-InOut passing loop both branches lead to the same exit, so
- *   this happens to look destination-directed there.
+ *   end are given to it; knowing the destination is the dispatcher's job. The dispatcher
+ *   gets it as [destinationName]: [ReservationTargetPolicy] takes the train's own exit when it
+ *   is an available candidate (Issue #1278); otherwise it prioritises InOuts, so the nearest
+ *   exit wins whenever a branch terminating at an InOut competes with one continuing into the
+ *   station. On `vyhybna.xml`'s two-InOut passing loop both branches lead to the same exit.
  *
  *   **Populated only where a forward reservation is possible** (Issue #749). The shell
  *   resolves the list exclusively for inputs satisfying
@@ -197,7 +197,14 @@ data class BlockInputObservation(
 	 * train already holds: the kernel changes no block and only re-clears the start signal, which fights the
 	 * reservation expiry's deferral (STOP) every tick. A dispatcher must not request it.
 	 */
-	val heldRouteEndName: String? = null
+	val heldRouteEndName: String? = null,
+	/**
+	 * The timetable's `out` InOut of [ownerTrainId] — the station exit the train is scheduled to
+	 * leave by — resolved only when [candidateTargets] is non-empty (Issue #1278); `null` otherwise,
+	 * and `null` when the owner is not one of the shell's approved trains. [ReservationTargetPolicy.pick]
+	 * prefers it among the available station-exit candidates; with `null` the pick keeps the plain order.
+	 */
+	val destinationName: String? = null
 )
 
 /**

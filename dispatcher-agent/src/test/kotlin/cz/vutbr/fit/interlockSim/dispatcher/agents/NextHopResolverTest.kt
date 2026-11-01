@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
+import cz.vutbr.fit.interlockSim.testutil.inOutCandidate
 import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -124,6 +125,25 @@ class NextHopResolverTest {
 		val outcome = NextHopResolver.resolve("T1", observation(innerBlockInputs = listOf(first, second)))
 
 		assertThat(outcome).isEqualTo(NextHopOutcome.Hop(fromSignalName = "first", toTargetName = "firstTarget"))
+	}
+
+	@Test
+	@DisplayName("the hop follows the policy's destination preference: the train's own exit wins (Issue #1278)")
+	fun hopTargetsTheTimetableExitWhenItIsAnAvailableCandidate() {
+		val atExitSignal =
+			input(towardSemaphoreName = "e32", isApproachingThisInput = true).copy(
+				candidateTargets = listOf(inOutCandidate("east_exit_2", true), inOutCandidate("east_exit_1", true)),
+				destinationName = "east_exit_1"
+			)
+		val obs = observation(innerBlockInputs = listOf(atExitSignal))
+
+		assertThat(NextHopResolver.resolve("T1", obs))
+			.isEqualTo(NextHopOutcome.Hop(fromSignalName = "e32", toTargetName = "east_exit_1"))
+		assertThat(NextHopResolver.resolveAll(listOf("T1"), obs))
+			.isEqualTo(mapOf("T1" to NextHopOutcome.Hop(fromSignalName = "e32", toTargetName = "east_exit_1")))
+		val noDestination = observation(innerBlockInputs = listOf(atExitSignal.copy(destinationName = null)))
+		assertThat(NextHopResolver.resolve("T1", noDestination))
+			.isEqualTo(NextHopOutcome.Hop(fromSignalName = "e32", toTargetName = "east_exit_2"))
 	}
 
 	// ── Non-qualifying inputs ───────────────────────────────────────────────
