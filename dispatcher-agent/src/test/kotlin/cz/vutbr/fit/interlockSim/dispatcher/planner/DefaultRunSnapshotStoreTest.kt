@@ -293,6 +293,43 @@ class DefaultRunSnapshotStoreTest {
 	}
 
 	/**
+	 * A schema-version-11 run (Issue #1306): written before the performance row and the example
+	 * existed, so it has none of their keys, and is still read with them absent.
+	 */
+	@Test
+	fun `readAll still reads a schema-version-11 file and reports its performance row as absent`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val v11Outcome = RailwayOutcome(journeysCompleted = 15L, trainsExited = 15L, endTime = 601.0)
+		val current =
+			FUTURE_SCHEMA_JSON_CODEC
+				.parseToJsonElement(
+					FUTURE_SCHEMA_JSON_CODEC.encodeToString(
+						DispatcherRunSnapshot.serializer(),
+						runSnapshot(runId = "legacy-v11-001").copy(railwayOutcome = v11Outcome)
+					)
+				).jsonObject
+		val v12Keys =
+			setOf("wallSeconds", "simulationSeconds", "realTimeRatio", "routeSearchBudgetExceeded", "reservePathCalls")
+		val outcome = JsonObject(current.getValue("railwayOutcome").jsonObject.filterKeys { it !in v12Keys })
+		val v11 =
+			JsonObject(
+				current.filterKeys { it != "example" } + ("schemaVersion" to JsonPrimitive(11)) + ("railwayOutcome" to outcome)
+			)
+		val armDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(armDir)
+		Files.writeString(armDir.resolve("legacy-v11.json"), v11.toString())
+
+		val legacy = store.readAll(tmpDir).single()
+
+		assertThat(legacy.schemaVersion).isEqualTo(11)
+		assertThat(legacy.railwayOutcome).isEqualTo(v11Outcome)
+		assertThat(legacy.railwayOutcome.wallSeconds).isNull()
+		assertThat(legacy.example).isNull()
+	}
+
+	/**
 	 * A literal schema-version-10 document (Issue #676 fix round 1): the shape of a run JSON written
 	 * on 2026-10-31 by the version-10 code (maps trimmed to a few keys), with the per-run railway
 	 * figures of the #895 control arm (vyhybna `shuntingLoop`, 600 s). Not built from the current

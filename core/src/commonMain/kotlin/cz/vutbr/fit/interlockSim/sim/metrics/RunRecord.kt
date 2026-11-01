@@ -58,6 +58,9 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
  * @property endTime Kernel clock at run end.
  * @property endTimeReached Whether the main loop reached its end time.
  * @property classification How the run ended.
+ * @property performance The performance row (Issue #1306, Goal 6 SP8): wall against simulated time,
+ *   route-search budget stops and `reservePath` calls; `null` when [MetricGroup.PERFORMANCE] was off.
+ *   [performanceLine] prints it.
  * @since Issue #676 (Goal 6 SP5)
  */
 data class RunRecord(
@@ -83,7 +86,8 @@ data class RunRecord(
 	val unfinishedJourneys: Int,
 	val endTime: Double,
 	val endTimeReached: Boolean,
-	val classification: RunEndClassification
+	val classification: RunEndClassification,
+	val performance: RunPerformance? = null
 ) {
 	/**
 	 * The record as one console line, starting `Run record:` -- printed by the native CLI after its
@@ -144,6 +148,7 @@ fun RunEndSummary.toRunRecord(): RunRecord? {
 		unfinishedJourneys = unfinishedJourneys,
 		endTime = endedAt,
 		endTimeReached = endTimeReached,
-		classification = endedAs
+		classification = endedAs,
+		performance = performance
 	)
 }

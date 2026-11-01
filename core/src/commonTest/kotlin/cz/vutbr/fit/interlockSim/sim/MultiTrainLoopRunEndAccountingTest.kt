@@ -202,7 +202,10 @@ class MultiTrainLoopRunEndAccountingTest : CommonKoinTestBase() {
 			ctx.run()
 
 			val core = coreOnly.runEndSummary()
-			assertThat(core, name = "core-only summary = all-groups summary at $endTime s").isEqualTo(ctx.summary())
+			// The performance row is its own group (Issue #1306): absent with only CORE on.
+			assertThat(core.performance, name = "no performance row with PERFORMANCE off at $endTime s").isNull()
+			assertThat(core, name = "core-only summary = all-groups summary at $endTime s")
+				.isEqualTo(ctx.summary().copy(performance = null))
 			assertThat(core.classification, name = "classification at $endTime s").isEqualTo(expected)
 			assertThat(core.trainsEntered, name = "trains entered at $endTime s").isEqualTo(2)
 			assertThat(coreOnly.journeys(), name = "no journey records with JOURNEYS off").isEmpty()

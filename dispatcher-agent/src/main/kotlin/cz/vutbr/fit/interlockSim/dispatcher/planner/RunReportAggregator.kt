@@ -51,7 +51,7 @@ import java.time.format.DateTimeFormatter
  * | Apply Failures | [ApplyFailureCode] × arm |
  * | Author Attribution | [ActionAuthor] × arm |
  * | Latency | arm × tick period, p50/p95/max and deadline-miss count |
- * | Parameter Sweep | one row per [RunParameters] cell |
+ * | Parameter Sweep | one row per [RunParameters] cell; its Performance table one per cell and example |
  *
  * @param store Used to load per-run JSON snapshots for the Gradle task entry point.
  *
@@ -589,7 +589,9 @@ class RunReportAggregator(
 	 * columns stopped being legible, so this renders **Decision Hygiene** (tick/action
 	 * bookkeeping, the existing gate columns) and **Railway Outcomes** (what the railway actually
 	 * did) as two tables built from the identical [paramsRowPrefix] columns, so a reader can join
-	 * a row in one to its counterpart in the other without guessing.
+	 * a row in one to its counterpart in the other without guessing. A third, **Performance**
+	 * ([PerformanceReportSection], Issue #1306), splits each cell by example and starts with the same
+	 * columns.
 	 *
 	 * ## Why this is not one row per arm (Issue #847, SP2c.24)
 	 *
@@ -649,6 +651,8 @@ class RunReportAggregator(
 		appendParameterSweepLegend(sb)
 		appendHygieneTable(sb, ranked)
 		appendOutcomesTable(sb, ranked)
+		// Issue #1306: per cell and example, so wall time is never pooled across networks.
+		PerformanceReportSection.append(sb, ranked.map { it.first }, ::paramsRowPrefix)
 	}
 
 	private fun appendHygieneTable(
@@ -817,6 +821,7 @@ class RunReportAggregator(
 				"termination-gated and is the authoritative per-cell outcome figure; `journeysCompleted` is " +
 				"still reported alongside it, for comparison only."
 		)
+		sb.appendLine(PerformanceReportSection.legend())
 		sb.appendLine()
 	}
 

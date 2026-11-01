@@ -108,6 +108,20 @@ import kotlinx.serialization.Serializable
  * @property endClassification How the run ended, as the metrics service classified it. The recorded
  *   [RunEndCause] is decided separately and is not replaced by it.
  *
+ * The figures below are the run record's performance row (`RunRecord.performance`, schema version
+ * 12, Issue #1306, Goal 6 SP8). Each is `null` in older files, in a run that had not ended when it
+ * was read, and in a run whose `PERFORMANCE` metric group was off. They measure the machine as much
+ * as the railway: the wall figures vary from run to run and with load.
+ *
+ * @property wallSeconds Wall-clock seconds the simulation kernel ran (not the JVM start-up or the
+ *   network loading).
+ * @property simulationSeconds Simulated seconds the run reached.
+ * @property realTimeRatio [simulationSeconds] divided by [wallSeconds]; `null` also when the wall time
+ *   was not above zero.
+ * @property routeSearchBudgetExceeded Route searches stopped at their node budget (Issue #1151).
+ * @property reservePathCalls Public route requests of `PathReservationService`, each counted once:
+ *   `reservePath`, `reservePathToAny` and `reservePathToAnyNextSemaphore` (`RunPerformance.reservePathCalls`).
+ *
  * @see DispatcherRunSnapshot.railwayOutcome
  * @since Issue #834 (SP2c.11 — record what the railway achieved, not just decision hygiene)
  */
@@ -135,7 +149,12 @@ data class RailwayOutcome(
 	val topologyCapacity: Long? = null,
 	val endTime: Double? = null,
 	val endTimeReached: Boolean? = null,
-	val endClassification: RunEndClassification? = null
+	val endClassification: RunEndClassification? = null,
+	val wallSeconds: Double? = null,
+	val simulationSeconds: Double? = null,
+	val realTimeRatio: Double? = null,
+	val routeSearchBudgetExceeded: Long? = null,
+	val reservePathCalls: Long? = null
 ) {
 	companion object {
 		/**

@@ -33,7 +33,8 @@ data class StallOutcome(
 
 /**
  * This run record as the persisted [RailwayOutcome]: every figure present, the per-kind maps keyed by
- * enum name (the [DispatcherRunSnapshot] map convention).
+ * enum name (the [DispatcherRunSnapshot] map convention). The performance figures (Issue #1306) are
+ * absent when the record has no performance row.
  *
  * @since Issue #676 (Goal 6 SP5)
  */
@@ -61,7 +62,12 @@ fun RunRecord.toRailwayOutcome(): RailwayOutcome =
 		topologyCapacity = topologyCapacity?.toLong(),
 		endTime = endTime,
 		endTimeReached = endTimeReached,
-		endClassification = classification
+		endClassification = classification,
+		wallSeconds = performance?.wallSeconds,
+		simulationSeconds = performance?.simulationSeconds,
+		realTimeRatio = performance?.realTimeRatio,
+		routeSearchBudgetExceeded = performance?.routeSearchBudgetExceeded?.toLong(),
+		reservePathCalls = performance?.reservePathCalls?.toLong()
 	)
 
 /**

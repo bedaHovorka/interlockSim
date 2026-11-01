@@ -170,7 +170,11 @@ at cache write (same routes), nothing the sweep exercises.
    wait forever with one warning in the log. No shipped network gets near the budget (at most 236
    expanded nodes against 300,000). A Goal 9B dispatcher that reasons about refusals needs a
    distinct reason ("route search over budget") in `ReservationResult`; that is a public API
-   change left to Goal 9B.
+   change left to Goal 9B. Since Goal 6 SP8 (#1306) each stop is at least counted: the navigator
+   announces `RunAccountingEvent.RouteSearchBudgetExceeded` where it logs the warning, and the run
+   record's performance row (`RunPerformance.routeSearchBudgetExceeded`, the "Budget exceeded"
+   column of the aiSweep report) carries the count. That is a run figure, not the per-request
+   reason, which stays with Goal 9B.
 4. **The switch-blind listing is the remaining unbounded search.** `findAllTopologicalPaths` (used
    for non-InOut `reservePath` starts and `findCandidatePaths`) has neither cache nor budget. It is
    not on a Praha hot path today, but it is the one that grows exponentially (760 paths for one

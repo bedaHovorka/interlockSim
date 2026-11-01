@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
+import cz.vutbr.fit.interlockSim.sim.metrics.RunPerformance
 import cz.vutbr.fit.interlockSim.sim.metrics.RunStall
 import cz.vutbr.fit.interlockSim.sim.metrics.toRunRecord
 import org.junit.jupiter.api.Test
@@ -86,6 +87,29 @@ class RunRecordOutcomesTest {
 				endClassification = RunEndClassification.STALLED
 			)
 		)
+	}
+
+	@Test
+	fun `the performance row is persisted, and absent when the group was off`() {
+		val performance =
+			RunPerformance(
+				wallSeconds = 1.25,
+				simulationSeconds = 600.0,
+				realTimeRatio = 480.0,
+				routeSearchBudgetExceeded = 1,
+				reservePathCalls = 32
+			)
+
+		val measured = checkNotNull(ended.copy(performance = performance).toRunRecord()).toRailwayOutcome()
+		val off = checkNotNull(ended.toRunRecord()).toRailwayOutcome()
+
+		assertThat(measured.wallSeconds, "wall seconds").isEqualTo(1.25)
+		assertThat(measured.simulationSeconds, "simulated seconds").isEqualTo(600.0)
+		assertThat(measured.realTimeRatio, "ratio").isEqualTo(480.0)
+		assertThat(measured.routeSearchBudgetExceeded, "budget stops").isEqualTo(1L)
+		assertThat(measured.reservePathCalls, "reservePath calls").isEqualTo(32L)
+		assertThat(off.wallSeconds, "wall seconds, group off").isNull()
+		assertThat(off.reservePathCalls, "reservePath calls, group off").isNull()
 	}
 
 	@Test
