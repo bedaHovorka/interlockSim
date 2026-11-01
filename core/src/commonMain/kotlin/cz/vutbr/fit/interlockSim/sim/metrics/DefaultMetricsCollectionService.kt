@@ -65,12 +65,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   Pass `null` only in unit tests that drive [handleBlockEvent] directly.
  * @param history Buffer the published snapshots are appended to; defaults to a
  *   [MetricsHistory] with its default caps (Issue #673).
+ * @param config The active metric groups; read once here, so fixed for the run. With
+ *   [MetricGroup.HISTORY] off nothing is appended to [history]; with [MetricGroup.JOURNEYS] off the
+ *   service does not subscribe to journey events and [journeys] stays empty (Issue #674).
  *
  * @since Issue #672 (Goal 6 SP1)
  */
 class DefaultMetricsCollectionService(
 	env: SimulationEnvironment? = null,
-	private val history: MetricsHistory = MetricsHistory()
+	private val history: MetricsHistory = MetricsHistory(),
+	config: MetricsConfig = MetricsConfig.ALL
 ) : MetricsCollectionService {
 	// ── KPI accumulators ─────────────────────────────────────────────────────
 
@@ -158,11 +162,15 @@ class DefaultMetricsCollectionService(
 
 	private val journeyRecorder = JourneyRecorder()
 
+	private val historyEnabled: Boolean = config.isEnabled(MetricGroup.HISTORY)
+
+	private val journeysEnabled: Boolean = config.isEnabled(MetricGroup.JOURNEYS)
+
 	// ── Subscription ─────────────────────────────────────────────────────────
 
 	init {
 		env?.onBlockEvent { event -> handleBlockEvent(event) }
-		env?.onTrainJourneyEvent { event -> handleJourneyEvent(event) }
+		if (journeysEnabled) env?.onTrainJourneyEvent { event -> handleJourneyEvent(event) }
 	}
 
 	// ── Interface implementation ──────────────────────────────────────────────
@@ -252,7 +260,7 @@ class DefaultMetricsCollectionService(
 	 * same reason as [handleBlockEvent].
 	 */
 	internal fun handleJourneyEvent(event: TrainJourneyEvent) {
-		journeyRecorder.record(event)
+		if (journeysEnabled) journeyRecorder.record(event)
 	}
 
 	// ── Private event handlers ────────────────────────────────────────────────
@@ -380,7 +388,7 @@ class DefaultMetricsCollectionService(
 	private fun publishSnapshot() {
 		val snapshot = getSnapshot()
 		published = snapshot
-		history.add(snapshot)
+		if (historyEnabled) history.add(snapshot)
 		notifyListeners(snapshot)
 	}
 
