@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsHistory
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.sim.metrics.TrainJourneyRecord
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A [MetricsCollectionService] that reports a fixed snapshot and records whether the leak gauge
@@ -67,7 +68,25 @@ class FakeMetricsCollectionService(
 		return unreleasedReservations
 	}
 
-	override fun latestSnapshot(): MetricsSnapshot = getSnapshot()
+	/**
+	 * What [latestSnapshot] returns when set; the fixed snapshot otherwise (Issue #675).
+	 * Written from the test thread, read from a poll thread -- hence volatile.
+	 */
+	@Volatile
+	var published: MetricsSnapshot? = null
+
+	/** Names of the threads that called [latestSnapshot], to prove the dashboard reads off the EDT (Issue #675). */
+	val latestSnapshotThreads: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+
+	/** When set, [latestSnapshot] waits for it: lets a test hold a poll in flight (Issue #675). */
+	@Volatile
+	var latestSnapshotGate: java.util.concurrent.CountDownLatch? = null
+
+	override fun latestSnapshot(): MetricsSnapshot {
+		latestSnapshotThreads.add(Thread.currentThread().name)
+		latestSnapshotGate?.await(GATE_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+		return published ?: getSnapshot()
+	}
 
 	/** One empty buffer shared by every read, like the real service's single buffer. */
 	private val emptyHistory = MetricsHistory()
@@ -76,8 +95,20 @@ class FakeMetricsCollectionService(
 
 	override fun journeys(): List<TrainJourneyRecord> = emptyList()
 
-	/** The snapshot's figures; every run-end counter zero and the run not ended (Issue #1304). */
-	override fun runEndSummary(): RunEndSummary =
+	/** What [runEndSummary] returns when set; the zero summary otherwise (Issue #675). */
+	@Volatile
+	var runEnd: RunEndSummary? = null
+
+	/** How often [runEndSummary] was read (Issue #675). */
+	val runEndSummaryReads: AtomicInteger = AtomicInteger()
+
+	/** [runEnd] when set, else the snapshot's figures with every run-end counter zero (Issue #1304). */
+	override fun runEndSummary(): RunEndSummary {
+		runEndSummaryReads.incrementAndGet()
+		return runEnd ?: zeroSummary()
+	}
+
+	private fun zeroSummary(): RunEndSummary =
 		RunEndSummary(
 			journeysCompleted = completedTrains,
 			trainsEntered = 0,
@@ -109,6 +140,13 @@ class FakeMetricsCollectionService(
 		topologyCapacity: Int
 	) = Unit
 
-	/** No contention is ever open (Issue #1305). */
-	override fun latestOpenContentions(): List<OpenContention> = emptyList()
+	/** What [latestOpenContentions] returns; none by default (Issue #1305). */
+	@Volatile
+	var contentions: List<OpenContention> = emptyList()
+
+	override fun latestOpenContentions(): List<OpenContention> = contentions
+
+	private companion object {
+		const val GATE_TIMEOUT_SECONDS = 10L
+	}
 }
