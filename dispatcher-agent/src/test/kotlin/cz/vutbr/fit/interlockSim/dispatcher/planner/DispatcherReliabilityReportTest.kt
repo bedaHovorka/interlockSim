@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.exists
 import assertk.assertions.isEqualTo
 import org.junit.jupiter.api.Test
@@ -43,14 +44,16 @@ class DispatcherReliabilityReportTest {
 	}
 
 	@Test
-	fun `an empty root still renders one row per arm with zero runs`(
+	fun `an empty root still renders one row per dispatcher arm with zero runs`(
 		@TempDir tempDir: Path
 	) {
 		val markdown = Files.readString(renderDispatcherReliabilityReport(tempDir))
 
-		for (arm in DispatcherArm.entries) {
+		for (arm in DispatcherArm.entries.filter { it.hasDispatcher }) {
 			assertThat(markdown).contains("| $arm | 0 |")
 		}
+		// Issue #676: the arm of runs without a dispatcher is listed only when it has runs.
+		assertThat(markdown).doesNotContain("| ${DispatcherArm.NO_DISPATCHER} |")
 	}
 
 	@Test

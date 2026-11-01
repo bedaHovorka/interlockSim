@@ -23,6 +23,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * ## Services
  *
  * - [getMetricsCollectionService] — Subscribe to metrics events, query current [MetricsSnapshot].
+ * - [getRunRecordSource] — The record of the finished run (Issue #676).
  *
  * @see cz.vutbr.fit.interlockSim.context.SimulationEnvironment.getMetricsServices
  * @since Issue #672 (Goal 6 SP1)
@@ -35,4 +36,12 @@ fun interface MetricsServices {
 	 * @see MetricsCollectionService
 	 */
 	fun getMetricsCollectionService(): MetricsCollectionService
+
+	/**
+	 * The [RunRecordSource] of this simulation context: the run record contract (Issue #676). It is
+	 * the context's [MetricsCollectionService].
+	 *
+	 * @since Issue #676 (Goal 6 SP5)
+	 */
+	fun getRunRecordSource(): RunRecordSource = getMetricsCollectionService()
 }
