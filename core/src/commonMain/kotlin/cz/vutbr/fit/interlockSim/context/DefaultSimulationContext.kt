@@ -61,6 +61,7 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.monotonicNanosKMP
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
@@ -409,6 +410,9 @@ open class DefaultSimulationContext(
 		 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
 		 */
 		private val simulationLogger = KotlinLogging.logger("cz.vutbr.fit.interlockSim.simulation")
+
+		/** Nanoseconds per second, for the wall time of a run (Issue #1306). */
+		private const val NANOS_PER_SECOND: Double = 1_000_000_000.0
 
 		/**
 		 * Factory method to create SimulationContext from EditingContext.
@@ -1409,6 +1413,8 @@ open class DefaultSimulationContext(
 		pendingSimEventListeners.forEach { sim.onEvent(it) }
 		wireCustomEventListeners(sim, pendingBlockEventListeners)
 		wireCustomEventListeners(sim, pendingConflictEventListeners)
+		// Issue #1306 (Goal 6 SP8): the one wall clock of every harness, read around the kernel run.
+		val kernelStartNanos = monotonicNanosKMP()
 		try {
 			var stepState = StepControlState(prevTime = 0.0)
 			runBlocking {
@@ -1420,11 +1426,12 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
+			val wallSeconds = (monotonicNanosKMP() - kernelStartNanos) / NANOS_PER_SECOND
 			val kernelEndTime = sim.time()
 			try {
 				flushUnresolvedReservationConflicts(kernelEndTime)
 				// An Error from a run-end subscriber propagates, but never skips the cleanup below.
-				deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun))
+				deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
 			} finally {
 				lastRunEndTime = kernelEndTime
 				simulation = null // Release reference once sim.run() returns (natural end or stop() called)

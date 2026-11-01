@@ -10,7 +10,10 @@
 package cz.vutbr.fit.interlockSim
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotNull
+import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
@@ -18,6 +21,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.module.Module
 import org.koin.test.get
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -46,6 +51,35 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 		val outcome = get<Main>().runExample(arrayOf("example", ExampleNames.SHUNTING_LOOP, "30"))
 
 		assertThat(outcome).isEqualTo(RunOutcome.COMPLETED)
+	}
+
+	/**
+	 * Issue #1306 (Goal 6 SP8): a JVM run prints its performance row after the summary, like the
+	 * native CLI. Asserts the line and its units only, never a wall-time number.
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("a multiTrainLoop run prints its run record and its performance row, as the native CLI does")
+	fun completedRunPrintsItsPerformanceRow() {
+		val captured = ByteArrayOutputStream()
+		val original = System.out
+		System.setOut(PrintStream(captured, true, Charsets.UTF_8))
+		try {
+			get<Main>().runExample(arrayOf("example", ExampleNames.MULTI_TRAIN_LOOP, "30"))
+		} finally {
+			System.setOut(original)
+		}
+
+		val lines = captured.toString(Charsets.UTF_8).lines()
+		val performance = lines.indexOfFirst { it.startsWith("Performance: ") }
+		val line = lines[performance]
+		assertThat(line).contains("real-time ratio ")
+		assertThat(line).contains("reservePath calls ")
+		// The same two lines the native CLI prints: the run record, then its performance row.
+		assertThat(lines.count { it.startsWith("Performance: ") }, name = "performance lines").isEqualTo(1)
+		assertThat(lines.getOrNull(performance - 1), name = "line before the performance row")
+			.isNotNull()
+			.startsWith("Run record: ")
 	}
 
 	@Test
