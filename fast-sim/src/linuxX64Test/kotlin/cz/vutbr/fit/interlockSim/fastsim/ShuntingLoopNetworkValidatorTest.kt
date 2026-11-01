@@ -76,7 +76,9 @@ class ShuntingLoopNetworkValidatorTest {
 			// Signal direction (Issue #1272): zA ends the block at InOut A but faces A.
 			val issues = ShuntingLoopNetworkValidator.validateShuntingLoopCompatible(ctx)
 			assertTrue(
-				issues.any { it.contains("kA") && it.contains("no home signal") && it.contains("zA faces the InOut") },
+				issues.any {
+					it.contains("kA") && it.contains("no home signal") && it.contains("zA governs travel towards the InOut")
+				},
 				"expected the misdirected home signal zA to be named; got: $issues"
 			)
 		}

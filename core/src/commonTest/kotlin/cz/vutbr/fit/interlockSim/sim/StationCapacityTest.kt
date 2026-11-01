@@ -204,14 +204,15 @@ class StationCapacityTest : CommonKoinTestBase() {
 
 	@Test
 	fun shuntingLoopRejectsAHomeSignalFacingItsInOut() {
-		// zA ends the entry/exit block kA but faces the InOut A, so a train entering from A has
+		// zA ends the entry/exit block kA but governs travel towards the InOut A, so a train entering from A has
 		// no home signal (signal direction, Issue #1272); the issue names zA instead of claiming
 		// the block does not end at a RailSemaphore.
 		val station = Station.from(load(NetworkResources.STATION_HOME_SIGNAL_FACING_AWAY_XML))
 
 		assertThat(ShuntingLoop.compatibilityIssues(station)).containsExactly(
-			"entry/exit block kA (11,8)-(14,8) has no home signal: its end RailSemaphore zA faces " +
-				"the InOut, away from the incoming train",
+			"entry/exit block kA (11,8)-(14,8) has no home signal: its end RailSemaphore zA governs " +
+				"travel towards the InOut (a departure signal), so no home signal (vjezdové návěstidlo) " +
+				"protects the incoming train",
 			"1 RailSemaphore(s) are neither a home signal nor a platform-track end"
 		)
 	}
@@ -224,7 +225,8 @@ class StationCapacityTest : CommonKoinTestBase() {
 
 		assertThat(ShuntingLoop.compatibilityIssues(station)).containsExactly(
 			"entry/exit block kA (11,8)-(14,8) has no home signal: its end RailSemaphore " +
-				"S_14_8 faces the InOut, away from the incoming train",
+				"S_14_8 governs travel towards the InOut (a departure signal), so no home signal " +
+				"(vjezdové návěstidlo) protects the incoming train",
 			"1 RailSemaphore(s) are neither a home signal nor a platform-track end"
 		)
 	}

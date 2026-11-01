@@ -71,10 +71,22 @@ name stays `cerveny_ujezd` everywhere: the file `cerveny_ujezd.xml`, `NetworkRes
 decided (`Station.from`, "Signal direction" in its KDoc). An entry/exit block whose end semaphore faces
 its InOut has no home signal; `Station` keeps that semaphore as `StationBlock.misdirectedSignals`, and the
 issue names it (`station-home-signal-facing-away.xml`: "... kA ... has no home signal: its end
-RailSemaphore zA faces the InOut, away from the incoming train") instead of claiming the block does not
-end at a RailSemaphore. The verdicts are unchanged: vyhybna and Červený Újezd are accepted (no
-misdirected signals), Praha is rejected; `StationCapacityTest`, `StationSignalDirectionTest` and
-`:fast-sim`'s `ShuntingLoopNetworkValidatorTest` pin it.
+RailSemaphore zA governs travel towards the InOut (a departure signal), so no home signal (vjezdové
+návěstidlo) protects the incoming train") instead of claiming the block does not end at a
+RailSemaphore. The verdicts are unchanged: vyhybna and Červený Újezd are accepted (no misdirected
+signals), Praha is rejected; `StationCapacityTest`, `StationSignalDirectionTest` and `:fast-sim`'s
+`ShuntingLoopNetworkValidatorTest` pin it.
+
+**Wording and the two-semaphore case (#1298, 2026-11-01).** The first text said zA "faces the InOut,
+away from the incoming train". In railway usage a signal faces the train that sees it, but the rule
+means the travel direction the signal governs, so the text now says "governs travel towards the InOut
+(a departure signal)", and the `Station` KDoc ("Signal direction") states that "faces" means that travel
+direction. #1298 also asked for a reason when both end semaphores of an entry/exit block face away. That
+block cannot exist: one end of an entry/exit block is its InOut cell, which holds no semaphore, so the
+block has at most one end semaphore — the home signal or one misdirected signal. The remaining text "it
+does not end at a RailSemaphore" is right for the two real cases (the other end is a switch, or the block
+joins two InOuts). `StationSignalDirectionTest.everyEntryExitBlockHasAtMostOneEndSemaphore` pins this over
+vyhybna, Červený Újezd, Praha and the facing-away fixture.
 
 ## Left out — demands on Goal 9B
 

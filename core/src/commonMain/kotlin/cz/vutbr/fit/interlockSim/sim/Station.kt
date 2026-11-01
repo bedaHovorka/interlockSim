@@ -39,7 +39,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   direction leaves the block. Said along a horizontal block: the signal at the west end has
  *   `orientation = true` and the signal at the east end `orientation = false`. A signal that faces
  *   away from a block is a departure signal for it, and an incoming train at the other end
- *   meets it as an entry signal.
+ *   meets it as an entry signal. "Faces" always means this travel direction (the direction the
+ *   signal governs), not the side its aspect is seen from (Issue #1298).
  * - An **entry/exit block** is the block at an InOut. Its signal is the home signal: the
  *   [DynamicRailSemaphore] at the other end of that block when there is one and it faces away from
  *   the block, that is towards the station, so it faces the train entering from the InOut; a semaphore
