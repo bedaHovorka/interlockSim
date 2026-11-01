@@ -67,7 +67,20 @@ class FakeMetricsCollectionService(
 		return unreleasedReservations
 	}
 
-	override fun latestSnapshot(): MetricsSnapshot = getSnapshot()
+	/**
+	 * What [latestSnapshot] returns when set; the fixed snapshot otherwise (Issue #675).
+	 * Written from the test thread, read from a poll thread -- hence volatile.
+	 */
+	@Volatile
+	var published: MetricsSnapshot? = null
+
+	/** Names of the threads that called [latestSnapshot], to prove the dashboard reads off the EDT (Issue #675). */
+	val latestSnapshotThreads: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+
+	override fun latestSnapshot(): MetricsSnapshot {
+		latestSnapshotThreads.add(Thread.currentThread().name)
+		return published ?: getSnapshot()
+	}
 
 	/** One empty buffer shared by every read, like the real service's single buffer. */
 	private val emptyHistory = MetricsHistory()
@@ -76,8 +89,14 @@ class FakeMetricsCollectionService(
 
 	override fun journeys(): List<TrainJourneyRecord> = emptyList()
 
+	/** What [runEndSummary] returns when set; the zero summary otherwise (Issue #675). */
+	@Volatile
+	var runEnd: RunEndSummary? = null
+
 	/** The snapshot's figures; every run-end counter zero and the run not ended (Issue #1304). */
-	override fun runEndSummary(): RunEndSummary =
+	override fun runEndSummary(): RunEndSummary = runEnd ?: zeroSummary()
+
+	private fun zeroSummary(): RunEndSummary =
 		RunEndSummary(
 			journeysCompleted = completedTrains,
 			trainsEntered = 0,
@@ -109,6 +128,9 @@ class FakeMetricsCollectionService(
 		topologyCapacity: Int
 	) = Unit
 
-	/** No contention is ever open (Issue #1305). */
-	override fun latestOpenContentions(): List<OpenContention> = emptyList()
+	/** What [latestOpenContentions] returns; none by default (Issue #1305). */
+	@Volatile
+	var contentions: List<OpenContention> = emptyList()
+
+	override fun latestOpenContentions(): List<OpenContention> = contentions
 }

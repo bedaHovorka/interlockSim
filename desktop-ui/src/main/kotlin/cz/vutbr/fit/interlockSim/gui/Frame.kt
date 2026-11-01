@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.scope.Scope
 import java.awt.BorderLayout
@@ -139,6 +140,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	internal val simulationControlPanel: SimulationControlPanel = SimulationControlPanel()
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
+
+	// Live KPI dashboard (Issue #675, Goal 6 SP3): shown in simulation mode, polls the metrics service
+	// off the EDT between RUNNING and STOPPED.
+	internal val metricsDashboardPanel: MetricsDashboardPanel = MetricsDashboardPanel()
 
 	// Dispatcher control panel (Issue #561, Goal 10 SP2b.6)
 	internal val dispatcherControlPanel: DispatcherControlPanel = DispatcherControlPanel()
@@ -261,6 +266,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							wiredRunScope = currentSimulationContext?.scope
 							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
 							wireDispatcherControlPanel()
+							// Issue #675: start the dashboard on this run's metrics service (read only through
+							// its cross-thread-safe latestSnapshot / latestOpenContentions).
+							currentSimulationContext?.scope?.getOrNull<MetricsCollectionService>()?.let {
+								metricsDashboardPanel.start(it)
+							}
 						}
 
 						SimulationController.SimulationStatus.STOPPED -> {
@@ -289,6 +299,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// ensureAnimationRunning().
 							stopAnimationUpdates()
 							railwayNetGridCanvas.captureFinalFrameAndPause()
+							// Issue #675: one last dashboard poll that also reads the run-end summary, then stop.
+							metricsDashboardPanel.stop()
 							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
 							// ended (captured at RUNNING time above). Null for every example except
 							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
@@ -457,6 +469,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			}
 		}
 
+		// Show the KPI dashboard in simulation mode (Issue #675, Goal 6 SP3)
+		if (metricsDashboardPanel.parent == null) {
+			southPanel.add(metricsDashboardPanel, DASHBOARD_PANEL_SOUTH_INDEX)
+		}
+
 		// Show WarningPanel in simulation mode (Goal 3 SP6)
 		if (warningPanel.parent == null) {
 			southPanel.add(warningPanel, WARNING_PANEL_SOUTH_INDEX)
@@ -504,6 +521,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		eventTimelinePanel?.let { panel ->
 			southPanel.remove(panel)
 		}
+
+		// Remove the KPI dashboard and stop its polling (Issue #675, Goal 6 SP3)
+		metricsDashboardPanel.detach()
+		southPanel.remove(metricsDashboardPanel)
 
 		// Hide WarningPanel in editing mode (Goal 3 SP6)
 		warningPanel.isVisible = false
@@ -943,6 +964,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		 * consistent with the other south-panel panels added dynamically.
 		 */
 		private const val WARNING_PANEL_SOUTH_INDEX = 0
+
+		/**
+		 * Index at which MetricsDashboardPanel is inserted in [southPanel] (Issue #675, Goal 6 SP3).
+		 *
+		 * Index 0 like the other panels, so the dashboard sits at the top of the south area in simulation
+		 * mode, above the timeline, warning panel and StatusBar.
+		 */
+		private const val DASHBOARD_PANEL_SOUTH_INDEX = 0
 	}
 
 	/**
