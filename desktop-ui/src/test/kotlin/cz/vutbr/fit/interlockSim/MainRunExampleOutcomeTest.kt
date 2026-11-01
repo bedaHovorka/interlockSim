@@ -12,6 +12,8 @@ package cz.vutbr.fit.interlockSim
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotNull
+import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
@@ -57,7 +59,7 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 	 */
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
-	@DisplayName("a multiTrainLoop run prints its performance row with the real-time ratio")
+	@DisplayName("a multiTrainLoop run prints its run record and its performance row, as the native CLI does")
 	fun completedRunPrintsItsPerformanceRow() {
 		val captured = ByteArrayOutputStream()
 		val original = System.out
@@ -68,9 +70,16 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 			System.setOut(original)
 		}
 
-		val line = captured.toString(Charsets.UTF_8).lines().single { it.startsWith("Performance: ") }
+		val lines = captured.toString(Charsets.UTF_8).lines()
+		val performance = lines.indexOfFirst { it.startsWith("Performance: ") }
+		val line = lines[performance]
 		assertThat(line).contains("real-time ratio ")
 		assertThat(line).contains("reservePath calls ")
+		// The same two lines the native CLI prints: the run record, then its performance row.
+		assertThat(lines.count { it.startsWith("Performance: ") }, name = "performance lines").isEqualTo(1)
+		assertThat(lines.getOrNull(performance - 1), name = "line before the performance row")
+			.isNotNull()
+			.startsWith("Run record: ")
 	}
 
 	@Test

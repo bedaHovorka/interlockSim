@@ -177,8 +177,10 @@ class Main {
 			context.use {
 				it.run(controller)
 				reporter.printSummary()
-				// Issue #1306 (Goal 6 SP8): the performance row, as the native CLI prints it.
+				// Issue #676 / #1306 (Goal 6 SP5, SP8): the run record and its performance row, the same two
+				// lines the native CLI prints after its summary.
 				it.getMetricsServices().getRunRecordSource().runRecord()?.let { record ->
+					println(record.summaryLine())
 					println(record.performanceLine())
 				}
 				// A dispatcher that gave up (AgentDriverLoop.stoppedByFailures) leaves the kDisco
