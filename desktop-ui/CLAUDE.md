@@ -54,6 +54,14 @@ or the shortcuts above.
 Details: [../docs/ANIMATION_ARCHITECTURE.md](../docs/ANIMATION_ARCHITECTURE.md)
 and [../docs/SIMULATION_SPEED_CONTROL.md](../docs/SIMULATION_SPEED_CONTROL.md).
 
+## KPI Dashboard (Goal 6 SP3)
+
+`MetricsDashboardPanel` is docked in `Frame`'s south panel in simulation mode. It polls only
+`MetricsCollectionService.latestSnapshot()` and `latestOpenContentions()` (cross-thread safe) from a
+`SwingWorker` driven by a `javax.swing.Timer`, never simulation-thread objects. `stop(summaryValid)` at STOPPED
+makes one last poll; it also reads `runEndSummary()` only after a natural completion (a manual stop reports
+STOPPED before the simulation thread has finished, so the end cause then reads "stopped manually").
+
 ## Verification and Benchmark Tasks
 
 ```bash
