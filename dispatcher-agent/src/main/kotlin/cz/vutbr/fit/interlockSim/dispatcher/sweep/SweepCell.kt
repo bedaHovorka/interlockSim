@@ -129,8 +129,9 @@ data class SweepCell(
 	 * ## How each arm resolves an omitted axis
 	 *
 	 * The rule-based arm records the empty-string sentinel for [model] and [promptVariant] and
-	 * `0.0` for [temperature] — it never assembles a prompt or contacts Ollama, so those axes are
-	 * not part of its identity. [inferenceTimeoutSeconds] still mirrors [systemProperties]'s `null`
+	 * `0.0` for [temperature] whatever the cell pins — it never assembles a prompt or contacts Ollama,
+	 * so those axes are not part of its identity, and the live recorder (`ruleBasedRunParameters`)
+	 * ignores them too. The same holds for a dispatcher-free cell (Issue #676). [inferenceTimeoutSeconds] still mirrors [systemProperties]'s `null`
 	 * handling (`null` means "leave [KoogAgentPlanAdapter]'s own default in place"), so the recorded
 	 * value is that default, not `null` (the field is non-nullable on [RunParameters]).
 	 *
@@ -189,9 +190,9 @@ data class SweepCell(
 			return RunParameters(
 				tickPeriodMs = tickPeriodMs,
 				historyN = historyN,
-				temperature = temperature ?: 0.0,
+				temperature = 0.0,
 				maxActionsPerTick = maxActionsPerTick,
-				model = model ?: "",
+				model = "",
 				seed = null,
 				inferenceTimeoutSeconds = inferenceTimeoutSeconds ?: KoogAgentPlanAdapter.DEFAULT_TIMEOUT_SECONDS,
 				promptVariant = "",

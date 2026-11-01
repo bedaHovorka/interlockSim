@@ -286,6 +286,8 @@ class DefaultMetricsCollectionService(
 
 	override fun runRecord(): RunRecord? = runRecord
 
+	override fun capacityShownToDispatcher(): Int? = runEndAccounting.capacityShown()
+
 	override fun recordCapacity(
 		shownToDispatcher: Int,
 		topologyCapacity: Int

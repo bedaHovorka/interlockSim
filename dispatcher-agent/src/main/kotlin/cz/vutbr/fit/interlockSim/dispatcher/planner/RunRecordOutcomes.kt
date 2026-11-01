@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
-import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
 import cz.vutbr.fit.interlockSim.sim.metrics.RunStall
 import kotlinx.serialization.Serializable
@@ -65,21 +65,18 @@ fun RunRecord.toRailwayOutcome(): RailwayOutcome =
 	)
 
 /**
- * The outcome of a run read before it ended, so without a [RunRecord]: the eight row figures counted
- * so far, and every record figure absent -- the run had no end to record yet.
+ * The outcome of a run read before it ended, so without a [RunRecord]: the three figures a
+ * [MetricsSnapshot] carries, and every other figure absent. The snapshot is the one source safe to read
+ * from another thread (`MetricsCollectionService.latestSnapshot`), which is where a GUI stop that has
+ * not joined the simulation thread reads it.
  *
  * @since Issue #676 (Goal 6 SP5)
  */
-fun RunEndSummary.toUnfinishedRunOutcome(): RailwayOutcome =
+fun MetricsSnapshot.toUnfinishedRunOutcome(): RailwayOutcome =
 	RailwayOutcome(
-		journeysCompleted = journeysCompleted.toLong(),
-		trainsEntered = trainsEntered.toLong(),
-		trainsExited = trainsExited.toLong(),
-		maxConcurrentTrains = maxConcurrentTrains.toLong(),
-		blockTransitions = blockTransitions.toLong(),
-		conflicts = conflicts.toLong(),
-		failedReservations = failedReservations.toLong(),
-		unresolvedAtRunEnd = unresolvedAtRunEnd.toLong()
+		journeysCompleted = completedTrains.toLong(),
+		conflicts = conflictCount.toLong(),
+		unresolvedAtRunEnd = unresolvedAtRunEndCount.toLong()
 	)
 
 private fun <K : Enum<K>> Map<K, Int>.byName(): Map<String, Long> =

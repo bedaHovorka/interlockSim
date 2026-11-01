@@ -247,8 +247,10 @@ object DispatcherRunSummaries {
 	 * in `CoreModule` for every context, through its run record contract
 	 * ([MetricsCollectionService.runRecord]): no cast to the main process, so `MultiTrainLoop` and
 	 * `ShuntingLoop` runs report the same figures. A run that has not ended yet — the GUI Stop
-	 * handler can race the simulation thread — has no record; it gets the row figures counted so
-	 * far and every record figure absent (`RunEndSummary.toUnfinishedRunOutcome`).
+	 * handler can race the simulation thread — has no record; it gets the three figures of the
+	 * thread-safe [MetricsCollectionService.latestSnapshot] and every other figure absent
+	 * (`MetricsSnapshot.toUnfinishedRunOutcome`). The run-end accounting is not read: it belongs to the
+	 * simulation thread and copies mutable maps, so reading it from the EDT could throw.
 	 *
 	 * ## Absent, never zero
 	 *
@@ -260,9 +262,9 @@ object DispatcherRunSummaries {
 	 * ## Threading
 	 *
 	 * Called at run end, after the kDisco kernel has stopped, on the thread that ended the run
-	 * (the `example` caller thread, or the EDT for the GUI). The run is quiesced already, so
-	 * [MetricsCollectionService.getSnapshot] needs no synchronisation here; a reader that reads
-	 * mid-run uses [MetricsCollectionService.latestSnapshot] instead.
+	 * (the `example` caller thread, or the EDT for the GUI). The record is an immutable value behind a
+	 * volatile reference, so it needs no synchronisation; a manual stop that has not joined the
+	 * simulation thread yet reads only [MetricsCollectionService.latestSnapshot].
 	 *
 	 * Must be called inside `context.use { … }`, like every other read in this object.
 	 *
@@ -275,7 +277,7 @@ object DispatcherRunSummaries {
 		// RailwayOutcome.
 		metricsService.reportUnreleasedReservations()
 		return metricsService.runRecord()?.toRailwayOutcome()
-			?: metricsService.runEndSummary().toUnfinishedRunOutcome()
+			?: metricsService.latestSnapshot().toUnfinishedRunOutcome()
 	}
 
 	/**
@@ -297,7 +299,7 @@ object DispatcherRunSummaries {
 	 */
 	internal fun wiresDispatcher(scope: Scope): Boolean =
 		scope.getOrNull<AgentDriverLoop>() != null ||
-			scope.getOrNull<MetricsCollectionService>()?.runEndSummary()?.capacityShownToDispatcher != null
+			scope.getOrNull<MetricsCollectionService>()?.capacityShownToDispatcher() != null
 
 	/** Whether a sweep pointed this run at its own output directory (`DispatcherRunConfig.runsRoot`). */
 	private fun sweepConfiguredStore(scope: Scope): Boolean = scope.getOrNull<DispatcherRunConfig>()?.runsRoot != null

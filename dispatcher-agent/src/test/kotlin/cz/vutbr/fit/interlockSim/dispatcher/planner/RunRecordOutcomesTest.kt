@@ -14,6 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.sim.metrics.RunStall
@@ -99,20 +100,23 @@ class RunRecordOutcomesTest {
 	}
 
 	@Test
-	fun `a run that has not ended keeps only the row figures so far`() {
-		val outcome = ended.copy(classification = null, endTime = null).toUnfinishedRunOutcome()
-
-		assertThat(outcome).isEqualTo(
-			RailwayOutcome(
-				journeysCompleted = 15L,
-				trainsEntered = 16L,
-				trainsExited = 15L,
-				maxConcurrentTrains = 2L,
-				blockTransitions = 30L,
-				conflicts = 0L,
-				failedReservations = 2L,
-				unresolvedAtRunEnd = 1L
+	fun `a run that has not ended keeps only the figures of the latest snapshot`() {
+		val snapshot =
+			MetricsSnapshot(
+				time = 12.0,
+				conflictCount = 3,
+				completedTrains = 15,
+				throughput = 0.0,
+				totalWaitSeconds = 0.0,
+				averageWaitSeconds = 0.0,
+				occupiedBlocks = 0,
+				totalBlocks = 0,
+				utilization = 0.0,
+				unresolvedAtRunEndCount = 1
 			)
+
+		assertThat(snapshot.toUnfinishedRunOutcome()).isEqualTo(
+			RailwayOutcome(journeysCompleted = 15L, conflicts = 3L, unresolvedAtRunEnd = 1L)
 		)
 	}
 }

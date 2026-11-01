@@ -198,7 +198,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("a persisted run carries the railway figures read from its loop and metrics service")
+	@DisplayName("a run persisted before it ended carries the snapshot figures and no record figures")
 	fun persistedRunCarriesRailwayOutcomes(
 		@TempDir root: Path
 	) {
@@ -211,37 +211,31 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		assertThat(outcome.journeysCompleted, "journeys completed").isNotNull()
 		assertThat(outcome.conflicts, "conflicts").isNotNull()
 		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isNotNull()
-		assertThat(outcome.trainsEntered, "trains entered").isNotNull()
-		assertThat(outcome.trainsExited, "trains exited").isNotNull()
-		assertThat(outcome.maxConcurrentTrains, "max concurrent trains").isNotNull()
-		assertThat(outcome.blockTransitions, "block transitions").isNotNull()
-		assertThat(outcome.failedReservations, "failed reservations").isNotNull()
+		// Nothing ran, so there is no run record and the accounting is not read: absent, never zero.
+		assertThat(outcome.trainsEntered, "trains entered").isNull()
+		assertThat(outcome.trainsExited, "trains exited").isNull()
+		assertThat(outcome.endClassification, "end classification").isNull()
 	}
 
 	/**
 	 * `multiTrainLoop` runs a `MultiTrainLoop`, which keeps none of `ShuntingLoop`'s counters. Until
-	 * Issue #676 its loop-sourced figures came out absent; now every figure comes from the run's
-	 * metrics, whatever the main process. Read before the run has ended, there is no run record yet:
-	 * the row figures are the ones counted so far (here none, so `0`), and every record figure stays
-	 * absent, because nothing has ended to be recorded.
+	 * Issue #676 its loop-sourced figures came out absent; now every figure of a finished run comes from
+	 * the run record, whatever the main process (`MultiTrainLoopRunRecordTest`, `SynchronousRunPersistenceTest`).
+	 * Read before the run has ended, there is no record: only the snapshot figures are present.
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("an example that is not a ShuntingLoop reports its row figures, and no record before the run ends")
-	fun nonShuntingLoopExampleReportsRowFiguresBeforeItsRecord() {
+	@DisplayName("an example that is not a ShuntingLoop reports only snapshot figures before the run ends")
+	fun nonShuntingLoopExampleReportsSnapshotFiguresBeforeItsRecord() {
 		val context = createExample("createMultiTrainLoopExample", ExampleNames.MULTI_TRAIN_LOOP)
 
 		val outcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
 
-		assertThat(outcome.trainsEntered, "trains entered").isEqualTo(0L)
-		assertThat(outcome.trainsExited, "trains exited").isEqualTo(0L)
-		assertThat(outcome.maxConcurrentTrains, "max concurrent trains").isEqualTo(0L)
-		assertThat(outcome.blockTransitions, "block transitions").isEqualTo(0L)
-		assertThat(outcome.failedReservations, "failed reservations").isEqualTo(0L)
 		assertThat(outcome.journeysCompleted, "journeys completed").isNotNull()
 		assertThat(outcome.conflicts, "conflicts").isNotNull()
 		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isNotNull()
-		// No run record yet: the record figures are not measured.
+		assertThat(outcome.trainsEntered, "trains entered").isNull()
+		assertThat(outcome.blockTransitions, "block transitions").isNull()
 		assertThat(outcome.endClassification, "end classification").isNull()
 		assertThat(outcome.wrongExits, "wrong exits").isNull()
 		assertThat(outcome.endTime, "end time").isNull()
@@ -266,6 +260,28 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 
 		assertThat(outcome.conflicts, "conflicts").isEqualTo(0L)
 		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isEqualTo(2L)
+	}
+
+	/**
+	 * A manual stop does not join the simulation thread, so a run with no record yet is read on the EDT
+	 * while the run-end accounting is still being written. Only the thread-safe snapshot figures are
+	 * read then; every other figure stays absent (Issue #676, review thread on `railwayOutcomeFrom`).
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("railwayOutcomeFrom of a run without a record reads only the latest snapshot figures (Issue #676)")
+	fun railwayOutcomeFromUnfinishedRunReadsOnlyTheSnapshot() {
+		val context = createAiContext()
+		context.scope.declare<MetricsCollectionService>(
+			FakeMetricsCollectionService(completedTrains = 4, conflictCount = 1)
+		)
+
+		val outcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
+
+		assertThat(outcome.journeysCompleted, "journeys completed").isEqualTo(4L)
+		assertThat(outcome.conflicts, "conflicts").isEqualTo(1L)
+		assertThat(outcome.trainsExited, "trains exited").isNull()
+		assertThat(outcome.blockTransitions, "block transitions").isNull()
 	}
 
 	// ── Leak-gauge wiring (Issue #936, review Minor #5) ──────────────────────

@@ -226,4 +226,21 @@ class SweepCellTest {
 
 		assertThat(fromAbortPath).isEqualTo(fromLivePath)
 	}
+
+	/**
+	 * The live rule-based recorder (`ruleBasedRunParameters`) ignores the model and temperature axes, so a
+	 * cell that pins them must not split its aborted runs from its completed ones in the report grouping.
+	 */
+	@Test
+	@DisplayName("a cell without a prompt records the live sentinels even when it pins model and temperature")
+	fun promptlessCellsIgnorePinnedModelAndTemperature() {
+		for (example in listOf(ExampleNames.SHUNTING_LOOP, ExampleNames.MULTI_TRAIN_LOOP)) {
+			val pinned =
+				ruleBasedCell().copy(example = example, model = "qwen2.5:7b-instruct", temperature = 0.7)
+
+			assertThat(pinned.runParameters(), example).isEqualTo(ruleBasedCell().runParameters())
+			assertThat(pinned.runParameters().model, example).isEqualTo("")
+			assertThat(pinned.runParameters().temperature, example).isEqualTo(0.0)
+		}
+	}
 }

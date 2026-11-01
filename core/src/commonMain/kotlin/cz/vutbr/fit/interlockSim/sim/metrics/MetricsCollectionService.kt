@@ -178,6 +178,14 @@ interface MetricsCollectionService : RunRecordSource {
 	fun latestOpenContentions(): List<OpenContention>
 
 	/**
+	 * The admission cap recorded by [recordCapacity], or `null` when none was. Unlike [runEndSummary],
+	 * safe to read while the run is still going: it is written once at wiring time (Issue #676).
+	 *
+	 * @since Issue #676 (Goal 6 SP5)
+	 */
+	fun capacityShownToDispatcher(): Int? = runEndSummary().capacityShownToDispatcher
+
+	/**
 	 * The record of the finished run (Issue #676), built from [runEndSummary]; `null` while the run
 	 * has not ended. An implementation may keep the value it built at run end instead.
 	 *

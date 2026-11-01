@@ -48,8 +48,8 @@ import kotlinx.serialization.Serializable
  * end for every harness (`ShuntingLoop`, `MultiTrainLoop`), mapped by [toRailwayOutcome]. No loop
  * getter is read and no cast to the main process is made, so a `MultiTrainLoop` run has the same
  * figures as a `ShuntingLoop` one. A run that has not ended yet when it is read (a GUI stop racing
- * the simulation thread) has no record; it keeps the row figures counted so far
- * ([toUnfinishedRunOutcome]) and every record figure stays absent. Sourced by
+ * the simulation thread) has no record; it keeps the three figures of the latest metrics
+ * snapshot ([toUnfinishedRunOutcome]) and every other figure stays absent. Sourced by
  * `DispatcherRunSummaries.railwayOutcomeFrom` (`:desktop-ui`) and handed to
  * [DispatcherRunRecorder.recordRailwayOutcome] before [DispatcherRunRecorder.finish] freezes the
  * snapshot.
