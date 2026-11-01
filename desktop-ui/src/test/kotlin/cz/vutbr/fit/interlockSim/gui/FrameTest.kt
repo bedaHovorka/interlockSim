@@ -288,13 +288,15 @@ class FrameTest : AbstractFrameTestBase() {
 			val southPanel =
 				(frame.contentPane.layout as BorderLayout)
 					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			assertThat(southPanel.componentCount).isEqualTo(4)
+			// plus the KPI dashboard (Issue #675, Goal 6 SP3), added between them
+			assertThat(southPanel.componentCount).isEqualTo(5)
 			assertThat(southPanel.getComponent(0)).isInstanceOf(WarningPanel::class)
 			assertThat((southPanel.getComponent(0) as WarningPanel).isVisible).isTrue()
-			assertThat(southPanel.getComponent(1)).isInstanceOf(EventTimelinePanel::class)
-			assertThat(southPanel.getComponent(2)).isInstanceOf(PathPreviewPanel::class)
-			assertThat((southPanel.getComponent(2) as PathPreviewPanel).isVisible).isFalse()
-			assertThat(southPanel.getComponent(3)).isInstanceOf(StatusBar::class)
+			assertThat(southPanel.getComponent(1)).isInstanceOf(MetricsDashboardPanel::class)
+			assertThat(southPanel.getComponent(2)).isInstanceOf(EventTimelinePanel::class)
+			assertThat(southPanel.getComponent(3)).isInstanceOf(PathPreviewPanel::class)
+			assertThat((southPanel.getComponent(3) as PathPreviewPanel).isVisible).isFalse()
+			assertThat(southPanel.getComponent(4)).isInstanceOf(StatusBar::class)
 		}
 		runOnEDT { frame.stopSimulation() }
 		context.close()
