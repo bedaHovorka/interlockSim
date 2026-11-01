@@ -40,6 +40,7 @@ import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -71,6 +72,10 @@ val simulationCoreModule: Module =
 		// Grid transformer for static-to-dynamic cell conversion (grid parameterization)
 		// GridTransformer is a Kotlin object (singleton), registered via Koin for DI consistency
 		single { GridTransformer }
+
+		// Default metric groups: all on (Issue #674 Goal 6 SP4). Not a context, so a plain single;
+		// override it before run() to switch groups off.
+		single<MetricsConfig> { MetricsConfig.ALL }
 	}
 
 /**
@@ -284,7 +289,7 @@ val navigationModule: Module =
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
-				DefaultMetricsCollectionService(context)
+				DefaultMetricsCollectionService(context, config = getOrNull<MetricsConfig>() ?: MetricsConfig.ALL)
 			}
 
 			// InterlockingFacade: scoped to simulation context (Issue #572 SP3.4 Goal 10)
