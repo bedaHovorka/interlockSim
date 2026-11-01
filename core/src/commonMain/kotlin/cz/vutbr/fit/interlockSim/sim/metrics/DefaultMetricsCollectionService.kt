@@ -188,7 +188,7 @@ class DefaultMetricsCollectionService(
 	/** Per-train wait figures and capacity pressure (Issue #1305): exists only with [MetricGroup.TRAIN_WAIT] on. */
 	internal val trainWait: TrainWaitAccounting? =
 		if (config.isEnabled(MetricGroup.TRAIN_WAIT)) {
-			TrainWaitAccounting { env?.getRoutingServices()?.getPathReservationService() }
+			TrainWaitAccounting { env?.getRoutingServices()?.getContentionQuery() }
 		} else {
 			null
 		}

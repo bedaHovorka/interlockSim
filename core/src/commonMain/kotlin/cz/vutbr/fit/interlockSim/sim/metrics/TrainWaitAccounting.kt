@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim.metrics
 
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.ContentionQuery
@@ -19,6 +20,7 @@ import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
 import cz.vutbr.fit.interlockSim.sim.RunEnded
 import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.onRunAccountingEvent
 import cz.vutbr.fit.interlockSim.sim.onRunEnded
 import cz.vutbr.fit.interlockSim.sim.onTrainJourneyEvent
@@ -102,7 +104,10 @@ internal class TrainWaitAccounting(
 		env.onRunAccountingEvent(::onAccounting)
 		env.onReservationExpired(::onExpired)
 		env.onRunEnded(::onRunEnded)
-		env.onConflictDetectedEvent { refreshOpenContentions() }
+		// Through the raw stream, so the conflict-listener wiring of the dispatcher stays as it is.
+		env.onSimulationEvent { event ->
+			if ((event as? SimulationEvent.Custom)?.payload is ConflictDetectedEvent) refreshOpenContentions()
+		}
 	}
 
 	fun onJourney(event: TrainJourneyEvent) {
