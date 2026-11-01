@@ -17,6 +17,7 @@ import assertk.assertions.hasMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
@@ -177,8 +178,8 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 12`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_SKIPPED_OFFERS)
+	fun `current schema version is 13`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW)
 	}
 
 	/** Issue #1302 (schema version 12): the skipped and offered NEXT SECTION counts survive the round-trip. */
@@ -214,6 +215,26 @@ class DispatcherRunSnapshotTest {
 		assertThat(decoded.skippedNextSectionOffersStandingAtSignal).isNull()
 		assertThat(decoded.longestSkippedOfferStreakCycles).isNull()
 		assertThat(decoded.longestSkippedOfferStreakSimSeconds).isNull()
+	}
+
+	/** Issue #1306 (schema version 13): the performance row and the example survive encode→decode. */
+	@Test
+	fun `serialization round-trips the performance row and the example`() {
+		val snap =
+			snapshotWith(
+				railwayOutcome =
+					RailwayOutcome(
+						wallSeconds = 1.25,
+						simulationSeconds = 601.0,
+						realTimeRatio = 480.8,
+						routeSearchBudgetExceeded = 0L,
+						reservePathCalls = 32L
+					)
+			).copy(example = ExampleNames.SHUNTING_LOOP, processWallSeconds = 1.8)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"reservePathCalls\": 32")
+		assertThat(json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)).isEqualTo(snap)
 	}
 
 	/** Issue #1365 (schema version 11): the stale-origin refusal count survives the JSON round-trip. */
@@ -560,11 +581,11 @@ class DispatcherRunSnapshotTest {
 		/** Issue #988 added the [TickOutcome.LLM_SILENT_ALL_MOVING] tick outcome. */
 		private const val SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME: Int = 9
 
-		/** Issue #1302 added the skipped and offered NEXT SECTION counts of fallback-skipping cycles. */
-		private const val SCHEMA_VERSION_WITH_SKIPPED_OFFERS: Int = 12
-
 		/** Issue #1280 split the contentions still open at run end out of the conflict count. */
 		private const val SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END: Int = 10
+
+		/** Issue #1306 added the performance row and the example name. */
+		private const val SCHEMA_VERSION_WITH_PERFORMANCE_ROW: Int = 13
 
 		private val json =
 			Json {

@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
+import cz.vutbr.fit.interlockSim.sim.metrics.performanceLine
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import io.github.oshai.kotlinlogging.FormattingAppender
 import io.github.oshai.kotlinlogging.KLoggingEvent
@@ -324,13 +325,14 @@ private fun handleInterruptedRun(
 	throw e
 }
 
-/** Prints the reporter's summary line, then the run record line (Issue #676). */
+/** Prints the reporter's summary line, the run record line (Issue #676) and its performance row (Issue #1306). */
 private fun printRunSummary(
 	reporter: TextReporter,
 	env: SimulationEnvironment
 ) {
 	reporter.printSummary()
 	println(runRecordLine(env))
+	println(runPerformanceLine(env))
 }
 
 /**
@@ -346,6 +348,21 @@ internal fun runRecordLine(env: SimulationEnvironment): String =
 		.runRecord()
 		?.summaryLine()
 		?: "Run record: not available, the run has not ended"
+
+/**
+ * The performance row of [env]'s run record as the CLI prints it: `RunRecord.performanceLine` (wall
+ * and simulated time, real-time ratio, peak admitted trains, route-search budget stops, `reservePath`
+ * calls), or a line saying it is not available while the run has not ended.
+ *
+ * @since Issue #1306 (Goal 6 SP8)
+ */
+internal fun runPerformanceLine(env: SimulationEnvironment): String =
+	env
+		.getMetricsServices()
+		.getRunRecordSource()
+		.runRecord()
+		?.performanceLine()
+		?: "Performance: not available, the run has not ended"
 
 private fun printUsage() {
 	eprintln(

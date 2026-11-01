@@ -39,7 +39,7 @@ enum class MetricGroup {
 	 */
 	TRAIN_WAIT,
 
-	/** The performance row of a run (Goal 6 SP8); no consumer yet. */
+	/** The performance row of a run, [RunPerformance] (Goal 6 SP8, Issue #1306). */
 	PERFORMANCE
 }
 

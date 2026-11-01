@@ -33,8 +33,9 @@ import kotlinx.serialization.Serializable
  * vocabulary, Issue #988; version 10 split [RailwayOutcome.unresolvedAtRunEnd] out of
  * [RailwayOutcome.conflicts], Issue #1280; version 11 added
  * [staleOriginRefusalsAfterSilentCycle], Issue #1365, persisted the run record figures in
- * [railwayOutcome], Issue #676, and version 12 added the skipped NEXT SECTION offer figures
- * from [skippedNextSectionOffers] to [longestSkippedOfferStreakSimSeconds], Issue #1302).
+ * [railwayOutcome], Issue #676; version 12 added the skipped NEXT SECTION offer figures
+ * from [skippedNextSectionOffers] to [longestSkippedOfferStreakSimSeconds], Issue #1302; version 13
+ * added the performance row and [example], Issue #1306).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -197,6 +198,13 @@ import kotlinx.serialization.Serializable
  *   minus first tick sim time of the streak (a one-cycle streak is `0.0`). The longest by seconds
  *   and the longest by cycles need not be the same streak. `null` exactly when
  *   [skippedNextSectionOffers] is.
+ * @property example The registered example the run ran (`shuntingLoop`, `cervenyUjezd`, ...), so the
+ *   report's Performance table never pools wall time across networks (Issue #1306); `null` when the
+ *   caller did not name one (a GUI run, a file before schema version 12).
+ * @property processWallSeconds Wall seconds of the whole forked run as the `aiSweep` driver timed it,
+ *   from launching the child JVM to its exit: JVM start, network loading, the run and its persistence
+ *   (Issue #1306). The kernel-only wall is [RailwayOutcome.wallSeconds]. Present for an aborted run
+ *   too (a timed-out run carries its timeout); `null` outside a sweep and in files before version 12.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -255,7 +263,9 @@ data class DispatcherRunSnapshot(
 	val offeredNextSectionHops: Long? = null,
 	val skippedNextSectionOffersStandingAtSignal: Long? = null,
 	val longestSkippedOfferStreakCycles: Long? = null,
-	val longestSkippedOfferStreakSimSeconds: Double? = null
+	val longestSkippedOfferStreakSimSeconds: Double? = null,
+	val example: String? = null,
+	val processWallSeconds: Double? = null
 ) {
 	companion object {
 		/**
@@ -331,8 +341,15 @@ data class DispatcherRunSnapshot(
 		 *   [skippedNextSectionOffersStandingAtSignal], [longestSkippedOfferStreakCycles] and
 		 *   [longestSkippedOfferStreakSimSeconds]. All default to `null`, so every version 1-11 file
 		 *   still decodes, with the figures absent.
+		 * - **13** — Issue #1306 (Goal 6 SP8), [railwayOutcome] gained the run record's performance row
+		 *   ([RailwayOutcome.wallSeconds], [RailwayOutcome.simulationSeconds],
+		 *   [RailwayOutcome.realTimeRatio], [RailwayOutcome.routeSearchBudgetExceeded],
+		 *   [RailwayOutcome.reservePathCalls]) and the snapshot gained [example] and
+		 *   [processWallSeconds]. Every new field
+		 *   defaults to `null`, so every version 1-12 file still decodes, with them absent; no existing
+		 *   field changed meaning.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 12
+		const val CURRENT_SCHEMA_VERSION: Int = 13
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded
