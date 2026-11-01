@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -66,6 +67,40 @@ class FrameTest : AbstractFrameTestBase() {
 	fun frameHasCorrectTitle() {
 		runOnEDT {
 			assertThat(frame.title).isEqualTo(PROGRAM_FULL_NAME)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("an advisory run-end warning is listed without the critical indicator (Issue #1331)")
+	fun advisoryWarningIsListedWithoutCriticalIndicator() {
+		val advisory =
+			CollisionWarning.ReservationConflict(
+				trainId = "Train #19",
+				conflictingTrainId = "Train #18",
+				time = 601.0,
+				severity = CollisionWarning.Severity.WARNING
+			)
+		runOnEDT {
+			frame.showCollisionWarning(advisory, autoPause = true, sound = false)
+
+			assertThat(frame.warningPanel.listModel.size).isEqualTo(1)
+			assertThat(frame.warningPanel.hasCriticalWarning()).isFalse()
+			assertThat(frame.statusBar.isWarningIndicatorVisible()).isFalse()
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("a critical warning is listed and lights the status-bar indicator")
+	fun criticalWarningLightsIndicator() {
+		val critical = CollisionWarning.ReservationConflict("Train-A", "Train-B", time = 10.0)
+		runOnEDT {
+			frame.showCollisionWarning(critical, autoPause = true, sound = false)
+
+			assertThat(frame.warningPanel.listModel.size).isEqualTo(1)
+			assertThat(frame.warningPanel.hasCriticalWarning()).isTrue()
+			assertThat(frame.statusBar.isWarningIndicatorVisible()).isTrue()
 		}
 	}
 
