@@ -26,7 +26,9 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.CERVENY_UJEZD_STATION_CAPACITY
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContextFromMap
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -39,11 +41,7 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 
 	private fun build(
 		map: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext>
-	): DefaultSimulationContext {
-		// Names come from `ExampleNames` (`:core`) — one home for both registries and the tests.
-		val factory = checkNotNull(map[ExampleNames.CERVENY_UJEZD]) { "cervenyUjezd is not registered" }
-		return (factory(get(), arrayOf("example", ExampleNames.CERVENY_UJEZD, "60")) as DefaultSimulationContext).tracked()
-	}
+	): DefaultSimulationContext = createExampleContextFromMap(map, get(), ExampleNames.CERVENY_UJEZD).tracked()
 
 	@Test
 	fun `CLI map resolves cervenyUjezd to a ShuntingLoop on the four-track station without real-time sync`() {
@@ -53,7 +51,7 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 		val ctx = build(registry.examples)
 		val loop = ctx.mainProcess
 		assertThat(loop).isNotNull().isInstanceOf<ShuntingLoop>()
-		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_CAPACITY)
+		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_STATION_CAPACITY)
 		assertThat(loop.enableRealTimeSync).isFalse()
 	}
 
@@ -65,27 +63,34 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 		val ctx = build(registry.guiExamples)
 		val loop = ctx.mainProcess
 		assertThat(loop).isNotNull().isInstanceOf<ShuntingLoop>()
-		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_CAPACITY)
+		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_STATION_CAPACITY)
 		assertThat(loop.enableRealTimeSync).isTrue()
 	}
 
 	/**
-	 * Pins the GUI example's dispatcher cap at the vyhybna-derived constant of
+	 * Pins the dispatcher cap at the vyhybna-derived constant of
 	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2), while this station's loop capacity
-	 * is 4 — the difference the synchronous CLI/native wiring ([wireSynchronousDispatcher], which
-	 * sizes the dispatcher to the loop capacity) does not have. SP3 documents this as demand D5 in
-	 * `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`; SP8 owns raising the cap
-	 * (Issue #1155). Until then the GUI variant may approve at most 2 trains in this scenario.
+	 * is 4 — on both agent-stack arm wirings of this station: this GUI example and, since
+	 * Issue #1276 (PR #1282 review), the console control arm too. SP3 documents the synchronous
+	 * native run at capacity 4 as demand D5 in `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`;
+	 * SP8 owns raising the cap (Issue #1155). Until then the agent-stack examples may approve at
+	 * most 2 trains in this scenario.
 	 */
 	@Test
-	fun `GUI wiring keeps the dispatcher cap at the vyhybna constant while the station could take four`() {
+	fun `agent-stack arm wirings keep the dispatcher cap at the vyhybna constant while the station could take four`() {
 		val registry = get<ExampleRegistry>()
 
-		val ctx = build(registry.guiExamples)
-
-		val dispatcher = checkNotNull(ctx.scope.getOrNull<Dispatcher>())
+		val dispatcher = checkNotNull(build(registry.guiExamples).scope.getOrNull<Dispatcher>())
 		assertThat(dispatcher).isInstanceOf<RuleBasedDispatcher>()
 		assertThat((dispatcher as RuleBasedDispatcher).maxConcurrentTrains)
+			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
+
+		// Issue #1276 (PR #1282 review): the console cervenyUjezd runs the same agent stack, so
+		// the SP10.1 doc's "both arms ran at most 2 trains at a time" is pinned here too, not
+		// only measured.
+		val cliDispatcher = checkNotNull(build(registry.examples).scope.getOrNull<Dispatcher>())
+		assertThat(cliDispatcher).isInstanceOf<RuleBasedDispatcher>()
+		assertThat((cliDispatcher as RuleBasedDispatcher).maxConcurrentTrains)
 			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
 	}
 
@@ -107,9 +112,5 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 			ExampleNames.SHUNTING_LOOP_AI,
 			ExampleNames.THREE_TRAIN_LOOP
 		)
-	}
-
-	private companion object {
-		private const val CERVENY_UJEZD_CAPACITY = 4
 	}
 }

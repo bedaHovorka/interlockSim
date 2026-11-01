@@ -95,13 +95,15 @@ class ExampleLoadingTest : KoinTestBase() {
 			val exampleNames = registry.getAvailableExamples()
 
 			// Assert
-			assertThat(exampleNames).hasSize(6)
+			assertThat(exampleNames).hasSize(8)
 			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP_AI)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP_SYNC)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.MULTI_TRAIN_LOOP)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.THREE_TRAIN_LOOP)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_AI)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_SYNC)).isTrue()
 		}
 	}
 
@@ -215,7 +217,7 @@ class ExampleLoadingTest : KoinTestBase() {
 		}
 
 		/**
-		 * All seven shunting-loop factories share [ExampleRegistry.requireEndTimeArg]; each must
+		 * All ten shunting-loop factories share [ExampleRegistry.requireEndTimeArg]; each must
 		 * throw [ContextCreationException] with the exact shared message when `endTime` is missing
 		 * (PR #983 follow-up: the S1192 literal fix made the message a single constant, so every
 		 * throw site must agree on it byte-for-byte).
@@ -229,7 +231,10 @@ class ExampleLoadingTest : KoinTestBase() {
 				"createShuntingLoopGuiExample",
 				"createShuntingLoopAIGuiExample",
 				"createCervenyUjezdExample",
-				"createCervenyUjezdGuiExample"
+				"createCervenyUjezdGuiExample",
+				"createCervenyUjezdAIExample",
+				"createCervenyUjezdAIGuiExample",
+				"createCervenyUjezdSyncExample"
 			]
 		)
 		fun `all shunting-loop factories require endTime with the exact shared message`(methodName: String) {
@@ -465,6 +470,8 @@ class ExampleLoadingTest : KoinTestBase() {
 			assertThat(sortedNames).isEqualTo(
 				listOf(
 					ExampleNames.CERVENY_UJEZD,
+					ExampleNames.CERVENY_UJEZD_AI,
+					ExampleNames.CERVENY_UJEZD_SYNC,
 					ExampleNames.MULTI_TRAIN_LOOP,
 					ExampleNames.SHUNTING_LOOP,
 					ExampleNames.SHUNTING_LOOP_AI,
