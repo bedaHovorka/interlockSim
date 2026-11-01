@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import org.koin.core.component.get
 import kotlin.test.Test
 
@@ -214,6 +215,34 @@ class StationCapacityTest : CommonKoinTestBase() {
 				"travel towards the InOut (a departure signal), so no home signal (vjezdové návěstidlo) " +
 				"protects the incoming train",
 			"1 RailSemaphore(s) are neither a home signal nor a platform-track end"
+		)
+	}
+
+	@Test
+	fun shuntingLoopPrintsUnnamedForABlankMisdirectedSignalName() {
+		// The XML loader names every semaphore (Issue #1273), but a programmatically built network
+		// can still hold a blank name: the reason then prints Station.UNNAMED instead of nothing.
+		// Entry block A (10,5)-(15,5); the unnamed semaphore at (15,5) has orientation true, so it
+		// governs travel towards -x, back into the block and towards A: it is misdirected.
+		val ctx =
+			TestContextBuilder()
+				.withInOut("A", 10, 5, isEntry = true)
+				.withSemaphore(15, 5, isAllowing = true)
+				.withConnection(10, 5, 15, 5, length = 100.0, maxSpeed = 24.0)
+				.buildSimulationContext()
+				.tracked()
+		ctx.getInOuts() // initialize dynamic wrappers
+		val station = Station.from(ctx)
+
+		assertThat(
+			station.entryExitBlocks
+				.single()
+				.misdirectedSignals
+				.single()
+				.name
+		).isEqualTo("")
+		assertThat(ShuntingLoop.compatibilityIssues(station).joinToString("\n")).contains(
+			"its end RailSemaphore ${Station.UNNAMED} governs travel towards the InOut (a departure signal)"
 		)
 	}
 
