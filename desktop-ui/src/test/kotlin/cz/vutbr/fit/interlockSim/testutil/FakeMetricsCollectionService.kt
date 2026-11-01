@@ -10,16 +10,22 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsHistory
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
+import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
+import cz.vutbr.fit.interlockSim.sim.metrics.TrainJourneyRecord
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A [MetricsCollectionService] that reports a fixed snapshot and records whether the leak gauge
  * was read.
  *
- * `DispatcherRunSummaries.railwayOutcomeFrom` reads `completedTrains` and `conflictCount` off the
- * snapshot, so a test that wants a particular railway outcome needs a service reporting those
- * numbers — but the real one needs a real run behind it. Two test classes each declared their own
+ * `DispatcherRunSummaries.railwayOutcomeFrom` reads the run-end figures (from Issue #676 the run
+ * record, or [runEndSummary] before the run ended), so a test that wants a particular railway
+ * outcome needs a service reporting those numbers — but the real one needs a real run behind it. Two test classes each declared their own
  * stand-in for exactly this, one reporting zero journeys and one reporting a completed journey
  * (Issue #955, cluster U7).
  *
@@ -61,5 +67,100 @@ class FakeMetricsCollectionService(
 	override fun reportUnreleasedReservations(): Set<String> {
 		reportUnreleasedReservationsInvoked = true
 		return unreleasedReservations
+	}
+
+	/**
+	 * What [latestSnapshot] returns when set; the fixed snapshot otherwise (Issue #675).
+	 * Written from the test thread, read from a poll thread -- hence volatile.
+	 */
+	@Volatile
+	var published: MetricsSnapshot? = null
+
+	/** Names of the threads that called [latestSnapshot], to prove the dashboard reads off the EDT (Issue #675). */
+	val latestSnapshotThreads: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
+
+	/** When set, [latestSnapshot] waits for it: lets a test hold a poll in flight (Issue #675). */
+	@Volatile
+	var latestSnapshotGate: java.util.concurrent.CountDownLatch? = null
+
+	override fun latestSnapshot(): MetricsSnapshot {
+		latestSnapshotThreads.add(Thread.currentThread().name)
+		latestSnapshotGate?.await(GATE_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+		return published ?: getSnapshot()
+	}
+
+	/** One empty buffer shared by every read, like the real service's single buffer. */
+	private val emptyHistory = MetricsHistory()
+
+	override fun history(): MetricsHistory = emptyHistory
+
+	override fun journeys(): List<TrainJourneyRecord> = emptyList()
+
+	/** What [runEndSummary] returns when set; the zero summary otherwise (Issue #675). */
+	@Volatile
+	var runEnd: RunEndSummary? = null
+
+	/** How often [runEndSummary] was read (Issue #675). */
+	val runEndSummaryReads: AtomicInteger = AtomicInteger()
+
+	/** [runEnd] when set, else the snapshot's figures (Issue #1304). */
+	override fun runEndSummary(): RunEndSummary {
+		runEndSummaryReads.incrementAndGet()
+		return runEnd ?: zeroSummary()
+	}
+
+	/**
+	 * The snapshot's figures, the run not ended (Issue #1304). Each completed journey is also a train
+	 * that entered and exited -- `railwayOutcomeFrom` reads these since Issue #676, and a completed
+	 * journey without an exit would read as a starved railway. Every other counter is zero.
+	 */
+	private fun zeroSummary(): RunEndSummary =
+		RunEndSummary(
+			journeysCompleted = completedTrains,
+			trainsEntered = completedTrains,
+			trainsExited = completedTrains,
+			wrongExits = 0,
+			maxConcurrentTrains = 0,
+			blockTransitions = 0,
+			conflicts = conflictCount,
+			failedReservations = 0,
+			failedReservationsByKind = emptyMap(),
+			unresolvedAtRunEnd = unresolvedAtRunEndCount,
+			entryFailures = 0,
+			entryFailuresByKind = emptyMap(),
+			stall = null,
+			expiredHoldingCount = 0,
+			expiredTailCount = 0,
+			staleReleaseCount = 0,
+			partialReleaseCount = 0,
+			capacityShownToDispatcher = null,
+			topologyCapacity = null,
+			unfinishedJourneys = 0,
+			endTime = null,
+			endTimeReached = false,
+			classification = null
+		)
+
+	override fun recordCapacity(
+		shownToDispatcher: Int,
+		topologyCapacity: Int
+	) = Unit
+
+	/** What [latestOpenContentions] returns; none by default (Issue #1305). */
+	@Volatile
+	var contentions: List<OpenContention> = emptyList()
+
+	override fun latestOpenContentions(): List<OpenContention> = contentions
+
+	/**
+	 * What [runRecord] returns; `null` (the run has not ended) unless a test sets it. Overridden so
+	 * no read of the record goes through [runEndSummary] by way of the interface default.
+	 */
+	var record: RunRecord? = null
+
+	override fun runRecord(): RunRecord? = record
+
+	private companion object {
+		const val GATE_TIMEOUT_SECONDS = 10L
 	}
 }

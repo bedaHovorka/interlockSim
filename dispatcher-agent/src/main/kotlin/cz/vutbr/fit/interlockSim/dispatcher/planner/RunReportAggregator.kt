@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import java.time.ZoneOffset
@@ -50,7 +51,7 @@ import java.time.format.DateTimeFormatter
  * | Apply Failures | [ApplyFailureCode] × arm |
  * | Author Attribution | [ActionAuthor] × arm |
  * | Latency | arm × tick period, p50/p95/max and deadline-miss count |
- * | Parameter Sweep | one row per [RunParameters] cell |
+ * | Parameter Sweep | one row per [RunParameters] cell; its Performance table one per cell and example |
  *
  * @param store Used to load per-run JSON snapshots for the Gradle task entry point.
  *
@@ -117,7 +118,7 @@ class RunReportAggregator(
 		private const val HYGIENE_TABLE_COLUMNS = 24
 
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
-		private const val OUTCOMES_TABLE_COLUMNS = 20
+		private const val OUTCOMES_TABLE_COLUMNS = 22
 
 		/**
 		 * Column headers of the "Arm Comparison" table — the single source for both its header row
@@ -208,7 +209,9 @@ class RunReportAggregator(
 		val passingRuns = snapshots.count { runPassed(it) }
 		val allC7Clean = snapshots.all { it.c7Clean }
 		val runCount = snapshots.size
-		val gatePassed = runCount >= MIN_RUN_COUNT && passingRuns >= MIN_PASSING_RUNS && allC7Clean
+		// Issue #676: a run without a dispatcher measures no dispatcher, so its arm never passes.
+		val gatePassed =
+			arm.hasDispatcher && runCount >= MIN_RUN_COUNT && passingRuns >= MIN_PASSING_RUNS && allC7Clean
 
 		val llmSuccessRates = snapshots.map { it.llmSuccessRate }.sorted()
 		val actionableTickRates = snapshots.map { it.actionableTickRate }.sorted()
@@ -267,6 +270,24 @@ class RunReportAggregator(
 	}
 
 	/**
+	 * One [ArmReport] per arm, in [DispatcherArm] order: every arm with a dispatcher, even one
+	 * without runs (shown with zero runs), and [DispatcherArm.NO_DISPATCHER] only when it has runs
+	 * (Issue #676), so a report over dispatcher runs keeps its layout.
+	 *
+	 * @since Issue #676 (Goal 6 SP5)
+	 */
+	fun aggregateByArm(snapshots: List<DispatcherRunSnapshot>): List<ArmReport> {
+		val byArm = snapshots.groupBy { it.arm }
+		return DispatcherArm.entries
+			.filter { it.hasDispatcher || it in byArm }
+			.map { arm ->
+				// aggregate() reports RULE_BASED for an empty list, having no snapshot to read the
+				// arm from; put the right arm back so an empty arm does not misreport itself.
+				aggregate(byArm[arm] ?: emptyList()).let { if (it.runCount == 0) it.copy(arm = arm) else it }
+			}
+	}
+
+	/**
 	 * Renders a Markdown report from [reports] — one [ArmReport] per arm.
 	 *
 	 * Contains the seven sections specified in SP2c.23 (Issue #846).
@@ -305,7 +326,10 @@ class RunReportAggregator(
 	 *   consults no LLM, so it records `totalTicks = 0` and an `actionableTickRate` of `0.0`.
 	 *   Applying an LLM decision-quality clause to it failed a control arm that had just delivered
 	 *   eleven exits on every one of ten runs — #895 printed `| RULE_BASED | 10 | 0 | FAIL |` where
-	 *   #847 and #834 had both published the same arm as 10/10 PASS.
+	 *   #847 and #834 had both published the same arm as 10/10 PASS. [DispatcherArm.NO_DISPATCHER]
+	 *   is exempt for the same reason (Issue #676): with no dispatcher at all its runs always record
+	 *   `0.0`. Its arm gate never passes anyway; the exemption keeps its per-run verdict about the
+	 *   railway only.
 	 * - **An absent [RailwayOutcome.trainsExited] does not fail the outcome term.** Absent is "not
 	 *   measured", never "zero", the same rule [RailwayProgress] follows. That counter is absent for
 	 *   any example whose main process is not a `ShuntingLoop`.
@@ -317,9 +341,11 @@ class RunReportAggregator(
 			actionableRateAcceptable(snapshot) &&
 			railwayOutcomeAcceptable(snapshot)
 
-	/** See [runPassed] for why the rule-based arm is exempt. */
+	/** See [runPassed] for why the rule-based arm and the no-dispatcher arm are exempt. */
 	private fun actionableRateAcceptable(snapshot: DispatcherRunSnapshot): Boolean =
-		snapshot.arm == DispatcherArm.RULE_BASED || snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
+		snapshot.arm == DispatcherArm.RULE_BASED ||
+			!snapshot.arm.hasDispatcher ||
+			snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
 
 	/** See [runPassed] for why an absent exit count cannot fail a run. */
 	private fun railwayOutcomeAcceptable(snapshot: DispatcherRunSnapshot): Boolean =
@@ -340,7 +366,7 @@ class RunReportAggregator(
 				"| ${r.arm} " +
 					"| ${r.runCount} " +
 					"| ${r.passingRuns} " +
-					"| ${gateSymbol(r.gatePassed)} " +
+					"| ${gateText(r)} " +
 					"| ${fmtRate(r.medianLlmSuccessRate)} " +
 					"| ${fmtRate(r.medianActionableTickRate)} " +
 					"| ${fmtRate(r.medianNoOpRate)} " +
@@ -563,7 +589,9 @@ class RunReportAggregator(
 	 * columns stopped being legible, so this renders **Decision Hygiene** (tick/action
 	 * bookkeeping, the existing gate columns) and **Railway Outcomes** (what the railway actually
 	 * did) as two tables built from the identical [paramsRowPrefix] columns, so a reader can join
-	 * a row in one to its counterpart in the other without guessing.
+	 * a row in one to its counterpart in the other without guessing. A third, **Performance**
+	 * ([PerformanceReportSection], Issue #1306), splits each cell by example and starts with the same
+	 * columns.
 	 *
 	 * ## Why this is not one row per arm (Issue #847, SP2c.24)
 	 *
@@ -623,6 +651,8 @@ class RunReportAggregator(
 		appendParameterSweepLegend(sb)
 		appendHygieneTable(sb, ranked)
 		appendOutcomesTable(sb, ranked)
+		// Issue #1306: per cell and example, so wall time is never pooled across networks.
+		PerformanceReportSection.append(sb, ranked.map { it.first }, ::paramsRowPrefix)
 	}
 
 	private fun appendHygieneTable(
@@ -650,7 +680,7 @@ class RunReportAggregator(
 				paramsRowPrefix(r) +
 					"| ${r.runCount} " +
 					"| ${r.passingRuns} " +
-					"| ${gateSymbol(r.gatePassed)} " +
+					"| ${gateText(r)} " +
 					"| ${fmtRate(r.medianLlmSuccessRate)} " +
 					"| ${fmtRateNullable(invalidActionRate)} " +
 					"| ${fmtRate(r.medianNoOpRate)} " +
@@ -676,7 +706,7 @@ class RunReportAggregator(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
 				"Breaker Threshold | Breaker Cooldown s | " +
 				"Runs | Journeys completed | Trains entered | Trains exited (authoritative) | Max concurrent | " +
-				"Block transitions | Conflicts | Failed reservations | Unresolved at run end |"
+				"Block transitions | Conflicts | Failed reservations | Unresolved at run end | Wrong exits | Cutoff runs |"
 		)
 		sb.appendLine("|" + "---|".repeat(OUTCOMES_TABLE_COLUMNS))
 
@@ -691,10 +721,22 @@ class RunReportAggregator(
 					"| ${fmtNullableLong(outcome.blockTransitions)} " +
 					"| ${fmtNullableLong(outcome.conflicts)} " +
 					"| ${fmtNullableLong(outcome.failedReservations)} " +
-					"| ${fmtNullableLong(outcome.unresolvedAtRunEnd)} |"
+					"| ${fmtNullableLong(outcome.unresolvedAtRunEnd)} " +
+					"| ${fmtNullableLong(outcome.wrongExits)} " +
+					"| ${fmtNullableLong(cutoffRuns(r.snapshots))} |"
 			)
 		}
 		sb.appendLine()
+	}
+
+	/**
+	 * Runs of the cell classified [RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS]; `null` when
+	 * no run carries an end classification (files before schema version 11), Issue #676.
+	 */
+	private fun cutoffRuns(snapshots: List<DispatcherRunSnapshot>): Long? {
+		val classified = snapshots.mapNotNull { it.railwayOutcome.endClassification }
+		if (classified.isEmpty()) return null
+		return classified.count { it == RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS }.toLong()
 	}
 
 	/**
@@ -758,6 +800,19 @@ class RunReportAggregator(
 				"schema version 10 counted both in Conflicts and show `n/a` for Unresolved at run end."
 		)
 		sb.appendLine(
+			"- **Wrong exits / Cutoff runs (issue #676)** — **Wrong exits** sums the trains that left " +
+				"through another InOut than the one they were queued for. **Cutoff runs** counts the runs " +
+				"that reached their end time with admitted trains still on the network " +
+				"(`CUTOFF_WITH_UNFINISHED_JOURNEYS`). Neither fails a run or the gate: they say why a " +
+				"passing cell may still have sent trains the wrong way or left them under way. Runs written " +
+				"before schema version 11 show `n/a`."
+		)
+		sb.appendLine(
+			"- **NO_DISPATCHER arm (issue #676)** — runs with no dispatcher at all (for example " +
+				"`multiTrainLoop`), persisted because a sweep configured a store for them. Their railway " +
+				"figures are shown; the gate is `n/a`, because they measure no dispatcher."
+		)
+		sb.appendLine(
 			"- **Ranking (issue #906)** — both tables are ranked by **Trains exited**, descending, cells " +
 				"with no measured `trainsExited` sorted last. Not by `journeysCompleted`: that counter " +
 				"increments whenever a train's reservation count reaches zero, with no termination or " +
@@ -766,6 +821,7 @@ class RunReportAggregator(
 				"termination-gated and is the authoritative per-cell outcome figure; `journeysCompleted` is " +
 				"still reported alongside it, for comparison only."
 		)
+		sb.appendLine(PerformanceReportSection.legend())
 		sb.appendLine()
 	}
 
@@ -786,7 +842,8 @@ class RunReportAggregator(
 			blockTransitions = reduceOrNull(outcomes.map { it.blockTransitions }) { it.sum() },
 			conflicts = reduceOrNull(outcomes.map { it.conflicts }) { it.sum() },
 			failedReservations = reduceOrNull(outcomes.map { it.failedReservations }) { it.sum() },
-			unresolvedAtRunEnd = reduceOrNull(outcomes.map { it.unresolvedAtRunEnd }) { it.sum() }
+			unresolvedAtRunEnd = reduceOrNull(outcomes.map { it.unresolvedAtRunEnd }) { it.sum() },
+			wrongExits = reduceOrNull(outcomes.map { it.wrongExits }) { it.sum() }
 		)
 	}
 
@@ -830,7 +887,7 @@ class RunReportAggregator(
 	private fun paramsRowPrefix(r: ArmReport): String {
 		val p = r.params
 		return "| ${r.arm} " +
-			"| ${p.model.ifEmpty { "rule-based" }} " +
+			"| ${p.model.ifEmpty { if (r.arm.hasDispatcher) "rule-based" else "none" }} " +
 			"| ${p.temperature} " +
 			"| ${p.tickPeriodMs} " +
 			"| ${p.historyN} " +
@@ -918,6 +975,10 @@ class RunReportAggregator(
 	private fun fmtLatency(value: Long?): String = value?.toString() ?: "—"
 
 	private fun gateSymbol(passed: Boolean): String = if (passed) "✅ PASS" else "❌ FAIL"
+
+	/** The gate cell: `n/a` for an arm without a dispatcher, which the gate does not judge (Issue #676). */
+	private fun gateText(r: ArmReport): String =
+		if (r.arm.hasDispatcher) gateSymbol(r.gatePassed) else "n/a (no dispatcher)"
 
 	private fun boolSymbol(v: Boolean): String = if (v) "yes" else "no"
 

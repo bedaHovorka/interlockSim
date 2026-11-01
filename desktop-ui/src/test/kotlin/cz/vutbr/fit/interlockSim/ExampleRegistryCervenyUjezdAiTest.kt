@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.CERVENY_UJEZD_STATION_CAPACITY
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -54,6 +55,9 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		return loop
 	}
 
+	private fun shownCapacity(ctx: DefaultSimulationContext): Int? =
+		ctx.getMetricsServices().getMetricsCollectionService().capacityShownToDispatcher()
+
 	private fun recordedArm(ctx: DefaultSimulationContext): DispatcherArm =
 		checkNotNull(ctx.scope.getOrNull<DispatcherRunRecorder>()).snapshot().arm
 
@@ -68,6 +72,8 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
 		assertThat(ctx.scope.getOrNull<MeasuringPlanAdapter>(), "measuring planner").isNotNull()
+		// The prompt shows the station's own cap, so the run record must too (review of #1311).
+		assertThat(shownCapacity(ctx), "capacity shown to the LLM").isEqualTo(CERVENY_UJEZD_STATION_CAPACITY)
 		// The headless pacing controller must be the SAME instance Main hands to context.run().
 		assertThat(ctx.scope.getOrNull<SimulationController>())
 			.isNotNull()
@@ -92,6 +98,8 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
 		assertThat(ctx.scope.getOrNull<MeasuringPlanAdapter>(), "measuring planner").isNotNull()
+		// The prompt shows the station's own cap, so the run record must too (review of #1311).
+		assertThat(shownCapacity(ctx), "capacity shown to the LLM").isEqualTo(CERVENY_UJEZD_STATION_CAPACITY)
 	}
 
 	/**
@@ -110,6 +118,8 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.RULE_BASED)
+		assertThat(shownCapacity(ctx), "capacity shown to the rule-based planner")
+			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
 		assertThat(ctx.scope.getOrNull<AgentDriverLoop>(), "agent driver loop").isNotNull()
 		assertThat(ctx.scope.getOrNull<MeasuringPlanAdapter>(), "measuring planner").isNull()
 		assertThat(registry.usesLlmDispatcher(ExampleNames.CERVENY_UJEZD)).isFalse()

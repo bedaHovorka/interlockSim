@@ -70,6 +70,12 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * @param heldBlocks Number of block reservations outstanding across all trains, the block-level
  *   companion to [trainsHoldingReservations].
  * @param unresolvedAtRunEndCount Contentions still open when the run ended (Issue #1280).
+ * @param queuedTrains Capacity pressure (Issue #1305): trains queued at an entry and not yet
+ *   admitted or given up. Sampled with every snapshot when [MetricGroup.TRAIN_WAIT] is on, else zero.
+ * @param blockedTrains Capacity pressure (Issue #1305): trains with at least one open blocked-path
+ *   contention. Sampled like [queuedTrains]; the history shows the traffic level at which blocking begins.
+ * @param openContentions Capacity pressure (Issue #1305): open blocked-path contentions, one per
+ *   (train, block); the list itself is `MetricsCollectionService.latestOpenContentions`.
  *
  * @since Issue #672 (Goal 6 SP1)
  */
@@ -85,5 +91,8 @@ data class MetricsSnapshot(
 	val utilization: Double,
 	val trainsHoldingReservations: Int = 0,
 	val heldBlocks: Int = 0,
-	val unresolvedAtRunEndCount: Int = 0
+	val unresolvedAtRunEndCount: Int = 0,
+	val queuedTrains: Int = 0,
+	val blockedTrains: Int = 0,
+	val openContentions: Int = 0
 )

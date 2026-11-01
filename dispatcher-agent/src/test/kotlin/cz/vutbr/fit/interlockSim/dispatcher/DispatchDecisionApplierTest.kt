@@ -742,6 +742,34 @@ class DispatchDecisionApplierTest {
 		}
 
 		@Test
+		@DisplayName("RequestRoute refusal reaches the failed-reservation callback once, a grant does not (#1304)")
+		fun requestRoute_refusal_reportsFailedReservationOnce() {
+			val refused = RouteRequestResult.AllPathsBlocked(attemptedPaths = 2)
+			val failures = mutableListOf<Pair<String, RouteRequestResult>>()
+			val queue = ActuatorCommandQueue(ActuatorCommandQueue.DEFAULT_CAPACITY)
+			val applier =
+				DispatchDecisionApplier(
+					queue,
+					networkActuator,
+					onApproveTrain,
+					onFailedReservation = { trainId, result -> failures.add(trainId to result) }
+				)
+			every { networkActuator.requestRoute("Train #1", "A", "B") } returns refused
+			every { networkActuator.requestRoute("Train #2", "A", "B") } returns
+				RouteRequestResult.Reserved("Train #2", 3)
+			queue.postAll(
+				listOf(
+					DispatchDecision.RequestRoute("Train #1", "A", "B"),
+					DispatchDecision.RequestRoute("Train #2", "A", "B")
+				)
+			)
+
+			applier.onControlStep()
+
+			assertThat(failures).containsExactly("Train #1" to refused)
+		}
+
+		@Test
 		@DisplayName("RequestRoute AllPathsBlocked result does not throw")
 		fun requestRoute_allPathsBlocked_doesNotThrow() {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns

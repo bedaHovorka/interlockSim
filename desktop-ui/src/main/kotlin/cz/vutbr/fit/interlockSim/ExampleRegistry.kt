@@ -798,10 +798,7 @@ class ExampleRegistry {
 		// Fan out to both instead of choosing.
 		val runRecorder = context.scope.getOrNull<DispatcherRunRecorder>()
 		val actionOutcomeSink =
-			CompositeActionOutcomeSink.of(
-				actionOutcomeAggregator,
-				runRecorder?.let { it::onActionOutcome }
-			)
+			CompositeActionOutcomeSink.of(actionOutcomeAggregator, runRecorder?.let { it::onActionOutcome })
 		// SP3.6 (#574 / #187): reject async/LLM planners when the controller provides no pacing.
 		// NoOpSimulationController (rule-based console runs) has no speed cap, so an async planner
 		// cannot honour the 2x real-time limit there. The AI console run passes
@@ -809,6 +806,13 @@ class ExampleRegistry {
 		// runs pass the DelegatingSimulationController paced by SimulationRunner (SP4.2, #564).
 		// The rule-based planner is synchronous and exempt.
 		assertPlannerPacingCompatible(planner, controller)
+
+		// Issue #1304: the cap SHOWN to the dispatcher. An LLM planner is shown the station's own cap
+		// (KoogAgentFactory reads the scoped StationCapacity declared below: 4 on Cerveny Ujezd). The
+		// singleton RuleBasedDispatcher keeps the vyhybna-derived default (2 on every station, Issue #1276).
+		// The applier's admission gate is the station's own capacity either way (Issue #1155, SP8).
+		val shownCapacity = shownCapacityFor(plannerTickSource != null, loop.stationCapacity)
+		context.getMetricsServices().getMetricsCollectionService().recordCapacity(shownCapacity, loop.topologyCapacity)
 
 		val applier =
 			DispatchDecisionApplier(
@@ -1065,3 +1069,12 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext = createThreeTrainLoop(factory, args, enableRealTimeSync = true)
 }
+
+/**
+ * The admission cap the dispatcher is shown (Issue #1304). The LLM planner's prompt states the
+ * station's own cap ([stationCapacity]); the rule-based planner keeps its default.
+ */
+internal fun shownCapacityFor(
+	llmPlanner: Boolean,
+	stationCapacity: Int
+): Int = if (llmPlanner) stationCapacity else RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS

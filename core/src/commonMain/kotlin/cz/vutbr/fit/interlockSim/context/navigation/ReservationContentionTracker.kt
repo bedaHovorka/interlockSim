@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.isFreeOrOwnedBy
@@ -59,12 +60,25 @@ internal class ReservationContentionTracker(
 ) {
 	/**
 	 * The open contentions, keyed by (train, blocked block), valued by the simulation time the contention was first
-	 * observed. Nothing reads the time yet; it is kept on purpose as the source of the "since" column of the Goal 9B
-	 * demand for a read-only snapshot of open contentions (train, block, owner, since), see section 2.3 of
-	 * `docs/goal9b-demands/SP12-routing-decomposition.md` (Issue #1221). The same value stamps the one-shot
+	 * observed: the "since" column of [openContentions] (Issue #1305; the Goal 9B demand D1, section 2.3 of
+	 * `docs/goal9b-demands/SP12-routing-decomposition.md`, Issue #1221). The same value stamps the one-shot
 	 * [ConflictDetectedEvent] in [recordContentionAndEmitIfNew].
 	 */
 	private val blockedSince: MutableMap<Pair<String, DynamicTrackBlock>, Double> = mutableMapOf()
+
+	/**
+	 * Simulated seconds of the blocked episodes that have closed, per train (Issue #1305): recorded, never read
+	 * back by the tracking itself. One entry per train ever blocked, so bounded by the trains of the run.
+	 */
+	private val closedBlockedSeconds: MutableMap<String, Double> = mutableMapOf()
+
+	/**
+	 * Episodes cleared while no kernel was running, so with no clock to close them at, per train: the
+	 * earliest start (Issue #1305). [flushUnresolvedConflicts] closes them at the run's end time; until
+	 * then [blockedSeconds] counts them up to its `now`. Without this a clear outside a run would close
+	 * the episode at the clock's 0.0 fallback and lose it.
+	 */
+	private val unclosedSince: MutableMap<String, Double> = mutableMapOf()
 
 	/**
 	 * Record a blocked-path contention for [trainId] on [blockedBlock], and emit [ConflictDetectedEvent]
@@ -129,8 +143,14 @@ internal class ReservationContentionTracker(
 	 * @since Issue #612 (Goal 3 SP2 follow-up)
 	 */
 	fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected> {
+		// Issue #1305: episodes cleared with no running kernel end with the run.
+		unclosedSince.forEach { (trainId, since) -> addClosed(trainId, simulationEndTime - since) }
+		unclosedSince.clear()
 		if (blockedSince.isEmpty()) return emptyList()
 		val unresolved = blockedSince.keys.toList()
+		// Issue #1305: every train still blocked stood blocked to the end, ownerless block or not.
+		// One pass over the map, not one per train (N trains x B entries would be quadratic).
+		earliestOpenSince().forEach { (trainId, since) -> addClosed(trainId, simulationEndTime - since) }
 		blockedSince.clear()
 		return unresolved.mapNotNull { (trainId, block) ->
 			val owner = ownerOf(block) ?: return@mapNotNull null
@@ -156,9 +176,61 @@ internal class ReservationContentionTracker(
 	 * conflating a stale, already-resolved contention with a fresh one on the same block
 	 * later, and keeps [flushUnresolvedConflicts] from reporting contention that actually
 	 * resolved.
+	 *
+	 * Records the closed blocked episode for [blockedSeconds] (Issue #1305) at the simulation clock. With no
+	 * running kernel there is no clock: the episode is then kept apart, still forgotten as a contention, and
+	 * the end-of-run [flushUnresolvedConflicts] closes it at the run's end time.
 	 */
 	fun clearBlockedTracking(trainId: String) {
+		// Issue #1305: record the closed episode; the clock is read only when the train was blocked. With no
+		// running kernel there is no close time, so the flush closes the episode at the end time instead.
+		val since = earliestOpenSince()[trainId] ?: return
+		val now = runCatching { Process.time() }.getOrNull()
+		if (now != null) {
+			addClosed(trainId, now - since)
+		} else {
+			unclosedSince[trainId] = minOf(unclosedSince[trainId] ?: since, since)
+		}
 		blockedSince.keys.removeAll { it.first == trainId }
+	}
+
+	/**
+	 * The open contentions, in the order first observed, with the owner [ownerOf] names now; a copy
+	 * (Issue #1305). Read-only: see [ContentionQuery.openContentions].
+	 */
+	fun openContentions(ownerOf: (DynamicTrackBlock) -> String?): List<OpenContention> =
+		blockedSince.map { (key, since) -> OpenContention(key.first, key.second, ownerOf(key.second), since) }
+
+	/**
+	 * Blocked seconds per train: the closed episodes plus the open one up to [now] (Issue #1305). An episode runs from
+	 * the train's earliest open contention to the clear, so contentions on several blocks count once. Read-only: see
+	 * [ContentionQuery.blockedSeconds].
+	 */
+	fun blockedSeconds(now: Double): Map<String, Double> {
+		val total = closedBlockedSeconds.toMutableMap()
+		for (episodes in listOf(earliestOpenSince(), unclosedSince)) {
+			for ((trainId, since) in episodes) {
+				total[trainId] = (total[trainId] ?: 0.0) + (now - since).coerceAtLeast(0.0)
+			}
+		}
+		return total
+	}
+
+	private fun addClosed(
+		trainId: String,
+		seconds: Double
+	) {
+		closedBlockedSeconds[trainId] = (closedBlockedSeconds[trainId] ?: 0.0) + seconds.coerceAtLeast(0.0)
+	}
+
+	/** The earliest open-contention start of every blocked train. */
+	private fun earliestOpenSince(): Map<String, Double> {
+		val earliest = mutableMapOf<String, Double>()
+		for ((key, since) in blockedSince) {
+			val trainId = key.first
+			earliest[trainId] = minOf(earliest[trainId] ?: since, since)
+		}
+		return earliest
 	}
 
 	/**

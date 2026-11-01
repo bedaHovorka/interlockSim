@@ -11,7 +11,11 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
+import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
+import cz.vutbr.fit.interlockSim.sim.onRunEnded
+import cz.vutbr.fit.interlockSim.sim.onTrainJourneyEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -43,23 +47,61 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * state change.  The current snapshot is always visible in logs, satisfying the
  * Goal 10 requirement that metrics are observable in stdout/log without a GUI.
  *
+ * ## History and journeys (Issue #673, Goal 6 SP2)
+ *
+ * After every handled [BlockEvent] the service publishes the new snapshot: it becomes
+ * [latestSnapshot], is appended to [history] and is handed to the listeners — one instance
+ * for all three. [TrainJourneyEvent]s (subscribed through [onTrainJourneyEvent]) feed a
+ * [JourneyRecorder], read through [journeys]; they publish no snapshot.
+ *
+ * ## Run-end accounting (Issue #1304, Goal 6 SP6)
+ *
+ * A [RunEndAccounting] collaborator counts the run-end figures and classifies how the run ended,
+ * from events alone; [runEndSummary] reads it, [recordCapacity] feeds it at wiring time.
+ * When the run ends the service keeps the finished [RunRecord] of that moment, read through
+ * [runRecord] (Issue #676, Goal 6 SP5).
+ *
+ * ## Per-train wait and capacity pressure (Issue #1305, Goal 6 SP7)
+ *
+ * With [MetricGroup.TRAIN_WAIT] on, a [TrainWaitAccounting] collaborator fills the wait figures of
+ * [journeys] and samples the capacity pressure into every published snapshot; it also publishes
+ * [latestOpenContentions]. With the group off it does not exist.
+ *
+ * ## Performance row (Issue #1306, Goal 6 SP8)
+ *
+ * With [MetricGroup.PERFORMANCE] on, a [RunPerformanceAccounting] collaborator counts the
+ * `reservePath` calls and the route-search budget stops and takes the wall and simulated seconds from
+ * the run's end; the summary and the record carry the result as [RunEndSummary.performance]. With the
+ * group off nothing subscribes and the row is `null`.
+ *
  * ## Thread safety
  *
- * This class is **not thread-safe**. It is intended to be driven solely by the
- * kDisco event stream — i.e. the single-threaded `emitCustom` callbacks that
- * fire inside `runBlocking { context.run() }`. [getSnapshot] is meant to be
- * polled after `context.run()` completes, not concurrently from another thread
- * while events are being processed.
+ * Not thread-safe, with three exceptions. The service is driven solely by the kDisco event stream —
+ * [getSnapshot], [history] and [journeys] are read there or after the run. [latestSnapshot] and
+ * [latestOpenContentions] are immutable values behind volatile references, safe from any thread; the
+ * why-and-how lives on [MetricsCollectionService.latestSnapshot]. [runRecord] (Issue #676) is an
+ * immutable record written once on the simulation thread at run end behind a volatile reference, so the
+ * GUI Stop handler on the EDT, which does not join the simulation thread, sees either `null` or the
+ * whole record.
  *
  * ## Constructor
  *
- * @param env The simulation environment used to subscribe to block events.
+ * @param env The simulation environment used to subscribe to block and journey events.
  *   Pass `null` only in unit tests that drive [handleBlockEvent] directly.
+ * @param history Buffer the published snapshots are appended to; defaults to a
+ *   [MetricsHistory] with its default caps (Issue #673).
+ * @param config The active metric groups; read once here, so fixed for the run. With
+ *   [MetricGroup.HISTORY] off nothing is appended to [history]; with [MetricGroup.JOURNEYS] off no
+ *   journey records are kept and [journeys] stays empty (Issue #674). The CORE run-end accounting
+ *   ([runEndSummary], Issue #1304) still reads the journey events itself. With
+ *   [MetricGroup.PERFORMANCE] off the run has no performance row (Issue #1306).
  *
  * @since Issue #672 (Goal 6 SP1)
  */
 class DefaultMetricsCollectionService(
-	env: SimulationEnvironment? = null
+	env: SimulationEnvironment? = null,
+	private val history: MetricsHistory = MetricsHistory(),
+	config: MetricsConfig = MetricsConfig.ALL
 ) : MetricsCollectionService {
 	// ── KPI accumulators ─────────────────────────────────────────────────────
 
@@ -139,10 +181,52 @@ class DefaultMetricsCollectionService(
 
 	private val listeners: MutableList<(MetricsSnapshot) -> Unit> = mutableListOf()
 
+	// ── Published state (Issue #673) ─────────────────────────────────────────
+
+	/** Last published snapshot; the one field read across threads (see [latestSnapshot]). */
+	@kotlin.concurrent.Volatile
+	private var published: MetricsSnapshot = EMPTY_SNAPSHOT
+
+	private val journeyRecorder = JourneyRecorder()
+
+	private val historyEnabled: Boolean = config.isEnabled(MetricGroup.HISTORY)
+
+	private val journeysEnabled: Boolean = config.isEnabled(MetricGroup.JOURNEYS)
+
+	/**
+	 * Run-end counters and the end-cause classification (Issue #1304): the CORE group, always on. It
+	 * subscribes to the journey events itself, so it works with [MetricGroup.JOURNEYS] off.
+	 */
+	internal val runEndAccounting = RunEndAccounting()
+
+	/** Per-train wait figures and capacity pressure (Issue #1305): exists only with [MetricGroup.TRAIN_WAIT] on. */
+	internal val trainWait: TrainWaitAccounting? =
+		if (config.isEnabled(MetricGroup.TRAIN_WAIT)) {
+			TrainWaitAccounting { env?.getRoutingServices()?.getContentionQuery() }
+		} else {
+			null
+		}
+
+	/** The performance row (Issue #1306); `null` with [MetricGroup.PERFORMANCE] off. */
+	private val performanceAccounting: RunPerformanceAccounting? =
+		if (config.isEnabled(MetricGroup.PERFORMANCE)) RunPerformanceAccounting() else null
+
+	/** The run record, filled when the run ends (Issue #676); `null` before. Read across threads. */
+	@kotlin.concurrent.Volatile
+	private var runRecord: RunRecord? = null
+
 	// ── Subscription ─────────────────────────────────────────────────────────
 
 	init {
 		env?.onBlockEvent { event -> handleBlockEvent(event) }
+		if (journeysEnabled) env?.onTrainJourneyEvent { event -> handleJourneyEvent(event) }
+		// CORE (Issue #1304): subscribed whatever the groups, journey events included.
+		env?.let(runEndAccounting::subscribe)
+		trainWait?.let { wait -> env?.let(wait::subscribe) }
+		// PERFORMANCE (Issue #1306): also before the record, whose RunEnded reads its row.
+		performanceAccounting?.let { accounting -> env?.let(accounting::subscribe) }
+		// Issue #676: registered after the accounting, so its RunEnded has set the classification.
+		env?.onRunEnded { runRecord = runEndSummary().toRunRecord() }
 	}
 
 	// ── Interface implementation ──────────────────────────────────────────────
@@ -155,6 +239,7 @@ class DefaultMetricsCollectionService(
 		val total = totalBlocks
 		val utilization = if (total > 0) occupied.toDouble() / total else 0.0
 		val avgWait = if (occupancyEventCount > 0) totalWaitSeconds / occupancyEventCount else 0.0
+		val pressure = trainWait?.pressure() ?: CapacityPressure.NONE
 
 		val snapshot =
 			MetricsSnapshot(
@@ -169,7 +254,10 @@ class DefaultMetricsCollectionService(
 				utilization = utilization,
 				trainsHoldingReservations = activeReservationCount.size,
 				heldBlocks = blockReservedAt.size,
-				unresolvedAtRunEndCount = unresolvedAtRunEndCount
+				unresolvedAtRunEndCount = unresolvedAtRunEndCount,
+				queuedTrains = pressure.queuedTrains,
+				blockedTrains = pressure.blockedTrains,
+				openContentions = pressure.openContentions
 			)
 		logger.debug { "Metrics snapshot queried: $snapshot" }
 		return snapshot
@@ -199,6 +287,27 @@ class DefaultMetricsCollectionService(
 		listeners -= listener
 	}
 
+	override fun latestSnapshot(): MetricsSnapshot = published
+
+	override fun history(): MetricsHistory = history
+
+	override fun journeys(): List<TrainJourneyRecord> =
+		journeyRecorder.records().let { records -> trainWait?.decorate(records) ?: records }
+
+	override fun latestOpenContentions(): List<OpenContention> = trainWait?.latestOpenContentions().orEmpty()
+
+	override fun runEndSummary(): RunEndSummary =
+		runEndAccounting.summary(getSnapshot(), performanceAccounting?.performance())
+
+	override fun runRecord(): RunRecord? = runRecord
+
+	override fun capacityShownToDispatcher(): Int? = runEndAccounting.capacityShown()
+
+	override fun recordCapacity(
+		shownToDispatcher: Int,
+		topologyCapacity: Int
+	) = runEndAccounting.recordCapacity(shownToDispatcher, topologyCapacity)
+
 	// ── Internal event handler (internal for test access) ────────────────────
 
 	/**
@@ -218,7 +327,16 @@ class DefaultMetricsCollectionService(
 			is BlockEvent.OccupancyCleared -> onOccupancyCleared(event)
 			is BlockEvent.ReservationConflictDetected -> onReservationConflict(event)
 		}
-		notifyListeners()
+		trainWait?.onBlockEvent(event)
+		publishSnapshot()
+	}
+
+	/**
+	 * Feed one [TrainJourneyEvent] to the journey records (Issue #673). `internal` for the
+	 * same reason as [handleBlockEvent].
+	 */
+	internal fun handleJourneyEvent(event: TrainJourneyEvent) {
+		if (journeysEnabled) journeyRecorder.record(event)
 	}
 
 	// ── Private event handlers ────────────────────────────────────────────────
@@ -339,9 +457,19 @@ class DefaultMetricsCollectionService(
 		return "$whole.$frac"
 	}
 
-	private fun notifyListeners() {
-		if (listeners.isEmpty()) return
+	/**
+	 * Publish the current snapshot as [latestSnapshot] (one volatile write of an immutable
+	 * value), append it to [history], then hand the same instance to the listeners.
+	 */
+	private fun publishSnapshot() {
 		val snapshot = getSnapshot()
+		published = snapshot
+		if (historyEnabled) history.add(snapshot)
+		notifyListeners(snapshot)
+	}
+
+	private fun notifyListeners(snapshot: MetricsSnapshot) {
+		if (listeners.isEmpty()) return
 		listeners.toList().forEach { listener ->
 			try {
 				listener(snapshot)
@@ -353,5 +481,19 @@ class DefaultMetricsCollectionService(
 
 	private companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/** [latestSnapshot] before the first event: every KPI zero. */
+		private val EMPTY_SNAPSHOT =
+			MetricsSnapshot(
+				time = 0.0,
+				conflictCount = 0,
+				completedTrains = 0,
+				throughput = 0.0,
+				totalWaitSeconds = 0.0,
+				averageWaitSeconds = 0.0,
+				occupiedBlocks = 0,
+				totalBlocks = 0,
+				utilization = 0.0
+			)
 	}
 }
