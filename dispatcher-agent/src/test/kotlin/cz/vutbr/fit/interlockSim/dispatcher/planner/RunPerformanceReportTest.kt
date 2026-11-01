@@ -115,6 +115,7 @@ class RunPerformanceReportTest {
 			.isEqualTo(listOf("1", "0", "n/a", "n/a", "n/a", "n/a", "2", "n/a", "n/a"))
 		assertThat(md).contains("- Whole run (forked JVM, measured by aiSweep): not measured")
 		assertThat(md).contains("- Kernel only (run record): not measured")
+		assertThat(md).contains("not comparable with the Goal 1B B5 `reservePath`-only count")
 	}
 
 	@Test
@@ -139,7 +140,7 @@ class RunPerformanceReportTest {
 			"- Kernel only (run record): slowest 16.00 s; 1 of 2 measured runs over 15 s; total 17.50 s of 180 s"
 		)
 		assertThat(md).contains(
-			"- Aborted runs (TIMEOUT_ABORT or CRASH): 1, without a kernel wall; their whole-run wall is in the line above"
+			"- Aborted runs (TIMEOUT_ABORT or CRASH): 1, without a kernel wall; their whole-run wall is in the Whole run line"
 		)
 		assertThat(performanceCells(md, ExampleNames.SHUNTING_LOOP)[EXAMPLE_COLUMN + 2], "measured runs").isEqualTo("2")
 	}

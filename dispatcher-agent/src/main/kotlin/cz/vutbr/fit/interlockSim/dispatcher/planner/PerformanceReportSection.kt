@@ -95,7 +95,9 @@ internal object PerformanceReportSection {
 			"run the wall includes the speed pacing and pauses, so its ratio mostly shows the speed factor. " +
 			"**Max concurrent** is the peak of admitted trains (max), **Budget exceeded** the route searches " +
 			"stopped at their node budget, **reservePath calls** the public route requests (`reservePath`, " +
-			"`reservePathToAny`, `reservePathToAnyNextSemaphore`, each call once; both summed). Wall time " +
+			"`reservePathToAny`, `reservePathToAnyNextSemaphore`, each call once; both summed), so it is " +
+			"not comparable with the Goal 1B B5 `reservePath`-only count (for example shuntingLoop 32 → 47 " +
+			"per run). Wall time " +
 			"measures the machine, not the railway: it varies with load, and nothing in the gate reads it. " +
 			"`n/a` = not measured (a file before schema version 12, an aborted run, the PERFORMANCE metric " +
 			"group off, or no aiSweep timing). The SP11 wall budget below the table is reported against, " +
@@ -131,7 +133,7 @@ internal object PerformanceReportSection {
 			"- Whole run (forked JVM, measured by aiSweep): " + wallSummary(runs.mapNotNull { it.processWallSeconds }, "runs"),
 			"- Kernel only (run record): " + wallSummary(runs.mapNotNull { it.railwayOutcome.wallSeconds }, "measured runs"),
 			"- Aborted runs (TIMEOUT_ABORT or CRASH): $aborted, without a kernel wall; " +
-				"their whole-run wall is in the line above"
+				"their whole-run wall is in the Whole run line"
 		)
 	}
 
