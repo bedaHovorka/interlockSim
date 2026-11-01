@@ -17,7 +17,10 @@ import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
+import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -101,6 +104,27 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 		assertThat(s.classification, name = "classification").isEqualTo(RunEndClassification.NATURAL_COMPLETION)
 	}
 
+	/**
+	 * Exact accounting of a run cut off at its end time: every admitted train is, for the metrics,
+	 * either exited or unfinished, and, for the loop, either counted exited or still in its approved
+	 * list. The two exited counts differ by a one-tick lag: the metrics count an exit when the front
+	 * reaches the InOut (the meaning the review ruled right), the loop once the train's process has
+	 * ended -- after its tail cleared -- at its next tick. A train caught between the two at the
+	 * cutoff is exited for the metrics but still approved for the loop.
+	 */
+	private fun assertCutoffAccountsForEveryAdmittedTrain(
+		s: RunEndSummary,
+		loop: ShuntingLoop
+	) {
+		assertThat(s.trainsExited + s.unfinishedJourneys, name = "admitted trains: exited + unfinished")
+			.isEqualTo(loop.getTrainsExited() + loop.getApprovedTrains().size)
+		assertThat(
+			s.trainsExited,
+			name = "exits seen no later than the loop's"
+		).isGreaterThanOrEqualTo(loop.getTrainsExited())
+		assertThat(s.unfinishedJourneys, name = "admitted trains still on the network").isGreaterThan(0)
+	}
+
 	@Test
 	@Tag("integration-test")
 	@Timeout(value = 300, unit = TimeUnit.SECONDS)
@@ -113,13 +137,9 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 
 		val s = context.summary()
 		assertShuntingLoopCounters(s, loop)
-		// The metrics count an exit when the front reaches the InOut; the loop counts it once the
-		// train's process has terminated, on its next tick. A train caught between the two at the
-		// cutoff is exited for the metrics and not yet for the loop -- and no longer on the network.
-		assertThat(s.trainsExited, name = "trains exited, at least the loop's").isGreaterThanOrEqualTo(loop.getTrainsExited())
+		assertCutoffAccountsForEveryAdmittedTrain(s, loop)
 		assertThat(s.maxConcurrentTrains, name = "max concurrent trains, at most the loop's")
 			.isLessThanOrEqualTo(loop.getMaxConcurrentTrains())
-		assertThat(s.unfinishedJourneys, name = "admitted trains still on the network").isGreaterThan(0)
 		assertThat(s.capacityShownToDispatcher, name = "capacity shown (synchronous wiring)")
 			.isEqualTo(loop.stationCapacity)
 		assertThat(s.topologyCapacity, name = "topology capacity").isEqualTo(CERVENY_UJEZD_CAPACITY)
@@ -162,6 +182,48 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
 		assertThat(s.topologyCapacity, name = "topology capacity").isEqualTo(CERVENY_UJEZD_CAPACITY)
 		assertThat(s.classification, name = "not run, not classified").isNull()
+		// The prompt's `capacity:` line comes from the scoped projector: a change to only one of the two
+		// values fails here.
+		assertThat(context.scope.get<DispatcherObservationProjector>().capacity, name = "projector capacity")
+			.isEqualTo(s.capacityShownToDispatcher)
+	}
+
+	/**
+	 * Acceptance 3 of Issue #1304 names `exampleGui cervenyUjezd 600`: the GUI wiring (the
+	 * dispatcher-agent stack with its driver thread, cap 2) is built from the registry's GUI map
+	 * unchanged and run headless. The only difference from the GUI is the pacing: where the GUI's
+	 * `SimulationController` attaches its `SimulationRunner` as the delegate and runs at the chosen
+	 * speed, this test attaches a [ThrottlingSimulationController] at the maximum speed and raises
+	 * the loop's speed multiplier to the same value, so 600 simulated seconds take seconds of wall
+	 * time. The planner is the rule-based one; no Ollama is involved.
+	 */
+	@Test
+	@Tag("integration-test")
+	@Timeout(value = 300, unit = TimeUnit.SECONDS)
+	@DisplayName("cervenyUjezd GUI wiring 600 s headless: a cutoff with every admitted train accounted for")
+	fun cervenyUjezdGuiWiringIsACutoff() {
+		val registry = get<ExampleRegistry>()
+		val factory = checkNotNull(registry.guiExamples[ExampleNames.CERVENY_UJEZD])
+		val context =
+			(factory(get(), arrayOf("exampleGui", ExampleNames.CERVENY_UJEZD, END_TIME)) as DefaultSimulationContext)
+				.tracked()
+		val loop = context.mainProcess as ShuntingLoop
+		val pacing = ThrottlingSimulationController(ThrottlingSimulationController.MAX_SPEED)
+		loop.speedMultiplier = ThrottlingSimulationController.MAX_SPEED
+		context.scope.get<DelegatingSimulationController>().delegate = pacing
+
+		context.run(pacing)
+
+		val s = context.summary()
+		assertShuntingLoopCounters(s, loop)
+		assertCutoffAccountsForEveryAdmittedTrain(s, loop)
+		assertThat(s.maxConcurrentTrains, name = "max concurrent trains, within the cap shown")
+			.isLessThanOrEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
+		assertThat(s.capacityShownToDispatcher, name = "capacity shown")
+			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
+		assertThat(s.topologyCapacity, name = "topology capacity").isEqualTo(CERVENY_UJEZD_CAPACITY)
+		assertThat(s.classification, name = "classification")
+			.isEqualTo(RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS)
 	}
 
 	private companion object {

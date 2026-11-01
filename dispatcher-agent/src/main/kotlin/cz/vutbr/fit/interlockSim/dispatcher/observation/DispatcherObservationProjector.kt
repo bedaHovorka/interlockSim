@@ -83,7 +83,12 @@ class DispatcherObservationProjector(
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort,
 	private val pathReservationRegistry: PathReservationRegistry,
 	private val environment: SimulationEnvironment,
-	private val capacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
+	/**
+	 * Station capacity published as [DispatcherObservation.capacity] -- the `capacity:` line the
+	 * prompt shows. Readable so a test can pin it to the capacity the metrics record as shown to the
+	 * dispatcher (Issue #1304).
+	 */
+	val capacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
 	/**
 	 * SP2c.17 (#840): Optional outcome feed drained on each [captureOnSimThread] call.
 	 *
