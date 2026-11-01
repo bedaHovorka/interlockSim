@@ -325,26 +325,37 @@ class MetricsDashboardPanel : JPanel() {
 			// EDT.
 			override fun done() {
 				current.inFlight = false
-				val reading =
-					try {
-						get()
-					} catch (e: ExecutionException) {
-						logger.warn(e.cause ?: e) { "Metrics dashboard poll failed" }
-						null
-					} catch (e: InterruptedException) {
-						Thread.currentThread().interrupt()
-						null
-					}
+				val reading = readOrNull(this)
 				if (run !== current) return // detached or restarted while this poll ran
 				reading?.let { show(DashboardText.of(it)) }
-				if (final) {
-					run = null
-				} else if (current.finalPending) {
-					current.finalPending = false
-					poll(current, final = true)
-				}
+				afterPoll(current, final)
 			}
 		}.execute()
+	}
+
+	/** The finished worker's reading, or `null` when the poll failed or was interrupted. */
+	private fun readOrNull(worker: SwingWorker<DashboardReading, Void>): DashboardReading? =
+		try {
+			worker.get()
+		} catch (e: ExecutionException) {
+			logger.warn(e.cause ?: e) { "Metrics dashboard poll failed" }
+			null
+		} catch (e: InterruptedException) {
+			Thread.currentThread().interrupt()
+			null
+		}
+
+	/** After a poll of the current run: a final poll ends it, a queued final poll starts now. */
+	private fun afterPoll(
+		current: Run,
+		final: Boolean
+	) {
+		if (final) {
+			run = null
+		} else if (current.finalPending) {
+			current.finalPending = false
+			poll(current, final = true)
+		}
 	}
 
 	private fun show(text: DashboardText) {
