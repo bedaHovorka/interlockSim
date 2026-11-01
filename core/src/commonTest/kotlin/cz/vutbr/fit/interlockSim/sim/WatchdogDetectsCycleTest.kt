@@ -18,9 +18,7 @@ import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isZero
-import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-import cz.vutbr.fit.interlockSim.context.navigation.extractUniqueBlocks
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
@@ -100,23 +98,12 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 		}
 	}
 
-	private fun routeBlocks(ctx: SimulationContext): List<DynamicTrackBlock> {
-		val inOuts = ctx.getInOuts()
-		val inIo = inOuts.first { it.name == "A" }
-		val outIo = inOuts.first { it.name == "B" }
-		return ctx
-			.getRouteFinder()
-			.findRoutes(inIo.staticRef, outIo.staticRef, ctx)
-			.flatMap { extractUniqueBlocks(it.segments) }
-			.distinct()
-	}
-
 	private fun runWith(
 		lateTrains: Int = 0,
 		stagedHoldings: (List<DynamicTrackBlock>) -> List<List<DynamicTrackBlock>>
 	): Pair<MultiTrainLoop, StagedHoldingService> {
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true).tracked()
-		val blocks = routeBlocks(ctx)
+		val blocks = lineRouteBlocks(ctx)
 		assertThat(blocks.size, name = "route blocks of A -> B").isGreaterThanOrEqualTo(2)
 		val holdings = stagedHoldings(blocks)
 		val service =
@@ -168,7 +155,7 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 		// The member set alternates per tick, so the same-member rule restarts; the churn bound
 		// (PERSIST_TICKS * 10 ticks of any cycle) must still report (Copilot round on Issue #1154).
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true).tracked()
-		val blocks = routeBlocks(ctx)
+		val blocks = lineRouteBlocks(ctx)
 		assertThat(blocks.size, name = "route blocks of A -> B").isGreaterThanOrEqualTo(2)
 		val stages =
 			listOf(

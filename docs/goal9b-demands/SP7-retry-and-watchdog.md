@@ -53,7 +53,8 @@ inverting `PathReservationService.getReservedBlocks` of every approved train. Si
 edges come from what actually refused the waiter; see "Exact wait-for edges" below.
 
 The persistence rules (`DeadlockWatchdog`): either the same cycle (same member set) on
-`stallPersistTicks` (default 5, ten simulated seconds) successive dispatcher ticks, or any cycle on
+`stallPersistTicks` (default 2 since Issue #1270, see "Knot search" below; it was 5, ten simulated seconds)
+successive dispatcher ticks, or any cycle on
 ten times as many ticks (the churn bound -- member sets that alternate per tick never satisfy the
 same-member rule), with the clock strictly later on each. A tick at an unchanged clock value is
 ignored, so a frozen clock never fires it: that case is SP4's node budget. A tick without a cycle
@@ -65,6 +66,7 @@ Known approximations (these do not change today's behaviour, only what Goal 9B m
    the holders of all of them. A cycle through such edges is not always a deadlock. The persistence
    rule bounds the risk; an exact test needs a knot search on the per-route graph. Since Issue #1269
    the per-route data exists: `MultiTrainLoop` keeps each waiter's `BlockedCandidate` list.
+   Resolved by Issue #1270: the watchdog now searches for a knot (see "Knot search" below).
 2. **Started trains wait for nobody.** `MultiTrainLoop` reserves the whole path before it starts a
    train, so a started train never waits on another train's reservation and never has an outgoing
    edge (it can be the target of one, Issue #1269). With full-path reservation the graph has no cycle in production (`fiveTrainCompleteness`
@@ -146,6 +148,71 @@ refuses the second train. The candidate-route builder showed no edge in that win
 Pins: `BlockOwnerQueryTest` (owner of a reserved, a free and an unattributed block; a refusal names
 the train holding its block, and the train holding its switch), `WaitForEdgesFromOwnersTest`, and
 `WatchdogDetectsCycleTest` and `fiveTrainCompleteness` unchanged in their assertions.
+
+## Knot search (2026-10-31, Issue #1270)
+
+The watchdog is exact for OR waits. A waiting train needs only ONE of its candidate routes, and a
+route (reserved atomically) needs ALL its blockers gone. `MultiTrainLoop.buildWaitForGraph` records
+each `BlockedCandidate` of the waiter's last refusal as one route (`WaitForGraph.addRoute`), blocked
+by the current owner (`getBlockOwner`) of each block it named and the holder of each switch claim it
+named; the waiter itself is dropped. The edge view (`WaitForGraph.edges`, the `waitForEdges` seam of
+#1269) stays the union over the routes.
+
+`WaitForGraph.findKnot` returns the largest set of waiters in which every route of every member is
+blocked by at least one member (a greatest fixed point: drop every waiter with a route that has no
+blocker left in the set, repeat). Such a route never frees, whatever trains outside the set do: a
+route blocked by a member AND by a running train stays blocked after the running train has gone.
+A route blocked by nobody, or only by trains outside the set (started trains, trains of no loop,
+waiters that can themselves proceed), frees its waiter and every waiter that waits for it on some
+route. A waiter with no recorded route proves nothing and is never a member. The same holds for a
+block that is still busy but has no train attributed (`BlockedCandidate.blockedBlocks` stores
+`null` for it): it adds no blocker, so a route held only by such an occupancy looks free. That is
+the safe no-abort choice (#1271 wakes on a train-less `OccupancyCleared`), but it can hide a real
+deadlock until the end time. The routes recorded for a waiter must be ALL of its alternatives: a
+partial set over-reports (`reservePathToAny` carries the last target's list only).
+
+| Case | AND graph (before) | Knot search (now) |
+|---|---|---|
+| Two waiters hold each other's first route; one has a second route held by nobody | cycle, stall | no knot, run continues |
+| The same, the second route held only by a running train | cycle, stall | no knot, run continues |
+| Every route of both blocked by the other (one route also by a running train) | cycle, stall | knot, stall |
+| A third waiter whose only route is held by a knot member | cycle (tail not reported) | member of the knot, not of its cycle |
+
+The report: `SimulationStalled.cycle` stays a cycle (each train waits for the next), taken inside the
+knot (`WaitForGraph.findCycle` restricted to its members), and the new field `SimulationStalled.knot`
+(default: the cycle's trains) names every deadlocked train; the message lists them. The persistence
+rule of `DeadlockWatchdog` is unchanged and still compares the cycle, so the churn bound keeps its
+meaning (gemma4 ruling B below).
+
+**`stallPersistTicks` review.** The guard stays; its default `MultiTrainLoop.DEFAULT_STALL_PERSIST_TICKS`
+drops from 5 ticks (ten simulated seconds) to 2: the watchdog fires on the second consecutive
+sighting, two simulated seconds after the first. The churn bound (`persistTicks * 10`) drops from
+50 to 20 ticks with it, which is harmless now that knots are exact. The five ticks absorbed the OR-wait
+false positive of the AND graph, which the knot search removes. What remains is transient: block
+owners are read live, but a switch holder comes from the waiter's last refusal and lags until the
+retry, woken by the release at the same instant, replaces it; the watchdog tick can run before that
+retry. Two observations at strictly later clock values outlast that. The reservation TTL (60 s) is
+longer than either value, so neither covers a knot dissolved by expiry. Production scenarios form no
+knot (`fiveTrainCompleteness` asserts `stall == null`), so the default changes no run today; the
+tests that pin persistence pass their own value.
+
+gemma4 rulings (local `gemma4:latest`):
+
+1. Knot condition: "at least one blocker in the set" (A) over "only members block the route" (B).
+   Quote: "A route is stuck if AT LEAST ONE of its blockers is in D because this accurately captures
+   the condition necessary for the waiter to fail its OR-wait check."
+2. Report: keep `cycle`, add `knot` (C); then, asked which set the same-member rule compares: the
+   cycle (B). Quote: "Option B is chosen because it upholds the project's 'minimal changes only'
+   rule and preserves the coverage of the existing `WatchdogDetectsCycleTest`."
+3. Default: 2 ticks. Quote: "Two ticks (4 simulated seconds) is sufficient to wait out the
+   immediate, transient synchronization phase following a block release without incurring the high
+   cost of a false `errorStop`."
+
+Pins: `WaitForKnotTest` (the semantics on the graph alone), `WatchdogKnotSearchTest` (a free and a
+running-train alternative route: no stall, red on the AND graph; a knot of two waiters over two
+routes each and a knot with a waiting tail raise `SimulationStalled`; the default of 2 ticks, red at
+5). `WatchdogDetectsCycleTest`, `DeadlockWatchdogTest`, `WaitForEdgesFromOwnersTest` and
+`fiveTrainCompleteness` are unchanged.
 
 ## Release-path audit (2026-10-31, Issue #1271)
 
