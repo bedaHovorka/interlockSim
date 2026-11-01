@@ -18,6 +18,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
@@ -52,13 +53,16 @@ class AiSweepDriverTest {
 
 	private fun grid(
 		repeat: Int = 2,
-		temperatures: List<Double> = listOf(0.28)
+		temperatures: List<Double> = listOf(0.28),
+		examples: List<String>? = null
 	): SweepGrid =
 		SweepGrid(
 			endTimeSeconds = 60,
 			repeat = repeat,
 			perRunTimeoutSeconds = 30,
-			axes = SweepAxes(temperature = temperatures)
+			axes =
+				examples?.let { SweepAxes(example = it, temperature = temperatures) }
+					?: SweepAxes(temperature = temperatures)
 		)
 
 	/** Records every launch and writes a snapshot for the run id it was given, like a real child. */
@@ -153,6 +157,25 @@ class AiSweepDriverTest {
 		assertThat(snapshot.endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
 		assertThat(snapshot.completedNaturally).isEqualTo(false)
 		assertBreakerAndLatencyNotRecorded(snapshot)
+	}
+
+	/**
+	 * Issue #676 fix round 2: the completed runs of a dispatcher-free cell are recorded under
+	 * [DispatcherArm.NO_DISPATCHER], so its aborted runs must be too. Under `RULE_BASED` they would
+	 * add failing runs to that arm's gate counts -- 9 control runs + 1 aborted `multiTrainLoop` run
+	 * would reach `MIN_RUN_COUNT`.
+	 */
+	@Test
+	@DisplayName("an aborted run of a dispatcher-free cell is written under the NO_DISPATCHER arm")
+	fun abortedDispatcherFreeRunKeepsItsArm() {
+		val runner = RecordingRunner(behaviour = { SweepProcessResult(exitCode = null, timedOut = true) })
+
+		driverWith(runner).run(grid(repeat = 1, examples = listOf(ExampleNames.MULTI_TRAIN_LOOP)), outputRoot, mainClass)
+
+		val snapshot = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot).single()
+		assertThat(snapshot.endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
+		assertThat(snapshot.arm).isEqualTo(DispatcherArm.NO_DISPATCHER)
+		assertThat(outputRoot.resolve("no_dispatcher").toFile().isDirectory, "arm directory").isEqualTo(true)
 	}
 
 	@Test
