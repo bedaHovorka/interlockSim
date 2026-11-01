@@ -40,13 +40,18 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
  * @property failedReservations Refused reservation requests, the sum of [failedReservationsByKind].
  * @property failedReservationsByKind Refused requests per kind; kinds never seen are absent.
  * @property unresolvedAtRunEnd `MetricsSnapshot.unresolvedAtRunEndCount` (Issue #1280).
- * @property entryFailures `MultiTrainLoop` entries given up, the sum of [entryFailuresByKind].
+ * @property entryFailures `MultiTrainLoop` entries given up, the sum of [entryFailuresByKind]. `0`
+ *   also where it does not apply: only `MultiTrainLoop` gives entries up, and the metrics service
+ *   cannot tell from events which harness ran.
  * @property entryFailuresByKind Entries given up per kind; kinds never seen are absent.
  * @property stall The watchdog stall; `null` when the run did not stall.
  * @property expiredHoldingCount Kernel expiries of a whole holding (Issue #1174).
  * @property expiredTailCount Kernel expiries of an occupying train's tail (Issue #1220).
- * @property staleReleaseCount Whole un-travelled routes the orphan sweeper released.
- * @property partialReleaseCount Un-travelled tails the orphan sweeper released.
+ * @property staleReleaseCount Whole un-travelled routes the orphan sweeper released. `0` also when no
+ *   sweeper was wired (only the dispatcher-agent stack wires one); [capacityShownToDispatcher] and
+ *   the persisted arm tell the wirings apart.
+ * @property partialReleaseCount Un-travelled tails the orphan sweeper released; `0` also when no
+ *   sweeper was wired, like [staleReleaseCount].
  * @property capacityShownToDispatcher Admission cap the dispatcher was given; `null` without one.
  * @property topologyCapacity Capacity of the station topology; `null` when not recorded.
  * @property unfinishedJourneys Trains admitted whose front had not reached an exit InOut at run end.

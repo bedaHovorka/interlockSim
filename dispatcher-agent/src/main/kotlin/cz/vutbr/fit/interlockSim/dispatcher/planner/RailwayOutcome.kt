@@ -90,14 +90,17 @@ import kotlinx.serialization.Serializable
  * @property unfinishedJourneys Trains admitted whose front had not reached an exit InOut at run end.
  * @property failedReservationsByKind Refused requests per `FailedReservationKind` name; kinds never
  *   seen are absent from the map.
- * @property entryFailures `MultiTrainLoop` entries given up.
+ * @property entryFailures `MultiTrainLoop` entries given up. `0` = none, which includes "does not
+ *   apply" for any other main process (the record cannot tell the harness from its events).
  * @property entryFailuresByKind Entries given up per `MultiTrainLoop.EntryFailureKind` name.
  * @property stall The watchdog stall. With [endClassification] present, `null` means the run did not
  *   stall; with both `null`, nothing was measured.
  * @property expiredHoldingCount Kernel expiries of a whole holding (Issue #1174).
  * @property expiredTailCount Kernel expiries of an occupying train's tail (Issue #1220).
- * @property staleReleaseCount Whole un-travelled routes the orphan sweeper released.
- * @property partialReleaseCount Un-travelled tails the orphan sweeper released.
+ * @property staleReleaseCount Whole un-travelled routes the orphan sweeper released. `0` = none,
+ *   which includes "no sweeper wired": only a run with a dispatcher agent has one.
+ * @property partialReleaseCount Un-travelled tails the orphan sweeper released; `0` as for
+ *   [staleReleaseCount].
  * @property capacityShownToDispatcher Admission cap the dispatcher was given; `null` without one.
  * @property topologyCapacity Capacity of the station topology; `null` when not recorded.
  * @property endTime Kernel clock at run end, in simulated seconds.

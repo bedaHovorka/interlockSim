@@ -69,10 +69,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Thread safety
  *
- * Not thread-safe, with two exceptions: [latestSnapshot] and [latestOpenContentions] are immutable
- * values behind volatile references, safe from any thread. The service is driven solely by the
- * kDisco event stream — [getSnapshot], [history] and [journeys] are read there or after the run;
- * the why-and-how of the [latestSnapshot] exception lives on [MetricsCollectionService.latestSnapshot].
+ * Not thread-safe, with three exceptions. The service is driven solely by the kDisco event stream —
+ * [getSnapshot], [history] and [journeys] are read there or after the run. [latestSnapshot] and
+ * [latestOpenContentions] are immutable values behind volatile references, safe from any thread; the
+ * why-and-how lives on [MetricsCollectionService.latestSnapshot]. [runRecord] (Issue #676) is an
+ * immutable record written once on the simulation thread at run end behind a volatile reference, so the
+ * GUI Stop handler on the EDT, which does not join the simulation thread, sees either `null` or the
+ * whole record.
  *
  * ## Constructor
  *
@@ -196,7 +199,8 @@ class DefaultMetricsCollectionService(
 			null
 		}
 
-	/** The run record, filled when the run ends (Issue #676); `null` before. */
+	/** The run record, filled when the run ends (Issue #676); `null` before. Read across threads. */
+	@kotlin.concurrent.Volatile
 	private var runRecord: RunRecord? = null
 
 	// ── Subscription ─────────────────────────────────────────────────────────
