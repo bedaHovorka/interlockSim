@@ -131,7 +131,12 @@ open class MultiTrainLoop(
 	context: SimulationContext,
 	private val endTime: Long,
 	private val trainSpecs: List<TrainSpec> = emptyList(),
-	private val enableRealTimeSync: Boolean = false,
+	/**
+	 * Whether [startAction] activates [RealTimeSynch], pacing simulated time to the wall clock (GUI
+	 * examples pass `true`; headless runs keep the default `false`). Read-only, so a caller can
+	 * verify an example's real-time wiring, as on [ShuntingLoop.enableRealTimeSync] (Issue #1297).
+	 */
+	val enableRealTimeSync: Boolean = false,
 	initialSpeedMultiplier: Double = 1.0,
 	private val maxConcurrentTrains: Int = DEFAULT_MAX_CONCURRENT_TRAINS,
 	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService(),
