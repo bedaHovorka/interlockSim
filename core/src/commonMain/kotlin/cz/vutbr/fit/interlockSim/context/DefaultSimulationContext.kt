@@ -45,6 +45,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
+import cz.vutbr.fit.interlockSim.sim.RunEnded
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
@@ -261,6 +263,9 @@ open class DefaultSimulationContext(
 	 */
 	final override var lastRunEndTime: Double? = null
 		private set
+
+	/** Whether the main loop announced its end time in the current run (Issue #1304). */
+	private var endTimeReachedThisRun: Boolean = false
 
 	/** Collision warning listeners registered before run(); wired into the service at run() time. */
 	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
@@ -1398,6 +1403,8 @@ open class DefaultSimulationContext(
 				Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
 			}
 		simulation = sim
+		endTimeReachedThisRun = false
+		sim.onEvent(::noteEndTimeReached) // Issue #1304
 		// Wire pre-registered listeners into kdisco simulation
 		pendingSimEventListeners.forEach { sim.onEvent(it) }
 		wireCustomEventListeners(sim, pendingBlockEventListeners)
@@ -1414,10 +1421,15 @@ open class DefaultSimulationContext(
 			throw SimulationException(e)
 		} finally {
 			val kernelEndTime = sim.time()
-			flushUnresolvedReservationConflicts(kernelEndTime)
-			lastRunEndTime = kernelEndTime
-			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
-			currentController = null
+			try {
+				flushUnresolvedReservationConflicts(kernelEndTime)
+				// An Error from a run-end subscriber propagates, but never skips the cleanup below.
+				deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun))
+			} finally {
+				lastRunEndTime = kernelEndTime
+				simulation = null // Release reference once sim.run() returns (natural end or stop() called)
+				currentController = null
+			}
 		}
 	}
 
@@ -1435,6 +1447,35 @@ open class DefaultSimulationContext(
 		runCatching { pathReservationServiceInstance.flushUnresolvedConflicts(simulationEndTime) }
 			.onSuccess { events -> events.forEach { event -> pendingBlockEventListeners.forEach { it(event) } } }
 			.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
+	}
+
+	/**
+	 * Remember that the main loop announced [RunAccountingEvent.EndTimeReached] in this run
+	 * (Issue #1304), so [deliverRunEnded] can tell an end-time stop from an early one.
+	 */
+	private fun noteEndTimeReached(event: KDiscoSimulationEvent) {
+		if ((event as? KDiscoSimulationEvent.Custom)?.payload is RunAccountingEvent.EndTimeReached) {
+			endTimeReachedThisRun = true
+		}
+	}
+
+	/**
+	 * Deliver [runEnded] to the raw listeners registered before [run] (Issue #1304, Goal 6 SP6), as a
+	 * `SimulationEvent.Custom` payload so that [onRunEnded][cz.vutbr.fit.interlockSim.sim.onRunEnded]
+	 * filters it like any other payload. Delivered directly, after the contention flush, for the same
+	 * reason as [flushUnresolvedReservationConflicts]: the kernel has stopped and `emitCustom` is a
+	 * no-op. A listener that throws an [Exception] is logged at WARN and the ones after it still
+	 * receive the event; an [Error] is never caught.
+	 */
+	private fun deliverRunEnded(runEnded: RunEnded) {
+		val event = KDiscoSimulationEvent.Custom(runEnded.time, runEnded)
+		pendingSimEventListeners.forEach { listener ->
+			try {
+				listener(event)
+			} catch (e: Exception) {
+				logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
+			}
+		}
 	}
 
 	/**

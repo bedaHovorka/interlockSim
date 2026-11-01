@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsHistory
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.sim.metrics.TrainJourneyRecord
 
 /**
@@ -73,4 +74,37 @@ class FakeMetricsCollectionService(
 	override fun history(): MetricsHistory = emptyHistory
 
 	override fun journeys(): List<TrainJourneyRecord> = emptyList()
+
+	/** The snapshot's figures; every run-end counter zero and the run not ended (Issue #1304). */
+	override fun runEndSummary(): RunEndSummary =
+		RunEndSummary(
+			journeysCompleted = completedTrains,
+			trainsEntered = 0,
+			trainsExited = 0,
+			wrongExits = 0,
+			maxConcurrentTrains = 0,
+			blockTransitions = 0,
+			conflicts = conflictCount,
+			failedReservations = 0,
+			failedReservationsByKind = emptyMap(),
+			unresolvedAtRunEnd = unresolvedAtRunEndCount,
+			entryFailures = 0,
+			entryFailuresByKind = emptyMap(),
+			stall = null,
+			expiredHoldingCount = 0,
+			expiredTailCount = 0,
+			staleReleaseCount = 0,
+			partialReleaseCount = 0,
+			capacityShownToDispatcher = null,
+			topologyCapacity = null,
+			unfinishedJourneys = 0,
+			endTime = null,
+			endTimeReached = false,
+			classification = null
+		)
+
+	override fun recordCapacity(
+		shownToDispatcher: Int,
+		topologyCapacity: Int
+	) = Unit
 }

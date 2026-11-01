@@ -215,6 +215,8 @@ class SimpleLinearTrackTestProcess(
 
 	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
+			// Issue #1304: tell the run end that the end time, not an early stop, ended the run.
+			emitRunAccountingEvent(RunAccountingEvent.EndTimeReached(time()))
 			generator.terminate()
 			env.stop()
 			return
