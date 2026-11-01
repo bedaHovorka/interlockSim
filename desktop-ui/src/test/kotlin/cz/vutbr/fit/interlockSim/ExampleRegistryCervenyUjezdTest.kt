@@ -70,12 +70,13 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 	}
 
 	/**
-	 * Pins the GUI example's dispatcher cap at the vyhybna-derived constant of
+	 * Pins the dispatcher cap at the vyhybna-derived constant of
 	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2), while this station's loop capacity
-	 * is 4 — the difference the synchronous CLI/native wiring ([wireSynchronousDispatcher], which
-	 * sizes the dispatcher to the loop capacity) does not have. SP3 documents this as demand D5 in
-	 * `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`; SP8 owns raising the cap
-	 * (Issue #1155). Until then the GUI variant may approve at most 2 trains in this scenario.
+	 * is 4 — on both agent-stack arm wirings of this station: this GUI example and, since
+	 * Issue #1276 (PR #1282 review), the console control arm too. SP3 documents the synchronous
+	 * native run at capacity 4 as demand D5 in `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`;
+	 * SP8 owns raising the cap (Issue #1155). Until then the agent-stack examples may approve at
+	 * most 2 trains in this scenario.
 	 */
 	@Test
 	fun `GUI wiring keeps the dispatcher cap at the vyhybna constant while the station could take four`() {

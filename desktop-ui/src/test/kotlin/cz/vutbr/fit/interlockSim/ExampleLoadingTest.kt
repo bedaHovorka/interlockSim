@@ -103,7 +103,7 @@ class ExampleLoadingTest : KoinTestBase() {
 			assertThat(exampleNames.contains(ExampleNames.THREE_TRAIN_LOOP)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_AI)).isTrue()
-			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_RULE_BASED)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_SYNC)).isTrue()
 		}
 	}
 
@@ -234,7 +234,7 @@ class ExampleLoadingTest : KoinTestBase() {
 				"createCervenyUjezdGuiExample",
 				"createCervenyUjezdAIExample",
 				"createCervenyUjezdAIGuiExample",
-				"createCervenyUjezdRuleBasedExample"
+				"createCervenyUjezdSyncExample"
 			]
 		)
 		fun `all shunting-loop factories require endTime with the exact shared message`(methodName: String) {
@@ -471,7 +471,7 @@ class ExampleLoadingTest : KoinTestBase() {
 				listOf(
 					ExampleNames.CERVENY_UJEZD,
 					ExampleNames.CERVENY_UJEZD_AI,
-					ExampleNames.CERVENY_UJEZD_RULE_BASED,
+					ExampleNames.CERVENY_UJEZD_SYNC,
 					ExampleNames.MULTI_TRAIN_LOOP,
 					ExampleNames.SHUNTING_LOOP,
 					ExampleNames.SHUNTING_LOOP_AI,

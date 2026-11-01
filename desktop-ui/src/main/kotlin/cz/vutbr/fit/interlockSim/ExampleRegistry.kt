@@ -162,7 +162,7 @@ class ExampleRegistry {
 			ExampleNames.SHUNTING_LOOP_SYNC to ::createShuntingLoopSyncExample,
 			ExampleNames.CERVENY_UJEZD to ::createCervenyUjezdExample,
 			ExampleNames.CERVENY_UJEZD_AI to ::createCervenyUjezdAIExample,
-			ExampleNames.CERVENY_UJEZD_RULE_BASED to ::createCervenyUjezdRuleBasedExample,
+			ExampleNames.CERVENY_UJEZD_SYNC to ::createCervenyUjezdSyncExample,
 			ExampleNames.MULTI_TRAIN_LOOP to ::createMultiTrainLoopExample,
 			ExampleNames.THREE_TRAIN_LOOP to ::createThreeTrainLoopExample
 		)
@@ -226,8 +226,8 @@ class ExampleRegistry {
 
 	/**
 	 * Shared body of the console rule-based examples on the dispatcher-agent stack — the A4 control
-	 * arm `shuntingLoop` and its Cerveny Ujezd twin `cervenyUjezdRuleBased` (Issue #1276); they
-	 * differ only in the network XML. Unlike [syncShuntingLoopExample] this wiring declares an
+	 * arm `shuntingLoop` and its Cerveny Ujezd twin `cervenyUjezd` (Issue #1276); they differ only
+	 * in the network XML. Unlike [syncShuntingLoopExample] this wiring declares an
 	 * [AgentDriverLoop], so the run writes the per-run JSON an `aiSweep` control arm needs.
 	 */
 	private fun ruleBasedAgentShuntingLoopExample(
@@ -308,9 +308,15 @@ class ExampleRegistry {
 	/**
 	 * Creates the Cerveny Ujezd station example for console mode (Goal 1B SP3.2, Issue #1164).
 	 *
-	 * Wired with the plain [wireSynchronousDispatcher], like `shuntingLoopSync` and the native
-	 * `fast-sim` binary: rule-based, deterministic, no LLM and no dispatcher-agent threads. The loop
-	 * derives its blocks and its capacity (4) from the topology of `cerveny_ujezd.xml`.
+	 * Since Issue #1276 (SP10.1, PR #1282 review) this is the station's rule-based **control arm**
+	 * on the dispatcher-agent `aiSweep` grid: the [createShuntingLoopExample] wiring on
+	 * `cerveny_ujezd.xml` — dispatcher-agent stack, rule-based planner, [NoOpSimulationController],
+	 * per-tick barrier — so the run writes the per-run JSON the grid needs. It keeps exactly the
+	 * `shuntingLoop` to `shuntingLoopAI` shape; the recorder binding is the Koin-bound RULE_BASED
+	 * arm, so no example-level override is needed.
+	 *
+	 * The synchronous, native-parity build stays reachable as [createCervenyUjezdSyncExample] on the
+	 * JVM and as the native `fast-sim` CLI's `cervenyUjezd`.
 	 *
 	 * @param factory The simulation context factory
 	 * @param args Command line arguments (expects endTime as args[2])
@@ -320,12 +326,30 @@ class ExampleRegistry {
 	private fun createCervenyUjezdExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
+	): SimulationContext = ruleBasedAgentShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
+
+	/**
+	 * Creates the synchronous parity twin of [createCervenyUjezdExample] (Issue #1276, PR #1282
+	 * review): the [createShuntingLoopSyncExample] wiring on `cerveny_ujezd.xml`, exactly what the
+	 * native `fast-sim` CLI's `cervenyUjezd` builds. The console `cervenyUjezd` example runs the
+	 * dispatcher-agent stack (Issue #1276), whose wiring does not exist on the native target, so
+	 * `CrossPlatformParityTest` compares this twin's JVM output against the native run —
+	 * `shuntingLoopSync` plays the same role on vyhybna.
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createCervenyUjezdSyncExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
 	): SimulationContext = syncShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
 
 	/**
-	 * Creates the Cerveny Ujezd station example for the animated GUI (Issue #1164): the same
-	 * network and loop as [createCervenyUjezdExample] with real-time synchronization, and the rule-based
-	 * dispatcher-agent stack paced by the GUI like [createShuntingLoopGuiExample].
+	 * Creates the Cerveny Ujezd station example for the animated GUI (Issue #1164): the rule-based
+	 * dispatcher-agent stack on `cerveny_ujezd.xml` with real-time synchronization, paced by the
+	 * GUI like [createShuntingLoopGuiExample].
 	 *
 	 * @param factory The simulation context factory
 	 * @param args Command line arguments (expects endTime as args[2])
@@ -368,22 +392,6 @@ class ExampleRegistry {
 		factory: SimulationContextFactory,
 		args: Array<String>
 	): SimulationContext = llmGuiShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
-
-	/**
-	 * Creates the rule-based control arm of [createCervenyUjezdAIExample] (Issue #1276): the
-	 * [createShuntingLoopExample] wiring on `cerveny_ujezd.xml`, so both arms of one `aiSweep` run on
-	 * the same dispatcher-agent stack and both write a run JSON. `cervenyUjezd` itself stays the
-	 * synchronous, native-parity wiring of SP3.
-	 *
-	 * @param factory The simulation context factory
-	 * @param args Command line arguments (expects endTime as args[2])
-	 * @return Configured simulation context ready to run in console mode
-	 * @throws ContextCreationException if configuration fails or endTime is missing
-	 */
-	private fun createCervenyUjezdRuleBasedExample(
-		factory: SimulationContextFactory,
-		args: Array<String>
-	): SimulationContext = ruleBasedAgentShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
 
 	/**
 	 * Builds the [RunParameters] recorded for an LLM-arm run from the settings that run actually

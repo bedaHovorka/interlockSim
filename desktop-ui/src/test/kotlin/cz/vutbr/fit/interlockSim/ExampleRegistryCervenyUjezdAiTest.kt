@@ -5,10 +5,12 @@
  *
  * Railway Interlocking Simulator - Test Suite
  *
- * Lookup and wiring of the two Cerveny Ujezd examples that the Goal 1B SP10.1 measurement
- * (Issue #1276) sweeps with `aiSweep`: the LLM arm `cervenyUjezdAI` and its rule-based control
- * arm `cervenyUjezdRuleBased`, both on the dispatcher-agent stack like the vyhybna pair
- * `shuntingLoopAI` / `shuntingLoop`.
+ * Lookup and wiring of the Cerveny Ujezd arms that the Goal 1B SP10.1 measurement (Issue #1276)
+ * sweeps with `aiSweep`: the rule-based control arm `cervenyUjezd` and the LLM arm `cervenyUjezdAI`,
+ * both on the dispatcher-agent stack like the vyhybna pair `shuntingLoop` / `shuntingLoopAI`
+ * (owner decision, PR #1282 review: no separate `cervenyUjezdRuleBased` name). A third test pins
+ * the synchronous parity twin `cervenyUjezdSync`, the JVM side of the `CrossPlatformParityTest`
+ * station comparison.
  *
  * Contexts are built, never run, so no Ollama call, GUI window or driver thread starts.
  */
@@ -53,10 +55,11 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		return (factory(get(), arrayOf("example", name, "60")) as DefaultSimulationContext).tracked()
 	}
 
-	private fun assertCervenyUjezdLoop(ctx: DefaultSimulationContext) {
+	private fun assertCervenyUjezdLoop(ctx: DefaultSimulationContext): ShuntingLoop {
 		val loop = ctx.mainProcess
 		assertThat(loop).isNotNull().isInstanceOf<ShuntingLoop>()
 		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_CAPACITY)
+		return loop
 	}
 
 	private fun recordedArm(ctx: DefaultSimulationContext): DispatcherArm =
@@ -101,22 +104,42 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 
 	/**
 	 * The control arm must write a run JSON, or `aiSweep` records every control run as CRASH.
-	 * `cervenyUjezd` cannot be that arm: it is wired synchronously (native parity, SP3) and has no
-	 * [AgentDriverLoop], so `DispatcherRunSummaries.finishAndPersist` writes nothing for it.
+	 * Since the PR #1282 review the control arm IS `cervenyUjezd` (owner decision): the console
+	 * `shuntingLoop` wiring, while the plain `cervenyUjezdSync` twin keeps the synchronous SP3
+	 * build the native binary runs.
 	 */
 	@Test
 	@Timeout(value = 20, unit = TimeUnit.SECONDS)
-	fun `CLI map resolves cervenyUjezdRuleBased to the rule-based arm on the dispatcher-agent stack`() {
+	fun `CLI map resolves cervenyUjezd to the rule-based control arm on the dispatcher-agent stack`() {
 		val registry = get<ExampleRegistry>()
 
-		assertThat(registry.examples.keys).contains(ExampleNames.CERVENY_UJEZD_RULE_BASED)
-		val ctx = build(registry.examples, ExampleNames.CERVENY_UJEZD_RULE_BASED)
+		assertThat(registry.examples.keys).contains(ExampleNames.CERVENY_UJEZD)
+		val ctx = build(registry.examples, ExampleNames.CERVENY_UJEZD)
 
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.RULE_BASED)
 		assertThat(ctx.scope.getOrNull<AgentDriverLoop>(), "agent driver loop").isNotNull()
 		assertThat(ctx.scope.getOrNull<MeasuringPlanAdapter>(), "measuring planner").isNull()
-		assertThat(registry.usesLlmDispatcher(ExampleNames.CERVENY_UJEZD_RULE_BASED)).isFalse()
+		assertThat(registry.usesLlmDispatcher(ExampleNames.CERVENY_UJEZD)).isFalse()
+	}
+
+	/**
+	 * The parity twin keeps the synchronous, native-parity build: no [AgentDriverLoop] (so
+	 * `DispatcherRunSummaries.finishAndPersist` writes no run JSON) and no real-time sync —
+	 * the wiring `CrossPlatformParityTest` compares against the native `cervenyUjezd`.
+	 */
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	fun `cervenyUjezdSync is the sync native-parity twin driven by the synchronous dispatcher`() {
+		val registry = get<ExampleRegistry>()
+
+		assertThat(registry.examples.keys).contains(ExampleNames.CERVENY_UJEZD_SYNC)
+		val ctx = build(registry.examples, ExampleNames.CERVENY_UJEZD_SYNC)
+
+		val loop = assertCervenyUjezdLoop(ctx)
+		assertThat(loop.enableRealTimeSync).isFalse()
+		assertThat(ctx.scope.getOrNull<AgentDriverLoop>(), "agent driver loop").isNull()
+		assertThat(registry.usesLlmDispatcher(ExampleNames.CERVENY_UJEZD_SYNC)).isFalse()
 	}
 
 	private companion object {

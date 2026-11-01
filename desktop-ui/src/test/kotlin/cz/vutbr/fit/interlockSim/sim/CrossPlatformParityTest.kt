@@ -185,10 +185,13 @@ class CrossPlatformParityTest {
 
 	/**
 	 * The same comparison for the Cerveny Ujezd example (Goal 1B SP3, Issues #1163/#1164 + PR #1267
-	 * review): both registries construct it identically — [wireSynchronousDispatcher]-equivalent
-	 * wiring, seed 0, no `maxTrains` — so the exact-equality invariants apply to the **station**
-	 * topology too (32 blocks, a switch-driven throat, generated trains), not to vyhybna's tiny
-	 * graph alone.
+	 * review). Since Issue #1276 (PR #1282 review) the JVM console `cervenyUjezd` example runs the
+	 * dispatcher-agent stack, whose wiring does not exist on the native target, so the JVM side is
+	 * the synchronous parity twin `cervenyUjezdSync` — the role `shuntingLoopSync` plays for
+	 * `shuntingLoop` — and the native binary keeps the `wireSynchronousDispatcher`-equivalent
+	 * `cervenyUjezd` build (seed 0, no `maxTrains`). The exact-equality invariants therefore apply
+	 * to the **station** topology too (32 blocks, a switch-driven throat, generated trains), not to
+	 * vyhybna's tiny graph alone.
 	 */
 	@Test
 	@Timeout(value = 300, unit = TimeUnit.SECONDS)
@@ -197,7 +200,7 @@ class CrossPlatformParityTest {
 
 		val jvmResult =
 			runProcess(
-				listOf("java", "-jar", JAR_PATH.absolutePath, "example", ExampleNames.CERVENY_UJEZD, "60")
+				listOf("java", "-jar", JAR_PATH.absolutePath, "example", ExampleNames.CERVENY_UJEZD_SYNC, "60")
 			)
 		val nativeResult =
 			runProcess(
