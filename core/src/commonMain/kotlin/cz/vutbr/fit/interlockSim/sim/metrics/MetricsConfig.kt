@@ -28,7 +28,15 @@ enum class MetricGroup {
 	/** The per-journey [TrainJourneyRecord]s (Goal 6 SP2). */
 	JOURNEYS,
 
-	/** Per-train wait time (Goal 6 SP7); no consumer yet. */
+	/**
+	 * Per-train wait time and capacity pressure (Goal 6 SP7, Issue #1305), collected by the metrics
+	 * service's `TrainWaitAccounting`. It fills the wait fields of each [TrainJourneyRecord]
+	 * ([TrainJourneyRecord.queueSeconds], [TrainJourneyRecord.blockedSeconds],
+	 * [TrainJourneyRecord.noRouteStandingSeconds] and the expiry counts). It samples the capacity
+	 * pressure into every [MetricsSnapshot] ([MetricsSnapshot.queuedTrains],
+	 * [MetricsSnapshot.blockedTrains] and [MetricsSnapshot.openContentions]) and publishes
+	 * [MetricsCollectionService.latestOpenContentions]. Off: none of that is subscribed, sampled or queried.
+	 */
 	TRAIN_WAIT,
 
 	/** The performance row of a run (Goal 6 SP8); no consumer yet. */
