@@ -134,12 +134,16 @@ object DispatcherRunSummaries {
 	 * Issue #930 also decides here whether the run is recorded as [RunEndCause.STARVED] — see
 	 * [starvationAdjusted].
 	 *
+	 * @param example The registered example the run ran, persisted as [DispatcherRunSnapshot.example]
+	 *   so the report never pools wall time across networks (Issue #1306); `null` when the caller does
+	 *   not know it (the GUI).
 	 * @return what was recorded, including the file written (`null` if this context has no
 	 *   dispatcher recorder or store, or the run was already persisted).
 	 */
 	fun finishAndPersist(
 		scope: Scope,
-		cause: RunEndCause
+		cause: RunEndCause,
+		example: String? = null
 	): Persisted {
 		val outcome = railwayOutcomeFrom(scope)
 		val effectiveCause = starvationAdjusted(cause, outcome)
@@ -182,7 +186,7 @@ object DispatcherRunSummaries {
 			return Persisted(null, effectiveCause, outcome)
 		}
 		return try {
-			Persisted(store.write(withDispatcherArm(scope, snapshot)), effectiveCause, outcome)
+			Persisted(store.write(withDispatcherArm(scope, snapshot).copy(example = example)), effectiveCause, outcome)
 		} catch (e: IOException) {
 			// A run whose measurement file cannot be written is a lost data point, not a failed
 			// simulation: the run itself completed and its console summary is already logged. #847's

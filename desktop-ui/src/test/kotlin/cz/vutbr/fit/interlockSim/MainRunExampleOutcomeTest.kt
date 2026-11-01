@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
@@ -18,6 +19,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.module.Module
 import org.koin.test.get
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -46,6 +49,28 @@ class MainRunExampleOutcomeTest : KoinTestBase() {
 		val outcome = get<Main>().runExample(arrayOf("example", ExampleNames.SHUNTING_LOOP, "30"))
 
 		assertThat(outcome).isEqualTo(RunOutcome.COMPLETED)
+	}
+
+	/**
+	 * Issue #1306 (Goal 6 SP8): a JVM run prints its performance row after the summary, like the
+	 * native CLI. Asserts the line and its units only, never a wall-time number.
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("a multiTrainLoop run prints its performance row with the real-time ratio")
+	fun completedRunPrintsItsPerformanceRow() {
+		val captured = ByteArrayOutputStream()
+		val original = System.out
+		System.setOut(PrintStream(captured, true, Charsets.UTF_8))
+		try {
+			get<Main>().runExample(arrayOf("example", ExampleNames.MULTI_TRAIN_LOOP, "30"))
+		} finally {
+			System.setOut(original)
+		}
+
+		val line = captured.toString(Charsets.UTF_8).lines().single { it.startsWith("Performance: ") }
+		assertThat(line).contains("real-time ratio ")
+		assertThat(line).contains("reservePath calls ")
 	}
 
 	@Test
