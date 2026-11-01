@@ -15,8 +15,10 @@ import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.testutil.flushEDT
+import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -211,5 +213,21 @@ class WarningPanelTest {
 		val criticalCell = renderer.getListCellRendererComponent(list, reservation, 1, false, false) as JLabel
 		assertThat(criticalCell.text).contains("ReservationConflict")
 		assertThat(criticalCell.foreground).isEqualTo(WarningPanel.CRITICAL_COLOR)
+	}
+
+	@Test
+	@DisplayName("a selected advisory uses the selection color and its tooltip names the block")
+	fun rendererShowsSelectedAdvisoryWithBlockTooltip() {
+		val list = JList<CollisionWarning>()
+		val renderer = WarningPanel.WarningCellRenderer()
+		val block = mockk<DynamicTrackBlock>(relaxed = true)
+		every { block.name } returns "k4"
+
+		val cell =
+			renderer.getListCellRendererComponent(list, advisory.copy(conflictingBlock = block), 0, true, false) as JLabel
+
+		assertThat(cell.foreground).isEqualTo(list.selectionForeground)
+		assertThat(cell.toolTipText).contains("Unresolved at run end")
+		assertThat(cell.toolTipText).contains("Block: k4")
 	}
 }
