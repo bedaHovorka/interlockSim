@@ -450,8 +450,8 @@ class ExampleRegistry {
 	/**
 	 * Overrides the Koin-scoped [DispatcherRunRecorder] (bound `DispatcherAgentModule`-wide with
 	 * arm = RULE_BASED / empty model) with the LLM_TOOL_CALLING arm and the run's actual
-	 * [RunParameters], so the per-run JSON identifies its own arm. Used by both
-	 * [createShuntingLoopAIExample] (console) and [createShuntingLoopAIGuiExample] (GUI).
+	 * [RunParameters], so the per-run JSON identifies its own arm. Used by both shared helpers,
+	 * [llmShuntingLoopExample] (console) and [llmGuiShuntingLoopExample] (GUI).
 	 * Issue #847 round 4 (R4-5) / #928.
 	 */
 	private fun declareLlmToolCallingRecorder(

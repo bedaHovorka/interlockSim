@@ -14,6 +14,14 @@ import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 
 /**
+ * The loop capacity the `cerveny_ujezd.xml` topology gives every arm built on it: 4, read by
+ * `ShuntingLoop` from the `Station` abstraction. One shared test pin replacing the two private
+ * companions of the ExampleRegistry Cerveny Ujezd tests (PR #1282 review round); SP8 raises it
+ * (Issue #1155), so the next wave edits exactly this one constant.
+ */
+const val CERVENY_UJEZD_STATION_CAPACITY = 4
+
+/**
  * Structure check for the `cerveny_ujezd.xml` fixture, shared by the parse test in
  * `XMLContextFactoryParseTest` and the stream round trip in `XMLContextFactoryOutputStreamTest`
  * (Issue #1035 review round).

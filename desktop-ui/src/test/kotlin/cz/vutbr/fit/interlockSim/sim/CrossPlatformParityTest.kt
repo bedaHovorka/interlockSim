@@ -19,10 +19,13 @@ import cz.vutbr.fit.interlockSim.ExampleNames
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.stream.Stream
 
 /**
  * ProcessBuilder-based cross-platform parity test that launches both the JVM shadow JAR
@@ -79,6 +82,14 @@ class CrossPlatformParityTest {
 		 */
 		private val timestampRegex = Regex("""^\s*t=([\d.]+)\s+""")
 		private val summaryTrainCountRegex = Regex("""Simulation complete: (\d+) trains""")
+
+		/** The two (JVM twin, native example) rows — see the parity test's KDoc for the pairing. */
+		@JvmStatic
+		fun parityPairs(): Stream<Arguments> =
+			Stream.of(
+				Arguments.of(ExampleNames.SHUNTING_LOOP_SYNC, ExampleNames.SHUNTING_LOOP),
+				Arguments.of(ExampleNames.CERVENY_UJEZD_SYNC, ExampleNames.CERVENY_UJEZD)
+			)
 	}
 
 	data class ProcessResult(
@@ -161,50 +172,36 @@ class CrossPlatformParityTest {
 		}
 	}
 
-	@Test
-	@Timeout(value = 300, unit = TimeUnit.SECONDS)
-	fun `JVM and native produce structurally equivalent output`() {
-		assumeParityArtifacts()
-
-		// JVM runs the `shuntingLoopSync` variant: the default JVM `shuntingLoop` example
-		// wires the Goal 10 dispatcher-agent stack (Issue #733), which does not exist on
-		// the native target. `shuntingLoopSync` mirrors the native `shuntingLoop`
-		// construction (wireSynchronousDispatcher) exactly, making exact-count
-		// comparison meaningful.
-		val jvmResult =
-			runProcess(
-				listOf("java", "-jar", JAR_PATH.absolutePath, "example", ExampleNames.SHUNTING_LOOP_SYNC, "60")
-			)
-		val nativeResult =
-			runProcess(
-				listOf(NATIVE_PATH.absolutePath, "example", ExampleNames.SHUNTING_LOOP, "60")
-			)
-
-		assertStructuralParity(jvmResult, nativeResult)
-	}
-
 	/**
-	 * The same comparison for the Cerveny Ujezd example (Goal 1B SP3, Issues #1163/#1164 + PR #1267
-	 * review). Since Issue #1276 (PR #1282 review) the JVM console `cervenyUjezd` example runs the
-	 * dispatcher-agent stack, whose wiring does not exist on the native target, so the JVM side is
-	 * the synchronous parity twin `cervenyUjezdSync` — the role `shuntingLoopSync` plays for
-	 * `shuntingLoop` — and the native binary keeps the `wireSynchronousDispatcher`-equivalent
-	 * `cervenyUjezd` build (seed 0, no `maxTrains`). The exact-equality invariants therefore apply
-	 * to the **station** topology too (32 blocks, a switch-driven throat, generated trains), not to
-	 * vyhybna's tiny graph alone.
+	 * One parity pair per station, both rows driven by this one test (PR #1282 review round).
+	 *
+	 * Each pair's JVM side is the synchronous `*Sync` twin and the native side the plain example
+	 * name, because the JVM console `shuntingLoop` (Issue #733) and `cervenyUjezd` (Issue #1276)
+	 * examples run the dispatcher-agent stack, whose wiring does not exist on the native target;
+	 * the pairs compare the SAME `wireSynchronousDispatcher` construction on both sides, which is
+	 * what makes the exact-equality invariants below meaningful.
+	 *
+	 * The station row keeps the SP3 exact-equality claim alive on the bigger topology after the
+	 * rewire (Issues #1163/#1164 + PR #1267 review): 32 blocks, a switch-driven throat, generated
+	 * trains — not vyhybna's tiny graph alone.
 	 */
-	@Test
+	@ParameterizedTest(name = "JVM and native produce structurally equivalent {0} output")
+	@MethodSource("cz.vutbr.fit.interlockSim.sim.CrossPlatformParityTest#parityPairs")
 	@Timeout(value = 300, unit = TimeUnit.SECONDS)
-	fun `JVM and native produce structurally equivalent cervenyUjezd output`() {
+	fun `JVM and native produce structurally equivalent output`(
+		jvmExampleName: String,
+		nativeExampleName: String
+	) {
 		assumeParityArtifacts()
 
+		// seed 0, no maxTrains: the constructions are identical on both sides of the pair.
 		val jvmResult =
 			runProcess(
-				listOf("java", "-jar", JAR_PATH.absolutePath, "example", ExampleNames.CERVENY_UJEZD_SYNC, "60")
+				listOf("java", "-jar", JAR_PATH.absolutePath, "example", jvmExampleName, "60")
 			)
 		val nativeResult =
 			runProcess(
-				listOf(NATIVE_PATH.absolutePath, "example", ExampleNames.CERVENY_UJEZD, "60")
+				listOf(NATIVE_PATH.absolutePath, "example", nativeExampleName, "60")
 			)
 
 		assertStructuralParity(jvmResult, nativeResult)

@@ -99,9 +99,12 @@ conflicts that cap simultaneous movements below 4. This repeats SP2 demand D3, n
 
 ### D5 — Capacity and signals in the agent stack
 
-The GUI example `cervenyUjezd` uses the dispatcher-agent stack, which still reads the vyhybna capacity
-(2) from `RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS`; the console and native examples use
-`wireSynchronousDispatcher`, which reads the station capacity (4). This repeats SP2 demand D1 and is
+The agent-stack arm examples read the vyhybna capacity (2) from
+`RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS`: the GUI `cervenyUjezd` from SP3 onward, and since
+the Issue #1276 rewire (PR #1282 review, 2026-11-01) the console `cervenyUjezd` too, so its `aiSweep`
+runs write a run JSON. The synchronous builds — the `cervenyUjezdSync` parity twin and the native
+`fast-sim` example — still use `wireSynchronousDispatcher`, which reads the station capacity (4).
+This repeats SP2 demand D1 and is
 owned by SP8 (#1155). Signal direction in the station-track rule (SP2 demand D4) is owned by #1192.
 
 ### D6 — Names for signals

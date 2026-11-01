@@ -45,7 +45,13 @@ The `testutil` package provides:
   KoinTestBaseCleanupContractTest — removed here by the Issue #1046 dedupe)
 - **CervenyUjezdStructure** - `assertCervenyUjezdStationInOuts`: asserts the four station
   InOuts of the `cerveny_ujezd.xml` fixture exist and returns them (f1, f2, s1, s2); shared by
-  the parse test and the stream round trip of the XML factory tests
+  the parse test and the stream round trip of the XML factory tests. Also
+  `CERVENY_UJEZD_STATION_CAPACITY` (4): the shared loop-capacity pin of the ExampleRegistry
+  Cerveny Ujezd tests — one copy replacing the two private companions (PR #1282 review round)
+- **ExampleRegistryTestFactory** - how a test builds an ExampleRegistry context without running
+  it: `createExampleContext` reaches a private factory by method name (Issue #955), and
+  `createExampleContextFromMap` resolves the name through `registry.examples` / `guiExamples`
+  (PR #1282 review round); hand the result to `tracked()`
 - **EdtFlush** - `flushEDT(times = 2)`: drains the Swing event queue with
   `invokeAndWait` flushes; the default two cover a pending `invokeLater` task and the
   nested EDT work it queues. Must not be called on the EDT itself. One shared copy

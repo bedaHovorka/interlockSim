@@ -25,8 +25,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
@@ -34,7 +32,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.CERVENY_UJEZD_STATION_CAPACITY
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createExampleContextFromMap
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -47,18 +47,10 @@ import java.util.concurrent.TimeUnit
 class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
 
-	private fun build(
-		map: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext>,
-		name: String
-	): DefaultSimulationContext {
-		val factory = checkNotNull(map[name]) { "$name is not registered" }
-		return (factory(get(), arrayOf("example", name, "60")) as DefaultSimulationContext).tracked()
-	}
-
 	private fun assertCervenyUjezdLoop(ctx: DefaultSimulationContext): ShuntingLoop {
 		val loop = ctx.mainProcess
 		assertThat(loop).isNotNull().isInstanceOf<ShuntingLoop>()
-		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_CAPACITY)
+		assertThat((loop as ShuntingLoop).stationCapacity).isEqualTo(CERVENY_UJEZD_STATION_CAPACITY)
 		return loop
 	}
 
@@ -71,7 +63,7 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		val registry = get<ExampleRegistry>()
 
 		assertThat(registry.examples.keys).contains(ExampleNames.CERVENY_UJEZD_AI)
-		val ctx = build(registry.examples, ExampleNames.CERVENY_UJEZD_AI)
+		val ctx = createExampleContextFromMap(registry.examples, get(), ExampleNames.CERVENY_UJEZD_AI).tracked()
 
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
@@ -95,7 +87,7 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		val registry = get<ExampleRegistry>()
 
 		assertThat(registry.guiExamples.keys).contains(ExampleNames.CERVENY_UJEZD_AI)
-		val ctx = build(registry.guiExamples, ExampleNames.CERVENY_UJEZD_AI)
+		val ctx = createExampleContextFromMap(registry.guiExamples, get(), ExampleNames.CERVENY_UJEZD_AI).tracked()
 
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
@@ -114,7 +106,7 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		val registry = get<ExampleRegistry>()
 
 		assertThat(registry.examples.keys).contains(ExampleNames.CERVENY_UJEZD)
-		val ctx = build(registry.examples, ExampleNames.CERVENY_UJEZD)
+		val ctx = createExampleContextFromMap(registry.examples, get(), ExampleNames.CERVENY_UJEZD).tracked()
 
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.RULE_BASED)
@@ -134,15 +126,11 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		val registry = get<ExampleRegistry>()
 
 		assertThat(registry.examples.keys).contains(ExampleNames.CERVENY_UJEZD_SYNC)
-		val ctx = build(registry.examples, ExampleNames.CERVENY_UJEZD_SYNC)
+		val ctx = createExampleContextFromMap(registry.examples, get(), ExampleNames.CERVENY_UJEZD_SYNC).tracked()
 
 		val loop = assertCervenyUjezdLoop(ctx)
 		assertThat(loop.enableRealTimeSync).isFalse()
 		assertThat(ctx.scope.getOrNull<AgentDriverLoop>(), "agent driver loop").isNull()
 		assertThat(registry.usesLlmDispatcher(ExampleNames.CERVENY_UJEZD_SYNC)).isFalse()
-	}
-
-	private companion object {
-		private const val CERVENY_UJEZD_CAPACITY = 4
 	}
 }
