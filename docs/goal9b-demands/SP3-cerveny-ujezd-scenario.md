@@ -62,7 +62,8 @@ name stays `cerveny_ujezd` everywhere: the file `cerveny_ujezd.xml`, `NetworkRes
   list. A route with 2 or more switches exists and is exercised.
 - **Bidirectional station tracks.** Each station track has a signal at both ends, so one track serves
   trains from either side. Opposite-direction use of one track is possible and is kept apart by block
-  ownership.
+  ownership only: the registry refuses the second owner, but nothing checks for a wait-for cycle
+  (two opposed trains, each holding a block the other needs). See D7.
 - **Capacity above vyhybna.** Capacity is 4 (the track count), against 2 on vyhybna.
 
 ## Follow-up: signal direction in the compatibility rule (2026-10-31, #1272)
@@ -181,6 +182,17 @@ name. Two variants were open after its review; the owner chose to keep this beha
 Pinned by `XmlContextReaderSemaphoreAutoNameTest` (`aTypedGeneratedFormNameWithNoSharerIsOmittedOnSaveAndRegeneratedOnReload`,
 `aGeneratedFormNameOfAnotherPositionIsWrittenExplicitly`, next to the existing save tests).
 
+### D7 — Wait-for and deadlock detection
+
+A contention still open when the run stops is reported as "unresolved at run end" (#1280, #1331). The
+flush cannot tell an ordinary queue (a train held at a red signal behind another train, cut off by the end
+time) from a circular wait (*vzájemné čekání*: two trains, each holding a block the other needs, for
+example opposed trains on a bidirectional station track). It also does not carry how long the train
+has waited.
+
+**Demand:** a wait-for graph over the open contentions, so a cycle is reported as a deadlock and a chain
+without a cycle as a queue, with the wait age of each waiting train.
+
 ## Evidence
 
 ### Run timing
@@ -225,7 +237,20 @@ The run summary now keeps the two signals apart:
   table has an "Unresolved at run end" column, appended last. Files of version 9 or older load with
   the figure absent and keep their `conflicts` as stored.
 
-The motivating run now reads `conflicts=0 unresolvedAtRunEnd=2`. The end cause stays
+The motivating run now reads `conflicts=0 unresolvedAtRunEnd=2`.
+
+The collision service follows the same split (#1331, 2026-11-01). Before, it turned the flushed events
+into CRITICAL `CollisionWarning.ReservationConflict` warnings: a WARN "Collision warning" line and a pause
+request on a run that had already stopped, while the summary said `conflicts=0`. Now
+`DefaultCollisionDetectionService` gives a flushed event (`atRunEnd = true`) the severity `WARNING`:
+listeners still get it, it does not pause, it skips the deduplication window (the flush is one-shot, and
+the motivating run had two flushed events for one pair, block `k4` and a switch block), and it is logged
+at INFO as "Advisory warning (not a collision): unresolved at run end: Train #19 queued behind Train #18
+for block k4 ...". A live double-booking stays CRITICAL. So the CRITICAL count equals `conflicts` and the
+WARNING count equals `unresolvedAtRunEnd`; `RunEndConflictSeverityTest` (`commonTest`),
+`ReservationConflictWarningTest` and `MetricsIntegrationTest` pin it. The headless `example cervenyUjezd`
+at 300, 600 and 900 s ended with `unresolvedAtRunEnd=0` on this head, so the flush path is reproduced
+by the fixture tests, not by the example. The end cause stays
 `NATURAL_COMPLETION`: a new end cause for "cut off with trains on the network" would mark every
 `cervenyUjezd` run as not passing, and the #895 vyhybna baseline (all journeys finish before the end
 time, `conflicts=0`, no open contention at the end) is unchanged by the split.

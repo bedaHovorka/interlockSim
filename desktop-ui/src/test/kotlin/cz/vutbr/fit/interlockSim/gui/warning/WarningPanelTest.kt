@@ -11,17 +11,22 @@
 package cz.vutbr.fit.interlockSim.gui.warning
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.testutil.flushEDT
+import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import javax.swing.JLabel
+import javax.swing.JList
 import javax.swing.SwingUtilities
 
 /**
@@ -47,6 +52,14 @@ class WarningPanelTest {
 			trainId = "Train-A",
 			block = mockk(relaxed = true),
 			time = 15.0
+		)
+
+	private val advisory =
+		CollisionWarning.ReservationConflict(
+			trainId = "Train #19",
+			conflictingTrainId = "Train #18",
+			time = 601.0,
+			severity = CollisionWarning.Severity.WARNING
 		)
 
 	@BeforeEach
@@ -170,5 +183,51 @@ class WarningPanelTest {
 		SwingUtilities.invokeAndWait { panel.clearWarnings() }
 
 		assertThat(panel.listModel.isEmpty).isTrue()
+	}
+
+	// ── Severity (Issue #1331) ────────────────────────────────────────────────
+
+	@Test
+	@DisplayName("an advisory WARNING alone is no critical warning")
+	fun advisoryWarningIsNotCritical() {
+		SwingUtilities.invokeAndWait { model.addWarning(advisory) }
+
+		assertThat(model.size).isEqualTo(1)
+		assertThat(model.hasCriticalWarning()).isFalse()
+
+		SwingUtilities.invokeAndWait { model.addWarning(reservation) }
+		assertThat(model.hasCriticalWarning()).isTrue()
+	}
+
+	@Test
+	@DisplayName("the renderer draws an advisory in the list color and names it unresolved at run end")
+	fun rendererShowsAdvisoryWithoutCriticalPresentation() {
+		val list = JList<CollisionWarning>()
+		val renderer = WarningPanel.WarningCellRenderer()
+
+		val advisoryCell = renderer.getListCellRendererComponent(list, advisory, 0, false, false) as JLabel
+		assertThat(advisoryCell.text).contains("Unresolved at run end")
+		assertThat(advisoryCell.text.startsWith("⚠")).isFalse()
+		assertThat(advisoryCell.foreground).isEqualTo(list.foreground)
+
+		val criticalCell = renderer.getListCellRendererComponent(list, reservation, 1, false, false) as JLabel
+		assertThat(criticalCell.text).contains("ReservationConflict")
+		assertThat(criticalCell.foreground).isEqualTo(WarningPanel.CRITICAL_COLOR)
+	}
+
+	@Test
+	@DisplayName("a selected advisory uses the selection color and its tooltip names the block")
+	fun rendererShowsSelectedAdvisoryWithBlockTooltip() {
+		val list = JList<CollisionWarning>()
+		val renderer = WarningPanel.WarningCellRenderer()
+		val block = mockk<DynamicTrackBlock>(relaxed = true)
+		every { block.name } returns "k4"
+
+		val cell =
+			renderer.getListCellRendererComponent(list, advisory.copy(conflictingBlock = block), 0, true, false) as JLabel
+
+		assertThat(cell.foreground).isEqualTo(list.selectionForeground)
+		assertThat(cell.toolTipText).contains("Unresolved at run end")
+		assertThat(cell.toolTipText).contains("Block: k4")
 	}
 }
