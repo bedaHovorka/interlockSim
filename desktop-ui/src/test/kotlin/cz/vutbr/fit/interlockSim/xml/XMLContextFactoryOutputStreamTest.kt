@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertCervenyUjezdStationInOuts
 import cz.vutbr.fit.interlockSim.testutil.saveAndReloadThroughStream
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -264,7 +265,7 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveAndLoad_cervenyUjezd_preservesComplexStructure() {
 			// Load complex fixture
-			val xml = getFixtureStream("cerveny_ujezd.xml")
+			val xml = TestFixtures.loadCervenyUjezdXml()
 			editingContextFactory.createContext(xml).use { originalContext ->
 				// Save to OutputStream, load back from it, and verify
 				editingContextFactory.saveAndReloadThroughStream(originalContext) { loadedContext ->
@@ -288,44 +289,43 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun outputStreamAndFile_minimalNetwork_produceIdenticalXML(
 			@TempDir tempDir: File
 		) {
-			assertFileAndStreamOutputIdentical("minimal-network.xml", tempDir)
+			assertFileAndStreamOutputIdentical(getFixtureStream("minimal-network.xml"), tempDir)
 		}
 
 		@Test
 		fun outputStreamAndFile_linearTrack_produceIdenticalXML(
 			@TempDir tempDir: File
 		) {
-			assertFileAndStreamOutputIdentical("linear-track.xml", tempDir)
+			assertFileAndStreamOutputIdentical(getFixtureStream("linear-track.xml"), tempDir)
 		}
 
 		@Test
 		fun outputStreamAndFile_switchBasic_produceIdenticalXML(
 			@TempDir tempDir: File
 		) {
-			assertFileAndStreamOutputIdentical("switch-basic.xml", tempDir)
+			assertFileAndStreamOutputIdentical(getFixtureStream("switch-basic.xml"), tempDir)
 		}
 
 		@Test
 		fun outputStreamAndFile_emptyGrid_produceIdenticalXML(
 			@TempDir tempDir: File
 		) {
-			assertFileAndStreamOutputIdentical("empty-grid.xml", tempDir)
+			assertFileAndStreamOutputIdentical(getFixtureStream("empty-grid.xml"), tempDir)
 		}
 
 		@Test
 		fun outputStreamAndFile_cervenyUjezd_produceIdenticalXML(
 			@TempDir tempDir: File
 		) {
-			assertFileAndStreamOutputIdentical("cerveny_ujezd.xml", tempDir)
+			assertFileAndStreamOutputIdentical(TestFixtures.loadCervenyUjezdXml(), tempDir)
 		}
 
-		/** Loads [fixtureName], saves to both [tempDir] and an OutputStream, and asserts the outputs are identical. */
+		/** Saves the XML stream to both [tempDir] and an OutputStream, and asserts the outputs are identical. */
 		private fun assertFileAndStreamOutputIdentical(
-			fixtureName: String,
+			xml: InputStream,
 			tempDir: File
 		) {
 			val tempFile = File(tempDir, "equivalence.xml")
-			val xml = getFixtureStream(fixtureName)
 			editingContextFactory.createContext(xml).use { context ->
 				// Save to File
 				assertThat(editingContextFactory.saveContext(context, tempFile), name = "saveContext(file) must succeed").isTrue()
@@ -458,7 +458,7 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_largeContext_completesInReasonableTime() {
 			// Load complex fixture (cerveny_ujezd is reasonably large)
-			val xml = getFixtureStream("cerveny_ujezd.xml")
+			val xml = TestFixtures.loadCervenyUjezdXml()
 			editingContextFactory.createContext(xml).use { context ->
 				// Measure save time
 				val outputStream = ByteArrayOutputStream()

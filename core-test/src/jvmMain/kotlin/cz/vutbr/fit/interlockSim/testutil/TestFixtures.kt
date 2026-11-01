@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.BuiltinNetworks
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -53,7 +54,8 @@ object TestFixtures {
 
 	fun loadPrahaHlavniNadraziXml(): InputStream = fixture("praha-hlavni-nadrazi.xml")
 
-	fun loadCervenyUjezdXml(): InputStream = fixture("cerveny_ujezd.xml")
+	/** Reads the single built-in copy (PR #1287 relink): [BuiltinNetworks.CERVENY_UJEZD_XML] is the only source. */
+	fun loadCervenyUjezdXml(): InputStream = BuiltinNetworks.CERVENY_UJEZD_XML.byteInputStream()
 
 	/**
 	 * Two-parallel-route network (Issue #598 Goal 2 SP6).

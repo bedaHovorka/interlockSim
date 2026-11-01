@@ -35,8 +35,8 @@ object BuiltinNetworks {
 
 	/**
 	 * Cerveny Ujezd station (4 InOuts, 12 switches, 12 signals). Used by the `cervenyUjezd` example of the
-	 * desktop CLI and GUI and of the `:fast-sim` native binary. `:core-test` keeps its own copy of the file as the
-	 * `NetworkResources.CERVENY_UJEZD_XML` fixture; a test pins the two copies to the same content.
+	 * desktop CLI and GUI and of the `:fast-sim` native binary. Sole XML copy since the duplicate-file
+	 * relink of PR #1287 — `NetworkResources.CERVENY_UJEZD_XML` delegates here.
 	 */
 	val CERVENY_UJEZD_XML: String by lazy {
 		Resources.read(CERVENY_UJEZD_XML_PATH)

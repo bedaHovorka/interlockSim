@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.INOUT_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SEMAPHORE_KEY
 import cz.vutbr.fit.interlockSim.testutil.RAIL_SWITCH_KEY
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertCervenyUjezdStationInOuts
 import cz.vutbr.fit.interlockSim.testutil.countCellTypes
 import cz.vutbr.fit.interlockSim.testutil.existPath
@@ -51,7 +52,8 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * - semaphore-basic.xml - RailSemaphore between two InOut nodes
  * - two-tracks-parallel.xml - Two parallel independent tracks
  * - empty-grid.xml - Grid with minimal elements (2 InOut nodes, no tracks)
- * - cerveny_ujezd.xml - Full station topology (Cerveny Ujezd)
+ * - cerveny_ujezd.xml - Full station topology, loaded from the built-in network
+ *   asset (PR #1287 relink) via TestFixtures.loadCervenyUjezdXml, not from this directory
  * - invalid-*.xml - Various malformed/invalid XML files
  */
 @Timeout(value = 10, unit = TimeUnit.SECONDS)
@@ -206,7 +208,7 @@ class XMLContextFactoryParseTest : XMLContextFactoryTestBase() {
 
 	@Test
 	fun parseXML_cervenyUjezd_createsValidContext() {
-		val xml = getFixtureStream("cerveny_ujezd.xml")
+		val xml = TestFixtures.loadCervenyUjezdXml()
 
 		(editingContextFactory.createContext(xml) as EditingContext).use { context ->
 			assertThat(context).isNotNull()
