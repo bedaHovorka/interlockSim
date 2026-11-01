@@ -108,10 +108,12 @@ class TrainJourneyEventEmitTest {
 		var calls = 0
 
 		runWithListener(emitter) { simulation ->
-			simulation.onEvent(trainJourneyRecipient {
-				calls++
-				error("typed listener failure injected by the test")
-			})
+			simulation.onEvent(
+				trainJourneyRecipient {
+					calls++
+					error("typed listener failure injected by the test")
+				}
+			)
 		}
 
 		assertThat(calls).isEqualTo(1)
@@ -132,9 +134,10 @@ class TrainJourneyEventEmitTest {
 
 	@Test
 	fun `a typed listener cancelling is rethrown by the guard`() {
-		val guarded = trainJourneyGuard {
-			throw CancellationException("cancellation injected by the test")
-		}
+		val guarded =
+			trainJourneyGuard {
+				throw CancellationException("cancellation injected by the test")
+			}
 
 		val caught = runCatching { guarded(TrainJourneyEvent.Admitted(TEST_TRAIN_NAME, 1.0)) }
 		val thrown = caught.exceptionOrNull() ?: error("the guard swallowed the cancellation")

@@ -36,10 +36,11 @@ import kotlin.test.Test
 class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 	private fun realBlock(): DynamicTrackBlock {
 		val context =
-			CommonTestFixtures.parseSimulationContext(
-				NetworkResources.LINEAR_TRACK_XML,
-				DefaultSimulationProcessFactory()
-			).tracked()
+			CommonTestFixtures
+				.parseSimulationContext(
+					NetworkResources.LINEAR_TRACK_XML,
+					DefaultSimulationProcessFactory()
+				).tracked()
 		return context.getGraph().values().first()
 	}
 
