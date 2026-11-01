@@ -16,6 +16,9 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -245,6 +248,48 @@ class DefaultRunSnapshotStoreTest {
 		// 3. The aggregator's per-run gate predicate must treat this run as non-passing.
 		val aggregator = RunReportAggregator(store)
 		assertThat(aggregator.runPassed(legacy)).isFalse()
+	}
+
+	/**
+	 * Issue #676 bumped the schema to 11 with the run-record figures. A version-10 file on disk, which
+	 * has none of their keys, is still read, with its row figures kept and the record figures absent.
+	 */
+	@Test
+	fun `readAll still reads a schema-version-10 file and reports its run-record figures as absent`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val row = RailwayOutcome(journeysCompleted = 15L, trainsEntered = 15L, trainsExited = 15L, unresolvedAtRunEnd = 0L)
+		val current =
+			FUTURE_SCHEMA_JSON_CODEC
+				.parseToJsonElement(
+					FUTURE_SCHEMA_JSON_CODEC.encodeToString(
+						DispatcherRunSnapshot.serializer(),
+						runSnapshot(runId = "legacy-v10-001").copy(railwayOutcome = row)
+					)
+				).jsonObject
+		val rowKeys =
+			setOf(
+				"journeysCompleted",
+				"trainsEntered",
+				"trainsExited",
+				"maxConcurrentTrains",
+				"blockTransitions",
+				"conflicts",
+				"failedReservations",
+				"unresolvedAtRunEnd"
+			)
+		val v10Outcome = JsonObject(current.getValue("railwayOutcome").jsonObject.filterKeys { it in rowKeys })
+		val v10 = JsonObject(current + ("schemaVersion" to JsonPrimitive(10)) + ("railwayOutcome" to v10Outcome))
+		val armDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(armDir)
+		Files.writeString(armDir.resolve("legacy-v10.json"), v10.toString())
+
+		val legacy = store.readAll(tmpDir).single()
+
+		assertThat(legacy.schemaVersion).isEqualTo(10)
+		assertThat(legacy.railwayOutcome).isEqualTo(row)
+		assertThat(legacy.railwayOutcome.endClassification).isNull()
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
