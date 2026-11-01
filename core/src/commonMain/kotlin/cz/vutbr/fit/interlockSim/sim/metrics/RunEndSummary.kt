@@ -29,7 +29,10 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
  * @property trainsExited Trains whose front left through an InOut (`TrainJourneyEvent.Exited`).
  * @property wrongExits Exits through another InOut than the one the train was queued for
  *   (`ends in wrong out`, Issue #1276).
- * @property maxConcurrentTrains Peak number of admitted trains not yet exited (trains on the network).
+ * @property maxConcurrentTrains Peak number of trains admitted whose front had not yet reached an exit
+ *   InOut. Not an occupancy safety figure: `ShuntingLoop` keeps a train in its approved list until the
+ *   train's tail has cleared and its process ended, so this value is at most the loop's
+ *   `getMaxConcurrentTrains`.
  * @property blockTransitions Granted reservation requests (`RunAccountingEvent.RouteGranted`).
  * @property conflicts `MetricsSnapshot.conflictCount`: mid-run double-bookings caught.
  * @property failedReservations Refused reservation requests, the sum of [failedReservationsByKind].
@@ -44,7 +47,9 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
  * @property partialReleaseCount Un-travelled tails the orphan sweeper released.
  * @property capacityShownToDispatcher Admission cap the dispatcher was given; `null` without one.
  * @property topologyCapacity Capacity of the station topology; `null` when not recorded.
- * @property unfinishedJourneys Admitted trains that have not exited (yet).
+ * @property unfinishedJourneys Trains admitted whose front has not (yet) reached an exit InOut. Like
+ *   [maxConcurrentTrains] it is not an occupancy figure: a train whose front has left but whose tail is
+ *   still on the last block no longer counts here.
  * @property endTime Kernel clock at run end; `null` before the run ended.
  * @property endTimeReached Whether the main loop reached its end time.
  * @property classification How the run ended; `null` before the run ended.
