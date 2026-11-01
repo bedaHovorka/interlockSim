@@ -304,8 +304,11 @@ class DefaultCollisionDetectionService(
 	 * One English sentence for a [CollisionWarning.Severity.WARNING] warning (Issue #1331). The only
 	 * producer today is a [CollisionWarning.ReservationConflict] from the end-of-run flush: a train
 	 * still queued behind another one when the run stopped.
+	 *
+	 * Internal (not private) as a test seam: [emit] calls it inside a lazy INFO log lambda, which
+	 * does not run under the test log levels.
 	 */
-	private fun describeAdvisory(warning: CollisionWarning): String =
+	internal fun describeAdvisory(warning: CollisionWarning): String =
 		when (warning) {
 			is CollisionWarning.ReservationConflict -> {
 				val block = warning.conflictingBlock?.let { BlockIdentity.stableBlockId(it) } ?: "unknown"

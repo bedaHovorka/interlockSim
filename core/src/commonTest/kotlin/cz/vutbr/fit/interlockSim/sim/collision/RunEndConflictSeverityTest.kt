@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
+import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import org.koin.core.component.KoinComponent
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -155,5 +156,35 @@ class RunEndConflictSeverityTest : KoinComponent {
 		service.handleBlockEvent(conflictEvent(block, time = 100.5, atRunEnd = false))
 
 		assertThat(received.map { it.severity }).containsExactly(CollisionWarning.Severity.CRITICAL)
+	}
+
+	@Test
+	fun `the advisory log line names the queued train and its blocker and the block`() {
+		val service = DefaultCollisionDetectionService(CountingPauseController())
+		val block = realBlocks().first()
+		val advisory =
+			CollisionWarning.ReservationConflict(
+				trainId = "Train #19",
+				conflictingTrainId = "Train #18",
+				time = 601.0,
+				conflictingBlock = block,
+				severity = CollisionWarning.Severity.WARNING
+			)
+
+		assertThat(service.describeAdvisory(advisory)).isEqualTo(
+			"unresolved at run end: Train #19 queued behind Train #18 for block " +
+				"${BlockIdentity.stableBlockId(block)} at t=601.0"
+		)
+		assertThat(service.describeAdvisory(advisory.copy(conflictingBlock = null)))
+			.isEqualTo("unresolved at run end: Train #19 queued behind Train #18 for block unknown at t=601.0")
+	}
+
+	@Test
+	fun `an advisory of another warning type is described by its own text`() {
+		val service = DefaultCollisionDetectionService(CountingPauseController())
+		val predictive =
+			CollisionWarning.PredictiveCollision("T1", "T2", time = 5.0, severity = CollisionWarning.Severity.WARNING)
+
+		assertThat(service.describeAdvisory(predictive)).isEqualTo(predictive.toString())
 	}
 }
