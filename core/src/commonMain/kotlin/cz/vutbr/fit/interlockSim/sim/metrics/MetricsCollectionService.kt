@@ -189,6 +189,11 @@ interface MetricsCollectionService : RunRecordSource {
 	 * The record of the finished run (Issue #676), built from [runEndSummary]; `null` while the run
 	 * has not ended. An implementation may keep the value it built at run end instead.
 	 *
+	 * This default is **not thread-safe**: it rebuilds the record from the live summary on every call,
+	 * so a reader on another thread can see a half-updated summary, and it reads [runEndSummary] each
+	 * time. It is meant only for single-threaded fakes. [DefaultMetricsCollectionService] overrides it
+	 * with the record it built once at run end, behind a volatile reference.
+	 *
 	 * @since Issue #676 (Goal 6 SP5)
 	 */
 	override fun runRecord(): RunRecord? = runEndSummary().toRunRecord()

@@ -30,6 +30,7 @@ import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
+import cz.vutbr.fit.interlockSim.sim.metrics.performanceLine
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -176,6 +177,12 @@ class Main {
 			context.use {
 				it.run(controller)
 				reporter.printSummary()
+				// Issue #676 / #1306 (Goal 6 SP5, SP8): the run record and its performance row, the same two
+				// lines the native CLI prints after its summary.
+				it.getMetricsServices().getRunRecordSource().runRecord()?.let { record ->
+					println(record.summaryLine())
+					println(record.performanceLine())
+				}
 				// A dispatcher that gave up (AgentDriverLoop.stoppedByFailures) leaves the kDisco
 				// kernel ticking on to the horizon with nobody dispatching, so sim-time alone
 				// would report COMPLETED and the aggregator would count a dead run as a passing
@@ -206,7 +213,7 @@ class Main {
 				// railway achieved nothing. The process exit code is deliberately left alone — it is
 				// already decided above from reached-versus-requested sim time, and a starved run did
 				// reach its horizon. The sweep reads the verdict from the run JSON, not from `$?`.
-				DispatcherRunSummaries.finishAndPersist(it.scope, outcome.toRunEndCause())
+				DispatcherRunSummaries.finishAndPersist(it.scope, outcome.toRunEndCause(), name)
 				// Issue #1072: release the cached Koog agent before the context/scope closes so
 				// agent workers do not outlive the run. The shared Ollama executor stays open
 				// here — headless one-shot main closes it after the run returns (see loadExample).
