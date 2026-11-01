@@ -1460,13 +1460,17 @@ open class DefaultSimulationContext(
 	 * `SimulationEvent.Custom` payload so that [onRunEnded][cz.vutbr.fit.interlockSim.sim.onRunEnded]
 	 * filters it like any other payload. Delivered directly, after the contention flush, for the same
 	 * reason as [flushUnresolvedReservationConflicts]: the kernel has stopped and `emitCustom` is a
-	 * no-op. A failing listener is logged at WARN and the ones after it still receive the event.
+	 * no-op. A listener that throws an [Exception] is logged at WARN and the ones after it still
+	 * receive the event; an [Error] is never caught.
 	 */
 	private fun deliverRunEnded(runEnded: RunEnded) {
 		val event = KDiscoSimulationEvent.Custom(runEnded.time, runEnded)
 		pendingSimEventListeners.forEach { listener ->
-			runCatching { listener(event) }
-				.onFailure { e -> logger.warn(e) { "A listener failed on $runEnded during run() cleanup" } }
+			try {
+				listener(event)
+			} catch (e: Exception) {
+				logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
+			}
 		}
 	}
 
