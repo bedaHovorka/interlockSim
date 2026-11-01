@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
+import cz.vutbr.fit.interlockSim.sim.onRunEnded
 import cz.vutbr.fit.interlockSim.sim.onTrainJourneyEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -57,6 +58,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * A [RunEndAccounting] collaborator counts the run-end figures and classifies how the run ended,
  * from events alone; [runEndSummary] reads it, [recordCapacity] feeds it at wiring time.
+ * When the run ends the service keeps the finished [RunRecord] of that moment, read through
+ * [runRecord] (Issue #676, Goal 6 SP5).
  *
  * ## Per-train wait and capacity pressure (Issue #1305, Goal 6 SP7)
  *
@@ -193,6 +196,9 @@ class DefaultMetricsCollectionService(
 			null
 		}
 
+	/** The run record, filled when the run ends (Issue #676); `null` before. */
+	private var runRecord: RunRecord? = null
+
 	// ── Subscription ─────────────────────────────────────────────────────────
 
 	init {
@@ -201,6 +207,8 @@ class DefaultMetricsCollectionService(
 		// CORE (Issue #1304): subscribed whatever the groups, journey events included.
 		env?.let(runEndAccounting::subscribe)
 		trainWait?.let { wait -> env?.let(wait::subscribe) }
+		// Issue #676: registered after the accounting, so its RunEnded has set the classification.
+		env?.onRunEnded { runRecord = runEndSummary().toRunRecord() }
 	}
 
 	// ── Interface implementation ──────────────────────────────────────────────
@@ -271,6 +279,8 @@ class DefaultMetricsCollectionService(
 	override fun latestOpenContentions(): List<OpenContention> = trainWait?.latestOpenContentions().orEmpty()
 
 	override fun runEndSummary(): RunEndSummary = runEndAccounting.summary(getSnapshot())
+
+	override fun runRecord(): RunRecord? = runRecord
 
 	override fun recordCapacity(
 		shownToDispatcher: Int,
