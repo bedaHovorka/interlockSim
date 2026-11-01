@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
+import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
 import cz.vutbr.fit.interlockSim.sim.onTrainJourneyEvent
@@ -57,12 +58,18 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * A [RunEndAccounting] collaborator counts the run-end figures and classifies how the run ended,
  * from events alone; [runEndSummary] reads it, [recordCapacity] feeds it at wiring time.
  *
+ * ## Per-train wait and capacity pressure (Issue #1305, Goal 6 SP7)
+ *
+ * With [MetricGroup.TRAIN_WAIT] on, a [TrainWaitAccounting] collaborator fills the wait figures of
+ * [journeys] and samples the capacity pressure into every published snapshot; it also publishes
+ * [latestOpenContentions]. With the group off it does not exist.
+ *
  * ## Thread safety
  *
- * Not thread-safe, with one exception: [latestSnapshot] is safe from any thread. The service is
- * driven solely by the kDisco event stream — [getSnapshot], [history] and [journeys] are read
- * there or after the run; the why-and-how of that one exception lives on
- * [MetricsCollectionService.latestSnapshot].
+ * Not thread-safe, with two exceptions: [latestSnapshot] and [latestOpenContentions] are immutable
+ * values behind volatile references, safe from any thread. The service is driven solely by the
+ * kDisco event stream — [getSnapshot], [history] and [journeys] are read there or after the run;
+ * the why-and-how of the [latestSnapshot] exception lives on [MetricsCollectionService.latestSnapshot].
  *
  * ## Constructor
  *
@@ -178,6 +185,14 @@ class DefaultMetricsCollectionService(
 	 */
 	internal val runEndAccounting = RunEndAccounting()
 
+	/** Per-train wait figures and capacity pressure (Issue #1305): exists only with [MetricGroup.TRAIN_WAIT] on. */
+	internal val trainWait: TrainWaitAccounting? =
+		if (config.isEnabled(MetricGroup.TRAIN_WAIT)) {
+			TrainWaitAccounting { env?.getRoutingServices()?.getContentionQuery() }
+		} else {
+			null
+		}
+
 	// ── Subscription ─────────────────────────────────────────────────────────
 
 	init {
@@ -185,6 +200,7 @@ class DefaultMetricsCollectionService(
 		if (journeysEnabled) env?.onTrainJourneyEvent { event -> handleJourneyEvent(event) }
 		// CORE (Issue #1304): subscribed whatever the groups, journey events included.
 		env?.let(runEndAccounting::subscribe)
+		trainWait?.let { wait -> env?.let(wait::subscribe) }
 	}
 
 	// ── Interface implementation ──────────────────────────────────────────────
@@ -197,6 +213,7 @@ class DefaultMetricsCollectionService(
 		val total = totalBlocks
 		val utilization = if (total > 0) occupied.toDouble() / total else 0.0
 		val avgWait = if (occupancyEventCount > 0) totalWaitSeconds / occupancyEventCount else 0.0
+		val pressure = trainWait?.pressure() ?: CapacityPressure.NONE
 
 		val snapshot =
 			MetricsSnapshot(
@@ -211,7 +228,10 @@ class DefaultMetricsCollectionService(
 				utilization = utilization,
 				trainsHoldingReservations = activeReservationCount.size,
 				heldBlocks = blockReservedAt.size,
-				unresolvedAtRunEndCount = unresolvedAtRunEndCount
+				unresolvedAtRunEndCount = unresolvedAtRunEndCount,
+				queuedTrains = pressure.queuedTrains,
+				blockedTrains = pressure.blockedTrains,
+				openContentions = pressure.openContentions
 			)
 		logger.debug { "Metrics snapshot queried: $snapshot" }
 		return snapshot
@@ -245,7 +265,10 @@ class DefaultMetricsCollectionService(
 
 	override fun history(): MetricsHistory = history
 
-	override fun journeys(): List<TrainJourneyRecord> = journeyRecorder.records()
+	override fun journeys(): List<TrainJourneyRecord> =
+		journeyRecorder.records().let { records -> trainWait?.decorate(records) ?: records }
+
+	override fun latestOpenContentions(): List<OpenContention> = trainWait?.latestOpenContentions().orEmpty()
 
 	override fun runEndSummary(): RunEndSummary = runEndAccounting.summary(getSnapshot())
 
@@ -273,6 +296,7 @@ class DefaultMetricsCollectionService(
 			is BlockEvent.OccupancyCleared -> onOccupancyCleared(event)
 			is BlockEvent.ReservationConflictDetected -> onReservationConflict(event)
 		}
+		trainWait?.onBlockEvent(event)
 		publishSnapshot()
 	}
 

@@ -10,11 +10,13 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isIn
 import assertk.assertions.isInstanceOf
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import org.junit.jupiter.api.Tag
@@ -88,5 +90,62 @@ class PathReservationContentionTrackingTest : PathReservationServiceTestBase() {
 	@Test
 	fun `flush without any contention returns nothing`() {
 		assertThat(service.flushUnresolvedConflicts(1.0)).isEmpty()
+	}
+
+	// ── Read-only snapshot of open contentions (Issue #1305, Goal 6 SP7) ────────────────────
+
+	@Test
+	fun `a blocked train shows as one open contention owned by the holder`() {
+		val held = blockTrain2BehindTrain1()
+		repeat(2) { service.reservePath("train2", inOut1, inOut2) }
+
+		val open = service.openContentions()
+
+		assertThat(open.map { it.trainId to it.owner }).containsExactly("train2" to "train1")
+		assertThat(open.single().block).isIn(*held.toTypedArray())
+		assertThat(open.single().owner).isEqualTo(service.getBlockOwner(open.single().block))
+	}
+
+	@Test
+	fun `a later success of the blocked train closes its open contention`() {
+		blockTrain2BehindTrain1()
+		service.releasePath("train1")
+		assertReservationSuccess(service.reservePath("train2", inOut1, inOut2))
+
+		assertThat(service.openContentions()).isEmpty()
+		assertThat(service.blockedSeconds(now = 0.0).keys.toList()).containsExactly("train2")
+	}
+
+	@Test
+	fun `a blocked train that holds no block keeps its open contention after its release`() {
+		// The SP12.1 quirk, pinned through the snapshot as well: the contention stays to the run end.
+		blockTrain2BehindTrain1()
+		service.releasePath("train2")
+
+		assertThat(service.openContentions().map { it.trainId }).containsExactly("train2")
+	}
+
+	@Test
+	fun `reading the snapshot changes nothing the end-of-run flush reports`() {
+		blockTrain2BehindTrain1()
+		repeat(3) { service.openContentions() }
+
+		assertThat(service.flushUnresolvedConflicts(1.0)).hasSize(1)
+		assertThat(service.openContentions()).isEmpty()
+	}
+
+	@Test
+	fun `a successful retry has closed the open contention before its block events are delivered`() {
+		blockTrain2BehindTrain1()
+		service.releasePath("train1")
+		val openAtReserved = mutableListOf<Int>()
+		service.addBlockOccupancyListener { event ->
+			if (event.type == BlockOccupancyEventType.BLOCK_RESERVED) openAtReserved += service.openContentions().size
+		}
+
+		assertReservationSuccess(service.reservePath("train2", inOut1, inOut2))
+
+		assertThat(openAtReserved.isNotEmpty()).isEqualTo(true)
+		assertThat(openAtReserved.toSet()).isEqualTo(setOf(0))
 	}
 }
