@@ -34,6 +34,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
 import cz.vutbr.fit.interlockSim.dispatcher.planner.CompositeActionOutcomeSink
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultDispatcherRunRecorder
@@ -822,13 +823,10 @@ class ExampleRegistry {
 		// The rule-based planner is synchronous and exempt.
 		assertPlannerPacingCompatible(planner, controller)
 
-		// Issue #1304: the cap SHOWN to the dispatcher is the vyhybna-derived default, whatever the
-		// station (Issue #1276: 2 against a topology capacity of 4 on Cerveny Ujezd): the scoped
-		// observation projector (the prompt's `capacity:` line) and the singleton RuleBasedDispatcher
-		// use it. Since Issue #1155 (SP8) the applier's admission gate is the station's own
-		// capacity instead; raising the shown value is Issue #1303.
-		val shownCapacity = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
-		context.getMetricsServices().getMetricsCollectionService().recordCapacity(shownCapacity, loop.topologyCapacity)
+		// Issues #1304 and #1303: the cap SHOWN to the dispatcher is the station's own cap (4 on Cerveny
+		// Ujezd) for every planner: the LLM prompt states it and the rule-based planner is built with it.
+		// The applier's admission gate is the same value (Issue #1155, SP8).
+		recordShownCapacity(context, loop)
 
 		val applier =
 			DispatchDecisionApplier(
@@ -1085,4 +1083,17 @@ class ExampleRegistry {
 		factory: SimulationContextFactory,
 		args: Array<String>
 	): SimulationContext = createThreeTrainLoop(factory, args, enableRealTimeSync = true)
+}
+
+/**
+ * Tells the metrics and the observation projector which cap the dispatcher is shown (Issues #1303
+ * and #1304): the loop's own station cap, for every planner. The projector's value feeds the prompt's
+ * `capacity:` line and the validator's capacity check.
+ */
+private fun recordShownCapacity(
+	context: DefaultSimulationContext,
+	loop: ShuntingLoop
+) {
+	context.getMetricsServices().getMetricsCollectionService().recordCapacity(loop.stationCapacity, loop.topologyCapacity)
+	context.scope.get<DispatcherObservationProjector>().capacity = loop.stationCapacity
 }

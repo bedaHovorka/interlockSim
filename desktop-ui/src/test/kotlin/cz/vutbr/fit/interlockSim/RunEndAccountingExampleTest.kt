@@ -141,7 +141,7 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 		assertThat(s.maxConcurrentTrains, name = "max concurrent trains, at most the loop's")
 			.isLessThanOrEqualTo(loop.getMaxConcurrentTrains())
 		assertThat(s.capacityShownToDispatcher, name = "capacity shown (rule-based arm)")
-			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
+			.isEqualTo(CERVENY_UJEZD_CAPACITY)
 		assertThat(s.topologyCapacity, name = "topology capacity").isEqualTo(CERVENY_UJEZD_CAPACITY)
 		assertThat(s.classification, name = "classification")
 			.isEqualTo(RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS)
@@ -170,7 +170,7 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("cervenyUjezd GUI wiring records the dispatcher cap 2 against the topology capacity 4")
+	@DisplayName("cervenyUjezd GUI wiring records the station cap 4 as the capacity shown")
 	fun cervenyUjezdGuiRecordsTheCapacityShown() {
 		val registry = get<ExampleRegistry>()
 		val factory = checkNotNull(registry.guiExamples[ExampleNames.CERVENY_UJEZD])
@@ -178,8 +178,7 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 			(factory(get(), arrayOf("example", ExampleNames.CERVENY_UJEZD, "60")) as DefaultSimulationContext).tracked()
 
 		val s = context.summary()
-		assertThat(s.capacityShownToDispatcher, name = "capacity shown")
-			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
+		assertThat(s.capacityShownToDispatcher, name = "capacity shown").isEqualTo(CERVENY_UJEZD_CAPACITY)
 		assertThat(s.topologyCapacity, name = "topology capacity").isEqualTo(CERVENY_UJEZD_CAPACITY)
 		assertThat(s.classification, name = "not run, not classified").isNull()
 		// The prompt's `capacity:` line comes from the scoped projector: a change to only one of the two
@@ -190,7 +189,7 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 
 	/**
 	 * Acceptance 3 of Issue #1304 names `exampleGui cervenyUjezd 600`: the GUI wiring (the
-	 * dispatcher-agent stack with its driver thread, cap 2) is built from the registry's GUI map
+	 * dispatcher-agent stack with its driver thread, the station's cap 4) is built from the registry's GUI map
 	 * unchanged and run headless. The only difference from the GUI is the pacing: where the GUI's
 	 * `SimulationController` attaches its `SimulationRunner` as the delegate and runs at the chosen
 	 * speed, this test attaches a [ThrottlingSimulationController] at the maximum speed and raises
@@ -218,9 +217,8 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 		assertShuntingLoopCounters(s, loop)
 		assertCutoffAccountsForEveryAdmittedTrain(s, loop)
 		assertThat(s.maxConcurrentTrains, name = "max concurrent trains, within the cap shown")
-			.isLessThanOrEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
-		assertThat(s.capacityShownToDispatcher, name = "capacity shown")
-			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
+			.isLessThanOrEqualTo(CERVENY_UJEZD_CAPACITY)
+		assertThat(s.capacityShownToDispatcher, name = "capacity shown").isEqualTo(CERVENY_UJEZD_CAPACITY)
 		assertThat(s.topologyCapacity, name = "topology capacity").isEqualTo(CERVENY_UJEZD_CAPACITY)
 		assertThat(s.classification, name = "classification")
 			.isEqualTo(RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS)
