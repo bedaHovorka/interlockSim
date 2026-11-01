@@ -82,8 +82,10 @@ away from the incoming train". In railway usage a signal faces the train that se
 means the travel direction the signal governs, so the text now says "governs travel towards the InOut
 (a departure signal)", and the `Station` KDoc ("Signal direction") states that "faces" means that travel
 direction. #1298 also asked for a reason when both end semaphores of an entry/exit block face away. That
-block cannot exist: one end of an entry/exit block is its InOut cell, which holds no semaphore, so the
-block has at most one end semaphore — the home signal or one misdirected signal. The remaining text "it
+block cannot exist: one end of an entry/exit block is its InOut cell, and `Station.from` counts only
+`DynamicRailSemaphore` grid cells at the block ends. The InOut's own embedded in/out semaphores
+(`DynamicInOut.inSemaphore`, `outSemaphore`) are no separate cells, so the block has at most one end
+semaphore — the home signal or one misdirected signal. The remaining text "it
 does not end at a RailSemaphore" is right for the two real cases (the other end is a switch, or the block
 joins two InOuts). `StationSignalDirectionTest.everyEntryExitBlockHasAtMostOneEndSemaphore` pins this over
 vyhybna, Červený Újezd, Praha and the facing-away fixture.

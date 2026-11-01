@@ -165,8 +165,8 @@ class ShuntingLoop(
 		 * - every entry/exit block ends at a home signal — the dispatcher only moves trains from
 		 *   outer blocks toward a home signal. The signal direction is [Station]'s rule: a semaphore
 		 *   there that governs travel towards the InOut (a departure signal) is named as the reason
-		 *   (Issue #1272, wording #1298). An entry/exit block has at most one end semaphore -- its other
-		 *   end is the InOut cell -- so at most one semaphore is ever named;
+		 *   (Issue #1272, wording #1298). An entry/exit block has at most one end semaphore cell -- its
+		 *   other end is the InOut cell -- so at most one semaphore is ever named;
 		 * - every RailSemaphore is a home signal or a platform-track end — the dispatcher only
 		 *   reads block inputs at those signals, a train held at any other one would never move.
 		 *

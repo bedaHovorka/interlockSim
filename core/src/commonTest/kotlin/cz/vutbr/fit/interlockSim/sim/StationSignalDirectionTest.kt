@@ -82,9 +82,10 @@ class StationSignalDirectionTest : CommonKoinTestBase() {
 
 	@Test
 	fun everyEntryExitBlockHasAtMostOneEndSemaphore() {
-		// Issue #1298: one end of an entry/exit block is its InOut cell, which holds no semaphore, so
-		// the block has at most one end semaphore -- the home signal or one misdirected signal. An
-		// entry/exit block with two end semaphores, both facing away, cannot be built.
+		// Issue #1298: one end of an entry/exit block is its InOut cell, and Station.from counts only
+		// DynamicRailSemaphore grid cells at the block ends (the InOut's embedded in/out semaphores are
+		// no separate cells). So the block has at most one end semaphore -- the home signal or one
+		// misdirected signal. An entry/exit block with two end semaphores, both facing away, cannot be built.
 		val networks =
 			listOf(
 				NetworkResources.VYHYBNA_XML,
