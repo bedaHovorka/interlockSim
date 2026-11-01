@@ -807,12 +807,11 @@ class ExampleRegistry {
 		// The rule-based planner is synchronous and exempt.
 		assertPlannerPacingCompatible(planner, controller)
 
-		// Issue #1304: the cap SHOWN to the dispatcher is the vyhybna-derived default, whatever the
-		// station (Issue #1276: 2 against a topology capacity of 4 on Cerveny Ujezd): the scoped
-		// observation projector (the prompt's `capacity:` line) and the singleton RuleBasedDispatcher
-		// use it. Since Issue #1155 (SP8) the applier's admission gate is the station's own
-		// capacity instead; raising the shown value is Issue #1303.
-		val shownCapacity = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+		// Issue #1304: the cap SHOWN to the dispatcher. An LLM planner is shown the station's own cap
+		// (KoogAgentFactory reads the scoped StationCapacity declared below: 4 on Cerveny Ujezd). The
+		// singleton RuleBasedDispatcher keeps the vyhybna-derived default (2 on every station, Issue #1276).
+		// The applier's admission gate is the station's own capacity either way (Issue #1155, SP8).
+		val shownCapacity = shownCapacityFor(plannerTickSource != null, loop.stationCapacity)
 		context.getMetricsServices().getMetricsCollectionService().recordCapacity(shownCapacity, loop.topologyCapacity)
 
 		val applier =
@@ -1070,3 +1069,12 @@ class ExampleRegistry {
 		args: Array<String>
 	): SimulationContext = createThreeTrainLoop(factory, args, enableRealTimeSync = true)
 }
+
+/**
+ * The admission cap the dispatcher is shown (Issue #1304). The LLM planner's prompt states the
+ * station's own cap ([stationCapacity]); the rule-based planner keeps its default.
+ */
+internal fun shownCapacityFor(
+	llmPlanner: Boolean,
+	stationCapacity: Int
+): Int = if (llmPlanner) stationCapacity else RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS

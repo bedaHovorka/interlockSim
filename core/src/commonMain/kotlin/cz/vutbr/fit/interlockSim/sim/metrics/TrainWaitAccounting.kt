@@ -62,8 +62,9 @@ internal data class CapacityPressure(
  * Every handled block event samples the [CapacityPressure] and publishes the open contentions. The
  * end-of-run flush's events ([BlockEvent.ReservationConflictDetected.atRunEnd]) do not, so the last
  * sample keeps what was open just before the run ended. Conflict events and the run-accounting events that
- * can change the open contentions, or end the run, refresh the published contention list too (see
- * [mayChangeOpenContentions]), so a run with no block traffic still shows who waits.
+ * can change the open contentions, or end the run, refresh the published contention list and sample the
+ * pressure too (see [mayChangeOpenContentions]), so a run with no block traffic still shows who waits and
+ * the final snapshot agrees with the list.
  *
  * Single-threaded like the service, except [latestOpenContentions]: an immutable list behind a
  * volatile reference, safe from any thread.
@@ -124,7 +125,7 @@ internal class TrainWaitAccounting(
 	 */
 	fun onConflict(event: ConflictDetectedEvent) {
 		see(event.time)
-		refreshOpenContentions()
+		samplePressure(refreshOpenContentions())
 	}
 
 	fun onJourney(event: TrainJourneyEvent) {
@@ -154,7 +155,9 @@ internal class TrainWaitAccounting(
 			}
 			else -> Unit
 		}
-		if (mayChangeOpenContentions(event)) refreshOpenContentions()
+		// The pressure is sampled with the contentions: the run-end flush skips the sampling, and it clears the
+		// tracker before its events arrive, so a refusal or the end-time announcement is the last chance.
+		if (mayChangeOpenContentions(event)) samplePressure(refreshOpenContentions())
 	}
 
 	/**
@@ -196,7 +199,11 @@ internal class TrainWaitAccounting(
 	fun onBlockEvent(event: BlockEvent) {
 		if (event is BlockEvent.ReservationConflictDetected && event.atRunEnd) return
 		see(event.time)
-		val open = refreshOpenContentions()
+		samplePressure(refreshOpenContentions())
+	}
+
+	/** Take the pressure from [open]; it is what the next published snapshot, and the run-end one, carries. */
+	private fun samplePressure(open: List<OpenContention>) {
 		lastPressure =
 			CapacityPressure(
 				queuedTrains = queuedSince.size,

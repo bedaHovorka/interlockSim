@@ -307,8 +307,18 @@ open class DefaultSimulationContext(
 	 * init{} block so KPI counters are active for the full simulation run.
 	 */
 	private val metricsCollectionServiceInstance: MetricsCollectionService by lazy {
-		scope.get<MetricsCollectionService>()
+		val firstOwn = pendingSimEventListeners.size
+		scope.get<MetricsCollectionService>().also {
+			metricsListenerIndices = firstOwn until pendingSimEventListeners.size
+		}
 	}
+
+	/**
+	 * Where in [pendingSimEventListeners] the metrics service registered its own listeners. The service is
+	 * built lazily, so an observer registered earlier sits before them; [deliverRunEnded] hands
+	 * [RunEnded] to them first, so that an observer reading the run-end summary sees it finished.
+	 */
+	private var metricsListenerIndices: IntRange = IntRange.EMPTY
 
 	/**
 	 * Grouped performance-metrics services facade for this simulation context.
@@ -1469,14 +1479,18 @@ open class DefaultSimulationContext(
 	/**
 	 * Deliver [runEnded] to the raw listeners registered before [run] (Issue #1304, Goal 6 SP6), as a
 	 * `SimulationEvent.Custom` payload so that [onRunEnded][cz.vutbr.fit.interlockSim.sim.onRunEnded]
-	 * filters it like any other payload. Delivered directly, after the contention flush, for the same
+	 * filters it like any other payload. The metrics service's own listeners come first, so an observer finds
+	 * the run-end accounting finished. Delivered directly, after the contention flush, for the same
 	 * reason as [flushUnresolvedReservationConflicts]: the kernel has stopped and `emitCustom` is a
 	 * no-op. A listener that throws an [Exception] is logged at WARN and the ones after it still
 	 * receive the event; an [Error] is never caught.
 	 */
 	private fun deliverRunEnded(runEnded: RunEnded) {
 		val event = KDiscoSimulationEvent.Custom(runEnded.time, runEnded)
-		pendingSimEventListeners.forEach { listener ->
+		val inOrder =
+			metricsListenerIndices.map { pendingSimEventListeners[it] } +
+				pendingSimEventListeners.filterIndexed { index, _ -> index !in metricsListenerIndices }
+		inOrder.forEach { listener ->
 			try {
 				listener(event)
 			} catch (e: Exception) {

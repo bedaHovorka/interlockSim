@@ -332,6 +332,19 @@ class ReservationContentionTrackerTest {
 		}
 
 		@Test
+		fun `the end-of-run flush counts overlapping contentions of one train once, from the earliest start`() {
+			withClock(4.0, 6.0, 7.0) {
+				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+				tracker.recordContentionAndEmitIfNew("me", busyB, "owner")
+				tracker.recordContentionAndEmitIfNew("other", busyA, "owner")
+			}
+
+			tracker.flushUnresolvedConflicts(10.0)
+
+			assertThat(tracker.blockedSeconds(now = 99.0)).isEqualTo(mapOf("me" to 6.0, "other" to 3.0))
+		}
+
+		@Test
 		fun `a clear with no running kernel leaves the episode to the flush to close at the end time`() {
 			withClock(10.0) { tracker.recordContentionAndEmitIfNew("me", busyA, "owner") }
 			mockkObject(Process.Companion)
