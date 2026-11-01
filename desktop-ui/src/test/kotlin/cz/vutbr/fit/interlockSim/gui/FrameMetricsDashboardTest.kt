@@ -16,7 +16,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -67,5 +69,28 @@ class FrameMetricsDashboardTest : AbstractFrameTestBase() {
 			}
 		}
 		simulation.close()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("switching straight to another simulation context clears the previous run's figures")
+	fun simulationToSimulationSwitchClears() {
+		val first = createMockShuntingContext()
+		val second = createMockShuntingContext()
+		val fake = FakeMetricsCollectionService()
+		fake.published = fake.getSnapshot().copy(conflictCount = 42)
+		runOnEDT {
+			frame.setContext(first)
+			frame.metricsDashboardPanel.start(fake)
+			assertThat(frame.metricsDashboardPanel.isPolling).isTrue()
+
+			frame.setContext(second)
+
+			assertThat(frame.metricsDashboardPanel.isPolling).isFalse()
+			assertThat(frame.metricsDashboardPanel.textOf(MetricsDashboardPanel.CONFLICTS_NAME))
+				.isEqualTo(DashboardText.EMPTY.conflicts)
+		}
+		first.close()
+		second.close()
 	}
 }

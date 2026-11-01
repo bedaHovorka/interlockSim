@@ -78,8 +78,13 @@ class FakeMetricsCollectionService(
 	/** Names of the threads that called [latestSnapshot], to prove the dashboard reads off the EDT (Issue #675). */
 	val latestSnapshotThreads: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf())
 
+	/** When set, [latestSnapshot] waits for it: lets a test hold a poll in flight (Issue #675). */
+	@Volatile
+	var latestSnapshotGate: java.util.concurrent.CountDownLatch? = null
+
 	override fun latestSnapshot(): MetricsSnapshot {
 		latestSnapshotThreads.add(Thread.currentThread().name)
+		latestSnapshotGate?.await(GATE_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
 		return published ?: getSnapshot()
 	}
 
@@ -140,4 +145,8 @@ class FakeMetricsCollectionService(
 	var contentions: List<OpenContention> = emptyList()
 
 	override fun latestOpenContentions(): List<OpenContention> = contentions
+
+	private companion object {
+		const val GATE_TIMEOUT_SECONDS = 10L
+	}
 }

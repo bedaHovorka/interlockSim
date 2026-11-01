@@ -9,10 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricGroup
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.awt.BorderLayout
 import java.awt.FlowLayout
 import java.util.Locale
 import java.util.concurrent.ExecutionException
@@ -20,6 +22,8 @@ import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.JLabel
 import javax.swing.JPanel
+import javax.swing.JScrollPane
+import javax.swing.ScrollPaneConstants
 import javax.swing.SwingWorker
 import javax.swing.Timer
 
@@ -51,14 +55,17 @@ internal data class DashboardReading(
 	val snapshot: MetricsSnapshot,
 	val contentions: List<ContentionLine>,
 	val runEnd: RunEndSummary? = null,
-	val stoppedManually: Boolean = false
+	val stoppedManually: Boolean = false,
+	val trainWaitEnabled: Boolean = true
 )
 
 /**
  * The texts of the dashboard, computed from a [DashboardReading] -- pure formatting, no Swing.
  *
  * The stall and the end cause come from [RunEndSummary], which may only be read once the run has
- * ended; until then they show a dash. After a manual stop the summary is not read at all (the
+ * ended; until then they show a dash. With the train-wait metric group off the capacity-pressure
+ * figures (queued, blocked, open contentions) are not collected and show a dash, never a misleading
+ * zero. After a manual stop the summary is not read at all (the
  * simulation thread may still be finishing), so the end cause reads "stopped manually".
  *
  * @since Issue #675 (Goal 6 SP3)
@@ -112,15 +119,20 @@ internal data class DashboardText(
 				throughput = "Throughput: ${fixed(perHour, 1)} trains/h (${s.completedTrains} done)",
 				utilization =
 					"Utilization: ${fixed(s.utilization * PERCENT, 0)} % (${s.occupiedBlocks}/${s.totalBlocks} blocks)",
-				queued = "Queued: ${s.queuedTrains}",
-				blocked = "Blocked: ${s.blockedTrains}",
-				openContentions = "Open contentions: ${s.openContentions}",
-				contentionDetail = contentionDetail(reading.contentions),
+				queued = "Queued: ${pressure(reading, s.queuedTrains)}",
+				blocked = "Blocked: ${pressure(reading, s.blockedTrains)}",
+				openContentions = "Open contentions: ${pressure(reading, s.openContentions)}",
+				contentionDetail = if (reading.trainWaitEnabled) contentionDetail(reading.contentions) else null,
 				stall = stallText(reading.runEnd),
 				endCause = if (reading.stoppedManually) "End: stopped manually" else endCauseText(reading.runEnd),
 				time = "t = ${fixed(s.time, 1)} s"
 			)
 		}
+
+		private fun pressure(
+			reading: DashboardReading,
+			value: Int
+		): String = if (reading.trainWaitEnabled) value.toString() else NONE
 
 		private fun fixed(
 			value: Double,
@@ -136,10 +148,10 @@ internal data class DashboardText(
 				}
 
 		private fun stallText(summary: RunEndSummary?): String =
-			when {
-				summary == null -> "Stall: $NONE"
-				summary.stall == null -> "Stall: none"
-				else -> "Stall: yes (${summary.stall!!.knot.sorted().joinToString(", ")})"
+			if (summary == null) {
+				"Stall: $NONE"
+			} else {
+				summary.stall?.let { "Stall: yes (${it.knot.sorted().joinToString(", ")})" } ?: "Stall: none"
 			}
 
 		private fun endCauseText(summary: RunEndSummary?): String = "End: ${summary?.classification?.name ?: NONE}"
@@ -184,19 +196,44 @@ class MetricsDashboardPanel : JPanel() {
 			TIME_NAME
 		).associateWith { name -> JLabel().apply { this.name = name } }
 
-	private val timer = Timer(POLL_INTERVAL_MS) { poll(final = false) }
+	private val scroll: JScrollPane
 
-	private var service: MetricsCollectionService? = null
-	private var inFlight = false
-	private var finalPending = false
-	private var finalSummaryValid = true
+	private val timer = Timer(POLL_INTERVAL_MS) { run?.let { poll(it, final = false) } }
+
+	/**
+	 * The state of one run's polling. Every [start] makes a new one, so a worker that outlives its
+	 * run can only touch its own, obsolete, state (its completion is rejected by identity).
+	 */
+	private class Run(
+		val service: MetricsCollectionService,
+		val trainWaitEnabled: Boolean
+	) {
+		var inFlight = false
+		var finalPending = false
+		var finalSummaryValid = true
+	}
+
+	private var run: Run? = null
 
 	init {
 		name = PANEL_NAME
-		layout = BoxLayout(this, BoxLayout.Y_AXIS)
+		layout = BorderLayout()
 		border = BorderFactory.createTitledBorder("Metrics")
-		add(row(AVERAGE_WAIT_NAME, CONFLICTS_NAME, THROUGHPUT_NAME, UTILIZATION_NAME))
-		add(row(QUEUED_NAME, BLOCKED_NAME, OPEN_CONTENTIONS_NAME, STALL_NAME, END_CAUSE_NAME, TIME_NAME))
+		// The rows do not wrap (a FlowLayout reports a one-line height when it wraps); a narrow frame
+		// scrolls them sideways instead, so no figure is clipped.
+		val rows =
+			JPanel().apply {
+				layout = BoxLayout(this, BoxLayout.Y_AXIS)
+				add(row(AVERAGE_WAIT_NAME, CONFLICTS_NAME, THROUGHPUT_NAME, UTILIZATION_NAME))
+				add(row(QUEUED_NAME, BLOCKED_NAME, OPEN_CONTENTIONS_NAME, STALL_NAME, END_CAUSE_NAME, TIME_NAME))
+			}
+		scroll =
+			JScrollPane(rows, ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED)
+				.apply {
+					border = BorderFactory.createEmptyBorder()
+					name = SCROLL_NAME
+				}
+		add(scroll, BorderLayout.CENTER)
 		show(DashboardText.EMPTY)
 	}
 
@@ -208,13 +245,19 @@ class MetricsDashboardPanel : JPanel() {
 	/**
 	 * Begin polling [metrics] for a run that has just started; the previous run's figures are cleared.
 	 *
+	 * @param trainWaitEnabled whether the run collects [MetricGroup.TRAIN_WAIT]; when not, the
+	 *   capacity-pressure figures show a dash instead of the zero the snapshot carries
 	 * @since Issue #675 (Goal 6 SP3)
 	 */
-	fun start(metrics: MetricsCollectionService) {
+	fun start(
+		metrics: MetricsCollectionService,
+		trainWaitEnabled: Boolean = true
+	) {
 		detach()
-		service = metrics
+		val started = Run(metrics, trainWaitEnabled)
+		run = started
 		timer.start()
-		poll(final = false)
+		poll(started, final = false)
 	}
 
 	/**
@@ -229,8 +272,9 @@ class MetricsDashboardPanel : JPanel() {
 	 */
 	fun stop(summaryValid: Boolean) {
 		timer.stop()
-		finalSummaryValid = summaryValid
-		if (service != null) poll(final = true)
+		val current = run ?: return
+		current.finalSummaryValid = summaryValid
+		poll(current, final = true)
 	}
 
 	/**
@@ -240,9 +284,7 @@ class MetricsDashboardPanel : JPanel() {
 	 */
 	fun detach() {
 		timer.stop()
-		finalSummaryValid = true
-		service = null
-		finalPending = false
+		run = null
 		show(DashboardText.EMPTY)
 	}
 
@@ -253,16 +295,21 @@ class MetricsDashboardPanel : JPanel() {
 	fun textOf(labelName: String): String = labels.getValue(labelName).text
 
 	/** Start one poll now (the timer's tick), unless one is still running. @since Issue #675 (Goal 6 SP3) */
-	internal fun pollNow() = poll(final = false)
+	internal fun pollNow() {
+		run?.let { poll(it, final = false) }
+	}
 
-	private fun poll(final: Boolean) {
-		val metrics = service ?: return
-		if (inFlight) {
-			if (final) finalPending = true
+	private fun poll(
+		current: Run,
+		final: Boolean
+	) {
+		if (current.inFlight) {
+			if (final) current.finalPending = true
 			return
 		}
-		inFlight = true
-		val summaryValid = finalSummaryValid
+		current.inFlight = true
+		val metrics = current.service
+		val summaryValid = current.finalSummaryValid
 		object : SwingWorker<DashboardReading, Void>() {
 			// Background thread: only the two cross-thread-safe reads (plus the summary once ended).
 			override fun doInBackground(): DashboardReading =
@@ -271,12 +318,13 @@ class MetricsDashboardPanel : JPanel() {
 					contentions =
 						metrics.latestOpenContentions().map { ContentionLine(it.trainId, it.owner, it.since) },
 					runEnd = if (final && summaryValid) metrics.runEndSummary() else null,
-					stoppedManually = final && !summaryValid
+					stoppedManually = final && !summaryValid,
+					trainWaitEnabled = current.trainWaitEnabled
 				)
 
 			// EDT.
 			override fun done() {
-				inFlight = false
+				current.inFlight = false
 				val reading =
 					try {
 						get()
@@ -287,13 +335,13 @@ class MetricsDashboardPanel : JPanel() {
 						Thread.currentThread().interrupt()
 						null
 					}
-				if (service !== metrics) return // detached or restarted while this poll ran
+				if (run !== current) return // detached or restarted while this poll ran
 				reading?.let { show(DashboardText.of(it)) }
 				if (final) {
-					service = null
-				} else if (finalPending) {
-					finalPending = false
-					poll(final = true)
+					run = null
+				} else if (current.finalPending) {
+					current.finalPending = false
+					poll(current, final = true)
 				}
 			}
 		}.execute()
@@ -320,6 +368,7 @@ class MetricsDashboardPanel : JPanel() {
 		private const val POLL_INTERVAL_MS = 500
 		private const val GAP = 16
 		const val PANEL_NAME = "metricsDashboardPanel"
+		const val SCROLL_NAME = "metricsDashboardScroll"
 		const val AVERAGE_WAIT_NAME = "dashboardAverageWait"
 		const val CONFLICTS_NAME = "dashboardConflicts"
 		const val THROUGHPUT_NAME = "dashboardThroughput"

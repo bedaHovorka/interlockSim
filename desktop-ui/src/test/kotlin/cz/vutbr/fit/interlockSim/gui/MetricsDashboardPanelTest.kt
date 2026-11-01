@@ -31,7 +31,9 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import javax.swing.JScrollPane
 import javax.swing.SwingUtilities
 
 @DisplayName("MetricsDashboardPanel")
@@ -130,6 +132,18 @@ class MetricsDashboardPanelTest {
 			val naturalText = DashboardText.of(DashboardReading(snapshot, emptyList(), natural))
 			assertThat(naturalText.stall).isEqualTo("Stall: none")
 			assertThat(naturalText.endCause).isEqualTo("End: NATURAL_COMPLETION")
+		}
+
+		@Test
+		@DisplayName("with the train-wait group off the capacity pressure is absent, not zero")
+		fun trainWaitOffShowsDashes() {
+			val text = DashboardText.of(DashboardReading(snapshot, emptyList(), trainWaitEnabled = false))
+
+			assertThat(text.queued).isEqualTo(DashboardText.EMPTY.queued)
+			assertThat(text.blocked).isEqualTo(DashboardText.EMPTY.blocked)
+			assertThat(text.openContentions).isEqualTo(DashboardText.EMPTY.openContentions)
+			assertThat(text.contentionDetail).isNull()
+			assertThat(text.conflicts).isEqualTo("Conflicts: 7")
 		}
 
 		@Test
@@ -242,6 +256,88 @@ class MetricsDashboardPanelTest {
 			assertThat(p.isPolling).isFalse()
 			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).doesNotContain("7")
 			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo(DashboardText.EMPTY.conflicts)
+		}
+
+		@Test
+		@Timeout(value = 15, unit = TimeUnit.SECONDS)
+		@DisplayName("a run started with the train-wait group off shows dashes for the capacity pressure")
+		fun trainWaitOffRun() {
+			val fake = FakeMetricsCollectionService()
+			fake.published = snapshot
+			val p = newPanel()
+
+			onEdt { p.start(fake, trainWaitEnabled = false) }
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
+
+			assertThat(p.textOf(MetricsDashboardPanel.QUEUED_NAME)).isEqualTo(DashboardText.EMPTY.queued)
+			assertThat(p.textOf(MetricsDashboardPanel.OPEN_CONTENTIONS_NAME)).isEqualTo(DashboardText.EMPTY.openContentions)
+		}
+
+		@Test
+		@Timeout(value = 20, unit = TimeUnit.SECONDS)
+		@DisplayName("an obsolete final poll of the same service does not freeze the restarted run")
+		fun restartWithSameServiceIgnoresObsoleteFinalPoll() {
+			val fake = FakeMetricsCollectionService()
+			fake.published = snapshot
+			val p = newPanel()
+			onEdt { p.start(fake) }
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
+			val gate = CountDownLatch(1)
+			fake.latestSnapshotGate = gate
+
+			onEdt { p.stop(summaryValid = true) } // the old final poll hangs on the gate
+			onEdt { p.start(fake) } // restarted with the same service
+			gate.countDown()
+			fake.published = snapshot.copy(conflictCount = 9)
+
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 9")
+			assertThat(p.isPolling).isTrue()
+			fake.published = snapshot.copy(conflictCount = 10)
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 10")
+		}
+
+		@Test
+		@Timeout(value = 20, unit = TimeUnit.SECONDS)
+		@DisplayName("an obsolete poll of another service does not swallow the new run's final poll")
+		fun restartWithOtherServiceKeepsFinalPoll() {
+			val old = FakeMetricsCollectionService()
+			old.published = snapshot
+			val gate = CountDownLatch(1)
+			old.latestSnapshotGate = gate
+			val fresh = FakeMetricsCollectionService()
+			fresh.published = snapshot.copy(conflictCount = 5)
+			fresh.runEnd = fresh.runEndSummary().copy(classification = RunEndClassification.NATURAL_COMPLETION)
+			val freshReadsBefore = fresh.runEndSummaryReads.get()
+			val p = newPanel()
+			onEdt { p.start(old) } // its poll hangs on the gate
+
+			onEdt { p.start(fresh) }
+			onEdt { p.stop(summaryValid = true) }
+			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "NATURAL_COMPLETION")
+			gate.countDown()
+			flushEDT()
+
+			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo("Conflicts: 5")
+			assertThat(fresh.runEndSummaryReads.get()).isEqualTo(freshReadsBefore + 1)
+		}
+
+		@Test
+		@DisplayName("a narrow panel scrolls its rows sideways instead of clipping a figure")
+		fun narrowPanelScrolls() {
+			val p = newPanel()
+			var scrollable = false
+			var rowsWider = false
+			onEdt {
+				p.setSize(200, 120)
+				p.doLayout()
+				val scroll = p.components.filterIsInstance<JScrollPane>().single()
+				scroll.doLayout()
+				scrollable = scroll.horizontalScrollBar.isVisible
+				rowsWider = scroll.viewport.view.preferredSize.width > scroll.viewport.width
+			}
+
+			assertThat(rowsWider).isTrue()
+			assertThat(scrollable).isTrue()
 		}
 	}
 }

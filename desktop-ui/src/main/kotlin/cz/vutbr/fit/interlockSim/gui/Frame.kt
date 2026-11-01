@@ -29,7 +29,9 @@ import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricGroup
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.scope.Scope
 import java.awt.BorderLayout
@@ -268,8 +270,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							wireDispatcherControlPanel()
 							// Issue #675: start the dashboard on this run's metrics service (read only through
 							// its cross-thread-safe latestSnapshot / latestOpenContentions).
-							currentSimulationContext?.scope?.getOrNull<MetricsCollectionService>()?.let {
-								metricsDashboardPanel.start(it)
+							currentSimulationContext?.scope?.let { runScope ->
+								runScope.getOrNull<MetricsCollectionService>()?.let {
+									val trainWait =
+										runScope.getOrNull<MetricsConfig>()?.isEnabled(MetricGroup.TRAIN_WAIT) ?: true
+									metricsDashboardPanel.start(it, trainWait)
+								}
 							}
 						}
 
@@ -471,7 +477,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			}
 		}
 
-		// Show the KPI dashboard in simulation mode (Issue #675, Goal 6 SP3)
+		// Show the KPI dashboard in simulation mode (Issue #675, Goal 6 SP3). Entering simulation mode
+		// from another simulation context must not keep the previous run's figures or poll.
+		metricsDashboardPanel.detach()
 		if (metricsDashboardPanel.parent == null) {
 			southPanel.add(metricsDashboardPanel, DASHBOARD_PANEL_SOUTH_INDEX)
 		}
