@@ -71,8 +71,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param history Buffer the published snapshots are appended to; defaults to a
  *   [MetricsHistory] with its default caps (Issue #673).
  * @param config The active metric groups; read once here, so fixed for the run. With
- *   [MetricGroup.HISTORY] off nothing is appended to [history]; with [MetricGroup.JOURNEYS] off the
- *   service does not subscribe to journey events and [journeys] stays empty (Issue #674).
+ *   [MetricGroup.HISTORY] off nothing is appended to [history]; with [MetricGroup.JOURNEYS] off no
+ *   journey records are kept and [journeys] stays empty (Issue #674). The CORE run-end accounting
+ *   ([runEndSummary], Issue #1304) still reads the journey events itself.
  *
  * @since Issue #672 (Goal 6 SP1)
  */
