@@ -335,10 +335,11 @@ internal class RouteReleaser(
 			// Whatever deferral window was still open for these blocks is over: the train's
 			// whole footprint is gone (Issue #1050 review round).
 			blocks.forEach { approachLockDeferredUntil.remove(it) }
+			// Train is done contending for any block it may have been blocked on. Cleared before the release
+			// events, so their listeners (the Issue #1305 capacity-pressure sample) never see it as still blocked.
+			clearBlockedTracking(trainId)
 			// Emit BlockReleased after registry cleanup so isBlockAvailable() returns true for subscribers
 			emitReleasesContained("releasePath", blocks, trainId)
-			// Train is done contending for any block it may have been blocked on.
-			clearBlockedTracking(trainId)
 		}
 	}
 

@@ -78,8 +78,11 @@ internal class TrainWaitAccounting(
 	/** Queue-step time of the trains queued and not yet admitted or given up. */
 	private val queuedSince: MutableMap<String, Double> = mutableMapOf()
 
-	/** Time a queued train was given up by its loop (entry failure); its queue time ends there. */
-	private val queueGivenUpAt: MutableMap<String, Double> = mutableMapOf()
+	/**
+	 * Time a queued train was given up by its loop (entry failure); its queue time ends there. Keyed by the
+	 * train and the queue-step time of that journey, so a later journey of the same train is not cut short.
+	 */
+	private val queueGivenUpAt: MutableMap<Pair<String, Double>, Double> = mutableMapOf()
 
 	/** Admitted trains that have not exited. */
 	private val onNetwork: MutableSet<String> = mutableSetOf()
@@ -146,7 +149,8 @@ internal class TrainWaitAccounting(
 			is RunAccountingEvent.RouteGranted -> closeStanding(event.trainId, event.time)
 			is RunAccountingEvent.EntryFailed -> {
 				val trainId = event.failure.trainName
-				if (trainId != null && queuedSince.remove(trainId) != null) queueGivenUpAt[trainId] = event.time
+				val queuedAt = trainId?.let { queuedSince.remove(it) }
+				if (trainId != null && queuedAt != null) queueGivenUpAt[trainId to queuedAt] = event.time
 			}
 			else -> Unit
 		}
@@ -266,7 +270,7 @@ internal class TrainWaitAccounting(
 		now: Double
 	): Double? {
 		val entry = record.entryTime ?: return null
-		val end = record.admissionTime ?: queueGivenUpAt[record.trainId] ?: now
+		val end = record.admissionTime ?: queueGivenUpAt[record.trainId to entry] ?: now
 		return (end - entry).coerceAtLeast(0.0)
 	}
 

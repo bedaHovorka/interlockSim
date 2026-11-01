@@ -16,6 +16,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isIn
 import assertk.assertions.isInstanceOf
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import org.junit.jupiter.api.Tag
@@ -131,5 +132,20 @@ class PathReservationContentionTrackingTest : PathReservationServiceTestBase() {
 
 		assertThat(service.flushUnresolvedConflicts(1.0)).hasSize(1)
 		assertThat(service.openContentions()).isEmpty()
+	}
+
+	@Test
+	fun `a successful retry has closed the open contention before its block events are delivered`() {
+		blockTrain2BehindTrain1()
+		service.releasePath("train1")
+		val openAtReserved = mutableListOf<Int>()
+		service.addBlockOccupancyListener { event ->
+			if (event.type == BlockOccupancyEventType.BLOCK_RESERVED) openAtReserved += service.openContentions().size
+		}
+
+		assertReservationSuccess(service.reservePath("train2", inOut1, inOut2))
+
+		assertThat(openAtReserved.isNotEmpty()).isEqualTo(true)
+		assertThat(openAtReserved.toSet()).isEqualTo(setOf(0))
 	}
 }

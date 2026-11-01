@@ -154,6 +154,22 @@ class TrainWaitAccountingTest {
 	}
 
 	@Test
+	fun `a later journey of a train does not reuse the entry failure time of an earlier one`() {
+		queue("T1", 0.0)
+		accounting.onAccounting(
+			RunAccountingEvent.EntryFailed(
+				MultiTrainLoop.EntryFailure("T1", "A", "B", MultiTrainLoop.EntryFailureKind.NO_ROUTE, 1, null, 2.0)
+			)
+		)
+		queue("T1", 10.0)
+		accounting.onRunEnded(RunEnded(time = 20.0, endTimeReached = true))
+
+		val records = accounting.decorate(listOf(recordOf("T1", entryTime = 0.0), recordOf("T1", entryTime = 10.0)))
+
+		assertThat(records.map { it.queueSeconds }).containsExactly(2.0, 10.0)
+	}
+
+	@Test
 	fun `a journey with no queue step has no queue time`() {
 		assertThat(accounting.decorate(listOf(recordOf("T1", admissionTime = 1.0))).single().queueSeconds).isNull()
 	}
