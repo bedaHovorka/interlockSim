@@ -262,7 +262,10 @@ class CandidateCommitterTest : PathReservationServiceTestBase() {
 
 		val result = faulty.reservePath("faultTrain", doA1, inOutNamed("A"), maxDepth = 4)
 
-		assertThat(result).isEqualTo(PathReservationService.ReservationResult.AllPathsBlocked(1))
+		// Issue #1269: the refused candidate is listed with no blocker -- after its rollback nothing
+		// another train holds stands on it.
+		val noBlocker = PathReservationService.BlockedCandidate(0, emptyMap(), emptyMap())
+		assertThat(result).isEqualTo(PathReservationService.ReservationResult.AllPathsBlocked(1, listOf(noBlocker)))
 		assertNothingLeftBehind("faultTrain", candidateBlocks)
 		assertThat(vA.locked, "the candidate's switch is released").isFalse()
 		assertThat(doA1.signal, "the partially written START aspect is reset").isEqualTo(Signal.STOP)

@@ -29,6 +29,9 @@ internal class WaitForGraph {
 		edges.getOrPut(waiter) { linkedSetOf() }.add(holder)
 	}
 
+	/** Every edge, as each waiter's holders (Issue #1269); a snapshot, not a live view. */
+	fun edges(): Map<String, Set<String>> = edges.mapValues { it.value.toSet() }
+
 	/**
 	 * Finds one cycle, or `null` when the graph is acyclic.
 	 *

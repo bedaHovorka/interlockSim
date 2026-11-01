@@ -36,7 +36,11 @@ import kotlin.test.Test
  * The cycle is constructed with a reservation service that refuses every `reservePath` and
  * reports a staged holding per train: the first train seen holds the first block of the `A -> B`
  * route, the second train the second block, and every candidate route of both runs over both
- * blocks, so each waits for the other.
+ * blocks, so each waits for the other. Since Issue #1269 the edges come from each train's refusal:
+ * the refusal names the route blocks it found held, and the watchdog asks
+ * [PathReservationService.getBlockOwner] for their current owners. The staged holdings are
+ * therefore published through `getBlockOwner` only, not through `getReservedBlocks`: the loop does
+ * not attempt a train that already holds a path, and a train that never attempts has no refusal.
  */
 class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 	private companion object {
@@ -54,14 +58,16 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 	}
 
 	/**
-	 * Refuses every request, and reports staged holdings (indexed by the order in which trains are
-	 * first seen) as the trains' reserved blocks. [holdingsAt] is evaluated per query: a static
+	 * Refuses every request, and reports staged holdings (indexed by the order in which trains first
+	 * attempt) as the owners of the route blocks. [holdingsAt] is evaluated per query: a static
 	 * stage passes a lambda returning a fixed list, an alternating test rotates its stages by the
 	 * simulation tick. [lastQueryTime] is the last simulation time the loop asked it anything: it
-	 * shows when the loop stopped.
+	 * shows when the loop stopped. A refusal names every block of [routeBlocks] as blocked; the
+	 * owner of a block is the train whose staged holding contains it at the time of the query.
 	 */
 	private class StagedHoldingService(
 		real: PathReservationService,
+		private val routeBlocks: List<DynamicTrackBlock>,
 		private val holdingsAt: () -> List<List<DynamicTrackBlock>>
 	) : PathReservationService by real {
 		private val seen = mutableListOf<String>()
@@ -72,9 +78,9 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 			return holdingsAt().getOrElse(seen.indexOf(trainId)) { emptyList() }
 		}
 
-		override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> {
+		override fun getBlockOwner(block: DynamicTrackBlock): String? {
 			lastQueryTime = currentSimulationTime()
-			return holdingOf(trainId)
+			return seen.firstOrNull { block in holdingOf(it) }
 		}
 
 		override fun reservePath(
@@ -85,7 +91,12 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 		): PathReservationService.ReservationResult {
 			lastQueryTime = currentSimulationTime()
 			holdingOf(trainId)
-			return PathReservationService.ReservationResult.AllPathsBlocked(attemptedPaths = 1)
+			// Every route block, also the train's own: the stages rotate, and the watchdog drops self-edges.
+			val blocked = routeBlocks.associateWith { getBlockOwner(it) }
+			return PathReservationService.ReservationResult.AllPathsBlocked(
+				attemptedPaths = 1,
+				blockedBy = listOf(PathReservationService.BlockedCandidate(0, blocked, emptyMap()))
+			)
 		}
 	}
 
@@ -109,7 +120,7 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 		assertThat(blocks.size, name = "route blocks of A -> B").isGreaterThanOrEqualTo(2)
 		val holdings = stagedHoldings(blocks)
 		val service =
-			StagedHoldingService(ctx.getRoutingServices().getPathReservationService()) { holdings }
+			StagedHoldingService(ctx.getRoutingServices().getPathReservationService(), blocks) { holdings }
 		val loop =
 			MultiTrainLoop(
 				ctx,
@@ -166,7 +177,8 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 			)
 		val service =
 			StagedHoldingService(
-				ctx.getRoutingServices().getPathReservationService()
+				ctx.getRoutingServices().getPathReservationService(),
+				blocks
 			) { stages[((currentSimulationTime() / 2.0).toInt()) % stages.size] }
 		val loop =
 			MultiTrainLoop(

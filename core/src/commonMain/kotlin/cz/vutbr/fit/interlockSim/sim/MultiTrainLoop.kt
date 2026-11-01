@@ -94,10 +94,14 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Deadlock watchdog (Issue #1154)
  *
- * On each tick the loop builds a wait-for graph (a waiting train points at the trains that hold a
- * block of its candidate routes) and aborts the run with [SimulationStalled] when the wait-for
- * cycle persists while the clock advances: the same cycle for [stallPersistTicks] ticks, or any
- * cycle for ten times [stallPersistTicks] ticks (the churn bound). A frozen clock never reaches
+ * On each tick the loop builds a wait-for graph and aborts the run with [SimulationStalled] when
+ * the wait-for cycle persists while the clock advances. A waiting train points at the trains that
+ * refused its last attempt (Issue #1269): the current owner
+ * ([PathReservationService.getBlockOwner]) of each block its last
+ * [PathReservationService.ReservationResult.AllPathsBlocked] named, and the holder of each switch
+ * claim it named. Holders need not be waiting, or even be trains of this loop: a started train
+ * that keeps a waiter out is an edge. The cycle rule: the same cycle for [stallPersistTicks]
+ * ticks, or any cycle for ten times [stallPersistTicks] ticks (the churn bound). A frozen clock never reaches
  * a tick, so it is bounded by the route-search node budget instead (Issue #1151).
  *
  * ## Determinism
@@ -308,6 +312,14 @@ open class MultiTrainLoop(
 	/** Entry attempts made so far per not-yet-started train (Issue #1148). */
 	private val entryAttempts: MutableMap<Train, Int> = mutableMapOf()
 
+	/**
+	 * What refused the last attempt of each waiting train, per candidate route (Issue #1269): the
+	 * [PathReservationService.ReservationResult.AllPathsBlocked.blockedBy] of that attempt. Every
+	 * release wakes a new attempt, which replaces the entry, so the record is never older than the
+	 * last release. Kept per candidate so a per-route (OR) view of the wait stays possible.
+	 */
+	private val lastBlockedBy: MutableMap<Train, List<PathReservationService.BlockedCandidate>> = mutableMapOf()
+
 	/** Resource-gate blocks per `(entry, exit)` name pair; the topology is static. */
 	private val gateBlocksByRoute: MutableMap<Pair<String, String>, List<DynamicTrackBlock>> = mutableMapOf()
 
@@ -497,6 +509,7 @@ open class MultiTrainLoop(
 			trainEntries.remove(train)
 			startedTrains.remove(train)
 			entryAttempts.remove(train)
+			lastBlockedBy.remove(train)
 			trainsExitedCount++
 			logger.debug { "MultiTrainLoop: ${train.name} completed journey" }
 		}
@@ -626,15 +639,16 @@ open class MultiTrainLoop(
 
 	/**
 	 * Watchdog tick (Issue #1154): builds the wait-for graph and aborts the run when its cycle has
-	 * persisted. A train waits for every other train that holds a block of its candidate routes.
-	 * Only two or more unstarted trains can form a cycle, and a started train waits for nobody
-	 * here: its whole path was reserved before it started.
+	 * persisted. A train waits for the trains that refused its last attempt (see [buildWaitForGraph]).
+	 * Only two or more unstarted trains can form a cycle: a started train waits for nobody here (its
+	 * whole path was reserved before it started), so it can be the target of an edge but never the
+	 * source.
 	 */
 	private fun checkForStall() {
 		if (stall != null) {
 			return
 		}
-		val waiters = approvedTrains.filter { it !in startedTrains && trainEntries[it] != null }
+		val waiters = unstartedTrains()
 		val cycle = if (waiters.size < 2) null else buildWaitForGraph(waiters).findCycle()
 		val persisted = watchdog.observe(time(), cycle) ?: return
 		val report = SimulationStalled(persisted, watchdog.reportedTicks(), time())
@@ -643,18 +657,33 @@ open class MultiTrainLoop(
 		env.errorStop(report)
 	}
 
+	/**
+	 * The edges of the wait-for graph as the watchdog builds it at this instant (Issue #1269): each
+	 * waiting train with the trains it waits for. Built on demand, so a test can read it on any tick.
+	 */
+	internal fun waitForEdges(): Map<String, Set<String>> = buildWaitForGraph(unstartedTrains()).edges()
+
+	/** The approved trains not started yet: the only ones that can wait here. */
+	private fun unstartedTrains(): List<Train> = approvedTrains.filter { it !in startedTrains && trainEntries[it] != null }
+
+	/**
+	 * The wait-for graph (Issue #1269): each of [waiters] points at what refused its last attempt --
+	 * the owner [PathReservationService.getBlockOwner] names NOW for each block that refusal named
+	 * (a block freed since has no owner and adds no edge), and the holder of each switch claim it
+	 * named. Edges are the union over the refused candidates (an AND model of an OR wait: see
+	 * `docs/goal9b-demands/SP7-retry-and-watchdog.md`). A waiter whose last attempt was not an
+	 * [PathReservationService.ReservationResult.AllPathsBlocked] has no edge.
+	 */
 	private fun buildWaitForGraph(waiters: List<Train>): WaitForGraph {
-		val holderOf: MutableMap<DynamicTrackBlock, String> = mutableMapOf()
-		for (train in approvedTrains) {
-			for (block in pathReservationService.getReservedBlocks(train.name)) {
-				holderOf.getOrPut(block) { train.name }
-			}
-		}
 		val graph = WaitForGraph()
 		for (waiter in waiters) {
-			val entry = trainEntries[waiter] ?: continue
-			for (block in gateBlocksFor(entry)) {
-				holderOf[block]?.let { graph.addEdge(waiter.name, it) }
+			for (candidate in lastBlockedBy[waiter].orEmpty()) {
+				for (block in candidate.blockedBlocks.keys) {
+					pathReservationService.getBlockOwner(block)?.let { graph.addEdge(waiter.name, it) }
+				}
+				for (holder in candidate.lockedSwitches.values) {
+					graph.addEdge(waiter.name, holder)
+				}
 			}
 		}
 		return graph
@@ -673,6 +702,7 @@ open class MultiTrainLoop(
 		waitingTrains.remove(train)
 		trainEntries.remove(train)
 		entryAttempts.remove(train)
+		lastBlockedBy.remove(train)
 		entryFailures.add(failure)
 		logger.error {
 			"MultiTrainLoop: giving up entry of ${failure.trainName} " +
@@ -711,6 +741,11 @@ open class MultiTrainLoop(
 		}
 
 		val result = reserveThroughGate(train, gateBlocks, entry.inIo, entry.outIo)
+		if (result is PathReservationService.ReservationResult.AllPathsBlocked) {
+			lastBlockedBy[train] = result.blockedBy
+		} else {
+			lastBlockedBy.remove(train)
+		}
 		val permanentKind =
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
