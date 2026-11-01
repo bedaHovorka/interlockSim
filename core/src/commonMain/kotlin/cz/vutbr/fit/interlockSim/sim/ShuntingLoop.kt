@@ -24,7 +24,9 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
+import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
 import cz.vutbr.fit.interlockSim.util.platformStartDaemonThread
@@ -230,6 +232,14 @@ class ShuntingLoop(
 	 * capacity (Issue #1162). Not to be confused with [getMaxConcurrentTrains], the observed peak.
 	 */
 	val stationCapacity: Int
+
+	/**
+	 * The station's capacity from its topology alone ([Station.topologyCapacity]), whatever the
+	 * scenario override; recorded next to the cap the dispatcher is shown (Issue #1304, #1276).
+	 *
+	 * @since Issue #1304 (Goal 6 SP6)
+	 */
+	val topologyCapacity: Int
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
 
 	/**
@@ -373,6 +383,7 @@ class ShuntingLoop(
 		}
 		station.applyBlockNames()
 		stationCapacity = station.capacity(scenarioOverride = maxConcurrentTrains)
+		topologyCapacity = station.topologyCapacity
 		// SP2.2 review tripwire (Issue #1162): the override wins by design, but a value above
 		// the station's real track count is worth a warn line — it changes no verdict.
 		if (maxConcurrentTrains != null && maxConcurrentTrains > station.topologyCapacity) {
@@ -721,6 +732,8 @@ class ShuntingLoop(
 	 */
 	fun incrementBlockTransition(trainId: String) {
 		blockTransitionsByTrain[trainId] = (blockTransitionsByTrain[trainId] ?: 0) + 1
+		// Goal 6 SP6 (Issue #1304): the same grant for the metrics, which never read this counter.
+		emitRunAccountingEvent(RunAccountingEvent.RouteGranted(trainId, currentSimulationTime()))
 	}
 
 	/**
@@ -728,12 +741,20 @@ class ShuntingLoop(
 	 *
 	 * Called by [DispatchDecisionApplier][cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
 	 * on every rejected reservation; the counter previously lived inside `tryReservePath`
-	 * (removed by Issue #733).
+	 * (removed by Issue #733). Since Issue #1304 the caller names the train and the refusal, so the
+	 * metrics can count the refusal by [FailedReservationKind] without reading this counter.
 	 *
-	 * @since Issue #733 (SP0.11 — Goal 10)
+	 * @param trainId the train whose route request was refused
+	 * @param result the refusal; a [RouteRequestResult.Reserved] is not a refusal and is not counted
+	 * @since Issue #733 (SP0.11 — Goal 10); arguments added by Issue #1304 (Goal 6 SP6)
 	 */
-	fun incrementFailedReservation() {
+	fun incrementFailedReservation(
+		trainId: String,
+		result: RouteRequestResult
+	) {
+		val kind = FailedReservationKind.of(result) ?: return
 		failedReservationsCount++
+		emitRunAccountingEvent(RunAccountingEvent.ReservationRefused(trainId, kind, currentSimulationTime()))
 	}
 
 	/**
@@ -743,6 +764,8 @@ class ShuntingLoop(
 	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
 			simActive = false // signal the companion driver thread to stop
+			// Issue #1304: tell the run end that the end time, not an early stop, ended the run.
+			emitRunAccountingEvent(RunAccountingEvent.EndTimeReached(time()))
 			generator.terminate()
 			env.stop()
 			return
