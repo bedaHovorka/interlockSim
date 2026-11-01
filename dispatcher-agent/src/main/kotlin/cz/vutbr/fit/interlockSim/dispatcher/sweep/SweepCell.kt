@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.sweep
 
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
@@ -102,9 +103,20 @@ data class SweepCell(
 	 * Mirrors what the example factories declare, and is needed before the run exists so that a
 	 * timed-out or crashed run can still be written into the right arm directory — a failed run
 	 * that vanished from the arm it belongs to would quietly improve that arm's measured rate.
+	 *
+	 * The examples that wire no dispatcher at all ([DISPATCHER_FREE_EXAMPLES]) map to
+	 * [DispatcherArm.NO_DISPATCHER], the arm their completed runs are recorded under (Issue #676);
+	 * under `RULE_BASED` an aborted one would add a failing run to that arm's gate counts.
+	 * `SweepCellArmAgreementTest` (`:desktop-ui`) holds this mapping against the wiring of every
+	 * registered example.
 	 */
 	val arm: DispatcherArm
-		get() = if (example.endsWith("AI")) DispatcherArm.LLM_TOOL_CALLING else DispatcherArm.RULE_BASED
+		get() =
+			when {
+				example.endsWith("AI") -> DispatcherArm.LLM_TOOL_CALLING
+				example in DISPATCHER_FREE_EXAMPLES -> DispatcherArm.NO_DISPATCHER
+				else -> DispatcherArm.RULE_BASED
+			}
 
 	/**
 	 * [RunParameters] as they will be recorded, used for the abort snapshot of a killed run.
@@ -172,7 +184,8 @@ data class SweepCell(
 		val runConfigDefault = DispatcherRunConfig.fromProperties(properties = { null })
 		// The rule-based arm never assembles a prompt or contacts Ollama, so its omitted axes are
 		// the empty/zero sentinel, never the file-tier LLM values.
-		if (arm == DispatcherArm.RULE_BASED) {
+		// A dispatcher-free run is recorded by the same DI-built rule-based recorder (Issue #676).
+		if (arm == DispatcherArm.RULE_BASED || !arm.hasDispatcher) {
 			return RunParameters(
 				tickPeriodMs = tickPeriodMs,
 				historyN = historyN,
@@ -231,3 +244,9 @@ data class SweepRun(
 	/** Deterministic, resumption-safe identifier for this run. */
 	val runId: String get() = cell.runId(repeatIndex)
 }
+
+/**
+ * Registered examples whose main process admits its own trains with no dispatcher wired, so their
+ * runs record [DispatcherArm.NO_DISPATCHER] (Issue #676, Goal 6 SP5).
+ */
+private val DISPATCHER_FREE_EXAMPLES: Set<String> = setOf(ExampleNames.MULTI_TRAIN_LOOP, ExampleNames.THREE_TRAIN_LOOP)

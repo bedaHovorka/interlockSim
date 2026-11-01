@@ -288,12 +288,16 @@ object DispatcherRunSummaries {
 	private fun withDispatcherArm(
 		scope: Scope,
 		snapshot: DispatcherRunSnapshot
-	): DispatcherRunSnapshot {
-		val dispatcherWired =
-			scope.getOrNull<AgentDriverLoop>() != null ||
-				scope.getOrNull<MetricsCollectionService>()?.runEndSummary()?.capacityShownToDispatcher != null
-		return if (dispatcherWired) snapshot else snapshot.copy(arm = DispatcherArm.NO_DISPATCHER)
-	}
+	): DispatcherRunSnapshot = if (wiresDispatcher(scope)) snapshot else snapshot.copy(arm = DispatcherArm.NO_DISPATCHER)
+
+	/**
+	 * Whether the run owned by [scope] wired a dispatcher: a dispatcher agent, or a capacity
+	 * recorded, which every dispatcher wiring does (Issue #676). Readable before the run starts,
+	 * so `SweepCellArmAgreementTest` holds `SweepCell.arm` to the same answer.
+	 */
+	internal fun wiresDispatcher(scope: Scope): Boolean =
+		scope.getOrNull<AgentDriverLoop>() != null ||
+			scope.getOrNull<MetricsCollectionService>()?.runEndSummary()?.capacityShownToDispatcher != null
 
 	/** Whether a sweep pointed this run at its own output directory (`DispatcherRunConfig.runsRoot`). */
 	private fun sweepConfiguredStore(scope: Scope): Boolean = scope.getOrNull<DispatcherRunConfig>()?.runsRoot != null

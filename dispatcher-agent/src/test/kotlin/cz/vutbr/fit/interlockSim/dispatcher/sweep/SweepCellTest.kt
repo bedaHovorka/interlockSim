@@ -13,9 +13,11 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEqualTo
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import cz.vutbr.fit.interlockSim.dispatcher.di.ruleBasedRunParameters
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import org.junit.jupiter.api.DisplayName
@@ -57,6 +59,27 @@ class SweepCellTest {
 			maxActionsPerTick = 2,
 			inferenceTimeoutSeconds = inferenceTimeoutSeconds
 		)
+
+	/**
+	 * Issue #676 fix round 2: [SweepCell.arm] is the arm of an aborted run's snapshot, so it must be
+	 * the arm the completed runs of the cell record -- `multiTrainLoop` and `threeTrainLoop` wire no
+	 * dispatcher and are recorded under NO_DISPATCHER. `:desktop-ui`'s `SweepCellArmAgreementTest`
+	 * checks this mapping against every registered example.
+	 */
+	@Test
+	@DisplayName("a dispatcher-free example maps to the NO_DISPATCHER arm, with the rule-based parameters")
+	fun dispatcherFreeExamplesHaveTheirArm() {
+		for (example in listOf(ExampleNames.MULTI_TRAIN_LOOP, ExampleNames.THREE_TRAIN_LOOP)) {
+			val cell = ruleBasedCell().copy(example = example)
+
+			assertThat(cell.arm, example).isEqualTo(DispatcherArm.NO_DISPATCHER)
+			// Its live recorder is the DI-built rule-based one, so the abort snapshot uses the same parameters.
+			assertThat(cell.runParameters(), example).isEqualTo(ruleBasedCell().runParameters())
+		}
+		assertThat(ruleBasedCell().copy(example = ExampleNames.CERVENY_UJEZD).arm).isEqualTo(DispatcherArm.RULE_BASED)
+		assertThat(ruleBasedCell().arm).isEqualTo(DispatcherArm.RULE_BASED)
+		assertThat(llmCell().arm).isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
+	}
 
 	@Test
 	@DisplayName("a null inferenceTimeoutSeconds records KoogAgentPlanAdapter's own default, not null")
