@@ -1421,11 +1421,15 @@ open class DefaultSimulationContext(
 			throw SimulationException(e)
 		} finally {
 			val kernelEndTime = sim.time()
-			flushUnresolvedReservationConflicts(kernelEndTime)
-			deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun))
-			lastRunEndTime = kernelEndTime
-			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
-			currentController = null
+			try {
+				flushUnresolvedReservationConflicts(kernelEndTime)
+				// An Error from a run-end subscriber propagates, but never skips the cleanup below.
+				deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun))
+			} finally {
+				lastRunEndTime = kernelEndTime
+				simulation = null // Release reference once sim.run() returns (natural end or stop() called)
+				currentController = null
+			}
 		}
 	}
 

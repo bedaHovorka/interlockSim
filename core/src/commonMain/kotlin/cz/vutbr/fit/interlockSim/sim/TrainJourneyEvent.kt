@@ -100,7 +100,7 @@ private const val KDISCO_PROCESS_TERMINATED = "cz.ksimulantenbande.kdisco.Proces
  *
  * @since Issue #673 (Goal 6 SP2)
  */
-private fun rethrowProcessControl(e: Exception) {
+internal fun rethrowProcessControl(e: Exception) {
 	if (e is CancellationException || e::class.qualifiedName == KDISCO_PROCESS_TERMINATED) throw e
 }
 

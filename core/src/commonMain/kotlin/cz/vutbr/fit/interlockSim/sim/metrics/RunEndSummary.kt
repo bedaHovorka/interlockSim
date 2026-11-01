@@ -35,7 +35,8 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
  *   `getMaxConcurrentTrains`.
  * @property blockTransitions Granted reservation requests (`RunAccountingEvent.RouteGranted`).
  * @property conflicts `MetricsSnapshot.conflictCount`: mid-run double-bookings caught.
- * @property failedReservations Refused reservation requests, the sum of [failedReservationsByKind].
+ * @property failedReservations Refused reservation requests, the sum of [failedReservationsByKind]. It counts
+ * attempts: `MultiTrainLoop` reports a refusal on every retry tick, so one waiting train can add many.
  * @property failedReservationsByKind Refused requests per kind; kinds never seen are absent.
  * @property unresolvedAtRunEnd `MetricsSnapshot.unresolvedAtRunEndCount` (Issue #1280).
  * @property entryFailures `MultiTrainLoop` entries given up, the sum of [entryFailuresByKind].

@@ -814,7 +814,10 @@ class DispatchDecisionApplier(
 			}
 			return null
 		}
-		return when (val result = applyThroughSharedHelper<ToolDrivenOutcome.RouteRequested>(decision).result) {
+		val routeResult = applyThroughSharedHelper<ToolDrivenOutcome.RouteRequested>(decision).result
+		// Issue #1304: a refusal of an LLM request_route counts like a refused ReservePath, once.
+		if (routeResult !is RouteRequestResult.Reserved) onFailedReservation(decision.trainName, routeResult)
+		return when (val result = routeResult) {
 			is RouteRequestResult.Reserved -> {
 				handleRequestRouteReserved(decision, result, reservationKey, correlation)
 				null

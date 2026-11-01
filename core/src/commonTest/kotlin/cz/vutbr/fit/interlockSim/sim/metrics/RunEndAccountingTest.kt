@@ -266,4 +266,13 @@ class RunEndAccountingTest {
 				utilization = 0.0
 			)
 	}
+
+	@Test
+	fun `a train admitted twice under one name counts once on the network`() {
+		queue("T1")
+		admit("T1")
+		admit("T1", time = 3.0)
+
+		assertThat(summary().maxConcurrentTrains).isEqualTo(1)
+	}
 }

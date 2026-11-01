@@ -30,7 +30,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Counts from events only: [TrainJourneyEvent]s, [RunAccountingEvent]s, [ReservationExpired] and
  * [RunEnded]; the capacity comes through [recordCapacity] at wiring time, before the kernel runs.
  * Always on (the CORE metric group): it subscribes for itself and does not depend on the journey
- * records. Single-threaded, like the service: driven by the simulation thread, read on it or after
+ * records. One instance counts one run: the service is created per simulation context and subscribes once, so
+ * it is not reset for a second `run()`. Train names must be unique within a run (the set of trains on the
+ * network is keyed by name). Single-threaded, like the service: driven by the simulation thread, read on it or after
  * the run.
  */
 internal class RunEndAccounting {

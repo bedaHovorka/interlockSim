@@ -28,7 +28,11 @@ enum class RunEndClassification {
 	/** The end time was reached with at least one admitted train still on the network (Issue #1280). */
 	CUTOFF_WITH_UNFINISHED_JOURNEYS,
 
-	/** The deadlock watchdog reported a stall (`SimulationStalled`) and aborted the run. */
+	/**
+	 * The deadlock watchdog reported a stall (`SimulationStalled`) and aborted the run. Only the
+	 * `MultiTrainLoop` watchdog emits it today, so another harness that stops for a stall reads
+	 * [TERMINATED_EARLY].
+	 */
 	STALLED,
 
 	/** The run stopped before its end time without a stall: the kDisco queue drained, or a stop. */

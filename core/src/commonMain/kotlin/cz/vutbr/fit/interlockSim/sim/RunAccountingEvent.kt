@@ -165,23 +165,39 @@ private val logger = KotlinLogging.logger {}
 fun emitRunAccountingEvent(event: RunAccountingEvent) = emitCustomGuarded(event)
 
 /**
- * Subscribe to [RunAccountingEvent]s. Sugar over [SimulationEnvironment.onSimulationEvent], with its
- * contract: register before `run()`, delivered synchronously on the simulation thread. A [listener]
- * that throws is logged at WARN and the event still reaches the subscribers after it.
+ * The raw kDisco listener behind [onRunAccountingEvent]: carries the [RunAccountingEvent] payload of a
+ * [SimulationEvent.Custom] to [listener] and drops everything else. A [listener] that throws an
+ * ordinary exception is logged at WARN; kDisco's process control (`CancellationException`, kDisco's
+ * `ProcessTerminatedException`) is rethrown by [rethrowProcessControl], consistently with
+ * [trainJourneyGuard], so [emitCustomGuarded] can unwind the emitting process.
+ *
+ * Kept as a named function so tests can wire it onto a bare kDisco `Simulation`.
  *
  * @since Issue #1304 (Goal 6 SP6)
  */
-fun SimulationEnvironment.onRunAccountingEvent(listener: (RunAccountingEvent) -> Unit) =
-	onSimulationEvent { event ->
+internal fun runAccountingRecipient(listener: (RunAccountingEvent) -> Unit): (SimulationEvent) -> Unit =
+	{ event ->
 		val payload = (event as? SimulationEvent.Custom)?.payload
 		if (payload is RunAccountingEvent) {
 			try {
 				listener(payload)
 			} catch (e: Exception) {
+				rethrowProcessControl(e)
 				logger.warn(e) { "A RunAccountingEvent listener failed on $payload (Issue #1304)" }
 			}
 		}
 	}
+
+/**
+ * Subscribe to [RunAccountingEvent]s. Sugar over [SimulationEnvironment.onSimulationEvent], with its
+ * contract: register before `run()`, delivered synchronously on the simulation thread. A [listener]
+ * that throws is logged at WARN and the event still reaches the subscribers after it, except for
+ * kDisco's process control, which [runAccountingRecipient] rethrows.
+ *
+ * @since Issue #1304 (Goal 6 SP6)
+ */
+fun SimulationEnvironment.onRunAccountingEvent(listener: (RunAccountingEvent) -> Unit) =
+	onSimulationEvent(runAccountingRecipient(listener))
 
 /**
  * Subscribe to [RunEnded]. Sugar over [SimulationEnvironment.onSimulationEvent]: register before

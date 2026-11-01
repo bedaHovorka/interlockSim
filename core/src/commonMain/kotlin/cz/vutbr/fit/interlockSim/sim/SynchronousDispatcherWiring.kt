@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.DefaultTrainActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -163,6 +164,25 @@ internal fun applyTrainDecisions(
 	}
 }
 
+/**
+ * Issue #1304: tell the run-end accounting about a `RequestRoute` grant or refusal. Only the event is
+ * emitted -- the loop's own counters stay untouched, as documented for `DispatchDecision.RequestRoute`.
+ */
+private fun announceRouteRequest(
+	trainId: String,
+	result: RouteRequestResult
+) {
+	val time = currentSimulationTime()
+	val kind = FailedReservationKind.of(result)
+	emitRunAccountingEvent(
+		if (kind == null) {
+			RunAccountingEvent.RouteGranted(trainId, time)
+		} else {
+			RunAccountingEvent.ReservationRefused(trainId, kind, time)
+		}
+	)
+}
+
 internal fun applyDecision(
 	decision: DispatchDecision,
 	loop: ShuntingLoop,
@@ -200,9 +220,12 @@ internal fun applyDecision(
 	// test-observability only; trains navigate via PathReservationRegistry).
 	is DispatchDecision.SetSignalAspect,
 	is DispatchDecision.SetSwitchPosition,
-	is DispatchDecision.ReleaseRoute,
-	is DispatchDecision.RequestRoute ->
+	is DispatchDecision.ReleaseRoute ->
 		decision.applyToolDrivenToActuator(actuatorPort, "wireSynchronousDispatcher")
+	is DispatchDecision.RequestRoute ->
+		decision.applyToolDrivenToActuator(actuatorPort, "wireSynchronousDispatcher") { outcome ->
+			if (outcome is ToolDrivenOutcome.RouteRequested) announceRouteRequest(decision.trainName, outcome.result)
+		}
 	// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
 	// HoldTrain is not supported in the synchronous wiring path: wireSynchronousDispatcher
 	// is used by fast-sim and headless tests which run without a TrainLifecyclePort.
