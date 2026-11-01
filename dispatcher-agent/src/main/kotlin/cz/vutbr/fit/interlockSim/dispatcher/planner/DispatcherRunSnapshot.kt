@@ -32,7 +32,8 @@ import kotlinx.serialization.Serializable
  * state, Issue #1074; version 9 added [TickOutcome.LLM_SILENT_ALL_MOVING] to the outcome
  * vocabulary, Issue #988; version 10 split [RailwayOutcome.unresolvedAtRunEnd] out of
  * [RailwayOutcome.conflicts], Issue #1280; version 11 added
- * [staleOriginRefusalsAfterSilentCycle], Issue #1365).
+ * [staleOriginRefusalsAfterSilentCycle], Issue #1365, and persisted the run record figures in
+ * [railwayOutcome], Issue #676).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -279,6 +280,21 @@ data class DispatcherRunSnapshot(
 		 *   two are not comparable on that column.
 		 * - **11** — Issue #1365, added [staleOriginRefusalsAfterSilentCycle]. It defaults to
 		 *   `null`, so every version 1-10 file still decodes, with the count absent (not measured).
+		 * - **11** (continued) — Issue #676 (Goal 6 SP5), [railwayOutcome] is filled from the run record of `:core`
+		 *   for every harness and persists its figures: wrong exits, unfinished journeys, refused
+		 *   reservations and entry failures by kind, the stall, expiries and sweeper releases by kind,
+		 *   capacity shown versus topology, end time and the end classification. Every new field
+		 *   defaults to `null`, so every version 1-10 file still decodes, with them absent. The row
+		 *   figures now come from the run record too, which changes what four of them count; each is
+		 *   not comparable across versions 10 and 11:
+		 *   [RailwayOutcome.trainsEntered] counts trains queued at their entry InOut, not trains
+		 *   admitted; [RailwayOutcome.trainsExited] counts the front reaching the InOut, where the
+		 *   loop counted a tick later (one train more at a cutoff); [RailwayOutcome.maxConcurrentTrains]
+		 *   is the peak of admitted trains not yet at an exit, not the size of the loop's approved
+		 *   list; [RailwayOutcome.failedReservations] counts the refusals the metrics saw as events
+		 *   instead of the `ShuntingLoop` counter. In version 10 and older files those figures were
+		 *   `null` for a non-`ShuntingLoop` run. The arm vocabulary gained
+		 *   [DispatcherArm.NO_DISPATCHER] for runs that wired no dispatcher at all.
 		 */
 		const val CURRENT_SCHEMA_VERSION: Int = 11
 

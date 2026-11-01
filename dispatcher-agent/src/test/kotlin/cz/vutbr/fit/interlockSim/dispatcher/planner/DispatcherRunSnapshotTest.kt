@@ -20,6 +20,7 @@ import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -178,6 +179,7 @@ class DispatcherRunSnapshotTest {
 	@Test
 	fun `current schema version is 11`() {
 		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS)
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_RUN_RECORD)
 	}
 
 	/** Issue #1365 (schema version 11): the stale-origin refusal count survives the JSON round-trip. */
@@ -193,6 +195,42 @@ class DispatcherRunSnapshotTest {
 	}
 
 	/**
+	 * Issue #676 (schema version 11) persists the run record next to the row figures. Every new
+	 * figure has to survive encode→decode, the end classification included.
+	 */
+	@Test
+	fun `serialization round-trips the run record figures`() {
+		val snap =
+			snapshotWith(
+				railwayOutcome =
+					RailwayOutcome(
+						journeysCompleted = 17L,
+						wrongExits = 10L,
+						unfinishedJourneys = 2L,
+						failedReservationsByKind = mapOf("ALL_PATHS_BLOCKED" to 142L),
+						entryFailures = 0L,
+						entryFailuresByKind = emptyMap(),
+						stall = StallOutcome(listOf("T1", "T2"), listOf("T1", "T2"), persistedTicks = 3L, simTime = 99.5),
+						expiredHoldingCount = 1L,
+						expiredTailCount = 0L,
+						staleReleaseCount = 0L,
+						partialReleaseCount = 2L,
+						capacityShownToDispatcher = 4L,
+						topologyCapacity = 4L,
+						endTime = 600.0,
+						endTimeReached = true,
+						endClassification = RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS
+					)
+			)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"endClassification\": \"CUTOFF_WITH_UNFINISHED_JOURNEYS\"")
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+
+		assertThat(decoded).isEqualTo(snap)
+	}
+
+	/**
 	 * Issue #1365: a run JSON written before the field existed still loads, with the count absent
 	 * (not measured), never zero.
 	 */
@@ -201,6 +239,55 @@ class DispatcherRunSnapshotTest {
 		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), SCHEMA_V8_JSON)
 
 		assertThat(decoded.staleOriginRefusalsAfterSilentCycle).isNull()
+	}
+
+	/**
+	 * A version-10 file has none of the run-record keys. It must still load, with every record
+	 * figure absent -- not zero -- and its row figures kept as stored.
+	 */
+	@Test
+	fun `a version-10 file without the run-record figures loads with them absent`() {
+		val current =
+			json
+				.parseToJsonElement(
+					json.encodeToString(
+						DispatcherRunSnapshot.serializer(),
+						snapshotWith(railwayOutcome = RailwayOutcome(journeysCompleted = 15L, unresolvedAtRunEnd = 0L))
+					)
+				).jsonObject
+		val recordKeys =
+			setOf(
+				"wrongExits",
+				"unfinishedJourneys",
+				"failedReservationsByKind",
+				"entryFailures",
+				"entryFailuresByKind",
+				"stall",
+				"expiredHoldingCount",
+				"expiredTailCount",
+				"staleReleaseCount",
+				"partialReleaseCount",
+				"capacityShownToDispatcher",
+				"topologyCapacity",
+				"endTime",
+				"endTimeReached",
+				"endClassification"
+			)
+		val legacyOutcome = JsonObject(current.getValue("railwayOutcome").jsonObject - recordKeys)
+		val legacy =
+			JsonObject(
+				current +
+					("schemaVersion" to JsonPrimitive(SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END)) +
+					("railwayOutcome" to legacyOutcome)
+			)
+
+		val decoded = json.decodeFromJsonElement(DispatcherRunSnapshot.serializer(), legacy)
+
+		assertThat(decoded.schemaVersion).isEqualTo(SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END)
+		assertThat(decoded.railwayOutcome)
+			.isEqualTo(RailwayOutcome(journeysCompleted = 15L, unresolvedAtRunEnd = 0L))
+		assertThat(decoded.railwayOutcome.endClassification).isNull()
+		assertThat(decoded.railwayOutcome.wrongExits).isNull()
 	}
 
 	/**
@@ -439,8 +526,14 @@ class DispatcherRunSnapshotTest {
 		/** Issue #988 added the [TickOutcome.LLM_SILENT_ALL_MOVING] tick outcome. */
 		private const val SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME: Int = 9
 
+		/** Issue #1280 split the contentions still open at run end out of the conflict count. */
+		private const val SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END: Int = 10
+
 		/** Issue #1365 added the stale-origin refusal count after silent non-idle LLM cycles. */
 		private const val SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS: Int = 11
+
+		/** Issue #676 persisted the run record figures next to the row. */
+		private const val SCHEMA_VERSION_WITH_RUN_RECORD: Int = 11
 
 		private val json =
 			Json {

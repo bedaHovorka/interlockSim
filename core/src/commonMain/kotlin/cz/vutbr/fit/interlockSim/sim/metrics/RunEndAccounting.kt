@@ -128,6 +128,12 @@ internal class RunEndAccounting {
 		this.topologyCapacity = topologyCapacity
 	}
 
+	/**
+	 * The capacity recorded by [recordCapacity], or `null`. Written once at wiring time, before the run
+	 * starts, so any thread that starts or follows the run reads it without the map copies [summary] makes.
+	 */
+	fun capacityShown(): Int? = capacityShown
+
 	/** The figures so far, with the snapshot-owned ones taken from [snapshot]. */
 	fun summary(snapshot: MetricsSnapshot): RunEndSummary {
 		val ended = runEnded

@@ -178,10 +178,16 @@ class RunEndAccountingTest {
 	}
 
 	@Test
+	fun `no capacity is shown until one is recorded`() {
+		assertThat(accounting.capacityShown()).isNull()
+	}
+
+	@Test
 	fun `capacity shown to the dispatcher is kept next to the topology capacity`() {
 		accounting.recordCapacity(shownToDispatcher = 2, topologyCapacity = 4)
 
 		assertThat(summary().capacityShownToDispatcher).isEqualTo(2)
+		assertThat(accounting.capacityShown()).isEqualTo(2)
 		assertThat(summary().topologyCapacity).isEqualTo(4)
 	}
 

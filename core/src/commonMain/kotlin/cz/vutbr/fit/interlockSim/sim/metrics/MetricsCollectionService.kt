@@ -36,9 +36,12 @@ import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
  * [getSnapshot] is safe to call from the simulation thread; a reader on another
  * thread uses [latestSnapshot] (Issue #673).
  *
+ * It is also the run's [RunRecordSource] (Issue #676): [runRecord] is the finished record of the
+ * run, `null` until the run has ended.
+ *
  * @since Issue #672 (Goal 6 SP1)
  */
-interface MetricsCollectionService {
+interface MetricsCollectionService : RunRecordSource {
 	/**
 	 * Returns a [MetricsSnapshot] reflecting the current accumulated KPIs.
 	 *
@@ -173,4 +176,20 @@ interface MetricsCollectionService {
 	 * @since Issue #1305 (Goal 6 SP7)
 	 */
 	fun latestOpenContentions(): List<OpenContention>
+
+	/**
+	 * The admission cap recorded by [recordCapacity], or `null` when none was. Unlike [runEndSummary],
+	 * safe to read while the run is still going: it is written once at wiring time (Issue #676).
+	 *
+	 * @since Issue #676 (Goal 6 SP5)
+	 */
+	fun capacityShownToDispatcher(): Int? = runEndSummary().capacityShownToDispatcher
+
+	/**
+	 * The record of the finished run (Issue #676), built from [runEndSummary]; `null` while the run
+	 * has not ended. An implementation may keep the value it built at run end instead.
+	 *
+	 * @since Issue #676 (Goal 6 SP5)
+	 */
+	override fun runRecord(): RunRecord? = runEndSummary().toRunRecord()
 }
