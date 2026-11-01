@@ -41,6 +41,18 @@ name stays `cerveny_ujezd` everywhere: the file `cerveny_ujezd.xml`, `NetworkRes
   prefers the timetable's exit when it is an available candidate, which leaves 1 of 3 (the own exit
   was blocked by another train's route at the moment of the pick). Detail and the open part:
   [SP5 — D2 Destination awareness](SP5-target-selection-path.md#d2--destination-awareness).
+- **Unnamed switches print `unknown` block labels (2026-10-31, #1279).** The first GUI run printed
+  `Train #3 enter block unknown` for the throat blocks: `blockLabel` (and `BlockIdentity.stableBlockId`)
+  fall back to `unknown` when a block and both its end separators are unnamed, and all 12 `RailSwitch`
+  elements had no `name`. Both XML copies were named in ladder order, from the station boundary
+  inward, row 31 before row 32: `vW1`–`vW6` (columns 7, 8, 9) and `vE1`–`vE6` (columns 35, 34, 33),
+  after vyhybna's `vA`/`vB`. `CervenyUjezdBlockLabelTest` pins that no TRAIN_EVENTS block label of the
+  seeded run is `unknown`. Routing, seeds and physics are unchanged. Side effect: the dispatcher-agent
+  topology (`StationTopologySerializer.describe`) now lists the 12 switches, and throat blocks get
+  distinct `<end>-<end>` ids instead of collapsing into one `unknown` id. After the reviewer flagged
+  the doubled file, the `:core-test` fixture copy was removed (PR #1287 relink):
+  `NetworkResources.CERVENY_UJEZD_XML` delegates to `BuiltinNetworks.CERVENY_UJEZD_XML`, and tests
+  read the single `:core` copy that `:fast-sim` also embeds.
 
 ## Railway conflicts the scenario exposes
 
