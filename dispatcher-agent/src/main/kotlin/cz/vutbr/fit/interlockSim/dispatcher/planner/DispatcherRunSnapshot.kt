@@ -160,6 +160,10 @@ import kotlinx.serialization.Serializable
  * @property example The registered example the run ran (`shuntingLoop`, `cervenyUjezd`, ...), so the
  *   report's Performance table never pools wall time across networks (Issue #1306); `null` when the
  *   caller did not name one (a GUI run, a file before schema version 12).
+ * @property processWallSeconds Wall seconds of the whole forked run as the `aiSweep` driver timed it,
+ *   from launching the child JVM to its exit: JVM start, network loading, the run and its persistence
+ *   (Issue #1306). The kernel-only wall is [RailwayOutcome.wallSeconds]. Present for an aborted run
+ *   too (a timed-out run carries its timeout); `null` outside a sweep and in files before version 12.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -213,7 +217,8 @@ data class DispatcherRunSnapshot(
 	val circuitBreakerState: LlmCircuitBreaker.State? = null,
 	val circuitBreakerTotalSkips: Long? = null,
 	val circuitBreakerOpenCount: Long? = null,
-	val example: String? = null
+	val example: String? = null,
+	val processWallSeconds: Double? = null
 ) {
 	companion object {
 		/**
@@ -286,7 +291,8 @@ data class DispatcherRunSnapshot(
 		 * - **12** — Issue #1306 (Goal 6 SP8), [railwayOutcome] gained the run record's performance row
 		 *   ([RailwayOutcome.wallSeconds], [RailwayOutcome.simulationSeconds],
 		 *   [RailwayOutcome.realTimeRatio], [RailwayOutcome.routeSearchBudgetExceeded],
-		 *   [RailwayOutcome.reservePathCalls]) and the snapshot gained [example]. Every new field
+		 *   [RailwayOutcome.reservePathCalls]) and the snapshot gained [example] and
+		 *   [processWallSeconds]. Every new field
 		 *   defaults to `null`, so every version 1-11 file still decodes, with them absent; no existing
 		 *   field changed meaning.
 		 */

@@ -49,7 +49,8 @@ internal fun runSnapshot(
 	ruleFallbackTicks: Long = 0L,
 	loggedFatalSimExceptionCount: Long? = null,
 	loggedFatalSimExceptionFirstMessage: String? = null,
-	example: String? = null
+	example: String? = null,
+	processWallSeconds: Double? = null
 ): DispatcherRunSnapshot {
 	val outcomes = TickOutcome.entries.associate { it.name to 0L }.toMutableMap()
 	outcomes[TickOutcome.LLM_ACTIONS.name] = 1L
@@ -98,6 +99,7 @@ internal fun runSnapshot(
 		railwayOutcome = railwayOutcome,
 		loggedFatalSimExceptionCount = loggedFatalSimExceptionCount,
 		loggedFatalSimExceptionFirstMessage = loggedFatalSimExceptionFirstMessage,
-		example = example
+		example = example,
+		processWallSeconds = processWallSeconds
 	)
 }

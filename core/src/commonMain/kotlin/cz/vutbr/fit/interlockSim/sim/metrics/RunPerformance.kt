@@ -28,9 +28,14 @@ import kotlin.math.roundToLong
  *   starts at `0`).
  * @property realTimeRatio [simulationSeconds] divided by [wallSeconds]: how many times faster than
  *   real time the run went (the #591 acceptance figure). `null` when [wallSeconds] is not above `0`.
+ *   Only an unpaced run (headless example, sweep child, native CLI) measures the simulator's speed: in
+ *   a GUI run the wall includes the speed-control pacing and any pauses, so its ratio mostly shows the
+ *   chosen speed factor.
  * @property routeSearchBudgetExceeded Switch-constrained route searches stopped at their node budget
  *   (Issue #1151), one per search, the count of the budget WARN lines of the run.
- * @property reservePathCalls Calls of the public `PathReservationService.reservePath` during the run.
+ * @property reservePathCalls Public route requests of `PathReservationService` during the run, each
+ *   counted once: `reservePath`, `reservePathToAny` and `reservePathToAnyNextSemaphore` (the trains'
+ *   own entry and next-signal requests). The internal per-target attempts are not counted.
  * @since Issue #1306 (Goal 6 SP8)
  */
 data class RunPerformance(

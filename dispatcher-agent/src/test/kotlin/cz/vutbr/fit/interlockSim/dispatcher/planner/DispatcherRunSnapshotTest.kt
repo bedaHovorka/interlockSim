@@ -17,6 +17,7 @@ import assertk.assertions.hasMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
@@ -194,7 +195,7 @@ class DispatcherRunSnapshotTest {
 						routeSearchBudgetExceeded = 0L,
 						reservePathCalls = 32L
 					)
-			).copy(example = "shuntingLoop")
+			).copy(example = ExampleNames.SHUNTING_LOOP, processWallSeconds = 1.8)
 
 		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
 		assertThat(encoded).contains("\"reservePathCalls\": 32")

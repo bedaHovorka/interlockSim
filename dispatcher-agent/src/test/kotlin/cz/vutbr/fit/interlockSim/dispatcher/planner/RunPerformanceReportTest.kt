@@ -33,10 +33,12 @@ class RunPerformanceReportTest {
 		runId: String,
 		example: String?,
 		wallSeconds: Double?,
-		reservePathCalls: Long?
+		reservePathCalls: Long?,
+		processWallSeconds: Double? = wallSeconds?.let { it + 1.0 }
 	) = runSnapshot(
 		runId = runId,
 		example = example,
+		processWallSeconds = processWallSeconds,
 		railwayOutcome =
 			RailwayOutcome(
 				trainsExited = 15L,
@@ -81,15 +83,15 @@ class RunPerformanceReportTest {
 
 		val header = md.substringAfter("### Performance").lines().first { it.startsWith("| Arm ") }
 		assertThat(header).contains(
-			"| Example | Runs | Wall s (median) | Sim s (median) | Ratio (median) | Max concurrent | " +
-				"Budget exceeded | reservePath calls |"
+			"| Example | Runs | Measured runs | Kernel wall s (median) | Whole-run wall s (median) | " +
+				"Sim s (median) | Ratio (median) | Max concurrent | Budget exceeded | reservePath calls |"
 		)
 		val shunting = performanceCells(md, ExampleNames.SHUNTING_LOOP)
 		assertThat(shunting.size, "column count").isEqualTo(PERFORMANCE_COLUMNS)
 		assertThat(shunting.drop(EXAMPLE_COLUMN + 1), "shuntingLoop figures")
-			.isEqualTo(listOf("2", "2.00", "600.0", "400.0", "2", "0", "62"))
+			.isEqualTo(listOf("2", "2", "2.00", "3.00", "600.0", "400.0", "2", "0", "62"))
 		assertThat(performanceCells(md, ExampleNames.CERVENY_UJEZD).drop(EXAMPLE_COLUMN + 1), "cervenyUjezd figures")
-			.isEqualTo(listOf("1", "4.00", "600.0", "150.0", "2", "0", "177"))
+			.isEqualTo(listOf("1", "1", "4.00", "5.00", "600.0", "150.0", "2", "0", "177"))
 	}
 
 	@Test
@@ -106,33 +108,46 @@ class RunPerformanceReportTest {
 	}
 
 	@Test
-	fun `a run written before schema version 12 shows its performance as not measured`() {
+	fun `a run written before schema version 12 shows an unnamed network and its performance as not measured`() {
 		val md = render(listOf(run("v11", example = null, wallSeconds = null, reservePathCalls = null)))
 
-		assertThat(performanceCells(md, "n/a").drop(EXAMPLE_COLUMN + 1))
-			.isEqualTo(listOf("1", "n/a", "n/a", "n/a", "2", "n/a", "n/a"))
-		assertThat(md).contains("Wall-time budget (Goal 1B SP11, reported, never asserted): not measured")
+		assertThat(performanceCells(md, UNNAMED).drop(EXAMPLE_COLUMN + 1))
+			.isEqualTo(listOf("1", "0", "n/a", "n/a", "n/a", "n/a", "2", "n/a", "n/a"))
+		assertThat(md).contains("- Whole run (forked JVM, measured by aiSweep): not measured")
+		assertThat(md).contains("- Kernel only (run record): not measured")
 	}
 
 	@Test
-	fun `the SP11 wall budget is reported against the slowest run and the total`() {
+	fun `the SP11 wall budget is reported for the whole runs and the kernel, aborted runs included`() {
+		val aborted =
+			runSnapshot(runId = "t1", example = ExampleNames.SHUNTING_LOOP, processWallSeconds = 900.0)
+				.copy(endCause = RunEndCause.TIMEOUT_ABORT)
 		val md =
 			render(
 				listOf(
-					run("s1", ExampleNames.SHUNTING_LOOP, wallSeconds = 1.5, reservePathCalls = 30L),
-					run("s2", ExampleNames.SHUNTING_LOOP, wallSeconds = 16.0, reservePathCalls = 30L)
+					run("s1", ExampleNames.SHUNTING_LOOP, wallSeconds = 1.5, reservePathCalls = 30L, processWallSeconds = 2.0),
+					run("s2", ExampleNames.SHUNTING_LOOP, wallSeconds = 16.0, reservePathCalls = 30L, processWallSeconds = 17.0),
+					aborted
 				)
 			)
 
+		assertThat(md).contains("Wall-time budget (Goal 1B SP11, reported, never asserted): 15 s per run, 180 s in total.")
 		assertThat(md).contains(
-			"Wall-time budget (Goal 1B SP11, reported, never asserted): slowest run 16.00 s against 15 s per run " +
-				"(1 of 2 runs over); all runs 17.50 s against 180 s in total"
+			"- Whole run (forked JVM, measured by aiSweep): slowest 900.00 s; 2 of 3 runs over 15 s; total 919.00 s of 180 s"
 		)
+		assertThat(md).contains(
+			"- Kernel only (run record): slowest 16.00 s; 1 of 2 measured runs over 15 s; total 17.50 s of 180 s"
+		)
+		assertThat(md).contains(
+			"- Aborted runs (TIMEOUT_ABORT or CRASH): 1, without a kernel wall; their whole-run wall is in the line above"
+		)
+		assertThat(performanceCells(md, ExampleNames.SHUNTING_LOOP)[EXAMPLE_COLUMN + 2], "measured runs").isEqualTo("2")
 	}
 
 	private companion object {
 		/** Index of the Example cell: after the 11 parameter-identity cells. */
 		const val EXAMPLE_COLUMN = 11
-		const val PERFORMANCE_COLUMNS = 19
+		const val PERFORMANCE_COLUMNS = 21
+		const val UNNAMED = "(unnamed)"
 	}
 }

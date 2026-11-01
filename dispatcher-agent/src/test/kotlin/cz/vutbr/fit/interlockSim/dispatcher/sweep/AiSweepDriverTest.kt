@@ -16,6 +16,7 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.ExampleNames
@@ -178,6 +179,21 @@ class AiSweepDriverTest {
 		assertThat(outputRoot.resolve("no_dispatcher").toFile().isDirectory, "arm directory").isEqualTo(true)
 		// Issue #1306: the per-network Performance table needs the network of an aborted run too.
 		assertThat(snapshot.example, "example").isEqualTo(ExampleNames.MULTI_TRAIN_LOOP)
+		// Issue #1306 fix round 1: a timed-out run keeps its whole-run wall, the run most over budget.
+		assertThat(snapshot.processWallSeconds, "whole-run wall").isNotNull()
+	}
+
+	/**
+	 * Issue #1306 fix round 1: the driver times every forked run and writes the whole-run wall (JVM
+	 * start, network loading, run, persistence) into the JSON the child wrote. Presence only.
+	 */
+	@Test
+	fun `a completed run carries the whole-run wall the driver measured`() {
+		driverWith(RecordingRunner()).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val snapshot = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot).single()
+		assertThat(snapshot.endCause).isEqualTo(RunEndCause.NATURAL_COMPLETION)
+		assertThat(snapshot.processWallSeconds, "whole-run wall").isNotNull()
 	}
 
 	@Test
@@ -328,6 +344,41 @@ class AiSweepDriverTest {
 		assertThat(written).hasSize(1)
 		assertThat(written.single().loggedFatalSimExceptionCount).isEqualTo(1L)
 		assertThat(written.single().loggedFatalSimExceptionFirstMessage).isEqualTo(realLine)
+	}
+
+	/**
+	 * Issue #1306 fix round 1: an exit-1 run (Main's TERMINATED_EARLY, which wrote its own JSON) gets
+	 * its whole-run wall, and its FATAL fields stay exactly as the child wrote them, as before.
+	 */
+	@Test
+	@DisplayName("an exit-1 run that wrote its JSON gets its whole-run wall and keeps its FATAL fields")
+	fun terminatedEarlyRunGetsItsWholeRunWallOnly() {
+		val realLine =
+			PathSeparatorChangeException(
+				"switch doesn't join this segments",
+				mockk<PathSeparator>(relaxed = true)
+			).toString()
+		val runner =
+			SweepProcessRunner { request ->
+				Files.writeString(request.logFile, "$realLine\n")
+				val runId = request.systemProperties.getValue("interlocksim.dispatcher.runId")
+				DefaultRunSnapshotStore(outputRoot).write(
+					abortedSnapshot(
+						runId,
+						DispatcherArm.LLM_TOOL_CALLING,
+						SweepAxes().cells().single().runParameters(),
+						RunEndCause.TERMINATED_EARLY
+					)
+				)
+				SweepProcessResult(exitCode = 1, timedOut = false)
+			}
+
+		driverWith(runner).run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot).single()
+		assertThat(written.endCause).isEqualTo(RunEndCause.TERMINATED_EARLY)
+		assertThat(written.processWallSeconds, "whole-run wall").isNotNull()
+		assertThat(written.loggedFatalSimExceptionCount, "FATAL fields untouched").isNull()
 	}
 
 	@Test

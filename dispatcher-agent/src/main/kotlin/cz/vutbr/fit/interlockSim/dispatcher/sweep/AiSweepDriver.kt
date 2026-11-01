@@ -170,6 +170,9 @@ class AiSweepDriver(
 				logFile = logFile
 			)
 
+		// Issue #1306: the whole-run wall (JVM start, network loading, run, persistence), next to the
+		// kernel-only wall the child records itself.
+		val launchedAt = System.nanoTime()
 		val result =
 			try {
 				processRunner.run(request)
@@ -177,6 +180,7 @@ class AiSweepDriver(
 				logger.error(e) { "[aiSweep] could not launch ${run.runId}" }
 				SweepProcessResult(exitCode = null, timedOut = false)
 			}
+		val processWallSeconds = (System.nanoTime() - launchedAt) / NANOS_PER_SECOND.toDouble()
 
 		// Scanned once the child is done, regardless of how it ended: a timeout or a crash can
 		// still carry FATAL evidence in its log, and a run that exits 0 needs it patched into the
@@ -189,7 +193,7 @@ class AiSweepDriver(
 				"[aiSweep] ${run.runId} exceeded its ${timeoutSeconds}s budget and was killed — " +
 					"recording TIMEOUT_ABORT"
 			}
-			writeAbortSnapshot(run, RunEndCause.TIMEOUT_ABORT, fatalScan)
+			writeAbortSnapshot(run, RunEndCause.TIMEOUT_ABORT, fatalScan, processWallSeconds)
 			return SweepRunOutcome.ABORTED
 		}
 
@@ -198,7 +202,10 @@ class AiSweepDriver(
 			// Exit 1 is Main's TERMINATED_EARLY, which the run itself already persisted as
 			// TERMINATED_EARLY (Issue #909); anything else means the child died before it could record anything.
 			if (run.runId !in existingRunIds(outputRoot)) {
-				writeAbortSnapshot(run, RunEndCause.CRASH, fatalScan)
+				writeAbortSnapshot(run, RunEndCause.CRASH, fatalScan, processWallSeconds)
+			} else {
+				// The FATAL scan stays off for an exit-1 run as before; only its whole-run wall is added.
+				patchRunFile(outputRoot, run.runId, fatalScan = null, processWallSeconds = processWallSeconds)
 			}
 			return SweepRunOutcome.FAILED
 		}
@@ -208,11 +215,11 @@ class AiSweepDriver(
 			// dispatcher, or persistence failed. Counting it as completed would inflate the
 			// denominator with a run that has no measurement behind it.
 			logger.error { "[aiSweep] ${run.runId} exited 0 but wrote no run JSON — recording CRASH" }
-			writeAbortSnapshot(run, RunEndCause.CRASH, fatalScan)
+			writeAbortSnapshot(run, RunEndCause.CRASH, fatalScan, processWallSeconds)
 			return SweepRunOutcome.FAILED
 		}
 
-		patchFatalExceptionInfo(outputRoot, run.runId, fatalScan)
+		patchRunFile(outputRoot, run.runId, fatalScan, processWallSeconds)
 		return SweepRunOutcome.COMPLETED
 	}
 
@@ -244,11 +251,13 @@ class AiSweepDriver(
 	private fun writeAbortSnapshot(
 		run: SweepRun,
 		cause: RunEndCause,
-		fatalScan: FatalExceptionScanResult
+		fatalScan: FatalExceptionScanResult,
+		processWallSeconds: Double
 	) {
 		try {
 			store.write(
 				abortedSnapshot(run.runId, run.cell.arm, run.cell.runParameters(), cause, fatalScan, run.cell.example)
+					.copy(processWallSeconds = processWallSeconds)
 			)
 		} catch (e: IOException) {
 			logger.error(e) { "[aiSweep] could not record the aborted run ${run.runId}" }
@@ -256,8 +265,9 @@ class AiSweepDriver(
 	}
 
 	/**
-	 * Finds the run JSON the child already wrote for [runId] and, when [fatalScan] measured
-	 * something, rewrites it in place to carry the finding.
+	 * Finds the run JSON the child already wrote for [runId] and rewrites it in place to carry what
+	 * the driver measured from outside: the whole-run wall [processWallSeconds] (Issue #1306), and the
+	 * [fatalScan] finding when the scan measured something.
 	 *
 	 * ## Why "in place" and not [RunSnapshotStore.write]
 	 *
@@ -268,33 +278,37 @@ class AiSweepDriver(
 	 * file the child wrote, atomically (temp file + [StandardCopyOption.ATOMIC_MOVE], the same
 	 * pattern `DefaultRunSnapshotStore.write` uses), keeps the one-file-per-run invariant intact.
 	 *
-	 * Does nothing when [fatalScan] itself is absent (`count == null`): [DispatcherRunSnapshot]'s
-	 * own fields already default to `null`, so there is nothing to add, and leaving the pristine
-	 * file alone is strictly simpler — and strictly safer — than writing back a value it already
-	 * has.
+	 * The fatal-exception fields are left as the child wrote them when [fatalScan] is `null` (not
+	 * applied to this run) or itself absent (`count == null`): [DispatcherRunSnapshot]'s own fields
+	 * already default to `null`, so there is nothing to add.
 	 *
 	 * Best-effort like every other post-hoc write in this class: a failure here logs a WARN and
-	 * leaves the run JSON as the child wrote it (fatal-exception fields absent), it never fails
-	 * the run or the sweep.
+	 * leaves the run JSON as the child wrote it, it never fails the run or the sweep.
 	 */
-	private fun patchFatalExceptionInfo(
+	private fun patchRunFile(
 		outputRoot: Path,
 		runId: String,
-		fatalScan: FatalExceptionScanResult
+		fatalScan: FatalExceptionScanResult?,
+		processWallSeconds: Double
 	) {
-		if (fatalScan.count == null) return
+		val fatalCount = fatalScan?.count
 		try {
 			val file = findRunFile(outputRoot, runId)
 			if (file == null) {
-				logger.warn { "[aiSweep] no run file found for $runId — its FATAL-scan result was not recorded" }
+				logger.warn { "[aiSweep] no run file found for $runId — its whole-run wall and FATAL scan were not recorded" }
 				return
 			}
 			val original = json.decodeFromString(DispatcherRunSnapshot.serializer(), Files.readString(file))
+			val withWall = original.copy(processWallSeconds = processWallSeconds)
 			val patched =
-				original.copy(
-					loggedFatalSimExceptionCount = fatalScan.count,
-					loggedFatalSimExceptionFirstMessage = fatalScan.firstMessage
-				)
+				if (fatalCount == null) {
+					withWall
+				} else {
+					withWall.copy(
+						loggedFatalSimExceptionCount = fatalCount,
+						loggedFatalSimExceptionFirstMessage = fatalScan.firstMessage
+					)
+				}
 			val tmp = Files.createTempFile(file.parent, "run-patch-", ".json.tmp")
 			try {
 				Files.writeString(tmp, json.encodeToString(DispatcherRunSnapshot.serializer(), patched))
@@ -303,16 +317,16 @@ class AiSweepDriver(
 				Files.deleteIfExists(tmp)
 				throw e
 			}
-			if (fatalScan.count > 0) {
+			if (fatalCount != null && fatalCount > 0) {
 				logger.error {
-					"[aiSweep] $runId recorded ${fatalScan.count} FATAL SimulationException occurrence(s) — " +
+					"[aiSweep] $runId recorded $fatalCount FATAL SimulationException occurrence(s) — " +
 						"first: ${fatalScan.firstMessage}"
 				}
 			}
 		} catch (e: IOException) {
-			logger.warn(e) { "[aiSweep] could not patch $runId's run JSON with its FATAL-scan result" }
+			logger.warn(e) { "[aiSweep] could not patch $runId's run JSON with its whole-run wall and FATAL scan" }
 		} catch (e: SerializationException) {
-			logger.warn(e) { "[aiSweep] could not patch $runId's run JSON with its FATAL-scan result — parse error" }
+			logger.warn(e) { "[aiSweep] could not patch $runId's run JSON with its whole-run wall and FATAL scan — parse error" }
 		}
 	}
 
