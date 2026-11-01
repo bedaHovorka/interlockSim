@@ -67,7 +67,10 @@ class FakeMetricsCollectionService(
 
 	override fun latestSnapshot(): MetricsSnapshot = getSnapshot()
 
-	override fun history(): MetricsHistory = MetricsHistory()
+	/** One empty buffer shared by every read, like the real service's single buffer. */
+	private val emptyHistory = MetricsHistory()
+
+	override fun history(): MetricsHistory = emptyHistory
 
 	override fun journeys(): List<TrainJourneyRecord> = emptyList()
 }

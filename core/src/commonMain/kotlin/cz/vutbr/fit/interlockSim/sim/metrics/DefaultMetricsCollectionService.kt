@@ -54,12 +54,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Thread safety
  *
- * This class is **not thread-safe**, with one exception. It is intended to be driven
- * solely by the kDisco event stream — i.e. the single-threaded `emitCustom` callbacks
- * that fire inside `runBlocking { context.run() }`. [getSnapshot], [history] and
- * [journeys] are meant to be read on that thread or after `context.run()` completes.
- * The exception is [latestSnapshot]: an immutable snapshot behind a volatile reference,
- * safe to read from any thread while events are being processed.
+ * Not thread-safe, with one exception: [latestSnapshot] is safe from any thread. The service is
+ * driven solely by the kDisco event stream — [getSnapshot], [history] and [journeys] are read
+ * there or after the run; the why-and-how of that one exception lives on
+ * [MetricsCollectionService.latestSnapshot].
  *
  * ## Constructor
  *

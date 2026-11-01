@@ -21,7 +21,6 @@ import cz.vutbr.fit.interlockSim.sim.metrics.TrainJourneyRecord
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
-import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -51,11 +50,7 @@ class TrainJourneyEventIntegrationTest : KoinTestBase() {
 	)
 
 	private fun newContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { stream ->
-			Util.assertInstanceOf<DefaultSimulationContext>(
-				getKoin().get<SimulationContextFactory>().createContext(stream)
-			)
-		}
+		TestFixtures.loadShuntingSimulationContext(getKoin().get<SimulationContextFactory>())
 
 	/** One `ShuntingLoop` run; [beforeRun] may subscribe after the metrics service has subscribed. */
 	private fun runOnce(beforeRun: (DefaultSimulationContext) -> Unit): RunOutcome {
@@ -101,12 +96,7 @@ class TrainJourneyEventIntegrationTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun `every train reports queued, admitted and exited in that order despite a failing subscriber`() {
-		val context =
-			TestFixtures.loadShuntingXml().use { stream ->
-				Util.assertInstanceOf<DefaultSimulationContext>(
-					getKoin().get<SimulationContextFactory>().createContext(stream)
-				)
-			}
+		val context = newContext()
 		val loop = prepareShuntingLoop(context, END_TIME)
 		var failingCalls = 0
 		context.onTrainJourneyEvent {

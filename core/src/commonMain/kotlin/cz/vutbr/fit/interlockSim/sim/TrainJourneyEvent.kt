@@ -172,10 +172,7 @@ internal fun trainJourneyRecipient(listener: (TrainJourneyEvent) -> Unit): (Simu
  * Subscribe to [TrainJourneyEvent]s (Issue #673). Sugar over [SimulationEnvironment.onSimulationEvent],
  * with its contract: register before `run()`, delivered synchronously on the simulation thread.
  *
- * Each subscriber registered here is isolated: a [listener] that throws is logged at WARN and the
- * event still reaches the subscribers after it, so a faulty recorder never breaks the train process
- * that emitted the step — except kDisco's process control ([CancellationException] and kDisco's
- * `ProcessTerminatedException`), which passes through, matching [emitTrainJourneyEvent].
+ * Each subscriber registered here is isolated — the full contract is on [trainJourneyGuard].
  *
  * @since Issue #673 (Goal 6 SP2)
  */

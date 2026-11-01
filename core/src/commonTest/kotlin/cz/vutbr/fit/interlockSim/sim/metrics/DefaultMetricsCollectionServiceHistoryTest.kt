@@ -16,18 +16,13 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isZero
 import assertk.assertions.single
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
+import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
-import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
 import kotlin.test.Test
 
 /**
@@ -38,29 +33,14 @@ import kotlin.test.Test
  *
  * @since Issue #673 (Goal 6 SP2)
  */
-class DefaultMetricsCollectionServiceHistoryTest {
-	private var context: DefaultSimulationContext? = null
-
-	@BeforeTest
-	fun setUpKoin() {
-		startKoin { modules(commonCoreTestModule) }
-	}
-
-	@AfterTest
-	fun tearDown() {
-		context?.close()
-		context = null
-		stopKoin()
-	}
-
+class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 	private fun realBlock(): DynamicTrackBlock {
-		val ctx =
+		val context =
 			CommonTestFixtures.parseSimulationContext(
 				NetworkResources.LINEAR_TRACK_XML,
 				DefaultSimulationProcessFactory()
-			)
-		context = ctx
-		return ctx.getGraph().values().first()
+			).tracked()
+		return context.getGraph().values().first()
 	}
 
 	@Test

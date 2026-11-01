@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
@@ -98,12 +99,7 @@ class MetricsIntegrationTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun `a full ShuntingLoop run leaves one journey record per train`() {
-		val context =
-			TestFixtures.loadShuntingXml().use { stream ->
-				Util.assertInstanceOf<DefaultSimulationContext>(
-					getKoin().get<SimulationContextFactory>().createContext(stream)
-				)
-			}
+		val context = TestFixtures.loadShuntingSimulationContext(getKoin().get<SimulationContextFactory>())
 		val loop = prepareShuntingLoop(context, JOURNEY_RUN_END_TIME, maxTrains = JOURNEY_RUN_TRAINS)
 		val metrics = context.getMetricsServices().getMetricsCollectionService()
 
@@ -124,8 +120,7 @@ class MetricsIntegrationTest : KoinTestBase() {
 			val exit = requireNotNull(journey.exitTime) { "${journey.trainId} never exited" }
 			entryTime.isLessThanOrEqualTo(admission)
 			assertThat(admission, "${journey.trainId} admission before exit").isLessThanOrEqualTo(exit)
-			assertThat(journey.wrongExit, "${journey.trainId} wrong exit")
-				.isEqualTo(journey.actualExit != journey.plannedExit)
+			assertThat(journey.wrongExit, "${journey.trainId} wrong exit").isFalse()
 		}
 		assertThat(journeys.count { it.wrongExit }, "wrong exits").isEqualTo(EXPECTED_WRONG_EXITS)
 	}

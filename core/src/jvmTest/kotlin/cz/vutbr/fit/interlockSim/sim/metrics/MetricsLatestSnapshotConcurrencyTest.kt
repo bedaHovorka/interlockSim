@@ -13,12 +13,10 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
-import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -67,19 +65,13 @@ class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun `a reader thread never sees a torn latest snapshot while a ShuntingLoop runs`() {
-		val context =
-			TestFixtures.loadShuntingXml().use { stream ->
-				Util.assertInstanceOf<DefaultSimulationContext>(
-					getKoin().get<SimulationContextFactory>().createContext(stream)
-				)
-			}
+		val context = TestFixtures.loadShuntingSimulationContext(getKoin().get<SimulationContextFactory>())
 		prepareShuntingLoop(context, END_TIME)
 		val metrics = context.getMetricsServices().getMetricsCollectionService()
 
 		val handover = ArrayBlockingQueue<MetricsSnapshot>(1)
 		val handoverRead = ArrayBlockingQueue<MetricsSnapshot>(1)
 		val handshakesDone = AtomicInteger(0)
-		val handoverTimedOut = AtomicBoolean(false)
 		val violations = ConcurrentLinkedQueue<String>()
 		val runFinished = AtomicBoolean(false)
 
@@ -88,7 +80,7 @@ class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 				handover.put(published)
 				val seen = handoverRead.poll(HANDOVER_TIMEOUT_SECONDS, TimeUnit.SECONDS)
 				when {
-					seen == null -> handoverTimedOut.set(true)
+					seen == null -> violations += "handover timed out while reading $published"
 					seen !== published -> violations += "handover read $seen, published $published"
 				}
 				handshakesDone.incrementAndGet()
@@ -121,7 +113,6 @@ class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 		}
 
 		assertThat(reader.isAlive, "reader still running").isFalse()
-		assertThat(handoverTimedOut.get(), "a handover timed out").isFalse()
 		assertThat(handshakesDone.get(), "handovers").isEqualTo(HANDSHAKES)
 		assertThat(violations.toList()).isEmpty()
 		assertThat(metrics.latestSnapshot(), "after the run").isEqualTo(metrics.getSnapshot())
