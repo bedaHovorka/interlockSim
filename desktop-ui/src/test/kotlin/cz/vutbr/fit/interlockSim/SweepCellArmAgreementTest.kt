@@ -46,6 +46,8 @@ class SweepCellArmAgreementTest : KoinTestBase() {
 			ExampleNames.SHUNTING_LOOP_AI,
 			ExampleNames.SHUNTING_LOOP_SYNC,
 			ExampleNames.CERVENY_UJEZD,
+			ExampleNames.CERVENY_UJEZD_AI,
+			ExampleNames.CERVENY_UJEZD_SYNC,
 			ExampleNames.MULTI_TRAIN_LOOP,
 			ExampleNames.THREE_TRAIN_LOOP
 		]
@@ -75,6 +77,8 @@ class SweepCellArmAgreementTest : KoinTestBase() {
 				ExampleNames.SHUNTING_LOOP_AI,
 				ExampleNames.SHUNTING_LOOP_SYNC,
 				ExampleNames.CERVENY_UJEZD,
+				ExampleNames.CERVENY_UJEZD_AI,
+				ExampleNames.CERVENY_UJEZD_SYNC,
 				ExampleNames.MULTI_TRAIN_LOOP,
 				ExampleNames.THREE_TRAIN_LOOP
 			)
