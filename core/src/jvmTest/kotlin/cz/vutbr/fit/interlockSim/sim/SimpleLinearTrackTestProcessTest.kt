@@ -15,6 +15,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
+import assertk.assertions.isNotNull
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.assertThrows
 import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
@@ -86,6 +88,31 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		// Strong motion proof: train advanced along the reserved path.
 		assertThat(run.train.totalDistance).isGreaterThan(0.0)
 		assertThat(run.process.getBlockTransitions(run.train.name)).isGreaterThan(0)
+	}
+
+	/** Issue #1304: stopping at the end time is announced, so the run end is not read as an early stop. */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `run reaching the end time is reported as ended by the end time`() {
+		val ctx = loadLinearContext()
+		val ended = mutableListOf<RunEnded>()
+		ctx.onRunEnded { ended.add(it) }
+
+		runSimpleLinearTrackScenario(ctx, endTime = 5L, trainSpecs = emptyList())
+
+		assertThat(ended.map { it.endTimeReached }).isEqualTo(listOf(true))
+	}
+
+	/** Issue #1304: a run-end subscriber throwing an Error still propagates, but the cleanup is not skipped. */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `an Error from a run-end subscriber propagates and the run cleanup still happens`() {
+		val ctx = loadLinearContext()
+		ctx.onRunEnded { throw AssertionError("run-end failure injected by the test") }
+
+		assertThrows<AssertionError> { runSimpleLinearTrackScenario(ctx, endTime = 5L, trainSpecs = emptyList()) }
+
+		assertThat(ctx.lastRunEndTime).isNotNull()
 	}
 
 	/** Scenario 2: train halts at semaphore when path is not reserved. */

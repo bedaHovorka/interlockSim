@@ -11,6 +11,8 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
@@ -21,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -130,6 +133,17 @@ class MidJourneyNoPathErrorStopTest : DispatcherKoinTestBase() {
 		assertThat(error, name = "captured errorStop throwable").isNotNull()
 		assertThat(error!!.message ?: "", name = "errorStop message")
 			.contains("navigation reports no usable path")
+
+		// (3) Issue #1304: the only way an admitted train's front ends without an Exited event is an
+		// errorStop branch of Train.Site.actions (`if (stopped) return`), so such a train never makes
+		// a run that reached its end time look like a cutoff: the run is classified as ended early,
+		// with the train counted unfinished.
+		val summary = context.getMetricsServices().getMetricsCollectionService().runEndSummary()
+		assertThat(summary.trainsExited, name = "exits the metrics counted").isEqualTo(0)
+		assertThat(summary.unfinishedJourneys, name = "admitted train without an exit").isEqualTo(1)
+		assertThat(summary.endTimeReached, name = "end time reached").isFalse()
+		assertThat(summary.classification, name = "classification")
+			.isEqualTo(RunEndClassification.TERMINATED_EARLY)
 	}
 
 	private companion object {

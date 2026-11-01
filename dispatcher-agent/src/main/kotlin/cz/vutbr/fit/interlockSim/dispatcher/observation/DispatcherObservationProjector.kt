@@ -73,8 +73,6 @@ import cz.vutbr.fit.interlockSim.util.cellsOfType
  *   from `:dispatcher-agent` this way is new coupling accepted in #824's body as a documented
  *   debt a future `NetworkPerceptionPort.allSwitchPositions()` would repay — currently blocked by
  *   #822 constraint C10 (zero `:core` changes).
- * @param capacity Station capacity published as [DispatcherObservation.capacity]. Defaults to
- *   [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS].
  *
  * @since Issue #824 (SP2c.1 — Goal 10 autonomous dispatcher control-loop redesign)
  */
@@ -83,7 +81,6 @@ class DispatcherObservationProjector(
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort,
 	private val pathReservationRegistry: PathReservationRegistry,
 	private val environment: SimulationEnvironment,
-	private val capacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
 	/**
 	 * SP2c.17 (#840): Optional outcome feed drained on each [captureOnSimThread] call.
 	 *
@@ -93,6 +90,16 @@ class DispatcherObservationProjector(
 	 */
 	private val outcomeFeed: AppliedOutcomeFeed? = null
 ) : DispatcherObservationSource {
+	/**
+	 * Station capacity published as [DispatcherObservation.capacity] -- the `capacity:` line the
+	 * prompt shows and the cap [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator] checks. Set by
+	 * the wiring layer, which knows the station only after this projector is built (Issues #1303 and
+	 * #1304); the next capture publishes it. Defaults to
+	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS].
+	 */
+	@Volatile
+	var capacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
+
 	@Volatile
 	private var published: DispatcherObservation = DispatcherObservation.EMPTY
 

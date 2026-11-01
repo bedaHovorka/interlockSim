@@ -82,6 +82,10 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 
 		assertThat(context.getRoutingServices().getPathReservationService().getReservedBlocks(PHANTOM)).isEmpty()
 		assertThat(expiryOf(context).expiredHoldingCount).isEqualTo(1)
+		// Issue #1304: the metrics count the same expiry from its event, not from the counter.
+		val summary = context.getMetricsServices().getMetricsCollectionService().runEndSummary()
+		assertThat(summary.expiredHoldingCount, name = "expiries the metrics counted").isEqualTo(1)
+		assertThat(summary.expiredTailCount, name = "tail expiries the metrics counted").isEqualTo(0)
 	}
 
 	@Test

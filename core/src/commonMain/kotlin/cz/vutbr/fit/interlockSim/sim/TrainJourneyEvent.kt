@@ -24,8 +24,9 @@ import kotlin.coroutines.cancellation.CancellationException
  * only record: it runs inside the train or loop process that emitted the step.
  *
  * InOuts are carried by name. A scenario may report [Admitted] and [Exited] without a prior
- * [Queued]: only `ShuntingLoop` emits [Queued] today, while [Admitted] and [Exited] come from
- * [Train] itself and therefore fire for the trains of every scenario.
+ * [Queued]: only `ShuntingLoop` and (since Issue #1304) `MultiTrainLoop` emit [Queued], while
+ * [Admitted] and [Exited] come from [Train] itself and therefore fire for the trains of every
+ * scenario.
  *
  * @since Issue #673 (Goal 6 SP2)
  */
@@ -99,31 +100,38 @@ private const val KDISCO_PROCESS_TERMINATED = "cz.ksimulantenbande.kdisco.Proces
  *
  * @since Issue #673 (Goal 6 SP2)
  */
-private fun rethrowProcessControl(e: Exception) {
+internal fun rethrowProcessControl(e: Exception) {
 	if (e is CancellationException || e::class.qualifiedName == KDISCO_PROCESS_TERMINATED) throw e
 }
 
 /**
- * Send [event] on the kDisco event bus with the top-level kDisco `emitCustom`, a no-op outside a
- * running simulation.
+ * Send [event] on the kDisco event bus through [emitCustomGuarded]: announcing a journey step never
+ * changes the run.
+ */
+internal fun emitTrainJourneyEvent(event: TrainJourneyEvent) = emitCustomGuarded(event)
+
+/**
+ * Send [payload] on the kDisco event bus with the top-level kDisco `emitCustom`, a no-op outside a
+ * running simulation. Shared by every record-only announcement (journey steps of Issue #673, the
+ * run-end accounting events of Issue #1304).
  *
- * Guarded so that announcing a journey step never changes the run. kDisco's bus calls its raw
- * listeners with no guard of its own, so a raw [SimulationEnvironment.onSimulationEvent] subscriber
- * that throws would otherwise end the train or generator process that emitted the step — and before
- * Issue #673 nothing was emitted there. Such a failure is logged at WARN and the process carries on;
- * the raw subscribers after the failing one miss this step (kDisco stops its delivery loop).
+ * Guarded so that announcing never changes the run. kDisco's bus calls its raw listeners with no
+ * guard of its own, so a raw [SimulationEnvironment.onSimulationEvent] subscriber that throws would
+ * otherwise end the process that emitted the payload -- and before Issue #673 nothing was emitted
+ * there. Such a failure is logged at WARN and the process carries on; the raw subscribers after the
+ * failing one miss this payload (kDisco stops its delivery loop).
  *
  * kDisco's process control is not swallowed: [rethrowProcessControl] rethrows a
  * `CancellationException` and kDisco's `ProcessTerminatedException`, and an [Error] is never caught
  * (ruling of the traffic-simulation-expert, 2026-10-31, option A).
  */
-internal fun emitTrainJourneyEvent(event: TrainJourneyEvent) {
+internal fun emitCustomGuarded(payload: Any) {
 	try {
-		emitCustom(event)
+		emitCustom(payload)
 	} catch (e: Exception) {
 		rethrowProcessControl(e)
 		logger.warn(e) {
-			"A raw simulation event listener failed on $event; the emitting process continues and the " +
+			"A raw simulation event listener failed on $payload; the emitting process continues and the " +
 				"listeners after the failing one miss this step (Issue #673)"
 		}
 	}

@@ -139,22 +139,27 @@ class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 	}
 
 	@Test
-	fun `with JOURNEYS disabled the service registers no simulation-event listener`() {
-		val env = mock<SimulationEnvironment>(MockMode.autofill)
+	fun `enabling JOURNEYS adds exactly one simulation-event listener`() {
+		val disabledEnv = mock<SimulationEnvironment>(MockMode.autofill)
+		val enabledEnv = mock<SimulationEnvironment>(MockMode.autofill)
 
-		DefaultMetricsCollectionService(env = env, config = MetricsConfig(setOf(MetricGroup.HISTORY)))
+		DefaultMetricsCollectionService(env = disabledEnv, config = MetricsConfig(setOf(MetricGroup.HISTORY)))
+		DefaultMetricsCollectionService(env = enabledEnv, config = MetricsConfig.ALL)
 
-		verify(exactly(0)) { env.onSimulationEvent(any()) }
-		verify(exactly(1)) { env.onBlockEvent(any()) }
+		// The always-on run-end accounting (CORE) subscribes by itself, so compare the two runs
+		// instead of expecting zero: only the journey recorder's own listener may differ.
+		val withoutJourneys = countSimulationEventListeners(disabledEnv)
+		assertThat(countSimulationEventListeners(enabledEnv)).isEqualTo(withoutJourneys + 1)
 	}
 
-	@Test
-	fun `with JOURNEYS enabled the service registers one simulation-event listener`() {
-		val env = mock<SimulationEnvironment>(MockMode.autofill)
-
-		DefaultMetricsCollectionService(env = env, config = MetricsConfig.ALL)
-
-		verify(exactly(1)) { env.onSimulationEvent(any()) }
+	private fun countSimulationEventListeners(env: SimulationEnvironment): Int {
+		var count = 0
+		repeat(MAX_LISTENERS) { n ->
+			val registered =
+				runCatching { verify(exactly(n + 1)) { env.onSimulationEvent(any()) } }.isSuccess
+			if (registered) count = n + 1
+		}
+		return count
 	}
 
 	@Test
@@ -202,5 +207,9 @@ class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
 
 		assertThat(service.history().all()).isEmpty()
+	}
+
+	private companion object {
+		const val MAX_LISTENERS = 16
 	}
 }
