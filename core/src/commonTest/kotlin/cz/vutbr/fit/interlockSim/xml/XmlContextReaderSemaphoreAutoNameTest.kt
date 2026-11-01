@@ -164,6 +164,44 @@ class XmlContextReaderSemaphoreAutoNameTest {
 	}
 
 	@Test
+	fun aTypedGeneratedFormNameWithNoSharerIsOmittedOnSaveAndRegeneratedOnReload() {
+		// Issue #1332, owner decision 2026-11-01 (keep the writer-side inference): the writer cannot
+		// tell a typed "S_15_10" at (15,10) from a generated one. With no other node writing that name,
+		// the saved XML has no name attribute for it, and the reload regenerates the identical name,
+		// so the round trip is stable as long as the GeneratedSemaphoreName format stays frozen.
+		val typed =
+			NetworkResources.SEMAPHORE_BASIC_XML.replace(
+				SEMAPHORE_AT_15_10,
+				SEMAPHORE_AT_15_10.replace("/>", " name=\"S_15_10\"/>")
+			)
+		assertThat(typed.contains("name=\"S_15_10\""), name = "the input XML types the name").isTrue()
+
+		val saved = reader.parse(typed).use { writer.generate(it) }
+
+		assertThat(saved.contains("S_15_10"), name = "saved XML writes the typed generated-form name").isFalse()
+		val reloaded = reader.parse(saved).use { semaphoreAt(it, Point(15, 10)).getName() }
+		assertThat(reloaded).isEqualTo("S_15_10")
+	}
+
+	@Test
+	fun aGeneratedFormNameOfAnotherPositionIsWrittenExplicitly() {
+		// A semaphore that keeps the generated name of the position it came from ("S_14_10", as if it
+		// was moved from (14,10) to (15,10)) does not match its own position's generated name, so the
+		// writer writes it, and the reload keeps it instead of regenerating "S_15_10" (Issue #1332).
+		val moved =
+			NetworkResources.SEMAPHORE_BASIC_XML.replace(
+				SEMAPHORE_AT_15_10,
+				SEMAPHORE_AT_15_10.replace("/>", " name=\"S_14_10\"/>")
+			)
+
+		val saved = reader.parse(moved).use { writer.generate(it) }
+
+		assertThat(saved).contains("name=\"S_14_10\"")
+		val reloaded = reader.parse(saved).use { semaphoreAt(it, Point(15, 10)).getName() }
+		assertThat(reloaded).isEqualTo("S_14_10")
+	}
+
+	@Test
 	fun generatedNameClashingWithAnExplicitNameFailsTheLoadNamingTheCause() {
 		val xml =
 			NetworkResources.SEMAPHORE_BASIC_XML.replace(
@@ -216,6 +254,9 @@ class XmlContextReaderSemaphoreAutoNameTest {
 	private companion object {
 		const val PRAHA_SEMAPHORE_COUNT = 37
 		const val PRAHA_NAMED_COUNT = 19
+
+		/** The one unnamed semaphore element of `semaphore-basic.xml`. */
+		const val SEMAPHORE_AT_15_10 = "<RailSemaphore X=\"15\" Y=\"10\" SpatialType=\"HORIZONTAL\" orientation=\"true\"/>"
 
 		private val SEMAPHORE_TAG = Regex("<RailSemaphore\\b[^>]*>")
 		private val X_ATTR = Regex("\\bX=\"(\\d+)\"")
