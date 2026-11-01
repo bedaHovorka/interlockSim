@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.fastsim
 
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.TextReporter
@@ -246,12 +247,12 @@ private fun runExample(
 	ctx.addPropertyChangeListener(reporter)
 	try {
 		ctx.run()
-		reporter.printSummary()
+		printRunSummary(reporter, ctx)
 		return 0
 	} catch (
 		@Suppress("TooGenericExceptionCaught") e: Exception
 	) {
-		return handleInterruptedRun(reporter, e)
+		return handleInterruptedRun(reporter, ctx, e)
 	} finally {
 		ctx.close()
 	}
@@ -292,12 +293,12 @@ private fun runSim(
 		wireSynchronousDispatcher(ctx, loop)
 		ctx.setMainProcess(loop)
 		ctx.run()
-		reporter.printSummary()
+		printRunSummary(reporter, ctx)
 		return 0
 	} catch (
 		@Suppress("TooGenericExceptionCaught") e: Exception
 	) {
-		return handleInterruptedRun(reporter, e)
+		return handleInterruptedRun(reporter, ctx, e)
 	} finally {
 		ctx.close()
 	}
@@ -310,16 +311,41 @@ private fun runSim(
  */
 private fun handleInterruptedRun(
 	reporter: TextReporter,
+	env: SimulationEnvironment,
 	e: Exception
 ): Int {
 	if (isInterrupted()) {
 		// Safe: TextReporter captures data at PropertyChangeEvent time, not at print time,
-		// so printSummary() does not depend on live context state.
-		reporter.printSummary()
+		// so printSummary() does not depend on live context state. The run record is filled in
+		// run()'s own cleanup, so it is there unless the run never started (Issue #676).
+		printRunSummary(reporter, env)
 		return SIGINT_EXIT_CODE
 	}
 	throw e
 }
+
+/** Prints the reporter's summary line, then the run record line (Issue #676). */
+private fun printRunSummary(
+	reporter: TextReporter,
+	env: SimulationEnvironment
+) {
+	reporter.printSummary()
+	println(runRecordLine(env))
+}
+
+/**
+ * The run record of [env] as the CLI prints it: `RunRecord.summaryLine`, or a line saying the record
+ * is not available while the run has not ended.
+ *
+ * @since Issue #676 (Goal 6 SP5)
+ */
+internal fun runRecordLine(env: SimulationEnvironment): String =
+	env
+		.getMetricsServices()
+		.getRunRecordSource()
+		.runRecord()
+		?.summaryLine()
+		?: "Run record: not available, the run has not ended"
 
 private fun printUsage() {
 	eprintln(
