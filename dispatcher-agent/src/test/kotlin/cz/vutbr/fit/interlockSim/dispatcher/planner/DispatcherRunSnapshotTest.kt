@@ -177,8 +177,28 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 11`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_RUN_RECORD)
+	fun `current schema version is 12`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW)
+	}
+
+	/** Issue #1306 (schema version 12): the performance row and the example survive encode→decode. */
+	@Test
+	fun `serialization round-trips the performance row and the example`() {
+		val snap =
+			snapshotWith(
+				railwayOutcome =
+					RailwayOutcome(
+						wallSeconds = 1.25,
+						simulationSeconds = 601.0,
+						realTimeRatio = 480.8,
+						routeSearchBudgetExceeded = 0L,
+						reservePathCalls = 32L
+					)
+			).copy(example = "shuntingLoop")
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"reservePathCalls\": 32")
+		assertThat(json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)).isEqualTo(snap)
 	}
 
 	/**
@@ -506,7 +526,7 @@ class DispatcherRunSnapshotTest {
 		private const val SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END: Int = 10
 
 		/** Issue #676 persisted the run record figures next to the row. */
-		private const val SCHEMA_VERSION_WITH_RUN_RECORD: Int = 11
+		private const val SCHEMA_VERSION_WITH_PERFORMANCE_ROW: Int = 12
 
 		private val json =
 			Json {

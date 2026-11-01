@@ -24,7 +24,7 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing. Current version: **11** (version 2 added
+ * handle old JSON files without crashing. Current version: **12** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
@@ -32,7 +32,7 @@ import kotlinx.serialization.Serializable
  * state, Issue #1074; version 9 added [TickOutcome.LLM_SILENT_ALL_MOVING] to the outcome
  * vocabulary, Issue #988; version 10 split [RailwayOutcome.unresolvedAtRunEnd] out of
  * [RailwayOutcome.conflicts], Issue #1280; version 11 persisted the run record figures in
- * [railwayOutcome], Issue #676).
+ * [railwayOutcome], Issue #676; version 12 added the performance row and [example], Issue #1306).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -157,6 +157,9 @@ import kotlinx.serialization.Serializable
  * @property circuitBreakerOpenCount Number of times the circuit breaker opened; `null` when the
  *   breaker was not measured — see [circuitBreakerState]'s `TIMEOUT_ABORT` / `CRASH` caveat, which
  *   applies here identically (never read `null` as `0`).
+ * @property example The registered example the run ran (`shuntingLoop`, `cervenyUjezd`, ...), so the
+ *   report's Performance table never pools wall time across networks (Issue #1306); `null` when the
+ *   caller did not name one (a GUI run, a file before schema version 12).
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -209,7 +212,8 @@ data class DispatcherRunSnapshot(
 	val loggedFatalSimExceptionFirstMessage: String? = null,
 	val circuitBreakerState: LlmCircuitBreaker.State? = null,
 	val circuitBreakerTotalSkips: Long? = null,
-	val circuitBreakerOpenCount: Long? = null
+	val circuitBreakerOpenCount: Long? = null,
+	val example: String? = null
 ) {
 	companion object {
 		/**
@@ -279,8 +283,14 @@ data class DispatcherRunSnapshot(
 		 *   instead of the `ShuntingLoop` counter. In version 10 and older files those figures were
 		 *   `null` for a non-`ShuntingLoop` run. The arm vocabulary gained
 		 *   [DispatcherArm.NO_DISPATCHER] for runs that wired no dispatcher at all.
+		 * - **12** — Issue #1306 (Goal 6 SP8), [railwayOutcome] gained the run record's performance row
+		 *   ([RailwayOutcome.wallSeconds], [RailwayOutcome.simulationSeconds],
+		 *   [RailwayOutcome.realTimeRatio], [RailwayOutcome.routeSearchBudgetExceeded],
+		 *   [RailwayOutcome.reservePathCalls]) and the snapshot gained [example]. Every new field
+		 *   defaults to `null`, so every version 1-11 file still decodes, with them absent; no existing
+		 *   field changed meaning.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 11
+		const val CURRENT_SCHEMA_VERSION: Int = 12
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

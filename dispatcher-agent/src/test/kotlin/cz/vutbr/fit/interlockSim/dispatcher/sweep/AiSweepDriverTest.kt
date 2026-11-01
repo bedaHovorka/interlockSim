@@ -176,6 +176,8 @@ class AiSweepDriverTest {
 		assertThat(snapshot.endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
 		assertThat(snapshot.arm).isEqualTo(DispatcherArm.NO_DISPATCHER)
 		assertThat(outputRoot.resolve("no_dispatcher").toFile().isDirectory, "arm directory").isEqualTo(true)
+		// Issue #1306: the per-network Performance table needs the network of an aborted run too.
+		assertThat(snapshot.example, "example").isEqualTo(ExampleNames.MULTI_TRAIN_LOOP)
 	}
 
 	@Test

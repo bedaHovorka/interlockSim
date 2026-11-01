@@ -247,7 +247,9 @@ class AiSweepDriver(
 		fatalScan: FatalExceptionScanResult
 	) {
 		try {
-			store.write(abortedSnapshot(run.runId, run.cell.arm, run.cell.runParameters(), cause, fatalScan))
+			store.write(
+				abortedSnapshot(run.runId, run.cell.arm, run.cell.runParameters(), cause, fatalScan, run.cell.example)
+			)
 		} catch (e: IOException) {
 			logger.error(e) { "[aiSweep] could not record the aborted run ${run.runId}" }
 		}
@@ -503,13 +505,16 @@ class ForkedJvmSweepProcessRunner : SweepProcessRunner {
  *   snapshot was built, so an aborted or crashed run can still carry the finding — a timeout or a
  *   crash does not rule out the log having recorded a FATAL earlier in the same run. Defaults to
  *   an absent scan for call sites (tests) that have no log to scan.
+ * @param example The cell's example, so the run keeps its network in the report's Performance table
+ *   (Issue #1306); its performance figures stay absent like the other railway figures.
  */
 internal fun abortedSnapshot(
 	runId: String,
 	arm: DispatcherArm,
 	params: RunParameters,
 	cause: RunEndCause,
-	fatalScan: FatalExceptionScanResult = FatalExceptionScanResult()
+	fatalScan: FatalExceptionScanResult = FatalExceptionScanResult(),
+	example: String? = null
 ): DispatcherRunSnapshot =
 	DispatcherRunSnapshot(
 		runId = runId,
@@ -550,7 +555,8 @@ internal fun abortedSnapshot(
 		// enter an unmeasured run into the sweep as one where no train moved — a measurement.
 		railwayOutcome = RailwayOutcome.UNMEASURED,
 		loggedFatalSimExceptionCount = fatalScan.count,
-		loggedFatalSimExceptionFirstMessage = fatalScan.firstMessage
+		loggedFatalSimExceptionFirstMessage = fatalScan.firstMessage,
+		example = example
 	)
 
 private fun zeroed(keys: List<String>): Map<String, Long> = keys.associateWith { 0L }
