@@ -876,5 +876,7 @@ class RunReportAggregatorTest {
 	private fun hygieneSection(md: String): String =
 		md.substringAfter("### Decision Hygiene").substringBefore("### Railway Outcomes")
 
-	private fun outcomesSection(md: String): String = md.substringAfter("### Railway Outcomes")
+	/** The Railway Outcomes table alone: the Performance table (Issue #1306) follows it. */
+	private fun outcomesSection(md: String): String =
+		md.substringAfter("### Railway Outcomes").substringBefore("### Performance")
 }
