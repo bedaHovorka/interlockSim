@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -363,7 +364,11 @@ val dispatcherAgentModule: Module =
 					// Which system-prompt revision this run assembles (#834, SP2c.11). Read from the
 					// same DispatcherRunConfig every other per-run knob comes from, so the sweep's
 					// existing forked-JVM `-D` mechanism selects the A/B arm with no new channel.
-					promptVariant = get<DispatcherRunConfig>().promptVariant
+					promptVariant = get<DispatcherRunConfig>().promptVariant,
+					// Issue #1155: the loop's own admission cap, declared by the wiring layer
+					// (ExampleRegistry.wireDispatcherAgent) after this factory is resolved — so read
+					// lazily, like runRecorderProvider above.
+					stationCapacityProvider = { getOrNull<StationCapacity>() }
 				)
 			}
 
