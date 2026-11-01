@@ -29,6 +29,8 @@ import cz.vutbr.fit.interlockSim.sim.onTrainJourneyEvent
  * The capacity pressure at one instant (Issue #1305, Goal 6 SP7), sampled into every published
  * [MetricsSnapshot]: [MetricsSnapshot.queuedTrains], [MetricsSnapshot.blockedTrains] and
  * [MetricsSnapshot.openContentions].
+ *
+ * @since Issue #1305 (Goal 6 SP7)
  */
 internal data class CapacityPressure(
 	val queuedTrains: Int,
@@ -67,6 +69,7 @@ internal data class CapacityPressure(
  *
  * @param contentions The contention query of the run, resolved on each use; `null` when there is none
  *   (a service built without an environment), in which case blocked time and contentions read zero.
+ * @since Issue #1305 (Goal 6 SP7)
  */
 internal class TrainWaitAccounting(
 	private val contentions: () -> ContentionQuery?
@@ -106,8 +109,18 @@ internal class TrainWaitAccounting(
 		env.onRunEnded(::onRunEnded)
 		// Through the raw stream, so the conflict-listener wiring of the dispatcher stays as it is.
 		env.onSimulationEvent { event ->
-			if ((event as? SimulationEvent.Custom)?.payload is ConflictDetectedEvent) refreshOpenContentions()
+			val payload = (event as? SimulationEvent.Custom)?.payload
+			if (payload is ConflictDetectedEvent) onConflict(payload)
 		}
+	}
+
+	/**
+	 * A contention began: note its time, so open intervals are measured up to it, and republish the
+	 * open contentions.
+	 */
+	fun onConflict(event: ConflictDetectedEvent) {
+		see(event.time)
+		refreshOpenContentions()
 	}
 
 	fun onJourney(event: TrainJourneyEvent) {

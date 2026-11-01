@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
 import cz.vutbr.fit.interlockSim.sim.RunEnded
 import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
@@ -232,6 +233,18 @@ class TrainWaitAccountingTest {
 		admit("T1", 0.0)
 		refuse("T1", FailedReservationKind.NO_ROUTE, 2.0)
 		grant("T2", 9.0)
+
+		val record = accounting.decorate(listOf(recordOf("T1"))).single()
+
+		assertThat(record.noRouteStandingSeconds).isEqualTo(7.0)
+		assertThat(contentions.askedNow).isEqualTo(9.0)
+	}
+
+	@Test
+	fun `a conflict event moves the measuring time of open intervals forward`() {
+		admit("T1", 0.0)
+		refuse("T1", FailedReservationKind.NO_ROUTE, 2.0)
+		accounting.onConflict(ConflictDetectedEvent(realBlock(), "T2", "T1", time = 9.0))
 
 		val record = accounting.decorate(listOf(recordOf("T1"))).single()
 
