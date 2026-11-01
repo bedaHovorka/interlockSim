@@ -340,17 +340,8 @@ class AiSweepDriver(
 			return
 		}
 		val aggregator = RunReportAggregator(store)
-		val byArm = snapshots.groupBy { it.arm }
-		val reports =
-			DispatcherArm.entries.map { arm ->
-				aggregator.aggregate(byArm[arm] ?: emptyList()).let {
-					// RunReportAggregator.aggregate() hardcodes arm = RULE_BASED for the empty-run-list
-					// case (runCount == 0), since it has no snapshot to read the arm from. Patch the
-					// correct arm back in here so an empty LLM-arm section doesn't misreport itself as
-					// RULE_BASED in the rendered report.
-					if (it.runCount == 0) it.copy(arm = arm) else it
-				}
-			}
+		// One report per dispatcher arm, an empty one too; NO_DISPATCHER only with runs (Issue #676).
+		val reports = aggregator.aggregateByArm(snapshots)
 		val reportFile = outputRoot.resolve("report.md")
 		Files.writeString(reportFile, aggregator.renderMarkdown(reports))
 		logger.info { "[aiSweep] report written to $reportFile (${snapshots.size} run(s))" }

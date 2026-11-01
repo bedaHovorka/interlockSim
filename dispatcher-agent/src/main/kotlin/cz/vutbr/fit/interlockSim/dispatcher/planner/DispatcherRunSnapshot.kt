@@ -24,14 +24,15 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing. Current version: **10** (version 2 added
+ * handle old JSON files without crashing. Current version: **11** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
  * version 7 added [RunEndCause.STARVED], Issue #930; version 8 added circuit-breaker end
  * state, Issue #1074; version 9 added [TickOutcome.LLM_SILENT_ALL_MOVING] to the outcome
  * vocabulary, Issue #988; version 10 split [RailwayOutcome.unresolvedAtRunEnd] out of
- * [RailwayOutcome.conflicts], Issue #1280).
+ * [RailwayOutcome.conflicts], Issue #1280; version 11 persisted the run record figures in
+ * [railwayOutcome], Issue #676).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -263,8 +264,23 @@ data class DispatcherRunSnapshot(
 		 *   `conflicts` counted both and is kept as stored: on a run cut off at its end time with
 		 *   trains still queued it is higher than a version-10 run's for the same railway, so the
 		 *   two are not comparable on that column.
+		 * - **11** — Issue #676 (Goal 6 SP5), [railwayOutcome] is filled from the run record of `:core`
+		 *   for every harness and persists its figures: wrong exits, unfinished journeys, refused
+		 *   reservations and entry failures by kind, the stall, expiries and sweeper releases by kind,
+		 *   capacity shown versus topology, end time and the end classification. Every new field
+		 *   defaults to `null`, so every version 1-10 file still decodes, with them absent. The row
+		 *   figures now come from the run record too, which changes what four of them count; each is
+		 *   not comparable across versions 10 and 11:
+		 *   [RailwayOutcome.trainsEntered] counts trains queued at their entry InOut, not trains
+		 *   admitted; [RailwayOutcome.trainsExited] counts the front reaching the InOut, where the
+		 *   loop counted a tick later (one train more at a cutoff); [RailwayOutcome.maxConcurrentTrains]
+		 *   is the peak of admitted trains not yet at an exit, not the size of the loop's approved
+		 *   list; [RailwayOutcome.failedReservations] counts the refusals the metrics saw as events
+		 *   instead of the `ShuntingLoop` counter. In version 10 and older files those figures were
+		 *   `null` for a non-`ShuntingLoop` run. The arm vocabulary gained
+		 *   [DispatcherArm.NO_DISPATCHER] for runs that wired no dispatcher at all.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 10
+		const val CURRENT_SCHEMA_VERSION: Int = 11
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded
