@@ -30,6 +30,10 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * @property exitTime Simulation time its front reached [actualExit].
  * @property blockedSeconds Total simulated seconds the train stood blocked: the time it had an open
  *   blocked-path contention ([cz.vutbr.fit.interlockSim.context.navigation.ContentionQuery.blockedSeconds]).
+ *   Only a refusal whose first busy block has an owning train opens a contention; a refusal on a
+ *   locked switch, or on a busy block no train is attributed to, opens none and counts only in
+ *   [noRouteStandingSeconds]. So this is the time spent behind another train's block, at most the
+ *   time waited with no route.
  * @property expiries Reservation expiries the train suffered, both kinds:
  *   [expiredHoldingCount] + [expiredTailCount].
  * @property queueSeconds Simulated seconds from the queue step to the admission; for a train never
