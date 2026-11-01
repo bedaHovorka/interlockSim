@@ -22,7 +22,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.sim.Interlocking
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
@@ -105,10 +104,7 @@ class MetricsIntegrationTest : KoinTestBase() {
 					getKoin().get<SimulationContextFactory>().createContext(stream)
 				)
 			}
-		context.getInOuts()
-		val loop = ShuntingLoop(context, JOURNEY_RUN_END_TIME, maxTrains = JOURNEY_RUN_TRAINS)
-		wireSynchronousDispatcher(context, loop)
-		context.setMainProcess(loop)
+		val loop = prepareShuntingLoop(context, JOURNEY_RUN_END_TIME, maxTrains = JOURNEY_RUN_TRAINS)
 		val metrics = context.getMetricsServices().getMetricsCollectionService()
 
 		context.run()

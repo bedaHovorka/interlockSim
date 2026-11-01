@@ -94,6 +94,18 @@ class MetricsHistoryTest {
 	}
 
 	@Test
+	fun `a zero retention window keeps only the newest instant`() {
+		val history = MetricsHistory(retentionSeconds = 0.0)
+		history.add(snapshotAt(1.0))
+		history.add(snapshotAt(2.0))
+		history.add(snapshotAt(3.0))
+		history.add(snapshotAt(3.0, completed = 1))
+
+		// Every instant older than the newest one is gone; the newest instant keeps its own ties.
+		assertThat(history.times()).containsExactly(3.0, 3.0)
+	}
+
+	@Test
 	fun `count cap and retention window apply together`() {
 		val history = MetricsHistory(maxEntries = 2, retentionSeconds = 100.0)
 		listOf(1.0, 2.0, 3.0).forEach { history.add(snapshotAt(it)) }

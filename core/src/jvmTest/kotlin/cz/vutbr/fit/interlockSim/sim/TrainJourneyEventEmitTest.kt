@@ -88,6 +88,21 @@ class TrainJourneyEventEmitTest {
 	}
 
 	@Test
+	fun `a raw listener cancelling is rethrown by the emit guard`() {
+		val emitter = Emitter()
+
+		runWithListener(emitter) { simulation ->
+			simulation.onEvent {
+				if ((it as? SimulationEvent.Custom)?.payload is TrainJourneyEvent) {
+					throw CancellationException("cancellation injected by the test")
+				}
+			}
+		}
+
+		assertThat(emitter.reachedAfterEmit, "process ran past the emit after a cancellation").isFalse()
+	}
+
+	@Test
 	fun `a typed listener that throws does not end the emitting process`() {
 		val emitter = Emitter()
 		var calls = 0

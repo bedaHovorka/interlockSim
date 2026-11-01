@@ -149,6 +149,17 @@ class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 			if (current.conflictCount < previous.conflictCount) {
 				problems += "conflicts went back: $previous then $current"
 			}
+			// Only ever increments (run-end accounting); the two reservation counters above it are
+			// deliberately excluded — they legitimately fall on a release.
+			if (current.unresolvedAtRunEndCount < previous.unresolvedAtRunEndCount) {
+				problems += "unresolved-at-run-end went back: $previous then $current"
+			}
+		}
+		// A train sits in the holding map only while it holds at least one block (the count map
+		// drops a train as it reaches zero), and blocks are exclusive, so this invariant holds at
+		// every instant.
+		if (current.heldBlocks < current.trainsHoldingReservations) {
+			problems += "fewer held blocks than holding trains in $current"
 		}
 		return problems
 	}

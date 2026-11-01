@@ -16,7 +16,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * event. Two caps keep memory bounded on long runs, and both evict the **oldest** entries first:
  *
  * - **count cap** [maxEntries] — never more than this many snapshots. Default
- *   [DEFAULT_MAX_ENTRIES] (10 000): a few hundred KB for the eleven-number snapshot. A
+ *   [DEFAULT_MAX_ENTRIES] (10 000): about 1 MB for the eleven-number snapshot. A
  *   `shuntingLoop` run on `vyhybna.xml` published 409 snapshots in 600 simulated seconds
  *   (measured 2026-10-31, about 41 block events per simulated minute), so the default holds about
  *   four simulated hours of that traffic; a busier station fills it sooner.
