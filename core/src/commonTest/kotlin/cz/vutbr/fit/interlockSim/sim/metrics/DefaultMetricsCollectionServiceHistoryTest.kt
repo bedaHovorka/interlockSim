@@ -16,6 +16,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isZero
 import assertk.assertions.single
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
@@ -23,6 +24,11 @@ import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import dev.mokkery.MockMode
+import dev.mokkery.matcher.any
+import dev.mokkery.mock
+import dev.mokkery.verify
+import dev.mokkery.verify.VerifyMode.Companion.exactly
 import kotlin.test.Test
 
 /**
@@ -104,6 +110,75 @@ class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 		}
 
 		assertThat(service.history().all().map { it.time }).containsExactly(2.0, 3.0)
+	}
+
+	@Test
+	fun `with HISTORY disabled nothing is appended but the latest snapshot and listeners still work`() {
+		val service = DefaultMetricsCollectionService(config = MetricsConfig(setOf(MetricGroup.JOURNEYS)))
+		val block = realBlock()
+		val received = mutableListOf<MetricsSnapshot>()
+		service.onSnapshot { received += it }
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleBlockEvent(BlockEvent.ReservationConflictDetected(block, "T2", "T1", time = 2.0))
+
+		assertThat(service.history().size).isZero()
+		assertThat(received.size).isEqualTo(2)
+		assertThat(service.latestSnapshot().conflictCount).isEqualTo(1)
+		assertThat(service.getSnapshot().conflictCount).isEqualTo(1)
+	}
+
+	@Test
+	fun `with JOURNEYS disabled journey events add no records`() {
+		val service = DefaultMetricsCollectionService(config = MetricsConfig(setOf(MetricGroup.HISTORY)))
+
+		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
+		service.handleJourneyEvent(TrainJourneyEvent.Exited("T1", "B", 40.0))
+
+		assertThat(service.journeys()).isEmpty()
+	}
+
+	@Test
+	fun `with JOURNEYS disabled the service registers no simulation-event listener`() {
+		val env = mock<SimulationEnvironment>(MockMode.autofill)
+
+		DefaultMetricsCollectionService(env = env, config = MetricsConfig(setOf(MetricGroup.HISTORY)))
+
+		verify(exactly(0)) { env.onSimulationEvent(any()) }
+		verify(exactly(1)) { env.onBlockEvent(any()) }
+	}
+
+	@Test
+	fun `with JOURNEYS enabled the service registers one simulation-event listener`() {
+		val env = mock<SimulationEnvironment>(MockMode.autofill)
+
+		DefaultMetricsCollectionService(env = env, config = MetricsConfig.ALL)
+
+		verify(exactly(1)) { env.onSimulationEvent(any()) }
+	}
+
+	@Test
+	fun `core only collects neither history nor journeys`() {
+		val service = DefaultMetricsCollectionService(config = MetricsConfig.coreOnly())
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
+
+		assertThat(service.history().size).isZero()
+		assertThat(service.journeys()).isEmpty()
+	}
+
+	@Test
+	fun `the default config collects history and journeys`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		service.handleJourneyEvent(TrainJourneyEvent.Queued("T1", "A", "B", 1.0))
+
+		assertThat(service.history().size).isEqualTo(1)
+		assertThat(service.journeys().size).isEqualTo(1)
 	}
 
 	@Test
