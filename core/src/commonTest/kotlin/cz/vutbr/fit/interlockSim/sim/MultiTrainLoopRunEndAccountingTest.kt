@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -18,6 +19,8 @@ import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
@@ -39,6 +42,9 @@ class MultiTrainLoopRunEndAccountingTest : CommonKoinTestBase() {
 		const val MAX_ATTEMPTS: Int = 5
 		const val END_TIME: Long = 60L
 		const val LONG_END_TIME: Long = 300L
+
+		/** Too short for a train to cross the line: both are still on it when the run ends. */
+		const val CUTOFF_END_TIME: Long = 5L
 		const val RELEASE_PERIOD: Double = 5.0
 		const val TRAIN_LENGTH: Double = 20.0
 	}
@@ -172,5 +178,35 @@ class MultiTrainLoopRunEndAccountingTest : CommonKoinTestBase() {
 		assertThat(seen.size, name = "RunEnded deliveries").isEqualTo(1)
 		assertThat(seen.single().time, name = "run-end time").isEqualTo(ctx.lastRunEndTime)
 		assertThat(seen.single().endTimeReached, name = "end time reached").isTrue()
+	}
+
+	/**
+	 * The run-end figures are the CORE metric group (Issue #1304 on top of #674): a service built with
+	 * [MetricsConfig.coreOnly] -- no journey records, no history -- counts exactly what the default
+	 * (all groups) service counts, at a cutoff and at a natural completion.
+	 */
+	@Test
+	fun runEndFiguresStayOnWithOnlyTheCoreGroup() {
+		val horizons =
+			listOf(
+				CUTOFF_END_TIME to RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS,
+				LONG_END_TIME to RunEndClassification.NATURAL_COMPLETION
+			)
+		for ((endTime, expected) in horizons) {
+			val ctx = context()
+			val coreOnly = DefaultMetricsCollectionService(ctx, config = MetricsConfig.coreOnly())
+			ctx.setMainProcess(
+				MultiTrainLoop(ctx, endTime = endTime, trainSpecs = listOf(spec(inTime = 0.0), spec(inTime = 1.0)))
+			)
+
+			ctx.run()
+
+			val core = coreOnly.runEndSummary()
+			assertThat(core, name = "core-only summary = all-groups summary at $endTime s").isEqualTo(ctx.summary())
+			assertThat(core.classification, name = "classification at $endTime s").isEqualTo(expected)
+			assertThat(core.trainsEntered, name = "trains entered at $endTime s").isEqualTo(2)
+			assertThat(coreOnly.journeys(), name = "no journey records with JOURNEYS off").isEmpty()
+			assertThat(coreOnly.history().size, name = "no history with HISTORY off").isZero()
+		}
 	}
 }
