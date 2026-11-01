@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsHistory
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
@@ -107,4 +108,7 @@ class FakeMetricsCollectionService(
 		shownToDispatcher: Int,
 		topologyCapacity: Int
 	) = Unit
+
+	/** No contention is ever open (Issue #1305). */
+	override fun latestOpenContentions(): List<OpenContention> = emptyList()
 }

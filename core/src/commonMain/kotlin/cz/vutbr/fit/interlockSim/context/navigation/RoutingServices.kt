@@ -24,6 +24,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
  * - [getPathReservationService] - Atomic path reservation with train ownership tracking
  * - [getReservationTargetQuery] - Read-only next-target candidate query (reservation capability, Issue #970)
  * - [getReservationExpiry] - Kernel-side reservation expiry trigger (Issue #1174)
+ * - [getContentionQuery] - Read-only view of the open contentions and blocked time (Issue #1305)
  * - [getTrainNavigationService] - Train-specific navigation over RESERVED paths only
  *
  * @see cz.vutbr.fit.interlockSim.context.SimulationEnvironment.getRoutingServices
@@ -94,6 +95,18 @@ interface RoutingServices {
 	 * @since Issue #1174
 	 */
 	fun getReservationExpiry(): ReservationExpiry = getPathReservationService()
+
+	/**
+	 * Get the read-only contention view (Issue #1305, Goal 6 SP7) alone, for a reader that must not
+	 * hold the whole [PathReservationService] -- the metrics service, which only records and never
+	 * chooses a route (the single-entry discipline of Issue #1152). Served by the same instance as
+	 * [getPathReservationService], whose superinterface it is, so an implementation need not override it.
+	 *
+	 * @return the ContentionQuery of this simulation context's reservation service
+	 * @see ContentionQuery
+	 * @since Issue #1305 (Goal 6 SP7)
+	 */
+	fun getContentionQuery(): ContentionQuery = getPathReservationService()
 
 	/**
 	 * Get train navigation service for train-specific path following.
