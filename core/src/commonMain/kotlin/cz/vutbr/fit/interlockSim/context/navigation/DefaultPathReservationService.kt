@@ -854,7 +854,7 @@ class DefaultPathReservationService(
 
 		// Step 4: Delegate to the shared body (not the public overload: this call is already counted)
 		logger.debug {
-			"reservePathToAnyNextSemaphore: Delegating to existing overload with next=$next"
+			"reservePathToAnyNextSemaphore: Continuing with the resolved forward section next=$next"
 		}
 		return reserveToAnyNextSemaphoreVia(trainId, dynamicStart, next)
 	}

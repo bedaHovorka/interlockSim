@@ -40,21 +40,41 @@ class ReservationRequestCountTest : CommonKoinTestBase() {
 		override suspend fun interLoopSleep() = terminate()
 	}
 
+	/**
+	 * Calls only the public `(start, next)` overload of `reservePathToAnyNextSemaphore`, the one
+	 * `InOutWorker` calls in production, then ends the run.
+	 */
+	private class NextSemaphoreRequester(
+		private val ctx: DefaultSimulationContext
+	) : LoopProcess() {
+		override suspend fun iteration() {
+			val entry = ctx.getInOuts().first()
+			val next =
+				checkNotNull(ctx.getRoutingServices().getTopologyNavigator().getNextTrackSection(entry, null)) {
+					"forward section of the entry InOut"
+				}
+			ctx.getRoutingServices().getPathReservationService().reservePathToAnyNextSemaphore("T4", entry, next)
+		}
+
+		override suspend fun interLoopSleep() = terminate()
+	}
+
+	/** Runs [requester] as the main process and returns the run's counted public route requests. */
+	private fun countedRequests(requester: (DefaultSimulationContext) -> LoopProcess): Int {
+		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true).tracked().also { it.getInOuts() }
+		ctx.setMainProcess(requester(ctx))
+		ctx.run()
+		val record = checkNotNull(ctx.getMetricsServices().getRunRecordSource().runRecord()) { "run record" }
+		return checkNotNull(record.performance) { "performance row" }.reservePathCalls
+	}
+
 	@Test
 	fun everyPublicReservationEntryPointIsCountedOnce() {
-		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true).tracked().also { it.getInOuts() }
-		ctx.setMainProcess(Requester(ctx))
+		assertThat(countedRequests(::Requester), name = "public route requests").isEqualTo(3)
+	}
 
-		ctx.run()
-
-		val performance =
-			checkNotNull(
-				ctx
-					.getMetricsServices()
-					.getRunRecordSource()
-					.runRecord()
-					?.performance
-			)
-		assertThat(performance.reservePathCalls, name = "public route requests").isEqualTo(3)
+	@Test
+	fun theNextSemaphoreOverloadWithAKnownSectionIsCountedOnce() {
+		assertThat(countedRequests(::NextSemaphoreRequester), name = "public route requests").isEqualTo(1)
 	}
 }
