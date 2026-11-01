@@ -13,6 +13,7 @@ import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -33,7 +34,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   [BlockEvent.ReservationConflictDetected] fires (path blocked by a different train
  *   during [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePath]).
  *   Duplicate warnings for the same conflict pair are suppressed within a
- *   [DEDUP_WINDOW_SECONDS]-second window.
+ *   [DEDUP_WINDOW_SECONDS]-second window. An event of the end-of-run flush
+ *   ([BlockEvent.ReservationConflictDetected.atRunEnd]) is a train still queued, not a
+ *   double-booking: it becomes a [CollisionWarning.Severity.WARNING] warning (logged at INFO,
+ *   no pause) and bypasses the window, because the flush is one-shot (Issue #1331).
  *
  * **Detection rules (SP3, #613):**
  * - [CollisionWarning.BlockEntryViolation] (reservation mismatch): emitted when
@@ -271,7 +275,11 @@ class DefaultCollisionDetectionService(
 	// ── Internal helpers ──────────────────────────────────────────────────────
 
 	private fun emit(warning: CollisionWarning) {
-		logger.warn { "Collision warning: $warning" }
+		if (warning.severity == CollisionWarning.Severity.CRITICAL) {
+			logger.warn { "Collision warning: $warning" }
+		} else {
+			logger.info { "Advisory warning (not a collision): ${describeAdvisory(warning)}" }
+		}
 		// Snapshot the listener list so a re-entrant onCollisionWarning during delivery
 		// cannot trigger a ConcurrentModificationException, and isolate each listener so
 		// one bad callback cannot prevent the pause or starve later listeners.
@@ -291,6 +299,21 @@ class DefaultCollisionDetectionService(
 			haltCallbacks[warning.trainId]?.invoke()
 		}
 	}
+
+	/**
+	 * One English sentence for a [CollisionWarning.Severity.WARNING] warning (Issue #1331). The only
+	 * producer today is a [CollisionWarning.ReservationConflict] from the end-of-run flush: a train
+	 * still queued behind another one when the run stopped.
+	 */
+	private fun describeAdvisory(warning: CollisionWarning): String =
+		when (warning) {
+			is CollisionWarning.ReservationConflict -> {
+				val block = warning.conflictingBlock?.let { BlockIdentity.stableBlockId(it) } ?: "unknown"
+				"unresolved at run end: ${warning.trainId} queued behind ${warning.conflictingTrainId} " +
+					"for block $block at t=${warning.time}"
+			}
+			else -> warning.toString()
+		}
 
 	private fun handleSimulationEvent(event: SimulationEvent) {
 		// Receive CollisionWarning.BlockEntryViolation emitted by DynamicTrackBlock.enter()
@@ -376,9 +399,32 @@ class DefaultCollisionDetectionService(
 	 * Warnings for the same (trainId, conflictingTrainId) pair are suppressed if the
 	 * previous warning was emitted within [DEDUP_WINDOW_SECONDS] simulation seconds.
 	 *
+	 * An end-of-run event ([BlockEvent.ReservationConflictDetected.atRunEnd]) skips the window and
+	 * becomes a [CollisionWarning.Severity.WARNING] warning: the flush is one-shot, and one queued train
+	 * can wait for two blocks of the same owner (Issue #1331).
+	 *
 	 * @since Issue #612 (Goal 3 SP2)
 	 */
 	private fun handleReservationConflictDetected(event: BlockEvent.ReservationConflictDetected) {
+		// Issue #1331: the end-of-run flush is one-shot (no spam to suppress) and reports a train still
+		// queued behind another one, not a double-booking -- an advisory WARNING, not a collision.
+		if (!event.atRunEnd && isDuplicateConflictWarning(event)) return
+		emit(
+			CollisionWarning.ReservationConflict(
+				trainId = event.trainId,
+				conflictingTrainId = event.conflictingTrainId,
+				time = event.time,
+				conflictingBlock = event.block,
+				severity = if (event.atRunEnd) CollisionWarning.Severity.WARNING else CollisionWarning.Severity.CRITICAL
+			)
+		)
+	}
+
+	/**
+	 * `true` when a warning for the same (trainId, conflictingTrainId) pair was emitted less than
+	 * [DEDUP_WINDOW_SECONDS] ago; otherwise records [event]'s time for the pair and returns `false`.
+	 */
+	private fun isDuplicateConflictWarning(event: BlockEvent.ReservationConflictDetected): Boolean {
 		val key = Pair(event.trainId, event.conflictingTrainId)
 		val lastTime = lastConflictWarningTime[key]
 		if (lastTime != null && (event.time - lastTime) < DEDUP_WINDOW_SECONDS) {
@@ -387,17 +433,10 @@ class DefaultCollisionDetectionService(
 					"(${event.trainId}, ${event.conflictingTrainId}) at t=${event.time} " +
 					"(last at t=$lastTime)"
 			}
-			return
+			return true
 		}
 		lastConflictWarningTime[key] = event.time
-		emit(
-			CollisionWarning.ReservationConflict(
-				trainId = event.trainId,
-				conflictingTrainId = event.conflictingTrainId,
-				time = event.time,
-				conflictingBlock = event.block
-			)
-		)
+		return false
 	}
 
 	/**

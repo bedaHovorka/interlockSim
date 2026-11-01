@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.sim.Interlocking
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
@@ -120,6 +121,8 @@ class MetricsIntegrationTest : KoinTestBase() {
 			val inOuts = ctx.getInOuts()
 			val reservationService = ctx.getRoutingServices().getPathReservationService()
 			val metrics = ctx.getMetricsServices().getMetricsCollectionService()
+			val warnings = mutableListOf<CollisionWarning>()
+			ctx.getCollisionServices().onCollisionWarning { warnings.add(it) }
 			val process =
 				object : Interlocking(ctx) {
 					override suspend fun iteration() {
@@ -144,6 +147,11 @@ class MetricsIntegrationTest : KoinTestBase() {
 			val snap = metrics.getSnapshot()
 			assertThat(snap.conflictCount).isZero()
 			assertThat(snap.unresolvedAtRunEndCount).isEqualTo(1)
+			// Issue #1331: the collision service agrees with the metrics -- CRITICAL warnings are the
+			// mid-run conflicts, WARNING ones the contentions still open at the run end.
+			val bySeverity = warnings.groupingBy { it.severity }.eachCount()
+			assertThat(bySeverity[CollisionWarning.Severity.CRITICAL] ?: 0).isEqualTo(snap.conflictCount)
+			assertThat(bySeverity[CollisionWarning.Severity.WARNING] ?: 0).isEqualTo(snap.unresolvedAtRunEndCount)
 		}
 	}
 }

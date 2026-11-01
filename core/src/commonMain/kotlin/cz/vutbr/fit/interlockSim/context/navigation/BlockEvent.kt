@@ -77,7 +77,8 @@ sealed class BlockEvent {
 	 * Consumed by
 	 * [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService]
 	 * which re-emits the conflict as a [cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning.ReservationConflict]
-	 * after applying a deduplication window.
+	 * after applying a deduplication window: CRITICAL for a mid-run event, WARNING (no pause, no
+	 * deduplication) for an end-of-run event (Issue #1331).
 	 *
 	 * The two sources are told apart by [atRunEnd] (Issue #1280): `false` for the mid-run registry
 	 * race, `true` for the end-of-run flush. A flushed contention is a train still queued behind
