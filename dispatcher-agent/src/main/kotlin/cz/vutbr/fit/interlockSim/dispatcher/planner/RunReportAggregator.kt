@@ -326,7 +326,10 @@ class RunReportAggregator(
 	 *   consults no LLM, so it records `totalTicks = 0` and an `actionableTickRate` of `0.0`.
 	 *   Applying an LLM decision-quality clause to it failed a control arm that had just delivered
 	 *   eleven exits on every one of ten runs — #895 printed `| RULE_BASED | 10 | 0 | FAIL |` where
-	 *   #847 and #834 had both published the same arm as 10/10 PASS.
+	 *   #847 and #834 had both published the same arm as 10/10 PASS. [DispatcherArm.NO_DISPATCHER]
+	 *   is exempt for the same reason (Issue #676): with no dispatcher at all its runs always record
+	 *   `0.0`. Its arm gate never passes anyway; the exemption keeps its per-run verdict about the
+	 *   railway only.
 	 * - **An absent [RailwayOutcome.trainsExited] does not fail the outcome term.** Absent is "not
 	 *   measured", never "zero", the same rule [RailwayProgress] follows. That counter is absent for
 	 *   any example whose main process is not a `ShuntingLoop`.
@@ -338,9 +341,11 @@ class RunReportAggregator(
 			actionableRateAcceptable(snapshot) &&
 			railwayOutcomeAcceptable(snapshot)
 
-	/** See [runPassed] for why the rule-based arm is exempt. */
+	/** See [runPassed] for why the rule-based arm and the no-dispatcher arm are exempt. */
 	private fun actionableRateAcceptable(snapshot: DispatcherRunSnapshot): Boolean =
-		snapshot.arm == DispatcherArm.RULE_BASED || snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
+		snapshot.arm == DispatcherArm.RULE_BASED ||
+			!snapshot.arm.hasDispatcher ||
+			snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
 
 	/** See [runPassed] for why an absent exit count cannot fail a run. */
 	private fun railwayOutcomeAcceptable(snapshot: DispatcherRunSnapshot): Boolean =

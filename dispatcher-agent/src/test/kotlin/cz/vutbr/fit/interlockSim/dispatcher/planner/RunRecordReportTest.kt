@@ -100,7 +100,11 @@ class RunRecordReportTest {
 
 	@Test
 	fun `ten clean runs without a dispatcher never pass the arm gate`() {
-		val runs = (1..10).map { runSnapshot(runId = "nd-$it", arm = DispatcherArm.NO_DISPATCHER) }
+		// A real dispatcher-free run consults no LLM: totalTicks 0, actionableTickRate 0.0 (fix round 2).
+		val runs =
+			(1..10).map {
+				runSnapshot(runId = "nd-$it", arm = DispatcherArm.NO_DISPATCHER, actionableTickRate = 0.0)
+			}
 
 		val report = aggregator.aggregate(runs)
 
@@ -109,6 +113,13 @@ class RunRecordReportTest {
 		val md = aggregator.renderMarkdown(listOf(report))
 		assertThat(md).contains("| ${DispatcherArm.NO_DISPATCHER} | 10 | 10 | n/a (no dispatcher) |")
 		assertThat(outcomeCells(md, DispatcherArm.NO_DISPATCHER)[1], "model").isEqualTo("none")
+	}
+
+	@Test
+	fun `a run without a dispatcher is not failed on the decision rate it cannot have`() {
+		val run = runSnapshot(arm = DispatcherArm.NO_DISPATCHER, actionableTickRate = 0.0)
+
+		assertThat(aggregator.runPassed(run), "runPassed").isTrue()
 	}
 
 	@Test
