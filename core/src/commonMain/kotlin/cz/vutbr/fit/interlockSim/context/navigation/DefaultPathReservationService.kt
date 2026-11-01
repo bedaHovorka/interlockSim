@@ -530,6 +530,12 @@ class DefaultPathReservationService(
 		return PathReservationService.ReservationResult.AllPathsBlocked(attemptedPaths, blockedBy)
 	}
 
+	/** Delegates to [ReservationContentionTracker.openContentions], owners named by [getBlockOwner] (Issue #1305). */
+	override fun openContentions(): List<OpenContention> = contention.openContentions(::getBlockOwner)
+
+	/** Delegates to [ReservationContentionTracker.blockedSeconds] (Issue #1305). */
+	override fun blockedSeconds(now: Double): Map<String, Double> = contention.blockedSeconds(now)
+
 	/** Delegates to [ReservationContentionTracker.flushUnresolvedConflicts] (Issue #612, #1167). */
 	override fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected> =
 		contention.flushUnresolvedConflicts(simulationEndTime)

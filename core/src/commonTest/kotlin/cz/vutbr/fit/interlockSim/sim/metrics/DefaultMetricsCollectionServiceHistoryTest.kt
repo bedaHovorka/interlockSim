@@ -144,7 +144,10 @@ class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 		val enabledEnv = mock<SimulationEnvironment>(MockMode.autofill)
 
 		DefaultMetricsCollectionService(env = disabledEnv, config = MetricsConfig(setOf(MetricGroup.HISTORY)))
-		DefaultMetricsCollectionService(env = enabledEnv, config = MetricsConfig.ALL)
+		DefaultMetricsCollectionService(
+			env = enabledEnv,
+			config = MetricsConfig(setOf(MetricGroup.HISTORY, MetricGroup.JOURNEYS))
+		)
 
 		// The always-on run-end accounting (CORE) subscribes by itself, so compare the two runs
 		// instead of expecting zero: only the journey recorder's own listener may differ.

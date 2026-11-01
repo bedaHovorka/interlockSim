@@ -76,6 +76,7 @@ interface PathReservationService :
 	ApproachLockedPathRelease,
 	BlockOwnerQuery,
 	BlockReleaseSteps,
+	ContentionQuery,
 	ReservationExpiry {
 	/**
 	 * Result of a path reservation attempt.
