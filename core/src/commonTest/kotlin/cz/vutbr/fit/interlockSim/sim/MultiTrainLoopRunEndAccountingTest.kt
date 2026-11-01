@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
@@ -178,6 +179,23 @@ class MultiTrainLoopRunEndAccountingTest : CommonKoinTestBase() {
 		assertThat(seen.size, name = "RunEnded deliveries").isEqualTo(1)
 		assertThat(seen.single().time, name = "run-end time").isEqualTo(ctx.lastRunEndTime)
 		assertThat(seen.single().endTimeReached, name = "end time reached").isTrue()
+	}
+
+	/** An observer registered before any metrics lookup must still see the accounting finished (review of #1311). */
+	@Test
+	fun aRunEndObserverRegisteredBeforeTheMetricsServiceReadsAFinishedSummary() {
+		val ctx = context()
+		var inObserver: RunEndSummary? = null
+		ctx.onRunEnded { inObserver = ctx.summary() }
+		ctx.setMainProcess(MultiTrainLoop(ctx, endTime = END_TIME))
+
+		ctx.run()
+
+		val seen = checkNotNull(inObserver) { "the observer was not called" }
+		assertThat(seen.endTime, name = "end time in the observer").isEqualTo(ctx.lastRunEndTime)
+		assertThat(seen.endTimeReached, name = "end time reached in the observer").isTrue()
+		assertThat(seen.classification, name = "classification in the observer").isNotNull()
+		assertThat(seen, name = "observer summary = summary after the run").isEqualTo(ctx.summary())
 	}
 
 	/**
