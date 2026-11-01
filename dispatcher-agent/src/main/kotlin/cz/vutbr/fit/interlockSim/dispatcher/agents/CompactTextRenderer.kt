@@ -217,9 +217,9 @@ class CompactTextRenderer : ObservationRenderer {
 				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
 					"ORIGIN_NOT_CONTIGUOUS (from ${outcome.fromEndpointName})"
 
-			// Issue #903: permanent geometric impossibility (rear-facing START or unconfigurable
-			// switch), not ordinary contention. Surfaced with the full reason, mirroring
-			// ConditionFailed below rather than OriginNotContiguous's minimal shape.
+			// Issue #903: permanent geometric impossibility (classes: see
+			// ReservationResult.GeometricallyImpossible), not ordinary contention. Surfaced with the full
+			// reason, mirroring ConditionFailed below rather than OriginNotContiguous's minimal shape.
 			is AppliedOutcome.GeometricallyImpossible ->
 				"request_route ${outcome.trainId} -> ${outcome.toEndpointName} : " +
 					"GEOMETRICALLY_IMPOSSIBLE — ${outcome.reason}"
@@ -240,7 +240,10 @@ class CompactTextRenderer : ObservationRenderer {
 				val status =
 					when {
 						outcome.deferredBlockIds.isNotEmpty() ->
-							"PARTIAL (kept: ${outcome.deferredBlockIds.joinToString(", ")}; repeat cancel_route)"
+							"KEPT (${outcome.deferredBlockIds.joinToString(", ")}; the train stands on or may " +
+								"still enter some of them, or the release cannot yet cut the route past them — " +
+								"extend the route; a repeat frees kept blocks only once the train has moved on " +
+								"or their booking windows close)"
 						outcome.anyReleased -> "RELEASED"
 						else -> "NO_RESERVATION"
 					}

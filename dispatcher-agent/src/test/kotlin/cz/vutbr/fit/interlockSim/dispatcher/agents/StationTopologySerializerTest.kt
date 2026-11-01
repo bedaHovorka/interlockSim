@@ -21,6 +21,11 @@ import cz.vutbr.fit.interlockSim.dispatcher.testutil.loadShuntingLoopContext
 import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
 import cz.vutbr.fit.interlockSim.lang.vocab.SwitchId
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -280,5 +285,44 @@ class StationTopologySerializerTest : DispatcherKoinTestBase() {
 			assertThat(topology.switches.map { it.id }.distinct()).isEqualTo(topology.switches.map { it.id })
 			assertThat(topology.inOuts.filter { it.isBlank() }).isEmpty()
 		}
+	}
+
+	/**
+	 * Derives every expected value from the parsed Červený Újezd network — no switch-name literals —
+	 * so the pin survives a renaming. The count and set comparisons are the load-bearing legs:
+	 * `describe()` silently filters blank-named switches and de-duplicates ids, so the pre-#1279
+	 * unnamed network produced an empty switch list against the 12 parsed cells.
+	 */
+	@Test
+	@DisplayName("describe() lists the named Červený Újezd switches and no 'unknown' block id (Issue #1279)")
+	fun describeExtractsNamedCervenyUjezdTopology() {
+		CommonTestFixtures
+			.parseSimulationContext(NetworkResources.CERVENY_UJEZD_XML, DefaultSimulationProcessFactory())
+			.use { context ->
+				val topology = StationTopologySerializer.describe(context)
+				val gridSwitches = context.getRailWayNetGrid().cellsOfType<DynamicRailSwitch>()
+
+				assertThat(
+					gridSwitches,
+					name = "switches of the parsed Červený Újezd network"
+				).isNotEmpty()
+				assertThat(
+					topology.switches.size,
+					name = "switches listed by describe() vs switches parsed from the network"
+				).isEqualTo(gridSwitches.size)
+				assertThat(
+					topology.switches.map { it.id.name }.toSet(),
+					name = "switch ids listed by describe() vs switch names parsed from the network"
+				).isEqualTo(gridSwitches.map { it.name }.toSet())
+
+				assertThat(topology.blocks, name = "blocks of the Červený Újezd topology").isNotEmpty()
+				assertThat(topology.blocks.map { it.name }, name = "block ids of the Červený Újezd topology")
+					.doesNotContain(UNKNOWN_BLOCK_ID)
+			}
+	}
+
+	private companion object {
+		/** [BlockIdentity.stableBlockId] fallback for a block whose ends are all unnamed. */
+		private const val UNKNOWN_BLOCK_ID = "unknown"
 	}
 }

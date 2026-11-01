@@ -38,7 +38,7 @@
 - ✅ Eliminates Issue #282 workaround (block ownership validation)
 - ✅ Reduces ShuntingLoop by ~100 lines
 - ✅ Enables clean editor validation without SimulationContext
-- ✅ Backward compatible until Phase 5 deprecation
+- ✅ Old API removed in Phase 5; every caller migrated (`RoutingServices`)
 
 **Implementation**: 5 phases (2026-01-11 to 2026-01-27), 1321+ tests passing, zero regressions
 
@@ -60,7 +60,7 @@ fun pathToNextSemaphore(separator: PathSeparator, next: TrackSection): Path?
 
 **Consequences**:
 - **Issue #291**: ShuntingLoop required ~100 lines of manual path construction to work around ambiguous block ownership
-- **Issue #282**: Trains navigated into blocks reserved by other trains, requiring validation workaround (lines 633-668)
+- **Issue #282**: Trains navigated into blocks reserved by other trains, requiring a validation workaround
 - **Editor Limitation**: Static topology validation forced conversion to SimulationContext (mixing concerns)
 - **Fragile Tests**: Tests required complex mocking to control block states
 
@@ -98,14 +98,14 @@ if (path != null) {
 2. **Atomic Reservation**: All-or-nothing path reservation (no partial reservations)
 3. **Explicit Ownership**: Clear train↔block ownership tracking (bidirectional)
 4. **Type Safety**: Separate interfaces prevent mixing incompatible operations
-5. **Backward Compatibility**: Existing code works unchanged until Phase 5
+5. **Backward Compatibility**: Existing code worked unchanged during Phases 1-4; the old API was removed in Phase 5
 
 ### Non-Functional Goals
 
 1. **Performance**: No degradation from original implementation (< 10% variance)
 2. **Testability**: Services can be tested independently with simple mocks
 3. **Maintainability**: Each service has single clear responsibility
-4. **DSOL Migration**: Architecture enables future migration from jDisco to DSOL/Kalasim
+4. **Engine Independence**: The services depend on `SimulationEnvironment`, not on the simulation engine (kDisco)
 5. **Zero Regressions**: All 1321+ tests passing, simulation behavior unchanged
 
 ---
@@ -165,12 +165,14 @@ if (path != null) {
 **4. PathReservationRegistry (Ownership Layer)**
 - **Input**: Reservation/release requests from PathReservationService
 - **Output**: Bidirectional train↔block ownership mappings
-- **State**: `trainToBlocks: Map<String, Set<TrackBlock>>`, `blockToTrain: Map<TrackBlock, String>`
+- **State**: bidirectional train↔block maps plus switch claims and PathInfo, held by delegate tables (see [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) §2)
 - **Use Case**: Prevent conflicts, enable ownership queries
 
 ---
 
 ## Component Design
+
+> **Historical sketches.** The Interface blocks below are the January 2026 design sketches and do not match the shipped signatures: the shipped navigator method is `findAllTopologicalPaths`, `reservePath` returns `ReservationResult` (`Success`, `NoPathExists`, `AllPathsBlocked`, `Conflict`, `NonContiguousStart`, `GeometricallyImpossible`, `DivergesFromHeldRoute`), and the registry registers through `registerAtomic`. The implementations were split into many units since; for the current design see [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md), and for exact signatures the source under `context/navigation/`.
 
 ### 1. TopologyNavigator
 
@@ -192,28 +194,6 @@ interface TopologyNavigator {
      * Find path from separator to next semaphore (static topology).
      */
     fun findPathToNextSemaphore(separator: PathSeparator, next: TrackSection): Path?
-}
-```
-
-**Implementation**:
-```kotlin
-class DefaultTopologyNavigator(
-    private val context: Context<*, *>
-) : TopologyNavigator {
-    override fun findPath(start: PathSeparator, target: PathSeparator): Path? {
-        // BFS through graph ignoring block states
-        return bfsPathFinder(context.getGraph(), start, target)
-    }
-
-    override fun getNextTrackSection(separator: PathSeparator, current: TrackSection?): TrackSection? {
-        // Navigate graph edges without state checks
-        return graphEdgeNavigation(context.getGraph(), separator, current)
-    }
-
-    override fun findPathToNextSemaphore(separator: PathSeparator, next: TrackSection): Path? {
-        // Find path until reaching next semaphore (static topology only)
-        return pathUntilNextSemaphore(context.getGraph(), separator, next)
-    }
 }
 ```
 
@@ -254,52 +234,6 @@ sealed class ReservationResult {
 }
 ```
 
-**Implementation**:
-```kotlin
-class DefaultPathReservationService(
-    private val navigator: TopologyNavigator,
-    private val context: SimulationContext,
-    private val registry: PathReservationRegistry
-) : PathReservationService {
-    override fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): ReservationResult {
-        // 1. Find path using TopologyNavigator (static topology)
-        val path = navigator.findPath(start, target) ?: return Failure("No path exists")
-
-        // 2. Check if all blocks are FREE (atomic check)
-        val blocks = path.blocks
-        if (!blocks.all { it.getState() == TrackFacility.State.FREE }) {
-            return Failure("Path partially occupied")
-        }
-
-        // 3. Reserve all blocks atomically (all-or-nothing)
-        blocks.forEach { it.reserveFrom(start as DynamicPathSeparator) }
-
-        // 4. Update registry (bidirectional tracking)
-        registry.register(trainId, blocks.toSet())
-
-        // 5. Configure switches automatically
-        configureSwitches(path)
-
-        return Success(path)
-    }
-
-    override fun releasePath(trainId: String) {
-        val blocks = registry.getBlocks(trainId)
-        blocks.forEach { it.setState(TrackFacility.State.FREE) }
-        registry.unregister(trainId)
-    }
-
-    override fun findReservablePaths(start: PathSeparator, target: PathSeparator): List<Path> {
-        // Find all paths (static topology)
-        val allPaths = navigator.findAllPaths(start, target)
-        // Filter to only paths with all blocks FREE
-        return allPaths.filter { path ->
-            path.blocks.all { it.getState() == TrackFacility.State.FREE }
-        }
-    }
-}
-```
-
 **Design Decisions**:
 - **Atomic Reservation**: All-or-nothing semantics prevent partial reservations
 - **Registry Integration**: Bidirectional ownership tracking (train → blocks, block → train)
@@ -329,39 +263,6 @@ interface TrainNavigationService {
      * Get all blocks currently reserved by train.
      */
     fun getReservedBlocks(trainId: String): Set<DynamicTrackBlock>
-}
-```
-
-**Implementation**:
-```kotlin
-class DefaultTrainNavigationService(
-    private val context: SimulationContext,
-    private val registry: PathReservationRegistry
-) : TrainNavigationService {
-    override fun findReservedPathForTrain(trainId: String, separator: PathSeparator, next: TrackSection): Path? {
-        // Use existing pathToNextSemaphore for topology navigation
-        val path = context.pathToNextSemaphore(separator, next) ?: return null
-
-        // Validate ownership: all blocks must be reserved by THIS train
-        val trainBlocks = registry.getBlocks(trainId)
-        val pathBlocks = path.blocks.toSet()
-
-        return if (pathBlocks.all { it in trainBlocks }) {
-            path // All blocks owned by this train
-        } else {
-            null // Path includes blocks owned by different train
-        }
-    }
-
-    override fun isPathReservedForTrain(trainId: String, start: PathSeparator, target: PathSeparator): Boolean {
-        val path = context.pathToNextSemaphore(start, ...) ?: return false
-        val trainBlocks = registry.getBlocks(trainId)
-        return path.blocks.all { it in trainBlocks }
-    }
-
-    override fun getReservedBlocks(trainId: String): Set<DynamicTrackBlock> {
-        return registry.getBlocks(trainId)
-    }
 }
 ```
 
@@ -405,40 +306,11 @@ class PathReservationRegistry {
 }
 ```
 
-**Implementation**:
-```kotlin
-class PathReservationRegistry {
-    private val trainToBlocks = mutableMapOf<String, MutableSet<DynamicTrackBlock>>()
-    private val blockToTrain = mutableMapOf<DynamicTrackBlock, String>()
-
-    fun register(trainId: String, blocks: Set<DynamicTrackBlock>) {
-        // Update train → blocks mapping
-        trainToBlocks.getOrPut(trainId) { mutableSetOf() }.addAll(blocks)
-        // Update block → train mapping (bidirectional)
-        blocks.forEach { blockToTrain[it] = trainId }
-    }
-
-    fun unregister(trainId: String) {
-        val blocks = trainToBlocks.remove(trainId) ?: return
-        blocks.forEach { blockToTrain.remove(it) }
-    }
-
-    fun getBlocks(trainId: String): Set<DynamicTrackBlock> =
-        trainToBlocks[trainId] ?: emptySet()
-
-    fun getOwner(block: DynamicTrackBlock): String? =
-        blockToTrain[block]
-
-    fun isOwnedBy(block: DynamicTrackBlock, trainId: String): Boolean =
-        blockToTrain[block] == trainId
-}
-```
-
 **Design Decisions**:
 - **Bidirectional Mapping**: Fast queries in both directions (train → blocks, block → train)
 - **Scoped Lifetime**: One registry per SimulationContext (Koin scope-per-context)
 - **Shared State**: All navigation services within same context share ONE registry
-- **Thread Safety**: Not thread-safe (matches jDisco single-threaded model)
+- **Thread Safety**: Not thread-safe (matches the single-threaded kDisco model)
 
 ---
 
@@ -467,26 +339,10 @@ val path = navigator.findPathToNextSemaphore(start, next)
 
 ### Why Atomic Reservation?
 
-**TOCTOU Race Condition**:
-```kotlin
-// Original pattern (VULNERABLE):
-val path = context.pathToNextSemaphore(start, next) // Time-of-Check
-if (path != null && path.blocks.all { it.getState() == FREE }) {
-    path.blocks.forEach { it.reserveFrom(semaphore) } // Time-of-Use
-    // Another train could reserve blocks between check and use!
-}
-
-// New pattern (ATOMIC):
-val result = service.reservePath(trainId, start, target)
-when (result) {
-    is Success -> // All blocks reserved atomically, no race condition
-    is Failure -> // Reservation failed, no partial state
-}
-```
+The original check-then-reserve pattern left a TOCTOU window between checking that the blocks were free and reserving them (the snippet is under [Root Cause Analysis](#root-cause-analysis)). `reservePath` closes it with all-or-nothing reservation and rollback; the remaining window and why it is acceptable in a single-threaded engine are analysed in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) §7.
 
 **Benefits**:
 - No partial reservations (all-or-nothing)
-- No race conditions between check and use
 - Clear success/failure semantics
 
 ---
@@ -561,9 +417,9 @@ context.close() // Registry cleaned up automatically
 
 **Trade-Off**: Keep deprecated methods or force immediate migration?
 
-**Decision**: Deprecate with WARNING level (code compiles, shows warnings)
-- **Rationale**: 1321+ tests use old APIs, immediate break would require massive changes
-- **Timeline**: Phase 5 deprecates, future phase removes after Train/InOutWorker migration
+**Decision**: Deprecate first (WARNING level), remove after the callers migrated
+- **Rationale**: 1321+ tests used the old APIs, an immediate break would have required massive changes
+- **Outcome**: ✅ COMPLETE. `pathToNextSemaphore()` and `getNextTrackSection()` are removed; `Train` and `InOutWorker` use the services through `RoutingServices`
 
 ---
 
@@ -637,17 +493,16 @@ context.close() // Registry cleaned up automatically
 
 ---
 
-### Phase 5: Deprecate Old APIs and Cleanup (Issue #297) [Current]
+### Phase 5: Deprecate Old APIs and Cleanup (Issue #297) ✅ COMPLETE
 
 **Goal**: Remove deprecated methods, finalize migration
 
 **Changes**:
-- **Deprecated**: `pathToNextSemaphore()`, `getNextTrackSection()` (DeprecationLevel.WARNING)
+- **Deprecated, then removed**: `pathToNextSemaphore()`, `getNextTrackSection()`; callers migrated (`RoutingServices`)
 - **Added**: `EditingContext.getTopologyNavigator()` method
 - **Documentation**: PATH_DISCOVERY_MIGRATION_GUIDE.md, PATH_DISCOVERY_ARCHITECTURE.md
-- **Tests**: Full suite (1321+ tests) passing
 
-**Outcome**: Clean API, comprehensive documentation, backward compatible
+**Outcome**: Clean API, comprehensive documentation
 
 ---
 
@@ -682,7 +537,7 @@ context.close() // Registry cleaned up automatically
 
 **Concurrency Tests**:
 - Multiple trains requesting paths simultaneously
-- Registry consistency under concurrent access (single-threaded in jDisco, but test design)
+- Registry consistency under concurrent access (single-threaded in kDisco, but test design)
 
 ---
 
@@ -709,27 +564,9 @@ diff -u baseline.log migrated.log | grep -v "Time:"
 
 ## Future Considerations
 
-### DSOL/Kalasim Migration
-
-**Current Architecture Enables**:
-- TopologyNavigator: Platform-agnostic (no jDisco dependencies)
-- PathReservationService: Can be adapted to DSOL SimEvent pattern
-- TrainNavigationService: Can be adapted to DSOL Agent pattern
-
-**Migration Path**:
-1. Replace jDisco `Process` with DSOL `SimEvent`
-2. Replace jDisco `hold()` with DSOL `schedule()`
-3. Adapt services to DSOL lifecycle (no interface changes needed)
-
----
-
 ### Multi-Threaded Simulations
 
-**Current**: Single-threaded (jDisco model)
-**Future**: If migrating to multi-threaded framework (e.g., Kalasim with coroutines):
-- Add synchronization to PathReservationRegistry
-- Use atomic operations for reservation/release
-- Consider read-write locks for registry queries
+The simulation is single-threaded (kDisco); there is no planned engine migration. If a multi-threaded engine is ever adopted, the synchronization options for the registry and the reservation are analysed in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) §7.
 
 ---
 
@@ -746,9 +583,8 @@ diff -u baseline.log migrated.log | grep -v "Time:"
 
 ### Performance Optimization
 
-**Current**: O(V+E) graph traversal, O(1) registry queries
+**Current**: O(V+E) graph traversal, O(1) registry queries, budgeted and cached switch-constrained route search (Issue #1151)
 **Future Optimizations**:
-- **Path caching**: Cache frequently used paths
 - **Incremental updates**: Update only changed paths when topology changes
 - **Spatial indexing**: R-tree or quad-tree for faster topology queries
 
@@ -762,7 +598,7 @@ diff -u baseline.log migrated.log | grep -v "Time:"
 ✅ **Atomic Reservation**: All-or-nothing path reservation (no partial reservations)
 ✅ **Explicit Ownership**: Bidirectional train↔block tracking (clear ownership semantics)
 ✅ **Simplified Code**: ShuntingLoop reduced by ~100 lines
-✅ **Backward Compatible**: Deprecated APIs work unchanged (WARNING level)
+✅ **Old API Removed**: Callers migrated to the services (`RoutingServices`)
 ✅ **Zero Regressions**: All 1321+ tests passing, simulation behavior unchanged
 ✅ **Comprehensive Documentation**: Migration guide + architecture documentation
 
@@ -804,5 +640,5 @@ diff -u baseline.log migrated.log | grep -v "Time:"
 ---
 
 **Architecture Status**: ✅ Implemented and Validated
-**Last Updated**: 2026-01-27
-**Next Steps**: Migrate Train.kt and InOutWorker.kt to new APIs (future phase)
+**Last Updated**: 2026-10-29
+**Next Steps**: ✅ COMPLETE. `Train.kt` and `InOutWorker.kt` use the services (`RoutingServices`); the old API is removed.

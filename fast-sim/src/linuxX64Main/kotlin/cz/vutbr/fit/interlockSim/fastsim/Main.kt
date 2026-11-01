@@ -274,15 +274,15 @@ private fun runSim(
 			return 2
 		}
 	val ctx = factory.createFromFile(path)
-	val issues = ShuntingLoopNetworkValidator.validateVyhybnaCompatible(ctx)
+	val issues = ShuntingLoopNetworkValidator.validateShuntingLoopCompatible(ctx)
 	if (issues.isNotEmpty()) {
 		ctx.close()
-		eprintln("Error: network is not vyhybna-compatible (required by ShuntingLoop process)")
+		eprintln("Error: network is not ShuntingLoop-compatible (required by ShuntingLoop process)")
 		eprintln("  Issues:")
 		for (issue in issues) {
 			eprintln("    - $issue")
 		}
-		eprintln("  Canonical example: core/src/jvmMain/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		eprintln("  Canonical example: core/src/commonMain/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 		return 2
 	}
 	val reporter = TextReporter(verbosity)
@@ -326,7 +326,7 @@ private fun printUsage() {
 		"""
 		Usage:
 		  fast-sim [$CMD_VERBOSE|$CMD_QUIET] $CMD_EXAMPLE <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.AVAILABLE})
-		  fast-sim [$CMD_VERBOSE|$CMD_QUIET] $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
+		  fast-sim [$CMD_VERBOSE|$CMD_QUIET] $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-like station required)
 		  fast-sim $CMD_VERSION                                Print version
 		  fast-sim $CMD_HELP / $CMD_HELP_SHORT                          Print this help
 

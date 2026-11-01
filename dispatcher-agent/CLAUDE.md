@@ -1,6 +1,6 @@
 # CLAUDE.md — :dispatcher-agent
 
-**Last Updated:** 2026-08-29
+**Last Updated:** 2026-10-29
 
 Guidance for Claude Code when working in `:dispatcher-agent`. Repo-wide rules
 (English-only output, heavy-test policy, Koin rules, code quality) live in the
@@ -41,9 +41,9 @@ deliberately live in `:core` to avoid a dependency cycle. Which
 - **MockWebServer is pinned to 5.x** because koog-agents' transitive aws-smithy
   forces okhttp 5.x, and mockwebserver 4.x crashes on the removed
   `okhttp3.internal.Util`.
-- This module declares its **own `sonar {}` block**, as do `:core` and
-  `:desktop-ui` (Issue #762 — the root Sonar config lists no module paths, so
-  no module is indexed twice). Keep it here.
+- This module declares its **own `sonar {}` configuration**, as does every analysed
+  module (`:core-test` and `:fast-sim` set `isSkipProject`; Issue #762 — the root Sonar
+  config lists no module paths, so no module is indexed twice). Keep it here.
 
 ## Configuration
 

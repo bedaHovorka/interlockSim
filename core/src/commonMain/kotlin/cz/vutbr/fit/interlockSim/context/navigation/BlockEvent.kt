@@ -18,7 +18,8 @@ sealed class BlockEvent {
 	abstract val time: Double
 
 	/**
-	 * A block was atomically reserved for a train by [DefaultPathReservationService].
+	 * A block was atomically reserved for a train; `CandidateCommitter` announces it once the
+	 * candidate's reservation is final.
 	 * State transition: FREE → RESERVED.
 	 */
 	data class BlockReserved(
@@ -60,12 +61,16 @@ sealed class BlockEvent {
 	 * A reservation conflict was detected: [trainId] attempted to use [block]
 	 * that is already held by [conflictingTrainId].
 	 *
-	 * Emitted by [DefaultPathReservationService] when:
-	 * - [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict]
-	 *   is returned (registry-level race detected atomically at reservation time), or
-	 * - the run has ended with blocked-path contention still unresolved
-	 *   ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.flushUnresolvedConflicts]).
-	 *   A routine [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.AllPathsBlocked]
+	 * Emitted mid-run by `CandidateCommitter` when
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict]
+	 * is returned (registry-level race detected atomically at reservation time). The other source is
+	 * `ReservationContentionTracker`: when the run has ended with blocked-path contention still unresolved
+	 * ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.flushUnresolvedConflicts])
+	 * it builds the events, but returns them instead of emitting them;
+	 * [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext]'s `run` delivers them to the block-event
+	 * listeners, because the event bus no longer delivers once the run has ended.
+	 *   A routine
+	 *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.AllPathsBlocked]
 	 *   outcome alone never emits this event mid-run (issue #612: timing-based
 	 *   heuristics misfire on ordinary queueing at shared bottlenecks).
 	 *
@@ -74,12 +79,23 @@ sealed class BlockEvent {
 	 * which re-emits the conflict as a [cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning.ReservationConflict]
 	 * after applying a deduplication window.
 	 *
+	 * The two sources are told apart by [atRunEnd] (Issue #1280): `false` for the mid-run registry
+	 * race, `true` for the end-of-run flush. A flushed contention is a train still queued behind
+	 * another when the run stopped -- the deadlock/starvation indicator of Issue #612, but also
+	 * ordinary queueing interrupted by an end-time cutoff -- and never a double-booking, so
+	 * [cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService] counts it apart from the
+	 * mid-run conflicts.
+	 *
+	 * @property atRunEnd `true` when the event comes from the end-of-run flush
+	 *   ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.flushUnresolvedConflicts]),
+	 *   stamped with the run's end time; `false` for a conflict detected while the run was live.
 	 * @since Issue #612 (Goal 3 SP2)
 	 */
 	data class ReservationConflictDetected(
 		override val block: DynamicTrackBlock,
 		val trainId: String,
 		val conflictingTrainId: String,
-		override val time: Double
+		override val time: Double,
+		val atRunEnd: Boolean = false
 	) : BlockEvent()
 }

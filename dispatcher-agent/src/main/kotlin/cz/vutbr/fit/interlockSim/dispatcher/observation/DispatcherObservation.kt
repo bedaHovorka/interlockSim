@@ -289,9 +289,8 @@ sealed interface AppliedOutcome {
 
 	/**
 	 * `request_route` failed because the candidate that came closest was **permanently**
-	 * impossible, not merely busy: a candidate's START semaphore faced away from the requested
-	 * direction of travel (G4), or a switch along a candidate could not be set to the position
-	 * the route required.
+	 * impossible, not merely busy; the impossibility classes are listed on
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible].
 	 *
 	 * Unlike [Blocked], retrying the identical request is futile while the network topology and
 	 * signal facings stay as they are — the agent has to ask for a different route, which is why
@@ -332,9 +331,21 @@ sealed interface AppliedOutcome {
 	/**
 	 * `cancel_route` completed; [anyReleased] is `true` if at least one block was released.
 	 *
-	 * [deferredBlockIds] lists blocks approach locking kept reserved because a proceed aspect stood
-	 * at them and a train may be committed (Issue #1050); non-empty means the release is partial
-	 * and `cancel_route` should be repeated.
+	 * [deferredBlockIds] non-empty (Issue #1050) means the release is not complete: every block not
+	 * listed was freed, and the listed blocks were kept (semantics:
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRouteDetailed]). The apply result
+	 * cannot tell the reachable cases apart, so the rendered text states only route-level truths
+	 * (Issue #1244):
+	 *
+	 * - the kept blocks are those the train stands on or may still enter, or the whole route when the
+	 *   release cannot yet cut it past them (Issue #1242);
+	 * - a repeated `cancel_route` frees nothing more until the train has moved on or the kept
+	 *   blocks' booking windows have closed;
+	 * - extending the route is how to move the train on.
+	 *
+	 * Residual: a kept block whose own release failed (a WARN'd internal failure of the
+	 * `releaseAllBut` drop) lands in neither list, so "every other block was freed" does not
+	 * account for it.
 	 */
 	data class Released(
 		val trainId: String,

@@ -1003,7 +1003,7 @@ class Train :
 				fireStop()
 				env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 
-				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+				// freePath(separator, next); // (the train sets up the path to the next semaphore itself on stopping)
 				waitUntil(allowingSignal(semaphore, separator))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
 				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
@@ -1070,7 +1070,7 @@ class Train :
 			semaphore.signal = Signal.STOP
 		}
 
-		// pro ucely ladeni - moznost ze si vlak sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+		// For debugging: lets a train set up the path to the next semaphore itself when it stops at one.
 // 		private Unit freePath(final PathSeparator separator, final TrackSection next) {
 // 			if (separator instanceof InOut) return;
 // 			try {
@@ -1666,8 +1666,8 @@ class Train :
 	 * - Prevents runtime simulation errors from track being too short
 	 *
 	 * **Implementation:**
-	 * - Uses TopologyNavigator to find all possible paths
-	 * - Calculates total track distance for each path
+	 * - Uses [cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator.findShortestTopologicalDistance]
+	 *   for the shortest route length (a shortest-path search, not a listing of every path)
 	 * - Validates train length against shortest available path
 	 * - Gracefully handles test mocks by catching exceptions
 	 *
@@ -1695,24 +1695,18 @@ class Train :
 		try {
 			val topologyNavigator = env.getRoutingServices().getTopologyNavigator()
 
-			// Find all topologically possible paths between InOuts
-			val paths =
-				topologyNavigator.findAllTopologicalPaths(
-					start = inOut,
-					target = outOut,
-					maxDepth = 100
-				)
-
-			requireSimulation(paths.isNotEmpty()) {
-				"Train length validation failed: No route exists between " +
-					"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
-					"Railway network must provide at least one path between entry and exit points."
-			}
-
-			// Calculate distance for each path and find the shortest using idiomatic Kotlin
+			// Shortest topological route length between the InOuts (a shortest-path search, Issue #1148).
 			val shortestPathDistance =
-				paths.minOf { path ->
-					path.sumOf { section -> section.length() }
+				requireSimulationNotNull(
+					topologyNavigator.findShortestTopologicalDistance(
+						start = inOut,
+						target = outOut,
+						maxDepth = 100
+					)
+				) {
+					"Train length validation failed: No route exists between " +
+						"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+						"Railway network must provide at least one path between entry and exit points."
 				}
 
 			// Validate train length against shortest path

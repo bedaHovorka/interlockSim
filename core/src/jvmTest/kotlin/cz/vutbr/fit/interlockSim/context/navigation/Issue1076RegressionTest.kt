@@ -18,29 +18,22 @@ import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.passAndRelease
 import cz.vutbr.fit.interlockSim.testutil.routeBlocksOf
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.testutil.throwingSwitchUnlockListener
 import cz.vutbr.fit.interlockSim.testutil.topologicalPathBlocks
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -66,14 +59,7 @@ import java.util.concurrent.TimeUnit
  */
 @Tag("integration-test")
 @DisplayName("Issue #1076 Regression: registerSwitches must not steal a foreign train's switch")
-class Issue1076RegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var service: PathReservationService
-
+class Issue1076RegressionTest : PathReservationServiceTestBase() {
 	// Elements from vyhybna.xml
 	private lateinit var semaphoreZA: DynamicPathSeparator // zA at (14,8)
 	private lateinit var semaphoreDoB1: DynamicPathSeparator // doB1 at (25,8), guards k1
@@ -81,12 +67,7 @@ class Issue1076RegressionTest : KoinTestBase() {
 	private lateinit var switchVA: DynamicRailSwitch // vA at (15,8)
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-
-		registry = simulationContext.scope.get()
-		service = simulationContext.getRoutingServices().getPathReservationService()
-
+	fun setUpFixtures() {
 		semaphoreZA = simulationContext.separatorAt(14, 8)
 		semaphoreDoB1 = simulationContext.separatorAt(25, 8)
 		semaphoreDoB2 = simulationContext.separatorAt(24, 9)
@@ -98,11 +79,6 @@ class Issue1076RegressionTest : KoinTestBase() {
 		if (switchVA.conf != Conf.MAIN) {
 			switchVA.changeConf()
 		}
-	}
-
-	@AfterEach
-	fun tearDown() {
-		simulationContext.close()
 	}
 
 	@Test

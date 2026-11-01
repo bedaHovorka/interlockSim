@@ -16,6 +16,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
+import cz.vutbr.fit.interlockSim.testutil.inOutCandidate
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidate
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
@@ -67,34 +70,33 @@ class RuleBasedDispatcherTest {
 
 	/**
 	 * Builds an input. [candidateTargets] defaults to the one available semaphore named by
-	 * [toSeparatorName] (none when it is `null`), so the pre-#970 cases that only name a target
-	 * read unchanged; a case about the choice itself passes an explicit list.
+	 * [targetName] (none when it is `null`), so the cases that only name a target read
+	 * compactly; a case about the choice itself passes an explicit list.
 	 */
 	private fun input(
 		state: TrackFacility.State,
 		towardSemaphoreName: String = "sem",
-		toSeparatorName: String? = "nextSep",
+		targetName: String? = "nextSep",
 		candidateTargets: List<CandidateTarget>? = null,
 		ownerTrainId: String? = null,
 		isApproachingThisInput: Boolean = false,
 		pathSetUpTowardThisInput: Boolean = false,
 		pathAlreadyExtendedBeyond: Boolean = false,
 		awaitingRouteExtension: Boolean = false,
+		heldRouteEndName: String? = null,
 		blockId: String = "block"
 	): BlockInputObservation =
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = towardSemaphoreName,
-			toSeparatorName = toSeparatorName,
-			candidateTargets =
-				candidateTargets
-					?: listOfNotNull(toSeparatorName?.let { CandidateTarget(it, SeparatorKind.SEMAPHORE, available = true) }),
+			candidateTargets = candidateTargets ?: semaphoreCandidates(targetName),
 			state = state,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
 			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
-			awaitingRouteExtension = awaitingRouteExtension
+			awaitingRouteExtension = awaitingRouteExtension,
+			heldRouteEndName = heldRouteEndName
 		)
 
 	// ── Admission ────────────────────────────────────────────────────────────
@@ -219,7 +221,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "zB",
-							toSeparatorName = "doA1",
+							targetName = "doA1",
 							ownerTrainId = "T1",
 							isApproachingThisInput = true,
 							pathAlreadyExtendedBeyond = true,
@@ -233,6 +235,111 @@ class RuleBasedDispatcherTest {
 		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "zB", "doA1"))
 	}
 
+	// ── Same-target re-request guard (Issue #1244) ──────────────────────────
+
+	/** An input of [trainId] standing at `zB` awaiting an extension, choosing between `doA1` and `doA2`. */
+	private fun awaitingInput(
+		trainId: String,
+		heldRouteEndName: String?,
+		blockId: String = "kB"
+	): BlockInputObservation =
+		input(
+			TrackFacility.State.OCCUPIED,
+			towardSemaphoreName = "zB",
+			candidateTargets = listOf(semaphoreCandidate("doA1", true), semaphoreCandidate("doA2", true)),
+			ownerTrainId = trainId,
+			isApproachingThisInput = true,
+			pathAlreadyExtendedBeyond = true,
+			awaitingRouteExtension = true,
+			heldRouteEndName = heldRouteEndName,
+			blockId = blockId
+		)
+
+	/** [awaitingInput] of `T1` holding a route that ends at `doA1`, then a `T2` input at `za` picking [t2Target]. */
+	private fun awaitingT1HoldingDoA1ThenT2Picking(t2Target: String): DispatchObservation =
+		observation(
+			innerBlockInputs =
+				listOf(
+					awaitingInput("T1", heldRouteEndName = "doA1"),
+					input(
+						TrackFacility.State.OCCUPIED,
+						towardSemaphoreName = "za",
+						targetName = t2Target,
+						ownerTrainId = "T2",
+						isApproachingThisInput = true,
+						blockId = "kA"
+					)
+				)
+		)
+
+	@Test
+	@DisplayName("awaiting input picking its held route end: no ReservePath; another input still reserves (#1244)")
+	fun awaitingInputDoesNotReRequestTheRouteItHolds() {
+		val decisions = RuleBasedDispatcher().decide(awaitingT1HoldingDoA1ThenT2Picking("zb"))
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "za", "zb"))
+	}
+
+	/**
+	 * Pins the guard's place before the same-tick claim: the skipped awaiting input must not claim
+	 * its held end, or a later input picking that separator would be deferred for nothing.
+	 */
+	@Test
+	@DisplayName("an awaiting T1 holding doA1 plus a T2 input picking doA1: T2 still gets its ReservePath (#1244)")
+	fun skippedAwaitingInputDoesNotClaimItsHeldEnd() {
+		val decisions = RuleBasedDispatcher().decide(awaitingT1HoldingDoA1ThenT2Picking("doA1"))
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "za", "doA1"))
+	}
+
+	@Test
+	@DisplayName("awaiting input whose held route ends elsewhere: reserves the pick as before (#1244)")
+	fun awaitingInputWithADifferentHeldEndReserves() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed = observation(innerBlockInputs = listOf(awaitingInput("T1", heldRouteEndName = "doA2")))
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "zB", "doA1"))
+	}
+
+	@Test
+	@DisplayName("a held route end on a non-awaiting OCCUPIED or RESERVED input is ignored (#1244)")
+	fun heldRouteEndOnANonAwaitingInputIsIgnored() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				innerBlockInputs =
+					listOf(
+						input(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "za",
+							targetName = "zb",
+							ownerTrainId = "T1",
+							isApproachingThisInput = true,
+							heldRouteEndName = "zb",
+							blockId = "kA"
+						),
+						input(
+							TrackFacility.State.RESERVED,
+							towardSemaphoreName = "zc",
+							targetName = "zd",
+							ownerTrainId = "T2",
+							pathSetUpTowardThisInput = true,
+							heldRouteEndName = "zd",
+							blockId = "kB"
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(
+			DispatchDecision.ReservePath("T1", "za", "zb"),
+			DispatchDecision.ReservePath("T2", "zc", "zd")
+		)
+	}
+
 	@Test
 	@DisplayName("OCCUPIED input, approaching, not extended: reserves from→to with occupant's train id")
 	fun occupiedApproachingReserves() {
@@ -244,7 +351,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "za",
-							toSeparatorName = "zb",
+							targetName = "zb",
 							ownerTrainId = "T1",
 							isApproachingThisInput = true
 						)
@@ -267,7 +374,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "za",
-							toSeparatorName = null,
+							targetName = null,
 							ownerTrainId = "T1",
 							isApproachingThisInput = true
 						)
@@ -281,16 +388,6 @@ class RuleBasedDispatcherTest {
 
 	// ── Path advancement — the target choice (Issue #970) ───────────────────
 
-	private fun semaphore(
-		name: String,
-		available: Boolean
-	) = CandidateTarget(name, SeparatorKind.SEMAPHORE, available)
-
-	private fun inOut(
-		name: String,
-		available: Boolean
-	) = CandidateTarget(name, SeparatorKind.IN_OUT, available)
-
 	@Test
 	@DisplayName("the second candidate wins when the first is unavailable")
 	fun secondCandidateWinsWhenFirstUnavailable() {
@@ -302,8 +399,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "zA",
-							toSeparatorName = null,
-							candidateTargets = listOf(semaphore("doB1", false), semaphore("doB2", true)),
+							candidateTargets = listOf(semaphoreCandidate("doB1", false), semaphoreCandidate("doB2", true)),
 							ownerTrainId = "T1",
 							isApproachingThisInput = true
 						)
@@ -316,7 +412,7 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
-	@DisplayName("all candidates unavailable: NoAction, whatever the projection says")
+	@DisplayName("all candidates unavailable: NoAction")
 	fun allCandidatesUnavailableGivesNoAction() {
 		val dispatcher = RuleBasedDispatcher()
 		val observed =
@@ -326,8 +422,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "zA",
-							toSeparatorName = "doB1",
-							candidateTargets = listOf(semaphore("doB1", false), semaphore("doB2", false)),
+							candidateTargets = listOf(semaphoreCandidate("doB1", false), semaphoreCandidate("doB2", false)),
 							ownerTrainId = "T1",
 							isApproachingThisInput = true
 						)
@@ -350,8 +445,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "doB1",
-							toSeparatorName = "zB",
-							candidateTargets = listOf(semaphore("zB", true), inOut("B", true)),
+							candidateTargets = listOf(semaphoreCandidate("zB", true), inOutCandidate("B", true)),
 							ownerTrainId = "T1",
 							isApproachingThisInput = true
 						)
@@ -364,8 +458,8 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
-	@DisplayName("the dispatcher chooses from the candidates and ignores a decoy toSeparatorName")
-	fun ignoresDecoyToSeparatorName() {
+	@DisplayName("a RESERVED input set up toward this input reserves toward the chosen candidate")
+	fun reservedInputReservesTowardChosenCandidate() {
 		val dispatcher = RuleBasedDispatcher()
 		val observed =
 			observation(
@@ -374,8 +468,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.RESERVED,
 							towardSemaphoreName = "zA",
-							toSeparatorName = "decoy",
-							candidateTargets = listOf(semaphore("doB2", true)),
+							candidateTargets = listOf(semaphoreCandidate("doB2", true)),
 							ownerTrainId = "T2",
 							pathSetUpTowardThisInput = true
 						)
@@ -399,8 +492,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k1",
 				towardSemaphoreName = "doB1",
-				toSeparatorName = "zB",
-				candidateTargets = listOf(semaphore("zB", true), semaphore("zB2", true)),
+				candidateTargets = listOf(semaphoreCandidate("zB", true), semaphoreCandidate("zB2", true)),
 				ownerTrainId = "T1",
 				isApproachingThisInput = true
 			)
@@ -409,8 +501,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k2",
 				towardSemaphoreName = "doB2",
-				toSeparatorName = "zB",
-				candidateTargets = listOf(semaphore("zB", true), semaphore("zB3", true)),
+				candidateTargets = listOf(semaphoreCandidate("zB", true), semaphoreCandidate("zB3", true)),
 				ownerTrainId = "T2",
 				isApproachingThisInput = true
 			)
@@ -470,7 +561,7 @@ class RuleBasedDispatcherTest {
 						input(
 							TrackFacility.State.RESERVED,
 							towardSemaphoreName = "zb",
-							toSeparatorName = "outB",
+							targetName = "outB",
 							ownerTrainId = "T2",
 							pathSetUpTowardThisInput = true
 						)
@@ -500,7 +591,7 @@ class RuleBasedDispatcherTest {
 			input(
 				TrackFacility.State.OCCUPIED,
 				towardSemaphoreName = "semA",
-				toSeparatorName = "nextA",
+				targetName = "nextA",
 				ownerTrainId = "TA",
 				isApproachingThisInput = true
 			)
@@ -508,7 +599,7 @@ class RuleBasedDispatcherTest {
 			input(
 				TrackFacility.State.OCCUPIED,
 				towardSemaphoreName = "semB",
-				toSeparatorName = "nextB",
+				targetName = "nextB",
 				ownerTrainId = "TA",
 				isApproachingThisInput = false
 			)
@@ -532,7 +623,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k1",
 				towardSemaphoreName = "doB1",
-				toSeparatorName = "zB1",
+				targetName = "zB1",
 				ownerTrainId = "T1",
 				isApproachingThisInput = true
 			)
@@ -541,7 +632,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k2",
 				towardSemaphoreName = "doB2",
-				toSeparatorName = "zB2",
+				targetName = "zB2",
 				ownerTrainId = "T2",
 				isApproachingThisInput = true
 			)
@@ -564,7 +655,7 @@ class RuleBasedDispatcherTest {
 		// exact shape non-deterministically firing a ConflictDetectedEvent on vyhybna.xml: two
 		// trains approaching a track merge (different blocks, e.g. doB1/doB2 converging on
 		// separator zB) both compute the SAME free next separator as their target in the SAME
-		// decide() call, since the shell resolves toSeparatorName once per input from a single
+		// decide() call, since the shell resolves the candidate list once per input from a single
 		// frozen observation — neither input sees the other's not-yet-applied reservation.
 		// Emitting both ReservePaths lets one land as a genuine ActionValidator/registry
 		// conflict purely from this same-tick race, not from any real track contention.
@@ -578,7 +669,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k1",
 				towardSemaphoreName = "doB1",
-				toSeparatorName = "zB",
+				targetName = "zB",
 				ownerTrainId = "T1",
 				isApproachingThisInput = true
 			)
@@ -587,7 +678,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k2",
 				towardSemaphoreName = "doB2",
-				toSeparatorName = "zB",
+				targetName = "zB",
 				ownerTrainId = "T2",
 				isApproachingThisInput = true
 			)
@@ -613,7 +704,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k1",
 				towardSemaphoreName = "semA",
-				toSeparatorName = "nextA",
+				targetName = "nextA",
 				ownerTrainId = "TA",
 				isApproachingThisInput = true
 			)
@@ -622,7 +713,7 @@ class RuleBasedDispatcherTest {
 				TrackFacility.State.OCCUPIED,
 				blockId = "k1",
 				towardSemaphoreName = "semB",
-				toSeparatorName = "nextB",
+				targetName = "nextB",
 				ownerTrainId = "TB",
 				isApproachingThisInput = true
 			)

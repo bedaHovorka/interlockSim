@@ -56,10 +56,18 @@ import kotlinx.serialization.Serializable
  * @property blockTransitions Total train movement events across all trains — every block-to-block
  *   step (sum over `ShuntingLoop.getAllBlockTransitions`). This is the figure that separated the
  *   rule-based arm (173 per 600 s run) from the LLM arm (2) in the #847 sweep.
- * @property conflicts Reservation conflicts detected since simulation start
- *   (`MetricsSnapshot.conflictCount`).
+ * @property conflicts Reservation conflicts detected while the run was live — a double-booking the
+ *   registry caught and rolled back (`MetricsSnapshot.conflictCount`). From schema version 10
+ *   (Issue #1280) it no longer includes the contentions still open at run end; those are
+ *   [unresolvedAtRunEnd]. A file of version 9 or older counted both here.
  * @property failedReservations Dispatcher reservation attempts that were refused
  *   (`ShuntingLoop.getFailedReservations`).
+ * @property unresolvedAtRunEnd Blocked-path contentions (a train waiting for a block another train
+ *   holds) still open when the run ended (`MetricsSnapshot.unresolvedAtRunEndCount`, Issue #1280).
+ *   `0` when every waiting train got its route. Non-zero is either the Issue #612
+ *   deadlock/starvation indicator or — on a run cut off at its end time with trains still on the
+ *   network, which a run fed by an endless train generator always is — queueing the cutoff
+ *   interrupted; it is never a double-booking. `null` in files written before schema version 10.
  *
  * @see DispatcherRunSnapshot.railwayOutcome
  * @since Issue #834 (SP2c.11 — record what the railway achieved, not just decision hygiene)
@@ -72,7 +80,8 @@ data class RailwayOutcome(
 	val maxConcurrentTrains: Long? = null,
 	val blockTransitions: Long? = null,
 	val conflicts: Long? = null,
-	val failedReservations: Long? = null
+	val failedReservations: Long? = null,
+	val unresolvedAtRunEnd: Long? = null
 ) {
 	companion object {
 		/**

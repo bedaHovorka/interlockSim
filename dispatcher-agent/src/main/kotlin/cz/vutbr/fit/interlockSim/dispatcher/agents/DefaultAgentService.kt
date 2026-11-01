@@ -51,7 +51,8 @@ class DefaultAgentService(
 		tools: List<DomainTool>,
 		systemPrompt: String?,
 		cycleHistory: CycleHistory,
-		outcomeFeed: AppliedOutcomeFeed?
+		outcomeFeed: AppliedOutcomeFeed?,
+		stationCapacity: Int
 	): KoogDispatchAgent {
 		logger.debug {
 			"DefaultAgentService.createDispatchAgent: modelName=$modelName, tools=${tools.size}, " +
@@ -72,6 +73,6 @@ class DefaultAgentService(
 			)
 
 		logger.debug { "DefaultAgentService: created AIAgent with ${tools.size} Koog-wrapped tools" }
-		return KoogDispatchAgentImpl(aiAgent, cycleHistory, outcomeFeed)
+		return KoogDispatchAgentImpl(aiAgent, cycleHistory, outcomeFeed, stationCapacity)
 	}
 }

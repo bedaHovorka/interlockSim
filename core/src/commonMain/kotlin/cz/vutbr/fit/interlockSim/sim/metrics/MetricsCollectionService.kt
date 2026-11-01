@@ -80,10 +80,11 @@ interface MetricsCollectionService {
 	 * Ids of trains that still hold at least one block reservation, logged at WARN when non-empty.
 	 *
 	 * Intended to be called **once, at run end, on a quiesced simulation**. A non-empty result is not
-	 * by itself a fault: it is expected when the run was stopped early (manual stop, time limit, or a
-	 * deadlock that left trains mid-journey), because those trains legitimately still hold their
-	 * sections. It is a **leak** only on a natural completion — a run that reached its scheduled end
-	 * yet still has outstanding reservations, meaning those trains' counts never drained, their
+	 * by itself a fault: it is expected when the run was stopped early (manual stop, or a deadlock that
+	 * left trains mid-journey) or cut off at its end time with trains still on the network — a run fed
+	 * by an endless train generator always ends that way (Issue #1280) — because those trains
+	 * legitimately still hold their sections. It is a **leak** only on a run whose every journey had
+	 * finished yet still has outstanding reservations, meaning those trains' counts never drained, their
 	 * journeys were never credited, and the blocks they hold were never returned (the Issue #936
 	 * failure). The caller, which knows the run-end cause, is the one that can tell the two apart;
 	 * this method only reports the observed state and logs it for visibility. Called mid-run it simply

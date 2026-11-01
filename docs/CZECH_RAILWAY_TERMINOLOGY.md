@@ -34,7 +34,7 @@ The interlockSim project uses Czech railway terminology primarily in:
 |------------------|-------------------------------|---------------------|-------|
 | **vyhybna.xml** | výhybna | "shunting loop.xml" | Main example railway network configuration |
 | **praha-hlavni-nadrazi.xml** | Praha Hlavní Nádraží | "Prague Main Station.xml" | Complex station network with 4 entry + 6 exit points |
-| **rudyUjezd.xml** | Rudý Újezd | "Red Settlement.xml" (fictional) | Test network configuration |
+| **cerveny_ujezd.xml** | Červený Újezd | "Red Settlement.xml" (fictional) | Test network configuration |
 
 **Filename Convention:**
 - **All filenames use ASCII without diacritics** for filesystem compatibility and encoding safety
@@ -45,7 +45,7 @@ The interlockSim project uses Czech railway terminology primarily in:
 - **vyhybna** - Czech term for "shunting loop" or "marshaling yard switching area"
 - **hlavní nádraží** - "main station" (with diacritics: nádraží, not nadrazi)
 - **Praha** - Prague (capital city of Czech Republic)
-- **Rudý Újezd** - Fictional place name for testing purposes
+- **Červený Újezd** - Fictional place name for testing purposes
 
 ---
 
@@ -192,7 +192,8 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations (fictional examp
 
 Found **1 Czech comment** in source code:
 
-**Location:** `src/main/kotlin/cz/vutbr/fit/interlockSim/sim/ShuntingLoop.kt:44`
+**Location:** `ShuntingLoop` (`sim/ShuntingLoop.kt`), the comment above the network load; the comment was
+removed in `4b2eca1a` (#1191), when `ShuntingLoop` started to derive its blocks and signals from a topology `Station`
 
 ```kotlin
 // Sit jiz musi byt nactena z vyhybna.xml !!!

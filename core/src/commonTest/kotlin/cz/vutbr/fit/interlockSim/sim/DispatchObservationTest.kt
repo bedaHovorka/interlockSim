@@ -11,13 +11,21 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import kotlin.test.Test
 
 /**
- * Unit tests for [DispatchObservation.from].
+ * Unit tests for [DispatchObservation.from] and for [routeEndpointName] (Issue #1244).
  *
  * The factory builds the stub [SimulationSnapshot] that a caller converting from a push-based
  * observation source (for example `:dispatcher-agent`'s `DispatcherObservation`, a type `:core`
@@ -72,5 +80,28 @@ class DispatchObservationTest {
 			)
 		)
 		assertThat(observation.approvedTrainCount).isEqualTo(2)
+	}
+
+	@Test
+	fun `routeEndpointName is the name of a station exit`() {
+		val static = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+		val inOut =
+			DynamicInOut(static, createDynamicInstance(static.inSemaphore), createDynamicInstance(static.outSemaphore))
+
+		assertThat(inOut.routeEndpointName()).isEqualTo("A")
+	}
+
+	@Test
+	fun `routeEndpointName is the name of a signal`() {
+		val semaphore = createDynamicInstance(RailSemaphore("doA1", true, Cell.SpatialType.HORIZONTAL))
+
+		assertThat(semaphore.routeEndpointName()).isEqualTo("doA1")
+	}
+
+	@Test
+	fun `routeEndpointName is null for a switch because a switch is never a route endpoint`() {
+		val switch = DynamicRailSwitch(RailSwitch("vA", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE))
+
+		assertThat(switch.routeEndpointName()).isNull()
 	}
 }

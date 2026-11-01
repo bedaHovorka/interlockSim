@@ -17,21 +17,12 @@ import assertk.assertions.isTrue
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import org.slf4j.LoggerFactory
 
 /**
@@ -42,44 +33,29 @@ import org.slf4j.LoggerFactory
  * so the signal kept STOP and the train waited at a red signal with a valid route.
  */
 @Tag("integration-test")
-class StartSignalOfRouteFromSignalTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var context: DefaultSimulationContext
+class StartSignalOfRouteFromSignalTest : PathReservationServiceTestBase() {
 	private lateinit var appender: ListAppender<ILoggingEvent>
 
 	@BeforeEach
-	fun setUp() {
-		context = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
+	fun attachAppender() {
 		appender = ListAppender<ILoggingEvent>().also { it.start() }
 		(LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger).addAppender(appender)
 	}
 
 	@AfterEach
-	fun tearDown() {
+	fun detachAppender() {
 		(LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger).detachAppender(appender)
 	}
-
-	private fun semaphore(name: String) = context.cellsOfType<DynamicRailSemaphore>().single { it.name == name }
-
-	private fun inOutB() =
-		context
-			.getInOuts()
-			.map { context.toDynamic(it) }
-			.filterIsInstance<DynamicInOut>()
-			.single { it.name == "B" }
 
 	private fun configWarnings() = appender.list.map { it.formattedMessage }.filter { "SEMAPHORE_CONFIG_WARNING" in it }
 
 	@Test
 	fun `a red start signal turns proceed when its route is granted from it`() {
-		val zB = semaphore("zB")
-		val doA1 = semaphore("doA1")
+		val zB = findSemaphoreByName("zB")
+		val doA1 = findSemaphoreByName("doA1")
 		assertThat(zB.signal).isEqualTo(Signal.STOP)
 
-		val result =
-			context.getRoutingServices().getPathReservationService().reservePath("startTrain", zB, doA1)
+		val result = service.reservePath("startTrain", zB, doA1)
 
 		assertThat(result)
 			.withMessage("the route zB -> doA1 must be granted")
@@ -90,14 +66,13 @@ class StartSignalOfRouteFromSignalTest : KoinTestBase() {
 
 	@Test
 	fun `a red start signal turns proceed when the route is extended from it`() {
-		val zA = semaphore("zA")
-		val service = context.getRoutingServices().getPathReservationService()
-		val first = service.reservePath("extTrain", zA, semaphore("doB1"))
+		val zA = findSemaphoreByName("zA")
+		val first = service.reservePath("extTrain", zA, findSemaphoreByName("doB1"))
 		assertThat(first).isInstanceOf<PathReservationService.ReservationResult.Success>()
 		zA.signal = Signal.STOP
 		appender.list.clear()
 
-		val extension = service.reservePath("extTrain", zA, inOutB())
+		val extension = service.reservePath("extTrain", zA, inOutNamed("B"))
 
 		assertThat(extension)
 			.withMessage("the extension zA -> B must be granted")

@@ -1,6 +1,6 @@
 # CLAUDE.md — :core-test
 
-**Last Updated:** 2026-09-29
+**Last Updated:** 2026-11-01
 
 Guidance for Claude Code when working in `:core-test`. Repo-wide rules live in
 the [root CLAUDE.md](../CLAUDE.md).
@@ -28,7 +28,8 @@ tripwire of Issue #1011 (see Contents).
   `ContextTracker`, `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
   (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
-  `NavigationDecoratingContext`, `ShuntingLoopLookups`,
+  `NavigationDecoratingContext`, `FirstTrainOwnershipConflict` (holds one train in an
+  ownership-conflict wait, Issues #943/#1244), `ShuntingLoopLookups`,
   `TrainKinematicSampler`/`TrainKinematicSample` and `AspectFlipOnce`
   (Issue #989 sampling/aspect-flip helpers; cadence pinned by
   `:core` jvmTest `TrainKinematicSamplerContractTest`), and `RepeatedTestCapExtension`
@@ -46,8 +47,11 @@ tripwire of Issue #1011 (see Contents).
   `logback-test.xml` (Issue #1011) — the same single-console-stream wiring every other
   JVM test config has. The module ships no logging engine of its own, so this dependency
   (`logback-classic`) also stops SLF4J's no-provider banner writing to stderr.
-- `src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` — 25 XML
-  fixture networks, from `minimal-network.xml` up to `praha-hlavni-nadrazi.xml`,
-  including six `invalid-*.xml` negative cases. This directory is one of the
+- `src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` — 28 XML
+  fixture files: 18 station/track networks from `minimal-network.xml` up to
+  `praha-hlavni-nadrazi.xml`, six `invalid-*.xml` negative cases and four
+  `roundtrip-*.xml` helpers. (`cerveny_ujezd.xml` left the directory with the
+  duplicate-file relink of PR #1287 — `NetworkResources.CERVENY_UJEZD_XML`
+  delegates to `BuiltinNetworks.CERVENY_UJEZD_XML`.) This directory is one of the
   roots baked into `:core`'s generated `NATIVE_RESOURCE_ROOTS` — see
   [core/CLAUDE.md](../core/CLAUDE.md).

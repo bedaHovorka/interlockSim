@@ -161,10 +161,11 @@ class InOutWorker(
 					}
 					is PathReservationService.ReservationResult.GeometricallyImpossible -> {
 						// Issue #903, same reasoning as the NonContiguousStart branch above: this
-						// is a permanent impossibility (rear-facing START or unconfigurable
-						// switch), not ordinary contention, so `continue`-and-retry via
-						// waitUntil(pathFree) would spin without advancing simulation time -- the
-						// condition it waits on is path AVAILABILITY, which this failure mode
+						// is a permanent impossibility (the non-oriented endpoint classes cannot arise here,
+						// because the origin is an InOut and every target a semaphore), not ordinary
+						// contention (classes: see ReservationResult.GeometricallyImpossible), so
+						// `continue`-and-retry via waitUntil(pathFree) would spin without advancing simulation
+						// time -- the condition it waits on is path AVAILABILITY, which this failure mode
 						// leaves untouched.
 						val errorMsg =
 							"InOut ${inOut.name} - Route geometrically impossible for train " +

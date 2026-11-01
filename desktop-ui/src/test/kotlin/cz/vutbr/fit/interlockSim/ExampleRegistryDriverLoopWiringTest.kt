@@ -19,6 +19,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createExampleContext
@@ -72,7 +74,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 			registry,
 			get<SimulationContextFactory>(),
 			"createShuntingLoopAIExample",
-			"shuntingLoopAI",
+			ExampleNames.SHUNTING_LOOP_AI,
 			"60"
 		)
 	}
@@ -107,6 +109,50 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 		checkNotNull(loop.controlStepListener) { "no ControlStepListener was wired" }.onControlStep()
 
 		assertThat(signal.signalCount).isGreaterThanOrEqualTo(before + 1)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("the loop's admission cap is declared in scope for the agent's prompt (#1155)")
+	fun stationCapacityIsDeclaredFromTheLoop() {
+		val context = createShuntingLoopAIContext()
+		val loop = context.mainProcess as ShuntingLoop
+
+		assertThat(context.scope.getOrNull<StationCapacity>()?.value).isEqualTo(loop.stationCapacity)
+	}
+
+	/**
+	 * Issue #1155: the apply-time admission gate must use the station's own capacity, not the
+	 * vyhybna-derived default — [ExampleRegistry] passes `maxConcurrentTrains = loop.stationCapacity`
+	 * to the [DispatchDecisionApplier]. The applier itself is not declared in the scope, so the wired
+	 * instance is reached the way [driverLivenessProbeIsWiredToTheLoop] reaches private wiring: the
+	 * [ShuntingLoop.controlStepListener] lambda captures it, and the capture field's type identifies
+	 * it. The private `maxConcurrentTrains` field is read by reflection — the exact value the
+	 * applier's cap check (`activeTrainCountProvider() >= maxConcurrentTrains`) consults.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("the wired applier's admission-gate cap is the loop's station capacity, not the default (#1155)")
+	fun applierAdmissionGateIsWiredFromTheLoopCapacity() {
+		val context = createShuntingLoopAIContext()
+		val loop = context.mainProcess as ShuntingLoop
+		val listener = checkNotNull(loop.controlStepListener) { "no ControlStepListener was wired" }
+
+		val applierField =
+			listener.javaClass.declaredFields.firstOrNull { field ->
+				DispatchDecisionApplier::class.java.isAssignableFrom(field.type)
+			}
+		checkNotNull(applierField) { "the wired ControlStepListener captures no DispatchDecisionApplier" }
+		applierField.isAccessible = true
+		val applier =
+			checkNotNull(applierField.get(listener) as? DispatchDecisionApplier) {
+				"the captured applier instance is absent"
+			}
+
+		val capField = DispatchDecisionApplier::class.java.getDeclaredField("maxConcurrentTrains")
+		capField.isAccessible = true
+		assertThat(capField.getInt(applier), "wired applier's maxConcurrentTrains")
+			.isEqualTo(loop.stationCapacity)
 	}
 
 	@Test

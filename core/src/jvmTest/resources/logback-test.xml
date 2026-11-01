@@ -46,7 +46,10 @@
 	<!--
 		PathCommandTranslator emits its skip/diagnostic messages at DEBUG. Enabling DEBUG here
 		makes the lambda bodies actually evaluate during tests, so a broken string interpolation
-		in a log statement fails the build instead of hiding behind a disabled log level.
+		in a log statement is exercised instead of hiding behind a disabled log level. It does
+		not fail a test: kotlin-logging's toStringSafe catches the exception and logs the text
+		"Log message invocation failed: <exception>" at the statement's own level, so assert on
+		the captured log output where a test must fail on it.
 		The class is only exercised by PathCommandTranslatorTest, so this adds no test noise.
 	-->
 	<logger name="cz.vutbr.fit.interlockSim.sim.PathCommandTranslator" level="DEBUG"/>
@@ -60,6 +63,28 @@
 		hides behind a disabled log level. The appenders filter at WARN, so nothing extra prints.
 	-->
 	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService" level="DEBUG"/>
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteReleaser" level="DEBUG"/>
+	<!--
+		The kernel reservation expiry (Issues #1174, #1220): same rationale, and its tests capture
+		the INFO-once-then-DEBUG deferral lines, which they can only see with the logger at DEBUG.
+	-->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.DefaultReservationExpiry" level="DEBUG"/>
+	<!-- Its signal bookkeeping and signal configuration moved out of the service (Issue #1169). -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.ClearedSignalLedger" level="DEBUG"/>
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteSignalConfigurator" level="DEBUG"/>
+
+	<!--
+		SwitchConfigurator (Issue #1170) holds the switch side of reservePath, extracted from
+		DefaultPathReservationService with its own logger. Same rationale as above: DEBUG so its
+		log lambdas evaluate during tests; the appenders filter at WARN, so nothing extra prints.
+	-->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.SwitchConfigurator" level="DEBUG"/>
+	<!-- Same rationale for the target discovery extracted from that service (Issue #1171). -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetDiscovery" level="DEBUG"/>
+	<!-- Same rationale for the candidate geometry screening extracted from that service (Issue #1210, SP12.9). -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.RouteCandidateScreen" level="DEBUG"/>
+	<!-- Same rationale for the candidate commit, finalize and rollback extracted from that service (Issue #1211, SP12.10). -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation.CandidateCommitter" level="DEBUG"/>
 
 	<!--
 		ReservationResultMapping.kt logs one INFO "Route GRANTED/DENIED" line per kernel outcome.
