@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.extractUniqueBlocks
 import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
+import cz.vutbr.fit.interlockSim.context.navigation.onSwitchClaimsReleased
 import cz.vutbr.fit.interlockSim.exceptions.SimulationStalled
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -71,14 +72,18 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * The first attempt is made on the dispatcher tick that first sees the train. A train refused on
  * a retryable result waits in a FIFO queue and is **not** polled: it is attempted again only when
- * a reservation is released -- a [BlockEvent.BlockReleased] or a
- * [cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired]. Waiters are attempted
- * before the fresh trains of the same tick: every release feeds one admission policy -- the
- * pending wake drains synchronously at the top of the tick, before [startApprovedTrains].
+ * a reservation is released -- a [BlockEvent.BlockReleased], a
+ * [cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired], a train-less
+ * [BlockEvent.OccupancyCleared], or the internal
+ * [cz.vutbr.fit.interlockSim.context.navigation.SwitchClaimsReleased] a teardown emits. Waiters are
+ * attempted before the fresh trains of the same tick: every release feeds one admission policy --
+ * the pending wake drains synchronously at the top of the tick, before [startApprovedTrains].
  * Every release wakes the queue; no relevance model sits between a release and the wake, and
  * releases that queue before the wake are coalesced (a release arriving after the wake
  * re-wakes the retry at the same instant, counted once per instant). A release caused by an
- * attempt's own rollback is ignored, otherwise a refused attempt would wake itself.
+ * attempt's own rollback is ignored for the events that carry a train id, otherwise a refused
+ * attempt would wake itself; the train-less [BlockEvent.OccupancyCleared] is not dropped by that
+ * filter.
  *
  * Consequently an attempt is no longer "one per dispatcher tick": [maxEntryAttempts] counts the
  * first attempt plus the retries that releases trigger. A blocked train that no release ever
@@ -339,11 +344,18 @@ open class MultiTrainLoop(
 
 	init {
 		context.onBlockEvent { event ->
-			if (event is BlockEvent.BlockReleased) {
-				onReleaseSignal(event.trainId)
+			when (event) {
+				is BlockEvent.BlockReleased -> onReleaseSignal(event.trainId)
+				// Issue #1271: a block a train stands on without a registry entry (the #893 shape)
+				// becomes FREE with no BlockReleased; its leave() announces it. For an owned block
+				// the BlockReleased of the same Tail step follows, and the two wakes coalesce.
+				is BlockEvent.OccupancyCleared -> onReleaseSignal(null)
+				else -> Unit
 			}
 		}
 		context.onReservationExpired { onReleaseSignal(it.trainId) }
+		// Issue #1271: a flank switch claim can outlive the train's last block (no BlockReleased).
+		context.onSwitchClaimsReleased { onReleaseSignal(it.trainId) }
 	}
 
 	// Test-observability counters (#365 pattern).
@@ -559,6 +571,8 @@ open class MultiTrainLoop(
 	 * over the queue; irrelevant wakes burn attempts the [maxEntryAttempts] cap already absorbs.
 	 */
 	private fun onReleaseSignal(releasingTrainName: String?) {
+		// Issue #1271: an attempt never suspends and never physically clears occupancy inside the
+		// call, so a train-less (`null`) signal cannot be that attempt's own rollback.
 		if (releasingTrainName != null && releasingTrainName == attemptingTrainName) {
 			return
 		}
