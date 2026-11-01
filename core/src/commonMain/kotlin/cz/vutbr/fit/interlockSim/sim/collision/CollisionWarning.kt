@@ -63,12 +63,23 @@ sealed class CollisionWarning {
 	 * a second reservation attempt for [trainId].  In correct operation this should not
 	 * happen; its presence indicates a dispatcher error or an interlocking bug.
 	 *
+	 * The [severity] tells the two sources apart (Issue #1331):
+	 * - [Severity.CRITICAL] (the default): a double-booking caught while the run is live -- a block
+	 *   reserved for another train, or a double-booking attempt refused by the registry (a race or
+	 *   logic fault).
+	 * - [Severity.WARNING]: a contention still open when the run stopped
+	 *   ([cz.vutbr.fit.interlockSim.context.navigation.BlockEvent.ReservationConflictDetected.atRunEnd]):
+	 *   [trainId] was queued behind [conflictingTrainId]. That is a queue cut off by the end time or a
+	 *   deadlock/starvation indicator -- the flush cannot tell the two apart -- and never a
+	 *   double-booking, so it does not pause.
+	 *
 	 * @property trainId The train that attempted the conflicting reservation.
 	 * @property conflictingTrainId The train that already holds the reservation.
 	 * @property time Simulation time of detection.
 	 * @property conflictingBlock The specific block that caused the conflict, if known.
-	 * @property severity Always [Severity.CRITICAL]: a double-reservation means the
-	 *   interlocking logic has failed and a physical collision is imminent.
+	 * @property severity [Severity.CRITICAL] for a live double-booking (the interlocking logic has
+	 *   failed and a physical collision is imminent); [Severity.WARNING] for a contention still open
+	 *   at the run end.
 	 */
 	data class ReservationConflict(
 		val trainId: String,
