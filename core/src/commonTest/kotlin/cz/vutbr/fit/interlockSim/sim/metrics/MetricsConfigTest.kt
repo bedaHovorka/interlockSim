@@ -45,4 +45,13 @@ class MetricsConfigTest {
 		assertThat(config.isEnabled(MetricGroup.JOURNEYS)).isFalse()
 		assertThat(MetricsConfig(emptySet())).isEqualTo(MetricsConfig.coreOnly())
 	}
+
+	@Test
+	fun `equal configs have equal hash codes even when CORE is passed explicitly`() {
+		val withCore = MetricsConfig(setOf(MetricGroup.CORE, MetricGroup.HISTORY))
+		val without = MetricsConfig(setOf(MetricGroup.HISTORY))
+
+		assertThat(withCore).isEqualTo(without)
+		assertThat(withCore.hashCode()).isEqualTo(without.hashCode())
+	}
 }

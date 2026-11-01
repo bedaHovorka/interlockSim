@@ -16,6 +16,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isZero
 import assertk.assertions.single
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
@@ -23,6 +24,11 @@ import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import dev.mokkery.MockMode
+import dev.mokkery.matcher.any
+import dev.mokkery.mock
+import dev.mokkery.verify
+import dev.mokkery.verify.VerifyMode.Companion.exactly
 import kotlin.test.Test
 
 /**
@@ -130,6 +136,25 @@ class DefaultMetricsCollectionServiceHistoryTest : CommonKoinTestBase() {
 		service.handleJourneyEvent(TrainJourneyEvent.Exited("T1", "B", 40.0))
 
 		assertThat(service.journeys()).isEmpty()
+	}
+
+	@Test
+	fun `with JOURNEYS disabled the service registers no simulation-event listener`() {
+		val env = mock<SimulationEnvironment>(MockMode.autofill)
+
+		DefaultMetricsCollectionService(env = env, config = MetricsConfig(setOf(MetricGroup.HISTORY)))
+
+		verify(exactly(0)) { env.onSimulationEvent(any()) }
+		verify(exactly(1)) { env.onBlockEvent(any()) }
+	}
+
+	@Test
+	fun `with JOURNEYS enabled the service registers one simulation-event listener`() {
+		val env = mock<SimulationEnvironment>(MockMode.autofill)
+
+		DefaultMetricsCollectionService(env = env, config = MetricsConfig.ALL)
+
+		verify(exactly(1)) { env.onSimulationEvent(any()) }
 	}
 
 	@Test
