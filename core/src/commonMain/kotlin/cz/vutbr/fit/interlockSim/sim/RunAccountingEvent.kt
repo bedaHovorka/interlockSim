@@ -121,9 +121,11 @@ sealed interface RunAccountingEvent {
 	) : RunAccountingEvent
 
 	/**
-	 * A caller entered the public `PathReservationService.reservePath` (Issue #1306, Goal 6 SP8): one
-	 * route request, whatever its answer. The internal per-target attempts of `reservePathToAny` and
-	 * `reservePathToAnyNextSemaphore` are not counted; this is the call the Goal 1B B5 cap counts.
+	 * A caller made one public route request of `PathReservationService` (Issue #1306, Goal 6 SP8):
+	 * `reservePath` (the call the Goal 1B B5 cap counts), `reservePathToAny` or
+	 * `reservePathToAnyNextSemaphore` (a train's own entry and next-signal requests), whatever its
+	 * answer. Each public call counts once: the oriented `reservePathToAnyNextSemaphore` overload
+	 * delegates without counting twice, and the internal per-target attempts are not counted.
 	 *
 	 * @property trainId Name of the train that asked.
 	 * @since Issue #1306 (Goal 6 SP8)

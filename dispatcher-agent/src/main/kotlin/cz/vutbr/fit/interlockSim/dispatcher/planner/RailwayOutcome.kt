@@ -119,7 +119,8 @@ import kotlinx.serialization.Serializable
  * @property realTimeRatio [simulationSeconds] divided by [wallSeconds]; `null` also when the wall time
  *   was not above zero.
  * @property routeSearchBudgetExceeded Route searches stopped at their node budget (Issue #1151).
- * @property reservePathCalls Calls of the public `PathReservationService.reservePath`.
+ * @property reservePathCalls Public route requests of `PathReservationService`, each counted once:
+ *   `reservePath`, `reservePathToAny` and `reservePathToAnyNextSemaphore` (`RunPerformance.reservePathCalls`).
  *
  * @see DispatcherRunSnapshot.railwayOutcome
  * @since Issue #834 (SP2c.11 — record what the railway achieved, not just decision hygiene)
