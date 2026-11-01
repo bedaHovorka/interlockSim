@@ -30,7 +30,8 @@ import javax.swing.SwingUtilities
  * Warning log panel that lists collision warnings detected during simulation.
  *
  * Each row in the list shows:
- * - A severity icon (⚠ for all current subtypes which are treated as CRITICAL)
+ * - A severity icon: ⚠ for a CRITICAL warning, ℹ for an advisory WARNING (a train still queued
+ *   when the run stopped, Issue #1331), which is also drawn in the list's normal color
  * - Simulation time of detection (formatted as `T=XX.XXs`)
  * - Involved trains (e.g. `[Train-A vs Train-B]`)
  * - A brief message describing the hazard type
@@ -134,7 +135,7 @@ class WarningPanel : JPanel() {
 
 	// ── Cell renderer ─────────────────────────────────────────────────────────
 
-	private class WarningCellRenderer : DefaultListCellRenderer() {
+	internal class WarningCellRenderer : DefaultListCellRenderer() {
 		override fun getListCellRendererComponent(
 			list: JList<*>,
 			value: Any?,
@@ -145,7 +146,12 @@ class WarningPanel : JPanel() {
 			super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
 			if (value is CollisionWarning) {
 				text = formatWarning(value)
-				foreground = if (isSelected) list.selectionForeground else CRITICAL_COLOR
+				foreground =
+					when {
+						isSelected -> list.selectionForeground
+						value.severity == CollisionWarning.Severity.CRITICAL -> CRITICAL_COLOR
+						else -> list.foreground
+					}
 				toolTipText = formatTooltip(value)
 			}
 			return this
@@ -155,7 +161,11 @@ class WarningPanel : JPanel() {
 			val time = String.format(Locale.ROOT, "T=%05.2fs", warning.time)
 			return when (warning) {
 				is CollisionWarning.ReservationConflict ->
-					"⚠ $time  [${warning.trainId} vs ${warning.conflictingTrainId}]  ReservationConflict"
+					if (warning.severity == CollisionWarning.Severity.CRITICAL) {
+						"⚠ $time  [${warning.trainId} vs ${warning.conflictingTrainId}]  ReservationConflict"
+					} else {
+						"ℹ $time  [${warning.trainId} queued behind ${warning.conflictingTrainId}]  Unresolved at run end"
+					}
 
 				is CollisionWarning.BlockEntryViolation ->
 					"⚠ $time  [${warning.trainId}]  BlockEntryViolation" +
@@ -169,11 +179,19 @@ class WarningPanel : JPanel() {
 		private fun formatTooltip(warning: CollisionWarning): String =
 			when (warning) {
 				is CollisionWarning.ReservationConflict ->
-					"<html><b>Reservation Conflict</b><br>" +
-						"Train <b>${warning.trainId}</b> tried to reserve a block already held " +
-						"by <b>${warning.conflictingTrainId}</b>." +
-						(warning.conflictingBlock?.let { "<br>Block: ${it.name}" } ?: "") +
-						"</html>"
+					if (warning.severity == CollisionWarning.Severity.CRITICAL) {
+						"<html><b>Reservation Conflict</b><br>" +
+							"Train <b>${warning.trainId}</b> tried to reserve a block already held " +
+							"by <b>${warning.conflictingTrainId}</b>." +
+							(warning.conflictingBlock?.let { "<br>Block: ${it.name}" } ?: "") +
+							"</html>"
+					} else {
+						"<html><b>Unresolved at run end</b> (not a collision)<br>" +
+							"Train <b>${warning.trainId}</b> was still queued behind " +
+							"<b>${warning.conflictingTrainId}</b> when the run stopped." +
+							(warning.conflictingBlock?.let { "<br>Block: ${it.name}" } ?: "") +
+							"</html>"
+					}
 
 				is CollisionWarning.BlockEntryViolation -> {
 					val reservation =

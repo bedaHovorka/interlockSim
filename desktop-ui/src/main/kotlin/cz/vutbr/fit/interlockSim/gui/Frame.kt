@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
@@ -750,6 +751,32 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	}
 
 	/**
+	 * Show one collision warning; **must be called from EDT**.
+	 *
+	 * Every warning is listed in [warningPanel]. Only a [CollisionWarning.Severity.CRITICAL] warning
+	 * lights the status-bar indicator, beeps when [sound] is on, and resumes the run the collision
+	 * service paused when [autoPause] is off. An advisory [CollisionWarning.Severity.WARNING] (a train
+	 * still queued when the run stopped, Issue #1331) neither paused the run nor is an alarm, so it
+	 * leaves the indicator, the sound and the pause state alone.
+	 */
+	internal fun showCollisionWarning(
+		warning: CollisionWarning,
+		autoPause: Boolean,
+		sound: Boolean
+	) {
+		warningPanel.addWarning(warning)
+		if (warning.severity != CollisionWarning.Severity.CRITICAL) return
+		statusBar.setWarningIndicator(true)
+		if (sound) {
+			Toolkit.getDefaultToolkit().beep()
+		}
+		// If auto-pause is OFF, resume the simulation immediately.
+		if (!autoPause) {
+			simulationController.runner?.isPaused = false
+		}
+	}
+
+	/**
 	 * Launch the simulation on a background thread via [SimulationController] (Issue #189).
 	 *
 	 * Delegates to [SimulationController.start]. Idempotent: if a simulation is already
@@ -784,17 +811,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			// Capture settings atomically from the volatile fields before dispatch.
 			val autoPause = autoPauseOnCriticalWarning
 			val sound = soundOnCriticalWarning
-			SwingUtilities.invokeLater {
-				warningPanel.addWarning(warning)
-				statusBar.setWarningIndicator(true)
-				if (sound) {
-					Toolkit.getDefaultToolkit().beep()
-				}
-				// If auto-pause is OFF, resume the simulation immediately.
-				if (!autoPause) {
-					simulationController.runner?.isPaused = false
-				}
-			}
+			SwingUtilities.invokeLater { showCollisionWarning(warning, autoPause, sound) }
 		}
 
 		// Apply the current auto-halt setting to the newly created service (Goal 3 SP6).

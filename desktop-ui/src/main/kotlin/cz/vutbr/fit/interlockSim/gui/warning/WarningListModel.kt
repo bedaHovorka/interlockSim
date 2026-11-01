@@ -24,12 +24,16 @@ import javax.swing.SwingUtilities
  *
  * ## Severity mapping
  *
- * All [CollisionWarning] subtypes are treated as **CRITICAL** in the current
- * implementation because each causes the simulation to pause and represents
- * a safety-critical situation:
+ * The model follows [CollisionWarning.severity]. Every subtype is
+ * [CollisionWarning.Severity.CRITICAL] by default, because each pauses the simulation
+ * and represents a safety-critical situation:
  * - [CollisionWarning.ReservationConflict] — double-reservation
  * - [CollisionWarning.BlockEntryViolation] — train entered a foreign block
  * - [CollisionWarning.PredictiveCollision] — pre-emptive head-on warning
+ *
+ * The one [CollisionWarning.Severity.WARNING] today is a [CollisionWarning.ReservationConflict]
+ * for a train still queued when the run stopped (Issue #1331): it is listed, but it is no
+ * critical warning.
  *
  * @since Issue #616 (Goal 3 SP6)
  */
@@ -62,13 +66,11 @@ class WarningListModel : DefaultListModel<CollisionWarning>() {
 	}
 
 	/**
-	 * Returns `true` when the model contains at least one unacknowledged warning.
-	 *
-	 * In the current implementation every warning is treated as CRITICAL, so this
-	 * is equivalent to `!isEmpty`.  The method name is kept intention-revealing for
-	 * future sub-phasing where severity tiers may differ.
+	 * Returns `true` when the model contains at least one unacknowledged
+	 * [CollisionWarning.Severity.CRITICAL] warning; advisory WARNING entries do not count
+	 * (Issue #1331).
 	 *
 	 * **Must be called from EDT** (reads Swing model state).
 	 */
-	fun hasCriticalWarning(): Boolean = !isEmpty
+	fun hasCriticalWarning(): Boolean = elements().asSequence().any { it.severity == CollisionWarning.Severity.CRITICAL }
 }
