@@ -11,7 +11,9 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsHistory
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
+import cz.vutbr.fit.interlockSim.sim.metrics.TrainJourneyRecord
 
 /**
  * A [MetricsCollectionService] that reports a fixed snapshot and records whether the leak gauge
@@ -62,4 +64,13 @@ class FakeMetricsCollectionService(
 		reportUnreleasedReservationsInvoked = true
 		return unreleasedReservations
 	}
+
+	override fun latestSnapshot(): MetricsSnapshot = getSnapshot()
+
+	/** One empty buffer shared by every read, like the real service's single buffer. */
+	private val emptyHistory = MetricsHistory()
+
+	override fun history(): MetricsHistory = emptyHistory
+
+	override fun journeys(): List<TrainJourneyRecord> = emptyList()
 }

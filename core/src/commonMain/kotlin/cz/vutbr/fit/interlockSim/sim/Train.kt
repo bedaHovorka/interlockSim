@@ -536,6 +536,8 @@ class Train :
 				if (where is DynamicInOut && current != null) {
 					// We're at an InOut and we've already traveled through at least one block
 					// This is our destination - exit the loop
+					// Goal 6 SP2 (Issue #673): the front's arrival is the train's exit; record only.
+					if (isFront) emitTrainJourneyEvent(TrainJourneyEvent.Exited(this@Train.name, where.name, time()))
 					break
 				}
 
@@ -1786,6 +1788,8 @@ class Train :
 	}
 
 	override suspend fun actions() { // started once the train is approved
+		// Goal 6 SP2 (Issue #673): the process start is the train's admission; record only.
+		emitTrainJourneyEvent(TrainJourneyEvent.Admitted(name, time()))
 		// Enqueue at the entry InOut (models the neighbouring station's system).
 		val inout = timetable.getIn()
 		val worker: InOutWorker = env.getWorkerFor(inout)

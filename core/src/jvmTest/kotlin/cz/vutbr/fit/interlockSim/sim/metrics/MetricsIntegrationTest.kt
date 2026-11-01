@@ -11,8 +11,11 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isLessThanOrEqualTo
+import assertk.assertions.isNotNull
 import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -59,6 +62,19 @@ class MetricsIntegrationTest : KoinTestBase() {
 		 * Train #1 completes ~49.5s, Train #2 ~101.5s. 120s yields ≥1 completion.
 		 */
 		private const val STANDARD_END_TIME = 120L
+
+		/** Trains of the journey-record run (Issue #673); few enough that every one finishes. */
+		private const val JOURNEY_RUN_TRAINS = 4
+
+		/** End time of the journey-record run: ample for [JOURNEY_RUN_TRAINS] trains to exit. */
+		private const val JOURNEY_RUN_END_TIME = 600L
+
+		/**
+		 * Wrong exits of the journey-record run: none. The synchronous dispatcher never reverses a
+		 * train on `vyhybna.xml`, so each leaves through the InOut its timetable names (measured
+		 * 2026-10-31: four trains B→A, A→B, B→A, B→A).
+		 */
+		private const val EXPECTED_WRONG_EXITS = 0
 	}
 
 	private fun createConfiguredSimulation(endTime: Long): SimulationContext {
@@ -72,6 +88,41 @@ class MetricsIntegrationTest : KoinTestBase() {
 		// Initialize dynamic wrapper map (mirrors ShuntingLoopSmokeTest).
 		val loop = prepareShuntingLoop(context, endTime)
 		return context
+	}
+
+	/**
+	 * Issue #673 (Goal 6 SP2): a full [ShuntingLoop] run leaves one journey record per train, with
+	 * its entry, admission and exit, and the wrong-exit flag. The run generates a bounded number of
+	 * trains and ends long after the last one has left, so every journey is complete; the loop's own
+	 * counters are read only to cross-check the records.
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	fun `a full ShuntingLoop run leaves one journey record per train`() {
+		val context = TestFixtures.loadShuntingSimulationContext(getKoin().get<SimulationContextFactory>())
+		val loop = prepareShuntingLoop(context, JOURNEY_RUN_END_TIME, maxTrains = JOURNEY_RUN_TRAINS)
+		val metrics = context.getMetricsServices().getMetricsCollectionService()
+
+		context.run()
+
+		val journeys = metrics.journeys()
+		journeys.forEach { logger.info { "Journey record: $it" } }
+		assertThat(journeys.size, "one record per train").isEqualTo(JOURNEY_RUN_TRAINS)
+		assertThat(journeys.map { it.trainId }.toSet().size, "distinct trains").isEqualTo(JOURNEY_RUN_TRAINS)
+		assertThat(journeys.size, "records versus trains entered").isEqualTo(loop.getTrainsEntered())
+		assertThat(journeys.count { it.exitTime != null }, "exited records").isEqualTo(loop.getTrainsExited())
+		for (journey in journeys) {
+			val entryTime = assertThat(journey.entryTime, "${journey.trainId} entry time").isNotNull()
+			assertThat(journey.entryInOut, "${journey.trainId} entry InOut").isNotNull()
+			assertThat(journey.plannedExit, "${journey.trainId} planned exit").isNotNull()
+			assertThat(journey.actualExit, "${journey.trainId} actual exit").isNotNull()
+			val admission = requireNotNull(journey.admissionTime) { "${journey.trainId} was never admitted" }
+			val exit = requireNotNull(journey.exitTime) { "${journey.trainId} never exited" }
+			entryTime.isLessThanOrEqualTo(admission)
+			assertThat(admission, "${journey.trainId} admission before exit").isLessThanOrEqualTo(exit)
+			assertThat(journey.wrongExit, "${journey.trainId} wrong exit").isFalse()
+		}
+		assertThat(journeys.count { it.wrongExit }, "wrong exits").isEqualTo(EXPECTED_WRONG_EXITS)
 	}
 
 	/**
