@@ -92,11 +92,11 @@ class SynchronousRunPersistenceTest : KoinTestBase() {
 	@Test
 	@Tag("integration-test")
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	@DisplayName("cervenyUjezd on the synchronous wiring writes its run JSON from the run record")
+	@DisplayName("cervenyUjezdSync on the synchronous wiring writes its run JSON from the run record")
 	fun cervenyUjezdSynchronousRunIsPersisted(
 		@TempDir root: Path
 	) {
-		val context = sweepChild(ExampleNames.CERVENY_UJEZD, root)
+		val context = sweepChild(ExampleNames.CERVENY_UJEZD_SYNC, root)
 		context.use {
 			it.run()
 			assertPersistedFromTheRecord(
