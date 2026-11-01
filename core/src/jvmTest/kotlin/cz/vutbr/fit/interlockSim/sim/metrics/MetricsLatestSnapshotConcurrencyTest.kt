@@ -59,6 +59,9 @@ class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 
 		/** Upper bound for one handover; a failure, not a measurement. */
 		const val HANDOVER_TIMEOUT_SECONDS = 10L
+
+		/** The reader wakes at least this often when idle, so a stop is always honoured. */
+		const val POLL_SECONDS = 1L
 	}
 
 	@Test
@@ -96,7 +99,9 @@ class MetricsLatestSnapshotConcurrencyTest : KoinTestBase() {
 			thread(name = "metrics-latest-snapshot-reader", isDaemon = true) {
 				var previous: MetricsSnapshot? = null
 				while (!runFinished.get()) {
-					val handed = handover.poll()
+					// Bounded even when idle: an empty queue would otherwise park the poll forever
+					// and no finally block can wake a poll that waits on an empty queue.
+					val handed = handover.poll(POLL_SECONDS, TimeUnit.SECONDS)
 					val seen = metrics.latestSnapshot()
 					violations += inconsistencies(previous, seen)
 					previous = seen
