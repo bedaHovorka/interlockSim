@@ -22,9 +22,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * A [MetricsCollectionService] that reports a fixed snapshot and records whether the leak gauge
  * was read.
  *
- * `DispatcherRunSummaries.railwayOutcomeFrom` reads `completedTrains` and `conflictCount` off the
- * snapshot, so a test that wants a particular railway outcome needs a service reporting those
- * numbers — but the real one needs a real run behind it. Two test classes each declared their own
+ * `DispatcherRunSummaries.railwayOutcomeFrom` reads the run-end figures (from Issue #676 the run
+ * record, or [runEndSummary] before the run ended), so a test that wants a particular railway
+ * outcome needs a service reporting those numbers — but the real one needs a real run behind it. Two test classes each declared their own
  * stand-in for exactly this, one reporting zero journeys and one reporting a completed journey
  * (Issue #955, cluster U7).
  *
@@ -102,17 +102,22 @@ class FakeMetricsCollectionService(
 	/** How often [runEndSummary] was read (Issue #675). */
 	val runEndSummaryReads: AtomicInteger = AtomicInteger()
 
-	/** [runEnd] when set, else the snapshot's figures with every run-end counter zero (Issue #1304). */
+	/** [runEnd] when set, else the snapshot's figures (Issue #1304). */
 	override fun runEndSummary(): RunEndSummary {
 		runEndSummaryReads.incrementAndGet()
 		return runEnd ?: zeroSummary()
 	}
 
+	/**
+	 * The snapshot's figures, the run not ended (Issue #1304). Each completed journey is also a train
+	 * that entered and exited -- `railwayOutcomeFrom` reads these since Issue #676, and a completed
+	 * journey without an exit would read as a starved railway. Every other counter is zero.
+	 */
 	private fun zeroSummary(): RunEndSummary =
 		RunEndSummary(
 			journeysCompleted = completedTrains,
-			trainsEntered = 0,
-			trainsExited = 0,
+			trainsEntered = completedTrains,
+			trainsExited = completedTrains,
 			wrongExits = 0,
 			maxConcurrentTrains = 0,
 			blockTransitions = 0,
