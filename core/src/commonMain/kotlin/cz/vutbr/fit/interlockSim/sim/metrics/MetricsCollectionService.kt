@@ -132,4 +132,30 @@ interface MetricsCollectionService {
 	 * @since Issue #673 (Goal 6 SP2)
 	 */
 	fun journeys(): List<TrainJourneyRecord>
+
+	/**
+	 * The run-end accounting counted from events so far (Issue #1304): trains entered and exited,
+	 * wrong exits, peak trains on the network, route grants, refused reservations and entry failures
+	 * by kind, the watchdog stall, reservation expiries and sweeper releases by kind, the capacity
+	 * shown to the dispatcher, and -- after the run ended -- how it ended
+	 * ([RunEndSummary.classification]). No loop getter is read. Read it on the simulation thread or
+	 * after the run; it is not safe to read concurrently.
+	 *
+	 * @since Issue #1304 (Goal 6 SP6)
+	 */
+	fun runEndSummary(): RunEndSummary
+
+	/**
+	 * Record, once at wiring time (before `run()`, when nothing can be emitted yet), the admission
+	 * cap the dispatcher is given next to the station's topology capacity -- 2 against 4 on the
+	 * Cerveny Ujezd GUI wiring (Issue #1276). Reported in [runEndSummary].
+	 *
+	 * @param shownToDispatcher the cap the dispatcher decides with
+	 * @param topologyCapacity the capacity of the station topology
+	 * @since Issue #1304 (Goal 6 SP6)
+	 */
+	fun recordCapacity(
+		shownToDispatcher: Int,
+		topologyCapacity: Int
+	)
 }
