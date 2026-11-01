@@ -219,31 +219,32 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	}
 
 	/**
-	 * `multiTrainLoop` runs a `MultiTrainLoop`, which keeps none of `ShuntingLoop`'s counters. Its
-	 * loop-sourced figures must therefore come out **absent**, not `0`: a zeroed column would say
-	 * "this configuration moved no train", which is the misreading
-	 * #847's sweep named under "Structurally empty columns".
-	 *
-	 * The metrics-sourced figures stay present, because `MetricsCollectionService` is bound for
-	 * every simulation context regardless of which process drives it.
+	 * `multiTrainLoop` runs a `MultiTrainLoop`, which keeps none of `ShuntingLoop`'s counters. Until
+	 * Issue #676 its loop-sourced figures came out absent; now every figure comes from the run's
+	 * metrics, whatever the main process. Read before the run has ended, there is no run record yet:
+	 * the row figures are the ones counted so far (here none, so `0`), and every record figure stays
+	 * absent, because nothing has ended to be recorded.
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("an example that is not a ShuntingLoop reports its loop figures as absent, not zero")
-	fun nonShuntingLoopExampleReportsLoopFiguresAsAbsent() {
+	@DisplayName("an example that is not a ShuntingLoop reports its row figures, and no record before the run ends")
+	fun nonShuntingLoopExampleReportsRowFiguresBeforeItsRecord() {
 		val context = createExample("createMultiTrainLoopExample", ExampleNames.MULTI_TRAIN_LOOP)
 
 		val outcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
 
-		assertThat(outcome.trainsEntered, "trains entered").isNull()
-		assertThat(outcome.trainsExited, "trains exited").isNull()
-		assertThat(outcome.maxConcurrentTrains, "max concurrent trains").isNull()
-		assertThat(outcome.blockTransitions, "block transitions").isNull()
-		assertThat(outcome.failedReservations, "failed reservations").isNull()
-		// Metrics are context-scoped, so they remain measurable for any main process.
+		assertThat(outcome.trainsEntered, "trains entered").isEqualTo(0L)
+		assertThat(outcome.trainsExited, "trains exited").isEqualTo(0L)
+		assertThat(outcome.maxConcurrentTrains, "max concurrent trains").isEqualTo(0L)
+		assertThat(outcome.blockTransitions, "block transitions").isEqualTo(0L)
+		assertThat(outcome.failedReservations, "failed reservations").isEqualTo(0L)
 		assertThat(outcome.journeysCompleted, "journeys completed").isNotNull()
 		assertThat(outcome.conflicts, "conflicts").isNotNull()
 		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isNotNull()
+		// No run record yet: the record figures are not measured.
+		assertThat(outcome.endClassification, "end classification").isNull()
+		assertThat(outcome.wrongExits, "wrong exits").isNull()
+		assertThat(outcome.endTime, "end time").isNull()
 	}
 
 	/**

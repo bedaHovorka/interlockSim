@@ -9,9 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim
 
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DecisionRateReport
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
@@ -21,7 +21,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayProgress
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.progress
-import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.dispatcher.planner.toRailwayOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.toUnfinishedRunOutcome
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.scope.Scope
@@ -73,7 +74,8 @@ object DispatcherRunSummaries {
 	 * reading the railway a second time.
 	 *
 	 * @property file The JSON written for this run, or `null` when nothing was written — no
-	 *   dispatcher recorder, no dispatcher agent, no store, or the run was already persisted.
+	 *   dispatcher recorder, neither a dispatcher agent nor a sweep-configured store, no store, or
+	 *   the run was already persisted.
 	 * @property endCause The cause recorded on the snapshot.
 	 * @property railwayOutcome What the railway achieved, as read at run end.
 	 */
@@ -164,8 +166,12 @@ object DispatcherRunSummaries {
 		// dispatcher did nothing — while counting towards #846's `runCount >= 10` gate.
 		//
 		// AgentDriverLoop is declared only by wireDispatcherAgent, so its presence is the precise
-		// signal that this context ran a dispatcher.
-		if (scope.getOrNull<AgentDriverLoop>() == null) return Persisted(null, effectiveCause, outcome)
+		// signal that this context ran a dispatcher. Issue #676: a run a sweep launched is written
+		// too, whatever its wiring — the sweep set DispatcherRunConfig.runsRoot for it and waits for
+		// its JSON; without one it records the run as CRASH (the #1276 cervenyUjezd control arm).
+		if (scope.getOrNull<AgentDriverLoop>() == null && !sweepConfiguredStore(scope)) {
+			return Persisted(null, effectiveCause, outcome)
+		}
 		val store =
 			scope.getOrNull<RunSnapshotStore>()
 				?: return Persisted(null, effectiveCause, outcome)
@@ -233,17 +239,14 @@ object DispatcherRunSummaries {
 	/**
 	 * Reads what the railway achieved during the run owned by [scope].
 	 *
-	 * ## Why here (Issue #834, SP2c.11)
+	 * ## From the run record (Issue #676, Goal 6 SP5)
 	 *
-	 * Both read-only sources hang off the simulation context, and this is the one place on the
-	 * live path — shared by the headless `Main.runExample` and the GUI `Frame`'s Stop handler —
-	 * that still holds the context's Koin scope at run end. Neither source is touched:
-	 *
-	 * - [MetricsCollectionService] is bound `scoped` per simulation context in `CoreModule`, so it
-	 *   resolves for **every** context regardless of which process drives it.
-	 * - [ShuntingLoop]'s counters exist only when the run's main process is a [ShuntingLoop]. For
-	 *   any other example (`multiTrainLoop`, `threeTrainLoop`) those figures are genuinely
-	 *   unobtainable and are left `null`.
+	 * Every figure comes from the scoped [MetricsCollectionService], bound per simulation context
+	 * in `CoreModule` for every context, through its run record contract
+	 * ([MetricsCollectionService.runRecord]): no cast to the main process, so `MultiTrainLoop` and
+	 * `ShuntingLoop` runs report the same figures. A run that has not ended yet — the GUI Stop
+	 * handler can race the simulation thread — has no record; it gets the row figures counted so
+	 * far and every record figure absent (`RunEndSummary.toUnfinishedRunOutcome`).
 	 *
 	 * ## Absent, never zero
 	 *
@@ -264,30 +267,17 @@ object DispatcherRunSummaries {
 	 * @return the figures available for this run, with `null` for every one that is not.
 	 */
 	fun railwayOutcomeFrom(scope: Scope): RailwayOutcome {
-		val metricsService = scope.getOrNull<MetricsCollectionService>()
+		val metricsService = scope.getOrNull<MetricsCollectionService>() ?: return RailwayOutcome.UNMEASURED
 		// Issue #936: the one run-end, quiesced read shared by the GUI and headless paths, so it is
 		// where a leaked reservation can still be reported. Deliberately not folded into
-		// RailwayOutcome — that record is persisted, and its schema is not in this issue's scope.
-		metricsService?.reportUnreleasedReservations()
-		val metrics = metricsService?.getSnapshot()
-		// getSource is how CoreModule's own scoped definitions reach the context; the run's main
-		// process is only a ShuntingLoop for the shuntingLoop* examples, hence the safe cast.
-		val loop = scope.getSource<DefaultSimulationContext>()?.mainProcess as? ShuntingLoop
-		return RailwayOutcome(
-			journeysCompleted = metrics?.completedTrains?.toLong(),
-			trainsEntered = loop?.getTrainsEntered()?.toLong(),
-			trainsExited = loop?.getTrainsExited()?.toLong(),
-			maxConcurrentTrains = loop?.getMaxConcurrentTrains()?.toLong(),
-			// One movement event per block-to-block step, summed over every train — the figure the
-			// #847 sweep had to scrape from logs to tell a working railway from a busy dispatcher.
-			blockTransitions = loop?.getAllBlockTransitions()?.values?.sumOf { it.toLong() },
-			conflicts = metrics?.conflictCount?.toLong(),
-			failedReservations = loop?.getFailedReservations()?.toLong(),
-			// Issue #1280: contentions still open at run end, kept out of `conflicts` — an end-time
-			// cutoff with trains still queued is not a double-booking.
-			unresolvedAtRunEnd = metrics?.unresolvedAtRunEndCount?.toLong()
-		)
+		// RailwayOutcome.
+		metricsService.reportUnreleasedReservations()
+		return metricsService.runRecord()?.toRailwayOutcome()
+			?: metricsService.runEndSummary().toUnfinishedRunOutcome()
 	}
+
+	/** Whether a sweep pointed this run at its own output directory (`DispatcherRunConfig.runsRoot`). */
+	private fun sweepConfiguredStore(scope: Scope): Boolean = scope.getOrNull<DispatcherRunConfig>()?.runsRoot != null
 
 	/**
 	 * Recorders whose snapshot has already been written, so a second [finishAndPersist] for the
