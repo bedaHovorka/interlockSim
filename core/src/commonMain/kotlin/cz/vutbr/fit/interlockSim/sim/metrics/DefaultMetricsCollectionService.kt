@@ -52,6 +52,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * for all three. [TrainJourneyEvent]s (subscribed through [onTrainJourneyEvent]) feed a
  * [JourneyRecorder], read through [journeys]; they publish no snapshot.
  *
+ * ## Run-end accounting (Issue #1304, Goal 6 SP6)
+ *
+ * A [RunEndAccounting] collaborator counts the run-end figures and classifies how the run ended,
+ * from events alone; [runEndSummary] reads it, [recordCapacity] feeds it at wiring time.
+ *
  * ## Thread safety
  *
  * Not thread-safe, with one exception: [latestSnapshot] is safe from any thread. The service is
@@ -66,8 +71,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param history Buffer the published snapshots are appended to; defaults to a
  *   [MetricsHistory] with its default caps (Issue #673).
  * @param config The active metric groups; read once here, so fixed for the run. With
- *   [MetricGroup.HISTORY] off nothing is appended to [history]; with [MetricGroup.JOURNEYS] off the
- *   service does not subscribe to journey events and [journeys] stays empty (Issue #674).
+ *   [MetricGroup.HISTORY] off nothing is appended to [history]; with [MetricGroup.JOURNEYS] off no
+ *   journey records are kept and [journeys] stays empty (Issue #674). The CORE run-end accounting
+ *   ([runEndSummary], Issue #1304) still reads the journey events itself.
  *
  * @since Issue #672 (Goal 6 SP1)
  */
@@ -166,11 +172,19 @@ class DefaultMetricsCollectionService(
 
 	private val journeysEnabled: Boolean = config.isEnabled(MetricGroup.JOURNEYS)
 
+	/**
+	 * Run-end counters and the end-cause classification (Issue #1304): the CORE group, always on. It
+	 * subscribes to the journey events itself, so it works with [MetricGroup.JOURNEYS] off.
+	 */
+	internal val runEndAccounting = RunEndAccounting()
+
 	// ── Subscription ─────────────────────────────────────────────────────────
 
 	init {
 		env?.onBlockEvent { event -> handleBlockEvent(event) }
 		if (journeysEnabled) env?.onTrainJourneyEvent { event -> handleJourneyEvent(event) }
+		// CORE (Issue #1304): subscribed whatever the groups, journey events included.
+		env?.let(runEndAccounting::subscribe)
 	}
 
 	// ── Interface implementation ──────────────────────────────────────────────
@@ -232,6 +246,13 @@ class DefaultMetricsCollectionService(
 	override fun history(): MetricsHistory = history
 
 	override fun journeys(): List<TrainJourneyRecord> = journeyRecorder.records()
+
+	override fun runEndSummary(): RunEndSummary = runEndAccounting.summary(getSnapshot())
+
+	override fun recordCapacity(
+		shownToDispatcher: Int,
+		topologyCapacity: Int
+	) = runEndAccounting.recordCapacity(shownToDispatcher, topologyCapacity)
 
 	// ── Internal event handler (internal for test access) ────────────────────
 

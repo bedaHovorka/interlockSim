@@ -130,11 +130,12 @@ class DispatchDecisionApplier(
 	 */
 	private val onBlockTransition: (trainId: String) -> Unit = {},
 	/**
-	 * Callback invoked on the sim thread when a path reservation fails (any of
-	 * AllPathsBlocked, Conflict, or NoRouteExists). Increments
-	 * [ShuntingLoop.incrementFailedReservation].
+	 * Callback invoked on the sim thread when a path reservation fails (any refusal of
+	 * [RouteRequestResult]), with the train and the refusal. Increments
+	 * [ShuntingLoop.incrementFailedReservation], which counts the refusal by kind for the metrics
+	 * since Issue #1304.
 	 */
-	private val onFailedReservation: () -> Unit = {},
+	private val onFailedReservation: (trainId: String, result: RouteRequestResult) -> Unit = { _, _ -> },
 	/**
 	 * Train lifecycle actuator port for [DispatchDecision.HoldTrain] commands. Null by
 	 * default for backward compatibility with callers that do not supply one.
@@ -696,7 +697,7 @@ class DispatchDecisionApplier(
 						"(${decision.fromSemaphoreName} → ${decision.toTargetName}); " +
 						"attempted: ${result.attemptedPaths}"
 				}
-				onFailedReservation()
+				onFailedReservation(decision.trainId, result)
 				ApplyFailureCode.ALL_PATHS_BLOCKED
 			}
 			is RouteRequestResult.Conflict -> {
@@ -704,7 +705,7 @@ class DispatchDecisionApplier(
 					"ReservePath: conflict for ${decision.trainId} — " +
 						"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
 				}
-				onFailedReservation()
+				onFailedReservation(decision.trainId, result)
 				ApplyFailureCode.CONFLICT
 			}
 			is RouteRequestResult.NoRouteExists -> {
@@ -713,7 +714,7 @@ class DispatchDecisionApplier(
 						"${decision.fromSemaphoreName} → ${decision.toTargetName} " +
 						"for ${decision.trainId}"
 				}
-				onFailedReservation()
+				onFailedReservation(decision.trainId, result)
 				ApplyFailureCode.NO_ROUTE_EXISTS
 			}
 			is RouteRequestResult.UnresolvedEndpoint -> {
@@ -721,7 +722,7 @@ class DispatchDecisionApplier(
 					"ReservePath: unresolved endpoint '${result.endpointName}' for ${decision.trainId} " +
 						"(${decision.fromSemaphoreName} → ${decision.toTargetName})"
 				}
-				onFailedReservation()
+				onFailedReservation(decision.trainId, result)
 				ApplyFailureCode.UNRESOLVED_ENDPOINT
 			}
 			is RouteRequestResult.OriginNotContiguous -> {
@@ -729,7 +730,7 @@ class DispatchDecisionApplier(
 					"ReservePath: origin '${decision.fromSemaphoreName}' is not contiguous " +
 						"with ${decision.trainId}: ${result.reason}"
 				}
-				onFailedReservation()
+				onFailedReservation(decision.trainId, result)
 				ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS
 			}
 			is RouteRequestResult.ConditionFailed -> {
@@ -738,7 +739,7 @@ class DispatchDecisionApplier(
 						"(${decision.fromSemaphoreName} → ${decision.toTargetName}" +
 						"${if (result.retryable) ", transient" else ", permanent"}): ${result.reason}"
 				}
-				onFailedReservation()
+				onFailedReservation(decision.trainId, result)
 				ApplyFailureCode.CONDITION_FAILED
 			}
 			is RouteRequestResult.GeometricallyImpossible -> {
@@ -746,7 +747,7 @@ class DispatchDecisionApplier(
 					"ReservePath: geometrically impossible for ${decision.trainId} " +
 						"(${decision.fromSemaphoreName} → ${decision.toTargetName}): ${result.reason}"
 				}
-				onFailedReservation()
+				onFailedReservation(decision.trainId, result)
 				ApplyFailureCode.GEOMETRICALLY_IMPOSSIBLE
 			}
 			is RouteRequestResult.DivergesFromHeldRoute -> {
@@ -755,7 +756,7 @@ class DispatchDecisionApplier(
 						"(${decision.fromSemaphoreName} → ${decision.toTargetName}, " +
 						"held target ${result.heldTarget}): ${result.reason}"
 				}
-				onFailedReservation()
+				onFailedReservation(decision.trainId, result)
 				ApplyFailureCode.DIVERGES_FROM_HELD_ROUTE
 			}
 		}
@@ -829,7 +830,10 @@ class DispatchDecisionApplier(
 			}
 			return null
 		}
-		return when (val result = applyThroughSharedHelper<ToolDrivenOutcome.RouteRequested>(decision).result) {
+		val routeResult = applyThroughSharedHelper<ToolDrivenOutcome.RouteRequested>(decision).result
+		// Issue #1304: a refusal of an LLM request_route counts like a refused ReservePath, once.
+		if (routeResult !is RouteRequestResult.Reserved) onFailedReservation(decision.trainName, routeResult)
+		return when (val result = routeResult) {
 			is RouteRequestResult.Reserved -> {
 				handleRequestRouteReserved(decision, result, reservationKey, correlation)
 				null

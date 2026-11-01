@@ -505,6 +505,24 @@ class DispatcherObservationProjectorTest : DispatcherKoinTestBase() {
 				assertThat(observation.activeCount).isEqualTo(2)
 			}
 		}
+
+		@Test
+		@DisplayName("capacity set by the wiring layer reaches the next capture (Issues #1303 and #1304)")
+		fun capacitySetByTheWiringLayerReachesTheNextCapture() {
+			loadShuntingLoopContext().use { context ->
+				val perceptionPort = mockk<NetworkPerceptionPort>()
+				val sensorPort = mockk<DispatchLoopSensorPort>()
+				every { perceptionPort.captureSnapshot() } returns snapshotOf(simTime = 0.0, perceptions = emptyList())
+				every { sensorPort.snapshot() } returns dispatchSnapshotOf(emptyList())
+				val projector = newProjector(context, perceptionPort, sensorPort)
+
+				assertThat(projector.projectTick(1L).capacity).isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
+				projector.capacity = 4
+
+				assertThat(projector.capacity).isEqualTo(4)
+				assertThat(projector.projectTick(2L).capacity).isEqualTo(4)
+			}
+		}
 	}
 
 	@Nested

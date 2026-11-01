@@ -77,7 +77,7 @@ class ActuatorToolMarshallingIntegrationTest : DispatcherKoinTestBase() {
 				networkActuator = actuatorPort,
 				onApproveTrain = {},
 				onBlockTransition = {},
-				onFailedReservation = {}
+				onFailedReservation = { _, _ -> }
 			)
 
 		// Publish a snapshot on the sim (test) thread so the projection has data.
