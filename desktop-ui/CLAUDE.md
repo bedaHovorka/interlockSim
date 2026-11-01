@@ -58,8 +58,9 @@ and [../docs/SIMULATION_SPEED_CONTROL.md](../docs/SIMULATION_SPEED_CONTROL.md).
 
 `MetricsDashboardPanel` is docked in `Frame`'s south panel in simulation mode. It polls only
 `MetricsCollectionService.latestSnapshot()` and `latestOpenContentions()` (cross-thread safe) from a
-`SwingWorker` driven by a `javax.swing.Timer`, never simulation-thread objects. `stop()` at STOPPED
-makes one last poll that also reads `runEndSummary()` (valid only after the run ended).
+`SwingWorker` driven by a `javax.swing.Timer`, never simulation-thread objects. `stop(summaryValid)` at STOPPED
+makes one last poll; it also reads `runEndSummary()` only after a natural completion (a manual stop reports
+STOPPED before the simulation thread has finished, so the end cause then reads "stopped manually").
 
 ## Verification and Benchmark Tasks
 

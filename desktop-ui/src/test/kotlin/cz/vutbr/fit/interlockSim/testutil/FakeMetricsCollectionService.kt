@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsHistory
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.sim.metrics.TrainJourneyRecord
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A [MetricsCollectionService] that reports a fixed snapshot and records whether the leak gauge
@@ -93,10 +94,10 @@ class FakeMetricsCollectionService(
 	@Volatile
 	var runEnd: RunEndSummary? = null
 
-	/** The snapshot's figures; every run-end counter zero and the run not ended (Issue #1304). */
 	/** How often [runEndSummary] was read (Issue #675). */
-	val runEndSummaryReads: java.util.concurrent.atomic.AtomicInteger = java.util.concurrent.atomic.AtomicInteger()
+	val runEndSummaryReads: AtomicInteger = AtomicInteger()
 
+	/** [runEnd] when set, else the snapshot's figures with every run-end counter zero (Issue #1304). */
 	override fun runEndSummary(): RunEndSummary {
 		runEndSummaryReads.incrementAndGet()
 		return runEnd ?: zeroSummary()
