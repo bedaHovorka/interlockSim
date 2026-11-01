@@ -255,9 +255,9 @@ object DispatcherRunSummaries {
 	 * ## Threading
 	 *
 	 * Called at run end, after the kDisco kernel has stopped, on the thread that ended the run
-	 * (the `example` caller thread, or the EDT for the GUI). [MetricsCollectionService.getSnapshot]
-	 * documents that external threads must synchronise while the simulation is live; here it is
-	 * not, so the read is a quiescent one.
+	 * (the `example` caller thread, or the EDT for the GUI). The run is quiesced already, so
+	 * [MetricsCollectionService.getSnapshot] needs no synchronisation here; a reader that reads
+	 * mid-run uses [MetricsCollectionService.latestSnapshot] instead.
 	 *
 	 * Must be called inside `context.use { … }`, like every other read in this object.
 	 *
