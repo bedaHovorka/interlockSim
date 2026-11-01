@@ -165,9 +165,10 @@ interface MetricsCollectionService {
 	 * The open blocked-path contentions (train, block, owner, since) as last published by the
 	 * simulation thread -- like [latestSnapshot], **safe from any thread** (Issue #1305, Goal 6 SP7):
 	 * one immutable list behind a volatile reference. Refreshed after every handled block event, every
-	 * conflict event and every run-accounting event, so a stuck run still shows who waits; the
-	 * end-of-run flush leaves it as it was just before. Empty with [MetricGroup.TRAIN_WAIT] off. Off the
-	 * simulation thread read only the identity of an [OpenContention.block], never its dynamic state.
+	 * conflict event, every route grant, refusal and sweeper release, and at a stall report or the end
+	 * time, so a stuck run still shows who waits; the end-of-run flush leaves it as it was just before.
+	 * Empty with [MetricGroup.TRAIN_WAIT] off. Off the simulation thread read only the identity of an
+	 * [OpenContention.block], never its dynamic state.
 	 *
 	 * @since Issue #1305 (Goal 6 SP7)
 	 */

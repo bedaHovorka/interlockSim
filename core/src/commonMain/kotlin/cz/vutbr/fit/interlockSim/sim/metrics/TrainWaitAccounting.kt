@@ -61,8 +61,9 @@ internal data class CapacityPressure(
  *
  * Every handled block event samples the [CapacityPressure] and publishes the open contentions. The
  * end-of-run flush's events ([BlockEvent.ReservationConflictDetected.atRunEnd]) do not, so the last
- * sample keeps what was open just before the run ended. Conflict and run-accounting events refresh the
- * published contention list too, so a run with no block traffic still shows who waits.
+ * sample keeps what was open just before the run ended. Conflict events and the run-accounting events that
+ * can change the open contentions, or end the run, refresh the published contention list too (see
+ * [mayChangeOpenContentions]), so a run with no block traffic still shows who waits.
  *
  * Single-threaded like the service, except [latestOpenContentions]: an immutable list behind a
  * volatile reference, safe from any thread.
@@ -149,8 +150,28 @@ internal class TrainWaitAccounting(
 			}
 			else -> Unit
 		}
-		refreshOpenContentions()
+		if (mayChangeOpenContentions(event)) refreshOpenContentions()
 	}
+
+	/**
+	 * Whether [event] comes with a change of the open contentions, or is the run's last instant, so the
+	 * published list must be re-read. A route grant follows a reservation `Success`, which clears the
+	 * train's contentions. A refusal follows an `AllPathsBlocked`, which may open one. A sweeper release
+	 * may clear the owner's contentions and changes the owners others wait behind. A stall report and the
+	 * end-time announcement change nothing, but they come just before the kernel stops, so the list then
+	 * shows what was open at the end. An entry failure releases nothing (`MultiTrainLoop.retireRefusedTrain`).
+	 * Any other event, including ones later lanes add (Goal 6 SP8's performance events), re-reads nothing,
+	 * so this group costs nothing per event of another group.
+	 */
+	private fun mayChangeOpenContentions(event: RunAccountingEvent): Boolean =
+		when (event) {
+			is RunAccountingEvent.RouteGranted,
+			is RunAccountingEvent.ReservationRefused,
+			is RunAccountingEvent.SweeperReleased,
+			is RunAccountingEvent.Stalled,
+			is RunAccountingEvent.EndTimeReached -> true
+			else -> false
+		}
 
 	fun onExpired(event: ReservationExpired) {
 		see(event.time)

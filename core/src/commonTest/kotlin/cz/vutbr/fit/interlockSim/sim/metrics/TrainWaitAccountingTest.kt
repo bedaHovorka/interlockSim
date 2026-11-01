@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
 import cz.vutbr.fit.interlockSim.sim.RunEnded
+import cz.vutbr.fit.interlockSim.sim.SweeperReleaseKind
 import cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
@@ -47,8 +48,12 @@ class TrainWaitAccountingTest {
 		var open: List<OpenContention> = emptyList()
 		var blocked: Map<String, Double> = emptyMap()
 		var askedNow: Double? = null
+		var openReads = 0
 
-		override fun openContentions(): List<OpenContention> = open
+		override fun openContentions(): List<OpenContention> {
+			openReads++
+			return open
+		}
 
 		override fun blockedSeconds(now: Double): Map<String, Double> {
 			askedNow = now
@@ -317,5 +322,31 @@ class TrainWaitAccountingTest {
 		grant("T2", 5.0)
 
 		assertThat(accounting.latestOpenContentions()).isEmpty()
+	}
+
+	@Test
+	fun `only accounting events that can change the open contentions or end the run refresh them`() {
+		val refreshing =
+			listOf(
+				RunAccountingEvent.RouteGranted("T1", 1.0),
+				RunAccountingEvent.ReservationRefused("T1", FailedReservationKind.ALL_PATHS_BLOCKED, 2.0),
+				RunAccountingEvent.SweeperReleased("T1", SweeperReleaseKind.STALE, 3.0),
+				RunAccountingEvent.Stalled(listOf("T1", "T2"), setOf("T1", "T2"), 5, 4.0),
+				RunAccountingEvent.EndTimeReached(5.0)
+			)
+		for (event in refreshing) {
+			val before = contentions.openReads
+			accounting.onAccounting(event)
+			assertThat(contentions.openReads - before, name = "refreshes on $event").isEqualTo(1)
+		}
+
+		// A retired entry releases nothing (MultiTrainLoop.retireRefusedTrain), so it re-reads nothing.
+		val before = contentions.openReads
+		accounting.onAccounting(
+			RunAccountingEvent.EntryFailed(
+				MultiTrainLoop.EntryFailure("T3", "A", "B", MultiTrainLoop.EntryFailureKind.NO_ROUTE, 1, null, 6.0)
+			)
+		)
+		assertThat(contentions.openReads - before, name = "refreshes on an entry failure").isEqualTo(0)
 	}
 }
