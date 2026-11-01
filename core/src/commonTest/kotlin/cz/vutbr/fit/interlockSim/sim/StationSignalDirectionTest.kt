@@ -12,7 +12,11 @@ import assertk.assertions.containsExactly
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isLessThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
@@ -73,6 +77,29 @@ class StationSignalDirectionTest : CommonKoinTestBase() {
 	fun stationsShuntingLoopRunsHaveNoMisdirectedSignals() {
 		for (xml in listOf(NetworkResources.VYHYBNA_XML, NetworkResources.CERVENY_UJEZD_XML)) {
 			assertThat(station(xml).allBlocks.flatMap { it.misdirectedSignals }).isEmpty()
+		}
+	}
+
+	@Test
+	fun everyEntryExitBlockHasAtMostOneEndSemaphore() {
+		// Issue #1298: one end of an entry/exit block is its InOut cell, and Station.from counts only
+		// DynamicRailSemaphore grid cells at the block ends (the InOut's embedded in/out semaphores are
+		// no separate cells). So the block has at most one end semaphore -- the home signal or one
+		// misdirected signal. An entry/exit block with two end semaphores, both facing away, cannot be built.
+		val networks =
+			listOf(
+				NetworkResources.VYHYBNA_XML,
+				NetworkResources.CERVENY_UJEZD_XML,
+				NetworkResources.PRAHA_HLAVNI_NADRAZI_XML,
+				NetworkResources.STATION_HOME_SIGNAL_FACING_AWAY_XML
+			)
+		for (xml in networks) {
+			for (entry in station(xml).entryExitBlocks) {
+				val ends = entry.block.ends()
+				assertThat(ends.count { it is DynamicInOut }, entry.name).isGreaterThanOrEqualTo(1)
+				assertThat(ends.count { it is DynamicRailSemaphore }, entry.name).isLessThanOrEqualTo(1)
+				assertThat(entry.signals.size + entry.misdirectedSignals.size, entry.name).isLessThanOrEqualTo(1)
+			}
 		}
 	}
 

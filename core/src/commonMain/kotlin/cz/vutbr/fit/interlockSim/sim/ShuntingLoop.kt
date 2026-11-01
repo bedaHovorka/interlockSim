@@ -164,7 +164,9 @@ class ShuntingLoop(
 		 *   exits (Issue #1163);
 		 * - every entry/exit block ends at a home signal — the dispatcher only moves trains from
 		 *   outer blocks toward a home signal. The signal direction is [Station]'s rule: a semaphore
-		 *   there that faces the InOut is named as the reason (Issue #1272);
+		 *   there that governs travel towards the InOut (a departure signal) is named as the reason
+		 *   (Issue #1272, wording #1298). An entry/exit block has at most one end semaphore cell -- its
+		 *   other end is the InOut cell -- so at most one semaphore is ever named;
 		 * - every RailSemaphore is a home signal or a platform-track end — the dispatcher only
 		 *   reads block inputs at those signals, a train held at any other one would never move.
 		 *
@@ -186,7 +188,9 @@ class ShuntingLoop(
 				station.entryExitBlocks.filter { it.signals.isEmpty() }.forEach { entryExit ->
 					val reason =
 						entryExit.misdirectedSignals.firstOrNull()?.let { signal ->
-							"its end RailSemaphore ${signal.name.ifBlank { Station.UNNAMED }} faces the InOut, away from the incoming train"
+							"its end RailSemaphore ${signal.name.ifBlank { Station.UNNAMED }} governs travel " +
+								"towards the InOut (a departure signal), so no home signal (vjezdové návěstidlo) " +
+								"protects the incoming train"
 						} ?: "it does not end at a RailSemaphore"
 					add("entry/exit block ${entryExit.name} ${entryExit.id} has no home signal: $reason")
 				}
