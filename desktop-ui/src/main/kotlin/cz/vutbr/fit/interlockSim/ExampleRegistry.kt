@@ -798,10 +798,7 @@ class ExampleRegistry {
 		// Fan out to both instead of choosing.
 		val runRecorder = context.scope.getOrNull<DispatcherRunRecorder>()
 		val actionOutcomeSink =
-			CompositeActionOutcomeSink.of(
-				actionOutcomeAggregator,
-				runRecorder?.let { it::onActionOutcome }
-			)
+			CompositeActionOutcomeSink.of(actionOutcomeAggregator, runRecorder?.let { it::onActionOutcome })
 		// SP3.6 (#574 / #187): reject async/LLM planners when the controller provides no pacing.
 		// NoOpSimulationController (rule-based console runs) has no speed cap, so an async planner
 		// cannot honour the 2x real-time limit there. The AI console run passes
@@ -810,11 +807,11 @@ class ExampleRegistry {
 		// The rule-based planner is synchronous and exempt.
 		assertPlannerPacingCompatible(planner, controller)
 
-		// Issue #1304: the cap this stack decides with is the vyhybna-derived default, whatever the
-		// station (Issue #1276: 2 against a topology capacity of 4 on Cerveny Ujezd) -- the applier
-		// below, the scoped observation projector (the prompt's `capacity:` line) and the singleton
-		// RuleBasedDispatcher all use it. Passed to the applier explicitly so the recorded value is
-		// the applier's own; the value itself is unchanged (SP8, Issue #1155, owns raising it).
+		// Issue #1304: the cap SHOWN to the dispatcher is the vyhybna-derived default, whatever the
+		// station (Issue #1276: 2 against a topology capacity of 4 on Cerveny Ujezd): the scoped
+		// observation projector (the prompt's `capacity:` line) and the singleton RuleBasedDispatcher
+		// use it. Since Issue #1155 (SP8) the applier's admission gate is the station's own
+		// capacity instead; raising the shown value is Issue #1303.
 		val shownCapacity = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 		context.getMetricsServices().getMetricsCollectionService().recordCapacity(shownCapacity, loop.topologyCapacity)
 
@@ -823,7 +820,6 @@ class ExampleRegistry {
 				queue = queue,
 				networkActuator = actuatorPort,
 				onApproveTrain = loop::approveQueuedTrain,
-				maxConcurrentTrains = shownCapacity,
 				// SP2c.18 (#841): live active-train count provider for apply-time cap enforcement.
 				// loop.getApprovedTrains() returns the sim-thread-owned list as a snapshot; calling
 				// .size on it on the sim thread (inside onControlStep) is safe and gives the live
