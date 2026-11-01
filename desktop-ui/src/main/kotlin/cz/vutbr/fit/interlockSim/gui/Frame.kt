@@ -299,8 +299,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// ensureAnimationRunning().
 							stopAnimationUpdates()
 							railwayNetGridCanvas.captureFinalFrameAndPause()
-							// Issue #675: one last dashboard poll that also reads the run-end summary, then stop.
-							metricsDashboardPanel.stop()
+							// Issue #675: one last dashboard poll, then stop. The run-end summary is read only
+							// after a natural completion; a manual stop reports STOPPED before the simulation
+							// thread has finished, so reading it then would race that thread.
+							metricsDashboardPanel.stop(summaryValid = runEndCause == RunEndCause.NATURAL_COMPLETION)
 							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
 							// ended (captured at RUNNING time above). Null for every example except
 							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
@@ -968,8 +970,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		/**
 		 * Index at which MetricsDashboardPanel is inserted in [southPanel] (Issue #675, Goal 6 SP3).
 		 *
-		 * Index 0 like the other panels, so the dashboard sits at the top of the south area in simulation
-		 * mode, above the timeline, warning panel and StatusBar.
+		 * Index 0 like the other panels, but the WarningPanel is inserted at index 0 after it, so in
+		 * simulation mode the dashboard sits between the WarningPanel (top) and the EventTimelinePanel,
+		 * above the PathPreviewPanel and the StatusBar.
 		 */
 		private const val DASHBOARD_PANEL_SOUTH_INDEX = 0
 	}

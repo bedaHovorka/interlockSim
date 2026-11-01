@@ -50,14 +50,16 @@ internal data class ContentionLine(
 internal data class DashboardReading(
 	val snapshot: MetricsSnapshot,
 	val contentions: List<ContentionLine>,
-	val runEnd: RunEndSummary? = null
+	val runEnd: RunEndSummary? = null,
+	val stoppedManually: Boolean = false
 )
 
 /**
  * The texts of the dashboard, computed from a [DashboardReading] -- pure formatting, no Swing.
  *
  * The stall and the end cause come from [RunEndSummary], which may only be read once the run has
- * ended; until then they show a dash.
+ * ended; until then they show a dash. After a manual stop the summary is not read at all (the
+ * simulation thread may still be finishing), so the end cause reads "stopped manually".
  *
  * @since Issue #675 (Goal 6 SP3)
  */
@@ -115,7 +117,7 @@ internal data class DashboardText(
 				openContentions = "Open contentions: ${s.openContentions}",
 				contentionDetail = contentionDetail(reading.contentions),
 				stall = stallText(reading.runEnd),
-				endCause = endCauseText(reading.runEnd),
+				endCause = if (reading.stoppedManually) "End: stopped manually" else endCauseText(reading.runEnd),
 				time = "t = ${fixed(s.time, 1)} s"
 			)
 		}
@@ -187,6 +189,7 @@ class MetricsDashboardPanel : JPanel() {
 	private var service: MetricsCollectionService? = null
 	private var inFlight = false
 	private var finalPending = false
+	private var finalSummaryValid = true
 
 	init {
 		name = PANEL_NAME
@@ -215,13 +218,18 @@ class MetricsDashboardPanel : JPanel() {
 	}
 
 	/**
-	 * End the polling after the run ended: one last poll that also reads the run-end summary, then the
-	 * service is released. The last figures stay on screen. No-op when not polling.
+	 * End the polling after the run ended: one last poll, then the service is released. The last
+	 * figures stay on screen. No-op when not polling.
 	 *
+	 * @param summaryValid `true` after a natural completion, when the simulation thread has ended and
+	 *   the last poll may also read the run-end summary. `false` after a manual stop: the stop only
+	 *   interrupts the simulation thread and reports STOPPED at once, so the summary would race it;
+	 *   the last poll is then a plain snapshot poll and the end cause reads "stopped manually".
 	 * @since Issue #675 (Goal 6 SP3)
 	 */
-	fun stop() {
+	fun stop(summaryValid: Boolean) {
 		timer.stop()
+		finalSummaryValid = summaryValid
 		if (service != null) poll(final = true)
 	}
 
@@ -232,6 +240,7 @@ class MetricsDashboardPanel : JPanel() {
 	 */
 	fun detach() {
 		timer.stop()
+		finalSummaryValid = true
 		service = null
 		finalPending = false
 		show(DashboardText.EMPTY)
@@ -253,6 +262,7 @@ class MetricsDashboardPanel : JPanel() {
 			return
 		}
 		inFlight = true
+		val summaryValid = finalSummaryValid
 		object : SwingWorker<DashboardReading, Void>() {
 			// Background thread: only the two cross-thread-safe reads (plus the summary once ended).
 			override fun doInBackground(): DashboardReading =
@@ -260,7 +270,8 @@ class MetricsDashboardPanel : JPanel() {
 					snapshot = metrics.latestSnapshot(),
 					contentions =
 						metrics.latestOpenContentions().map { ContentionLine(it.trainId, it.owner, it.since) },
-					runEnd = if (final) metrics.runEndSummary() else null
+					runEnd = if (final && summaryValid) metrics.runEndSummary() else null,
+					stoppedManually = final && !summaryValid
 				)
 
 			// EDT.

@@ -94,7 +94,13 @@ class FakeMetricsCollectionService(
 	var runEnd: RunEndSummary? = null
 
 	/** The snapshot's figures; every run-end counter zero and the run not ended (Issue #1304). */
-	override fun runEndSummary(): RunEndSummary = runEnd ?: zeroSummary()
+	/** How often [runEndSummary] was read (Issue #675). */
+	val runEndSummaryReads: java.util.concurrent.atomic.AtomicInteger = java.util.concurrent.atomic.AtomicInteger()
+
+	override fun runEndSummary(): RunEndSummary {
+		runEndSummaryReads.incrementAndGet()
+		return runEnd ?: zeroSummary()
+	}
 
 	private fun zeroSummary(): RunEndSummary =
 		RunEndSummary(

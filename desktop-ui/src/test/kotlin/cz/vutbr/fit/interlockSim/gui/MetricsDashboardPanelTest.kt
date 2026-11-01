@@ -39,13 +39,13 @@ class MetricsDashboardPanelTest {
 	private val snapshot =
 		MetricsSnapshot(
 			time = 123.45,
-			conflictCount = 2,
+			conflictCount = 7,
 			completedTrains = 12,
 			throughput = 0.006,
 			totalWaitSeconds = 30.0,
 			averageWaitSeconds = 3.25,
-			occupiedBlocks = 3,
-			totalBlocks = 12,
+			occupiedBlocks = 5,
+			totalBlocks = 20,
 			utilization = 0.25,
 			queuedTrains = 1,
 			blockedTrains = 2,
@@ -93,9 +93,9 @@ class MetricsDashboardPanelTest {
 			val text = DashboardText.of(DashboardReading(snapshot, emptyList()))
 
 			assertThat(text.averageWait).isEqualTo("Avg wait: 3.3 s")
-			assertThat(text.conflicts).isEqualTo("Conflicts: 2")
+			assertThat(text.conflicts).isEqualTo("Conflicts: 7")
 			assertThat(text.throughput).isEqualTo("Throughput: 21.6 trains/h (12 done)")
-			assertThat(text.utilization).isEqualTo("Utilization: 25 % (3/12 blocks)")
+			assertThat(text.utilization).isEqualTo("Utilization: 25 % (5/20 blocks)")
 			assertThat(text.queued).isEqualTo("Queued: 1")
 			assertThat(text.blocked).isEqualTo("Blocked: 2")
 			assertThat(text.openContentions).isEqualTo("Open contentions: 3")
@@ -157,7 +157,7 @@ class MetricsDashboardPanelTest {
 			val p = newPanel()
 
 			onEdt { p.start(fake) }
-			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 2")
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
 
 			assertThat(p.textOf(MetricsDashboardPanel.AVERAGE_WAIT_NAME)).isEqualTo("Avg wait: 3.3 s")
 			assertThat(fake.latestSnapshotThreads).isNotEmpty()
@@ -173,35 +173,57 @@ class MetricsDashboardPanelTest {
 			fake.contentions = listOf(OpenContention("t2", mockk<DynamicTrackBlock>(relaxed = true), "t1", 10.0))
 			val p = newPanel()
 			onEdt { p.start(fake) }
-			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 2")
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
 
-			fake.published = snapshot.copy(conflictCount = 5, queuedTrains = 4)
-			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 5")
+			fake.published = snapshot.copy(conflictCount = 9, queuedTrains = 4)
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 9")
 
 			assertThat(p.textOf(MetricsDashboardPanel.QUEUED_NAME)).isEqualTo("Queued: 4")
 		}
 
 		@Test
 		@Timeout(value = 15, unit = TimeUnit.SECONDS)
-		@DisplayName("stop makes a last poll with the run-end summary and ends the polling")
-		fun stopReadsRunEndAndStopsPolling() {
+		@DisplayName("a natural stop makes a last poll with the run-end summary and ends the polling")
+		fun naturalStopReadsRunEndAndStopsPolling() {
 			val fake = FakeMetricsCollectionService()
 			fake.published = snapshot
 			val p = newPanel()
 			onEdt { p.start(fake) }
-			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 2")
-			fake.published = snapshot.copy(conflictCount = 7)
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
+			fake.published = snapshot.copy(conflictCount = 11)
 			fake.runEnd = fake.runEndSummary().copy(classification = RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS)
+			val readsBefore = fake.runEndSummaryReads.get()
 
-			onEdt { p.stop() }
+			onEdt { p.stop(summaryValid = true) }
 			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "CUTOFF_WITH_UNFINISHED_JOURNEYS")
 
-			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo("Conflicts: 7")
+			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo("Conflicts: 11")
 			assertThat(p.isPolling).isFalse()
+			assertThat(fake.runEndSummaryReads.get()).isEqualTo(readsBefore + 1)
 			val reads = fake.latestSnapshotThreads.size
 			Thread.sleep(700)
 			flushEDT()
 			assertThat(fake.latestSnapshotThreads.size).isEqualTo(reads)
+		}
+
+		@Test
+		@Timeout(value = 15, unit = TimeUnit.SECONDS)
+		@DisplayName("a manual stop makes a plain last snapshot poll, never reads the summary, says stopped manually")
+		fun manualStopDoesNotReadSummary() {
+			val fake = FakeMetricsCollectionService()
+			fake.published = snapshot
+			val p = newPanel()
+			onEdt { p.start(fake) }
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
+			fake.published = snapshot.copy(conflictCount = 11)
+
+			onEdt { p.stop(summaryValid = false) }
+			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "stopped manually")
+
+			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo("Conflicts: 11")
+			assertThat(p.textOf(MetricsDashboardPanel.END_CAUSE_NAME)).isEqualTo("End: stopped manually")
+			assertThat(p.isPolling).isFalse()
+			assertThat(fake.runEndSummaryReads.get()).isEqualTo(0)
 		}
 
 		@Test
@@ -212,13 +234,13 @@ class MetricsDashboardPanelTest {
 			fake.published = snapshot
 			val p = newPanel()
 			onEdt { p.start(fake) }
-			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 2")
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
 			assertThat(p.isPolling).isTrue()
 
 			onEdt { p.detach() }
 
 			assertThat(p.isPolling).isFalse()
-			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).doesNotContain("2")
+			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).doesNotContain("7")
 			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo(DashboardText.EMPTY.conflicts)
 		}
 	}
