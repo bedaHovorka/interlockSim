@@ -149,7 +149,8 @@ internal class ReservationContentionTracker(
 		if (blockedSince.isEmpty()) return emptyList()
 		val unresolved = blockedSince.keys.toList()
 		// Issue #1305: every train still blocked stood blocked to the end, ownerless block or not.
-		unresolved.map { it.first }.distinct().forEach { closeEpisode(it, simulationEndTime) }
+		// One pass over the map, not one per train (N trains x B entries would be quadratic).
+		earliestOpenSince().forEach { (trainId, since) -> addClosed(trainId, simulationEndTime - since) }
 		blockedSince.clear()
 		return unresolved.mapNotNull { (trainId, block) ->
 			val owner = ownerOf(block) ?: return@mapNotNull null
@@ -213,15 +214,6 @@ internal class ReservationContentionTracker(
 			}
 		}
 		return total
-	}
-
-	/** Add the open episode of [trainId], from its earliest open contention to [until], to [closedBlockedSeconds]. */
-	private fun closeEpisode(
-		trainId: String,
-		until: Double
-	) {
-		val since = earliestOpenSince()[trainId] ?: return
-		addClosed(trainId, until - since)
 	}
 
 	private fun addClosed(
