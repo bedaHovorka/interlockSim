@@ -207,6 +207,11 @@ has waited.
 **Demand:** a wait-for graph over the open contentions, so a cycle is reported as a deadlock and a chain
 without a cycle as a queue, with the wait age of each waiting train.
 
+**Input provenance:** the graph must build its edges from the owner recorded when the contention started,
+or re-scan `PathReservationRegistry` at the flush — not from the owner named at flush time. The
+`ReservationContentionTracker` never unrecords a superseded entry, so a stale entry can name a block
+(and a block owner) that the train stopped contending for long before the run ended.
+
 ## Evidence
 
 ### Run timing
@@ -260,9 +265,16 @@ request on a run that had already stopped, while the summary said `conflicts=0`.
 listeners still get it, it does not pause, it skips the deduplication window (the flush is one-shot, and
 the motivating run had two flushed events for one pair, block `k4` and a switch block), and it is logged
 at INFO as "Advisory warning (not a collision): unresolved at run end: Train #19 queued behind Train #18
-for block k4 ...". A live double-booking stays CRITICAL. So the CRITICAL count equals `conflicts` and the
-WARNING count equals `unresolvedAtRunEnd`; `RunEndConflictSeverityTest` (`commonTest`),
-`ReservationConflictWarningTest` and `MetricsIntegrationTest` pin it. The headless `example cervenyUjezd`
+for block k4 ...". A live double-booking stays CRITICAL. The severity split is exact on the flush
+path: every flushed contention is exactly one WARNING, so the WARNING warning count equals
+`unresolvedAtRunEnd`. The CRITICAL warning count is only an upper bound for `conflicts`, not an
+equality: the service suppresses repeats of one pair inside the deduplication window while the
+recorder counts every event, and a `CollisionWarning.BlockEntryViolation` or
+`CollisionWarning.PredictiveCollision` is CRITICAL without touching `conflicts` at all.
+`RunEndConflictSeverityTest` (`commonTest`), `ReservationConflictWarningTest` and
+`MetricsIntegrationTest` pin it. The metrics service keeps its own WARN line
+("Contention unresolved at run end") for the same event on purpose: that line is the summary-level
+record, while the collision service's INFO line is the per-warning one. The headless `example cervenyUjezd`
 at 300, 600 and 900 s ended with `unresolvedAtRunEnd=0` on this head, so the flush path is reproduced
 by the fixture tests, not by the example. The end cause stays
 `NATURAL_COMPLETION`: a new end cause for "cut off with trains on the network" would mark every
