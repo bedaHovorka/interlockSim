@@ -317,7 +317,10 @@ class Train :
 		 * An InOut's embedded in- and out-semaphores are no grid cells, so neither the XML reader nor
 		 * the #1273 auto-naming names them, and a train's entry logged `detected at semaphore , ...`.
 		 * At that entry the separator is the InOut itself, so the line names it: `B (entry)` for its
-		 * in-semaphore, `B (exit)` for its out-semaphore. Any other blank name prints
+		 * in-semaphore, `B (exit)` for its out-semaphore. No call site logs a crossing at an
+		 * out-semaphore — an exit passes the traversal's `else` branch, which emits no SENSOR line —
+		 * so only the `(entry)` label is logged today; `TrainSemaphoreLogNameTest` pins both labels
+		 * for a future exit-SENSOR line. Any other blank name prints
 		 * [Station.UNNAMED], the label the station diagnostics already use. Log text only: the
 		 * semaphore keeps its blank name, and the XML file and the dispatcher's endpoint names do not
 		 * change.
