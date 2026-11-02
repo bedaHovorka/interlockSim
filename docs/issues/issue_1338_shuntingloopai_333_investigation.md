@@ -66,6 +66,11 @@ Seven older run logs of the same command were on disk, all from before SP8 (1c53
 | `fix/issue-1279`, 11-01 11:07 | eab8e5b7 | 1 | 6 | 2 | 0 | 0 | 0 | 117 |
 | **The run under study, 11-01 21:03** | 988ea634 | 5 | 5 | 2 | 1 | 3 | 2 | 75 |
 
+Each count column is the number of occurrences of that symptom's text in the run log:
+`geometrically impossible`, `detected at semaphore ,`, `all paths blocked`, `non-contiguous
+origin`, and the stall warning `holds track it cannot leave`; the LLM-timeout column counts
+`500 | 29.99s` aborts in the Ollama journal.
+
 Every run, old and new, ends with `journeysCompleted=5 trainsEntered=7 trainsExited=5`. The 46 run
 snapshots in `build/reports/dispatcher-runs/llm_tool_calling/` from 2026-10-01 to 2026-11-01 show 1 to
 6 geometrically impossible requests and 1 to 4 all-paths-blocked denials in almost every run. Only
@@ -82,10 +87,12 @@ the run under study has a circuit breaker that opened (twice).
    the refusal rule from 2dc7b3c1 (2026-09-13). The model relapses because a refusal reason reaches
    only the next cycle's prompt and `historyN=0` keeps no history. #1301 owns the fix (worked
    examples taken from the station's structure, as a measured A/B prompt variant).
-2. **`ReservePath: all paths blocked for Train #5 (zA → doB1)`.** Known behaviour. Train #4 held
-   block kB, the platform block between `doA1` and `doB1`, so `zA → doB1` crosses an occupied block;
-   `zA → doB2` takes the other platform track and was granted. The same pair is denied in the older
-   runs. In this run the next attempt came 30 s later only because of symptom 4.
+2. **`ReservePath: all paths blocked for Train #5 (zA → doB1)`.** Known behaviour. Five milliseconds
+   before the first denial, the fallback granted Train #4's `zB → doA1`; the route reserves platform
+   block k1 (between `doA1` and `doB1`). Train #4 then occupies k1, stopped at `doA1`, so the second
+   `zA → doB1` attempt crosses it too. `zA → doB2` takes the other platform track and was granted.
+   The same pair is denied in the older runs. In this run the next attempt came 30 s later only
+   because of symptom 4.
 3. **Train #4's `zB → doA1` requests.** Not the LLM: both came from the rule-based fallback, at the
    timeouts of 21:02:07 and 21:02:37. The first was granted and moved Train #4 off block kB. The
    fallback decides on the observation taken when the cycle started, 30 s earlier; by the second
