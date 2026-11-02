@@ -119,6 +119,7 @@ Dated summaries, retrospectives, decisions, and reports. Kept for context; do no
 - [TEST_COVERAGE_SUMMARY.md](TEST_COVERAGE_SUMMARY.md) - context package coverage improvement summary (history).
 - [TEST_COVERAGE_POLISH.md](TEST_COVERAGE_POLISH.md) - coverage polish for cells, tracks, and xml packages (history).
 - [issues/issue_280_analysis_plan.md](issues/issue_280_analysis_plan.md) - analysis plan for the zero-acceleration train deadlock, issue #280 (history, 2026-01).
+- [issues/issue_1338_shuntingloopai_333_investigation.md](issues/issue_1338_shuntingloopai_333_investigation.md) - the `shuntingLoopAI 333` run on `goal-1B` 988ea634 is not a regression: per-symptom causes, the baseline runs, the recurring runaway Ollama generation and its follow-ups, issue #1338 (history, 2026-11).
 
 ### Planning and backlog analysis
 
