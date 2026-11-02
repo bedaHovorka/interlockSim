@@ -19,6 +19,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.testutil.HOLD_AT_SEPARATOR_TRAIN_LENGTH
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.runReservedSingleTrainScenario
@@ -80,7 +81,7 @@ class TrainSensorLogNameTest : KoinTestBase() {
 			inName = ENTRY,
 			outName = EXIT,
 			endTime = END_TIME,
-			trainLength = TRAIN_LENGTH,
+			trainLength = HOLD_AT_SEPARATOR_TRAIN_LENGTH,
 			findReservedPath = { realNav, trainId, separator -> realNav.findReservedPathForTrain(trainId, separator) }
 		)
 
@@ -97,8 +98,5 @@ class TrainSensorLogNameTest : KoinTestBase() {
 
 		/** The entry SENSOR line is logged when the train starts; 30 s of simulated time is plenty. */
 		const val END_TIME = 30L
-
-		/** Short enough for the train to clear its entry InOut. */
-		const val TRAIN_LENGTH = 20.0
 	}
 }

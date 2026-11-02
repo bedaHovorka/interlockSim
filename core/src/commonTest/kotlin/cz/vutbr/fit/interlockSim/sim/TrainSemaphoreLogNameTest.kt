@@ -28,16 +28,13 @@ import kotlin.test.Test
  * real SENSOR line of an entering train is pinned end to end by `TrainSensorLogNameTest`.
  */
 class TrainSemaphoreLogNameTest {
-	private val inOutB: DynamicInOut = GridTransformer.createDynamic(InOut("B", true, Cell.SpatialType.HORIZONTAL))
+	private val inOutB: DynamicInOut = inOut("B")
+
+	private fun inOut(name: String): DynamicInOut =
+		GridTransformer.createDynamic(InOut(name, true, Cell.SpatialType.HORIZONTAL))
 
 	private fun semaphore(name: String? = null): DynamicRailSemaphore =
-		createDynamicInstance(
-			if (name == null) {
-				RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			} else {
-				RailSemaphore(name, true, Cell.SpatialType.HORIZONTAL)
-			}
-		)
+		createDynamicInstance(RailSemaphore(name, true, Cell.SpatialType.HORIZONTAL))
 
 	@Test
 	fun aNamedSemaphorePrintsItsOwnName() {
@@ -68,7 +65,7 @@ class TrainSemaphoreLogNameTest {
 
 	@Test
 	fun theEntrySemaphoreOfAnUnnamedInOutPrintsTheUnnamedLabel() {
-		val unnamedInOut = GridTransformer.createDynamic(InOut("", true, Cell.SpatialType.HORIZONTAL))
+		val unnamedInOut = inOut("")
 		assertThat(Train.semaphoreLogName(unnamedInOut.inSemaphore, unnamedInOut)).isEqualTo(Station.UNNAMED)
 	}
 }
