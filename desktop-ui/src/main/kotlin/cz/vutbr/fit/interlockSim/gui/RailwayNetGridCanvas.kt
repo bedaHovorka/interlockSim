@@ -727,8 +727,7 @@ class RailwayNetGridCanvas :
 			}
 
 		if (blockName == null) {
-			warningHighlights = emptySet()
-			repaint(100)
+			clearWarningHighlights()
 			return
 		}
 
@@ -749,6 +748,26 @@ class RailwayNetGridCanvas :
 		warningHighlights = points
 		repaint(100)
 	}
+
+	/**
+	 * Clear any warning-block highlight and schedule a repaint.
+	 *
+	 * Issue #1331: an advisory [CollisionWarning.Severity.WARNING] is not a collision, so selecting
+	 * its row must not paint the collision-red highlight; this also removes a stale highlight left
+	 * by an earlier CRITICAL row.
+	 *
+	 * **Must be called from the EDT.**
+	 *
+	 * @since Issue #1331
+	 */
+	fun clearWarningHighlights() {
+		warningHighlights = emptySet()
+		repaint(100)
+	}
+
+	/** Test seam: the grid points that currently carry the warning-block highlight. */
+	internal val highlightedGridPoints: Set<GridPoint>
+		get() = warningHighlights
 
 	/**
 	 * Collect grid positions that represent the cells belonging to [route]'s track

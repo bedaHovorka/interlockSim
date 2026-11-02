@@ -19,8 +19,10 @@ import javax.swing.SwingUtilities
  * Wraps [DefaultListModel]`<`[CollisionWarning]`>` and provides:
  * - EDT-safe [addWarning] and [clearWarnings] helpers that dispatch to the
  *   Event Dispatch Thread when called from a background thread.
- * - [hasCriticalWarning] query used by [cz.vutbr.fit.interlockSim.gui.StatusBar]
- *   to decide whether the warning indicator should be shown.
+ * - [hasCriticalWarning] query: `true` only when an unacknowledged
+ *   [CollisionWarning.Severity.CRITICAL] entry is in the list (Issue #1331: advisory WARNING
+ *   entries do not count). The alarm paths that consume this read [CollisionWarning.severity]
+ *   directly from their listeners rather than through this query.
  *
  * ## Severity mapping
  *

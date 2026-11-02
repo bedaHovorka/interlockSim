@@ -399,9 +399,15 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Warning panel (Issue #616, Goal 3 SP6) – initially hidden; shown in simulation mode
 		warningPanel.isVisible = false
-		// Selection highlights the involved block on the canvas when known.
+		// Selection highlights the involved block on the canvas when known (Issue #1331: only
+		// a CRITICAL warning gets the collision highlight; an advisory clears it instead -- the
+		// rationale lives on RailwayNetGridCanvas.clearWarningHighlights).
 		warningPanel.onWarningSelected = { warning ->
-			railwayNetGridCanvas.highlightWarningBlock(warning)
+			if (warning.severity == CollisionWarning.Severity.CRITICAL) {
+				railwayNetGridCanvas.highlightWarningBlock(warning)
+			} else {
+				railwayNetGridCanvas.clearWarningHighlights()
+			}
 		}
 		// Clearing the log also silences the status-bar warning indicator (Issue #616 follow-up).
 		warningPanel.onClear = {

@@ -130,7 +130,7 @@ class WarningPanel : JPanel() {
 		onClear?.invoke()
 	}
 
-	/** Returns `true` when the model contains at least one unacknowledged warning. */
+	/** Returns `true` when the model contains at least one unacknowledged [CollisionWarning.Severity.CRITICAL] warning. */
 	internal fun hasCriticalWarning(): Boolean = listModel.hasCriticalWarning()
 
 	// ── Cell renderer ─────────────────────────────────────────────────────────

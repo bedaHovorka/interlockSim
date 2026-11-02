@@ -12,6 +12,8 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
@@ -19,19 +21,30 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.PROGRAM_LLM_FULL_NAME
+import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
+import cz.vutbr.fit.interlockSim.objects.cells.AbstractCell
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackBlockPart
+import cz.vutbr.fit.interlockSim.util.Point
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.awt.BorderLayout
+import java.util.AbstractMap.SimpleEntry
 import java.util.concurrent.TimeUnit
 import javax.swing.JFrame
 import javax.swing.JScrollPane
@@ -48,6 +61,18 @@ import javax.swing.JScrollPane
 @DisplayName("Frame")
 class FrameTest : AbstractFrameTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
+
+	// The advisory/critical fixture pair, as WarningPanelTest declares them.
+	private val advisory =
+		CollisionWarning.ReservationConflict(
+			trainId = "Train #19",
+			conflictingTrainId = "Train #18",
+			time = 601.0,
+			severity = CollisionWarning.Severity.WARNING
+		)
+
+	private val critical = CollisionWarning.ReservationConflict("Train-A", "Train-B", time = 10.0)
+
 	private lateinit var frame: Frame
 
 	@BeforeEach
@@ -74,13 +99,6 @@ class FrameTest : AbstractFrameTestBase() {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("an advisory run-end warning is listed without the critical indicator (Issue #1331)")
 	fun advisoryWarningIsListedWithoutCriticalIndicator() {
-		val advisory =
-			CollisionWarning.ReservationConflict(
-				trainId = "Train #19",
-				conflictingTrainId = "Train #18",
-				time = 601.0,
-				severity = CollisionWarning.Severity.WARNING
-			)
 		runOnEDT {
 			frame.showCollisionWarning(advisory, autoPause = true, sound = false)
 
@@ -94,7 +112,6 @@ class FrameTest : AbstractFrameTestBase() {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("a critical warning is listed and lights the status-bar indicator")
 	fun criticalWarningLightsIndicator() {
-		val critical = CollisionWarning.ReservationConflict("Train-A", "Train-B", time = 10.0)
 		runOnEDT {
 			frame.showCollisionWarning(critical, autoPause = true, sound = false)
 
@@ -102,6 +119,62 @@ class FrameTest : AbstractFrameTestBase() {
 			assertThat(frame.warningPanel.hasCriticalWarning()).isTrue()
 			assertThat(frame.statusBar.isWarningIndicatorVisible()).isTrue()
 		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("a selected critical row lights its block and a selected advisory clears it (Issue #1331)")
+	fun warningSelectionHighlightFollowsSeverity() {
+		// The fixture blocks are unnamed in their sim contexts, and a warning with a null block
+		// name clears the highlight by design, so the scan runs against a mock context with one
+		// named block part (TrackTestMocks factories; DynamicTrackBlock stub style as in
+		// WarningPanelTest). The grid scaffold is local to this test.
+		val blockPart = createMockTrackBlockPart(createMockTrackBlock(blockName = "k4"))
+		val blockPoint = Point(0, 0)
+		val grid =
+			mockk<RailwayNetGrid<AbstractCell>>(relaxed = true) {
+				every { iterator() } returns
+					listOf<Map.Entry<Point, AbstractCell>>(
+						SimpleEntry(blockPoint, blockPart)
+					).iterator()
+			}
+		val canvasContext =
+			mockk<Context<AbstractCell, TrackBlock>>(relaxed = true) {
+				every { getRailWayNetGrid() } returns grid
+			}
+		val block = mockk<DynamicTrackBlock>(relaxed = true)
+		every { block.name } returns "k4"
+
+		runOnEDT {
+			frame.railwayNetGridCanvas.setContext(canvasContext)
+			requireNotNull(frame.warningPanel.onWarningSelected).invoke(critical.copy(conflictingBlock = block))
+		}
+		assertThat(frame.railwayNetGridCanvas.highlightedGridPoints).contains(blockPoint)
+
+		runOnEDT {
+			requireNotNull(frame.warningPanel.onWarningSelected).invoke(advisory.copy(conflictingBlock = block))
+		}
+		assertThat(frame.railwayNetGridCanvas.highlightedGridPoints).isEmpty()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("with auto-pause off, only a critical warning resumes a paused run (Issue #1331)")
+	fun onlyCriticalWarningResumesPausedRunner() {
+		val runner = SimulationRunner(mockk(relaxed = true))
+		runner.isPaused = true
+
+		runOnEDT {
+			frame.simulationController.runner = runner
+			frame.showCollisionWarning(advisory, autoPause = false, sound = false)
+		}
+		assertThat(runner.isPaused).isTrue()
+
+		runOnEDT {
+			frame.showCollisionWarning(critical, autoPause = false, sound = false)
+			frame.simulationController.runner = null
+		}
+		assertThat(runner.isPaused).isFalse()
 	}
 
 	@Test
