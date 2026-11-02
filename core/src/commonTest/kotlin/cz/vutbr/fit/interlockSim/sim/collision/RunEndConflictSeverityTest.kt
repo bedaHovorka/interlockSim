@@ -121,12 +121,12 @@ class RunEndConflictSeverityTest : KoinComponent {
 		val service = DefaultCollisionDetectionService(CountingPauseController())
 		val received = mutableListOf<CollisionWarning.ReservationConflict>()
 		service.onCollisionWarning { (it as? CollisionWarning.ReservationConflict)?.let(received::add) }
-		val (k4, switchBlock) = realBlocks()
+		val (firstBlock, secondBlock) = realBlocks()
 
-		service.handleBlockEvent(conflictEvent(k4, time = 601.0, atRunEnd = true))
-		service.handleBlockEvent(conflictEvent(switchBlock, time = 601.0, atRunEnd = true))
+		service.handleBlockEvent(conflictEvent(firstBlock, time = 601.0, atRunEnd = true))
+		service.handleBlockEvent(conflictEvent(secondBlock, time = 601.0, atRunEnd = true))
 
-		assertThat(received.map { it.conflictingBlock }).containsExactly(k4, switchBlock)
+		assertThat(received.map { it.conflictingBlock }).containsExactly(firstBlock, secondBlock)
 	}
 
 	// The deduplication window is 1 s: the second event of each pair below lies inside it.
