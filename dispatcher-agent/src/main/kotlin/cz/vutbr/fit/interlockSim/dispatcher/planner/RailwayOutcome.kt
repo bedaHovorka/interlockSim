@@ -26,9 +26,9 @@ import kotlinx.serialization.Serializable
  * Every field is nullable, and `null` means **not measured** — never "measured as none". The
  * distinction is load-bearing, not stylistic:
  *
- * - `trainsEntered = 0` is a finding: the dispatcher admitted nothing for the whole run.
+ * - `trainsEntered = 0` is a finding: no train arrived at the station for the whole run.
  * - `trainsEntered = null` is the absence of a finding: nothing in this run was in a position to
- *   count admissions, because the example's main process keeps no such counter.
+ *   count arrivals, because the example's main process keeps no such counter.
  *
  * Collapsing the two would reproduce exactly the failure mode
  * #847's sweep recorded under *"Structurally empty columns"*, where a
@@ -49,7 +49,11 @@ import kotlinx.serialization.Serializable
  *
  * @property journeysCompleted Trains that released every block they held, i.e. finished their
  *   journey and left the network (`MetricsSnapshot.completedTrains`).
- * @property trainsEntered Trains admitted into the network (`ShuntingLoop.getTrainsEntered`).
+ * @property trainsEntered Trains generated into the entry queue (`ShuntingLoop.getTrainsEntered`,
+ *   counted in `ShuntingLoop.InnerGenerator.placeTrain`), whether or not the dispatcher admitted
+ *   them: `exited + approved + queued` equals it (pinned by `Issue797StoppedAtAllowingSignalTest`).
+ *   A train still queued at run end counts here and in neither [trainsExited] nor
+ *   [maxConcurrentTrains] (Issue #1338).
  * @property trainsExited Trains that left through an exit point (`ShuntingLoop.getTrainsExited`).
  * @property maxConcurrentTrains Peak number of simultaneously admitted trains
  *   (`ShuntingLoop.getMaxConcurrentTrains`).
