@@ -296,5 +296,8 @@ class ReservationConflictWarningTest : KoinTestBase() {
 		assertThat(conflict.trainId).isEqualTo("TrainWaiting")
 		assertThat(conflict.conflictingTrainId).isEqualTo("TrainBusy")
 		assertThat(conflict.conflictingBlock).isNotNull()
+		// Issue #1331: a train still queued at the run end is no double-booking, so the warning is
+		// an advisory WARNING (no pause), not a CRITICAL collision.
+		assertThat(conflict.severity).isEqualTo(CollisionWarning.Severity.WARNING)
 	}
 }
