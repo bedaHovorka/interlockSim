@@ -9,7 +9,7 @@ low-traffic seeded test on 10 JVM seeds and 1 native seed, the wall-time budget,
 shoulder measurement rows, and the Goal 9B demands that follow from them (capacity limit, the traffic
 level at which blocking begins).
 
-Sections marked `MEASURED BY COORDINATOR` are filled from runs on a quiet machine. Wall times seen
+Wall times are taken only from runs on a quiet machine (see "Wall-time budget"). Wall times seen
 while other builds ran are not results and are not recorded here.
 
 ## Exit parameters (owner-approved)
@@ -50,6 +50,11 @@ functional table below has a column for it. That value is the realized sample me
 16 to 28 gaps, not the distribution parameter: the exponential mean is 120 s for every seed, and the
 minimum gaps and the rounding only ever move an injection later, but the sample mean still scatters
 around 120 s (100.7 to 173.9 s over the 10 seeds; seeds 2, 3, 6, 8 and 9 fall below 120 s).
+
+**Mean gap: distribution parameter, not per-seed mean (TSE ruling, PR #1349).** Inter-arrival gaps are
+drawn from an exponential distribution with mean 120 s (the owner's parameter); the per-seed realized
+mean entry gap of 100.7–173.9 s is sampling scatter, and the five seeds below 120 s passed under
+heavier-than-nominal traffic. The parameter and the seeds stay unchanged.
 
 ## Test layout
 
@@ -146,11 +151,40 @@ varies between its runs.
 Budget: at most 15 s wall per run and 3 min total for the 10 JVM seeds. A measurement, never an
 assertion.
 
-<!-- MEASURED BY COORDINATOR: quiet-window wall-time table. One row per seed 1-10 (JVM wall ms from
-the `wall=` field of each run line) plus the total, each against 15 s / 3 min; the native seed-1 wall
-time and the whole quiet `:core:linuxX64Test` time against the move-out rule below; and a
-machine-state line (load average, other Gradle daemons/JVMs running, CPU governor or power profile,
-date and commit). -->
+Measured 2026-11-03 in a quiet window: the coordinator held an exclusive machine lock (no gate, heavy
+test, sweep or agent build ran), waited until the 1-minute load average was below 1.5, pinned the
+run to the P-cores (`taskset -c 0-7`, 5.5 GHz) and ran Gradle with `--no-daemon` and `--rerun`.
+Machine state at the start of each window (tag **QUIET**; the 5- and 15-minute averages still show
+the builds that ran before the window; one JVM outside the run, not a Gradle worker, used up to 80 %
+of one core):
+
+- Window 1 (native seed): `sha=9e069813 loadavg=[1.26 20.41 30.68] busyJava=[38.9%:java 23.2%:java] pin=taskset 0-7 (P-cores) AC=1 docker=1 gpu=[7.09 W idle]` at 2026-11-03T07:54:36+01:00
+- Window 2 (JVM seeds, rows, whole native binary): `sha=9e069813 loadavg=[1.22 6.06 19.31] busyJava=[80.0%:java 24.9%:java] pin=taskset 0-7 (P-cores) AC=1 docker=1 gpu=[7.10 W idle]` at 2026-11-03T08:14:46+01:00
+
+| Seed | JVM wall (s) | Budget | Within |
+| ---: | ---: | ---: | --- |
+| 1 | 1.77 | 15 s | yes |
+| 2 | 1.69 | 15 s | yes |
+| 3 | 1.51 | 15 s | yes |
+| 4 | 1.37 | 15 s | yes |
+| 5 | 1.47 | 15 s | yes |
+| 6 | 1.83 | 15 s | yes |
+| 7 | 1.32 | 15 s | yes |
+| 8 | 1.47 | 15 s | yes |
+| 9 | 1.28 | 15 s | yes |
+| 10 | 1.05 | 15 s | yes |
+| **Total, 10 seeds** | **14.7** (JUnit suite time 15.1 s) | 3 min | yes |
+
+The slowest seed uses 12 % of its per-run budget; the 10 seeds together use 8 % of the total budget.
+The counts of the quiet run are identical to the functional table above (10 of 10 pass).
+
+| Native measure | Quiet wall | Move-out limit | Within |
+| --- | ---: | ---: | --- |
+| Seed 1 (`LowTrafficExitNativeSeedTest`, debug test binary) | 25.8 s | 60 s | yes |
+| Whole `:core` native test binary (1,316 tests, includes seed 1) | 71.5 s | 3 min | yes |
+
+The native seed costs about 17 times the JVM seed-1 run (debug binary). Both native numbers are inside
+the move-out rule below, so the seed **stays in `linuxX64Test`**.
 
 ### Native seed: move-out rule (TSE ruling, PR #1349)
 
@@ -162,16 +196,29 @@ manual. Only quiet-window numbers decide this; times taken while other builds ra
 
 ## Measurement rows: wall time (quiet window)
 
-<!-- MEASURED BY COORDINATOR: 20-train row (10 runs: entered, exited, max concurrent, wall ms,
-blocking begins at; min/mean/max wall) and shoulder row (seeds 1-10, same columns), with the same
-machine-state line. -->
+Same quiet window 2 (`sha=9e069813 loadavg=[1.22 6.06 19.31] busyJava=[80.0%:java 24.9%:java] pin=taskset 0-7 (P-cores) AC=1 docker=1 gpu=[7.10 W idle]` at 2026-11-03T08:14:46+01:00). Counts as in the functional table above (all runs 20/20 entered and
+exited, no entry failure, no stall).
+
+| Row (cap 20, 1,800 attempts, rotating legal pairs) | Runs | Max concurrent | Blocking begins at (s) | Wall min (s) | Wall mean (s) | Wall max (s) | Wall total (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 20-train high traffic, headway 5 s | 10 | 15 | 26 | 1.19 | 1.29 | 1.36 | 12.9 |
+| Shoulder traffic, gaps 15–30 s (seeds 1–10) | 10 | 4–5 | 118–184 | 1.22 | 1.35 | 1.86 | 13.5 |
 
 ## #895 re-baseline
 
-<!-- MEASURED BY COORDINATOR: #895 re-baseline table, base 375c54b1 vs head of this branch (same
-columns as the earlier SP re-baselines: revision, runs, journeys, entered, exited, max concurrent,
-block transitions, conflicts, failed reservations). This change touches no production code, so the
-two rows are expected to be identical. -->
+Rule-based `aiSweep` control arm, grid `endTimeSeconds 600, repeat 10, perRunTimeoutSeconds 900,
+example: ["shuntingLoop", "cervenyUjezd"]`, railway outcomes summed over the 10 runs. The base arm is
+the shared wave-5 base arm; the head arm was built from this branch.
+
+| Example | Revision | Runs | Journeys | Entered | Exited | Max concurrent | Block transitions | Conflicts | Failed reservations |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| shuntingLoop | base 375c54b1 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| shuntingLoop | head 9e069813 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| cervenyUjezd | base 375c54b1 | 10 | 180 | 190 | 170 | 2 | 380 | 0 | 100 |
+| cervenyUjezd | head 9e069813 | 10 | 180 | 190 | 170 | 2 | 380 | 0 | 100 |
+
+Every run `NATURAL_COMPLETION`, no unresolved reservation at run end. Base == head, as expected for a
+test-and-docs-only change.
 
 ## Verdicts
 
@@ -185,14 +232,33 @@ needed"**. The result is functional only; the counts may differ from head. 10 of
 needed for the exit", but SP7 is not removed in this wave. The numbers are tagged LOADED when they
 were not taken in the quiet window.
 
-<!-- MEASURED BY COORDINATOR: SP7 verdict. Per seed on 09ee668b: pass/fail and failure cause
-(LOADED tag where applicable), then the verdict by the method above. -->
+Run 2026-11-03 on `09ee668b` with this branch's calibration files and the two stubs (tag **LOADED**:
+`loadavg=[4.75 8.31 13.68]`, other builds running; timings not used):
+
+| Seed | Specs | Entered | Exited | Max concurrent (cap 4) | Entry failures | `@Timeout` | Result |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| 1 | 18 | 18 | 18 | 3 | 0 | no | pass |
+| 2 | 26 | 26 | 26 | 3 | 0 | no | pass |
+| 3 | 24 | 24 | 24 | 3 | 0 | no | pass |
+| 4 | 23 | 23 | 23 | 3 | 0 | no | pass |
+| 5 | 23 | 23 | 23 | 2 | 0 | no | pass |
+| 6 | 29 | 29 | 29 | 3 | 0 | no | pass |
+| 7 | 21 | 21 | 21 | 3 | 0 | no | pass |
+| 8 | 24 | 24 | 24 | 3 | 0 | no | pass |
+| 9 | 21 | 21 | 21 | 2 | 0 | no | pass |
+| 10 | 17 | 17 | 17 | 2 | 0 | no | pass |
+
+**Verdict: SP7 is not needed for 10 of 10 at the exit parameters.** All 10 seeds pass before SP7 with
+the same counts as at head. SP7 stays in place; it is not removed in this wave.
 
 ### SP14: must it open?
 
-<!-- MEASURED BY COORDINATOR: SP14 verdict. Cause per failing seed (WATCHDOG_FIRED,
-ENTRY_ATTEMPTS_USED_UP, MAX_CONCURRENCY_REACHED, OTHER); SP14 (incremental reservation) opens only
-on a capacity cause. On this branch's head all 10 seeds pass, so no seed has a cause. -->
+No seed fails, either at head (10 of 10, quiet window and functional runs) or on SP7's parent (10 of
+10), so no seed has a failure cause. Every run logs `firstEntryFailureAt=none` and `stallAt=none`, and
+the cap of 4 is never filled (`capHoldBeginsAt=never`).
+
+**Verdict: SP14 (incremental reservation) does not open.** No capacity cause exists at the exit
+parameters.
 
 ## Why other wave-5 issues cannot change these numbers
 
@@ -213,15 +279,29 @@ runs' logs):
 
 ## Goal 9B demands
 
-<!-- MEASURED BY COORDINATOR: capacity limit, concurrent trains versus wall time, from the quiet
-window: low traffic (peak admitted 2-3 of cap 4), shoulder (4-5 of cap 20) and 20-train (15 of cap
-20) against their wall times; state that "max concurrent" counts admitted trains, including those
-still waiting for a route. -->
+**D1 — Capacity limit, concurrent trains versus wall time.** "Max concurrent" counts *admitted* trains,
+including those still waiting for their entry route.
 
-<!-- MEASURED BY COORDINATOR: traffic level at which blocking begins. Functional data above, kept
-per configuration (the cap-4 exit gate and the cap-20 rows are never compared): exit gate, cap 4 —
-at the low-traffic rate (exponential mean 120 s, realized mean gaps 100.7-173.9 s) every seed
-already sees at least one refused entry (first at 40-2,062 s) but never fills the cap; rows, cap 20,
-1,800 attempts, rotating legal pairs — at shoulder gaps (15-30 s) the first refusal comes at
-118-184 s, at the 5 s headway at 26 s. Confirm or amend from the quiet-window runs and state the
-demand for Goal 9B. -->
+| Configuration | Peak admitted / cap | Wall per run (quiet) |
+| --- | --- | ---: |
+| Exit gate, low traffic (mean gap 120 s), 1 h simulated | 2–3 / 4 | 1.1–1.8 s |
+| Row: shoulder traffic (gaps 15–30 s), 20 trains | 4–5 / 20 | 1.2–1.9 s |
+| Row: 20-train high traffic (headway 5 s) | 15 / 20 | 1.2–1.4 s |
+
+Wall time does not grow with the number of admitted trains in this range: one simulated hour on Praha
+costs about 1–2 s on the JVM at 3, 5 or 15 admitted trains. Simulation cost is not the limit at the
+Goal 1B traffic levels; Goal 9B can plan with full-route reservation at these levels.
+
+**D2 — Traffic level at which blocking begins.** Kept per configuration; the cap-4 exit gate and the
+cap-20 rows are never compared.
+
+- **Exit gate, cap 4:** at the low-traffic rate (exponential mean 120 s; realized mean gaps
+  100.7–173.9 s) every seed already sees at least one refused entry (first at 40–2,062 s), but no run
+  fills the cap and no refusal turns into an entry failure.
+- **Rows, cap 20, 1,800 attempts, rotating legal pairs:** at shoulder gaps (15–30 s) the first
+  refusal comes at 118–184 s; at the 5 s headway at 26 s. All refusals resolve (20/20 in every run).
+
+Demand for Goal 9B: on Praha, route conflicts between full entry-to-exit reservations begin already
+at low traffic; they cost waiting time, not lost trains. A Goal 9B dispatcher must expect refused
+entries at every traffic level and treat them as a normal retry, not an error. Incremental
+reservation (SP14) is not needed to reach the Goal 1B exit.
