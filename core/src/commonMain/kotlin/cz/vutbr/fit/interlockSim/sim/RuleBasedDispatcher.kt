@@ -30,7 +30,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    among the next separators one section ahead that the shell reports with their
  *    availability ([BlockInputObservation.candidateTargets]), through
  *    [ReservationTargetPolicy] (Issue #970) — the train's own exit when it is an available
- *    candidate ([BlockInputObservation.destinationName], Issue #1278), otherwise the fixed order;
+ *    candidate ([BlockInputObservation.destinationName], Issue #1278), no pick while it waits for
+ *    that exit below the bound ([BlockInputObservation.destinationWaitSeconds], Issue #1299),
+ *    otherwise the fixed order;
  *    see [BlockInputObservation.candidateTargets], the dispatcher's only target-selection input
  *    (Issue #1152). A train awaiting a route extension is never offered the route it already
  *    holds: when the pick is [BlockInputObservation.heldRouteEndName], no reservation is
@@ -65,8 +67,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * value* of a reservation attempt, which is unavailable before the shell applies
  * the returned [DispatchDecision]s.
  *
- * When no candidate one section ahead is available ([ReservationTargetPolicy.pick] over
- * [BlockInputObservation.candidateTargets] returns `null`), no reservation can be
+ * When no candidate one section ahead is available, or the train waits for its own blocked exit
+ * ([ReservationTargetPolicy.pick] over [BlockInputObservation.candidateTargets] returns `null`),
+ * no reservation can be
  * requested this tick and [DispatchDecision.NoAction] effectively results for
  * that input — the train waits and is reconsidered next tick, matching the
  * pre-#729 behaviour where `reservePathToAnyNextSemaphore` returned

@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
+import cz.vutbr.fit.interlockSim.sim.ReservationTargetPolicy
 import cz.vutbr.fit.interlockSim.testutil.inOutCandidate
 import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import org.junit.jupiter.api.DisplayName
@@ -143,6 +144,29 @@ class NextHopResolverTest {
 			.isEqualTo(mapOf("T1" to NextHopOutcome.Hop(fromSignalName = "e32", toTargetName = "east_exit_1")))
 		val noDestination = observation(innerBlockInputs = listOf(atExitSignal.copy(destinationName = null)))
 		assertThat(NextHopResolver.resolve("T1", noDestination))
+			.isEqualTo(NextHopOutcome.Hop(fromSignalName = "e32", toTargetName = "east_exit_2"))
+	}
+
+	@Test
+	@DisplayName("no hop while the train waits for its blocked own exit, the fallback at the bound (Issue #1299)")
+	fun noHopWhileWaitingForTheOwnExitThenTheFallbackHop() {
+		val waiting =
+			input(towardSemaphoreName = "e32", isApproachingThisInput = true).copy(
+				candidateTargets = listOf(inOutCandidate("east_exit_2", true), inOutCandidate("east_exit_1", false)),
+				destinationName = "east_exit_1",
+				destinationWaitSeconds = 0.0
+			)
+		val obs = observation(innerBlockInputs = listOf(waiting))
+
+		assertThat(NextHopResolver.resolve("T1", obs)).isEqualTo(NextHopOutcome.NoSectionReservable)
+		assertThat(NextHopResolver.resolveAll(listOf("T1"), obs))
+			.isEqualTo(mapOf("T1" to NextHopOutcome.NoSectionReservable))
+		val atBound =
+			observation(
+				innerBlockInputs =
+					listOf(waiting.copy(destinationWaitSeconds = ReservationTargetPolicy.OWN_EXIT_WAIT_BOUND_SECONDS))
+			)
+		assertThat(NextHopResolver.resolve("T1", atBound))
 			.isEqualTo(NextHopOutcome.Hop(fromSignalName = "e32", toTargetName = "east_exit_2"))
 	}
 

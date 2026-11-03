@@ -458,6 +458,26 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
+	@DisplayName("a train waiting for its own blocked exit gets no reservation until the bound (Issue #1299)")
+	fun waitsForOwnExitUntilTheBound() {
+		val dispatcher = RuleBasedDispatcher()
+		val waiting =
+			input(
+				TrackFacility.State.OCCUPIED,
+				towardSemaphoreName = "e32",
+				candidateTargets = listOf(inOutCandidate("east_exit_2", true), inOutCandidate("east_exit_1", false)),
+				ownerTrainId = "T1",
+				isApproachingThisInput = true
+			).copy(destinationName = "east_exit_1", destinationWaitSeconds = 0.0)
+
+		assertThat(dispatcher.decide(observation(innerBlockInputs = listOf(waiting))))
+			.containsExactly(DispatchDecision.NoAction)
+		val atBound = waiting.copy(destinationWaitSeconds = ReservationTargetPolicy.OWN_EXIT_WAIT_BOUND_SECONDS)
+		assertThat(dispatcher.decide(observation(innerBlockInputs = listOf(atBound))))
+			.containsExactly(DispatchDecision.ReservePath("T1", "e32", "east_exit_2"))
+	}
+
+	@Test
 	@DisplayName("a RESERVED input set up toward this input reserves toward the chosen candidate")
 	fun reservedInputReservesTowardChosenCandidate() {
 		val dispatcher = RuleBasedDispatcher()

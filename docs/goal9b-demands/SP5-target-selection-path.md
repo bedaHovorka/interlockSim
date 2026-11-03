@@ -66,6 +66,35 @@ while its exit `east_exit_1` is a candidate but not available (Train #1 holds th
 fallback takes `east_exit_2` — 1 of 3 wrong-out reports left. Waiting for the own exit, and
 steering through the station toward it, belong to a destination-aware router (Goal 19).
 
+**Update 2026-11-03 (Issue #1299).** The policy now waits for the own exit. When the timetable
+exit is listed in `candidateTargets` but not available, `ReservationTargetPolicy.pick` picks
+nothing (the train waits and is reconsidered next tick) instead of falling back to the other
+exit. The wait is bounded in simulation time by `ReservationTargetPolicy.OWN_EXIT_WAIT_BOUND_SECONDS`
+(proposed 120 s, awaiting traffic-simulation-expert confirmation); at the bound the fixed-order
+fallback applies again, so a holder that never releases — or a train that needs the waiting
+train's block to clear the throat; `ShuntingLoop` has no SP7 watchdog — cannot hold the train up
+for ever (`OwnExitWaitBoundTest` pins this with a stand-in occupant that never leaves the exit block).
+
+The clock lives in the shell, not in a dispatcher: `ShuntingLoop` records when a train started
+waiting at an input (the first tick at which `ReservationTargetPolicy.isWaitingForOwnExit` holds
+there) and reports the elapsed simulation seconds as `BlockInputObservation.destinationWaitSeconds`.
+`chosenTargetName` passes it to the policy, so `RuleBasedDispatcher` and `NextHopResolver` see the
+same wait and make the same pick. An observation without a wait (`null`) keeps the immediate
+fallback of #1278.
+
+Measured with an unbounded wait, sampled on the 2 s control tick: in the seeded
+`CervenyUjezdRunTest` run Train #2 waits at `e32` while Train #1 clears the throat — 14 s
+reported, `east_exit_1` free 16 s after the wait began — and then leaves by its own exit, so the
+seeded run has no `ends in wrong out` report left. Over eleven `cerveny_ujezd.xml` runs (600 s,
+seeds 0–9 and 1163, uncapped generator) the longest wait that ended within the run lasted 76 s
+(median about 14 s); with the 120 s bound none reaches it, and the wrong-exit count drops from
+15 to 0. The waits cost throughput in two of those runs (seed 5: 12 → 10 exited, seed 8:
+12 → 11; the others unchanged). On `vyhybna.xml` (one exit per side) the wait never changes a
+pick: a blocked own exit there leaves no other exit to fall back to.
+
+D5 is what this step works around: the dispatcher still cannot see *when* the exit frees, so
+the bound is a fixed number rather than an expected-free time.
+
 ### D3 — Why a candidate is unavailable
 
 `available = false` is a single bit. The dispatcher cannot distinguish *occupied by a train*
