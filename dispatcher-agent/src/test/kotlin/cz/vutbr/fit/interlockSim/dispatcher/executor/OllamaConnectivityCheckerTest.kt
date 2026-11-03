@@ -26,6 +26,20 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
+ * The /api/tags answer of a model list holding exactly [MODEL_NAME] — what Koog's
+ * `OllamaClient.listModels` decodes. Shared by the HTTP tests and the cancellation test, which
+ * serves it from [HoldingOllamaServer] as the request it answers before holding the next one.
+ */
+private const val MODEL_NAME = "qwen2.5:7b-instruct"
+
+private val TAGS_WITH_MODEL =
+	"""{"models":[{"name":"$MODEL_NAME","model":"$MODEL_NAME",""" +
+		""""modified_at":"2026-01-01T00:00:00.000000000Z","size":4683087536,""" +
+		""""digest":"sha256:testdigest","details":{"parent_model":"","format":"gguf",""" +
+		""""family":"qwen2","families":["qwen2"],"parameter_size":"7B",""" +
+		""""quantization_level":"Q4_K_M"}}]}"""
+
+/**
  * Unit tests for [OllamaConnectivityChecker.evaluate] (SP1.3, Issue #548).
  *
  * These exercise the network-free decision logic only, against plain
@@ -65,7 +79,7 @@ class OllamaConnectivityCheckerTest {
 }
 
 /**
- * Network-free `[OllamaConnectivityChecker.check]` tests (Issue #1341 round) — previously that
+ * Network-free [OllamaConnectivityChecker.check] tests (Issue #1341 round) — previously that
  * whole path was covered only by a `@Tag("ollama-test")` test that the gate excludes.
  *
  * [MockWebServer] answers Ollama's two management endpoints Koog's `OllamaClient.getModelOrNull`
@@ -76,14 +90,6 @@ class OllamaConnectivityCheckerTest {
  */
 class OllamaConnectivityCheckerHttpTest {
 	private companion object {
-		private const val MODEL_NAME = "qwen2.5:7b-instruct"
-
-		private val TAGS_WITH_MODEL =
-			"""{"models":[{"name":"$MODEL_NAME","model":"$MODEL_NAME",""" +
-				""""modified_at":"2026-01-01T00:00:00.000000000Z","size":4683087536,""" +
-				""""digest":"sha256:testdigest","details":{"parent_model":"","format":"gguf",""" +
-				""""family":"qwen2","families":["qwen2"],"parameter_size":"7B",""" +
-				""""quantization_level":"Q4_K_M"}}]}"""
 		private const val TAGS_EMPTY = """{"models":[]}"""
 
 		private val SHOW_WITH_TOOLS =
@@ -117,14 +123,16 @@ class OllamaConnectivityCheckerHttpTest {
 	/** No trailing slash: Koog joins the endpoint and its relative paths itself. */
 	private fun endpoint(): String = server.url("/").toString().trimEnd('/')
 
+	private fun jsonResponse(body: String): MockResponse =
+		MockResponse()
+			.setResponseCode(200)
+			.setBody(body)
+			.setHeader("Content-Type", "application/json")
+
 	@Test
 	fun `check reports a pulled tool-capable model as Available`() {
-		server.enqueue(
-			MockResponse().setResponseCode(200).setBody(TAGS_WITH_MODEL).setHeader("Content-Type", "application/json")
-		)
-		server.enqueue(
-			MockResponse().setResponseCode(200).setBody(SHOW_WITH_TOOLS).setHeader("Content-Type", "application/json")
-		)
+		server.enqueue(jsonResponse(TAGS_WITH_MODEL))
+		server.enqueue(jsonResponse(SHOW_WITH_TOOLS))
 		val config = OllamaExecutorConfig(ollamaEndpoint = endpoint(), modelName = MODEL_NAME)
 
 		val result = runBlocking { OllamaConnectivityChecker.check(config) }
@@ -141,9 +149,7 @@ class OllamaConnectivityCheckerHttpTest {
 
 	@Test
 	fun `check reports a model missing from the instance as ModelNotPulled`() {
-		server.enqueue(
-			MockResponse().setResponseCode(200).setBody(TAGS_EMPTY).setHeader("Content-Type", "application/json")
-		)
+		server.enqueue(jsonResponse(TAGS_EMPTY))
 		val config = OllamaExecutorConfig(ollamaEndpoint = endpoint(), modelName = MODEL_NAME)
 
 		val result = runBlocking { OllamaConnectivityChecker.check(config) }
@@ -154,12 +160,8 @@ class OllamaConnectivityCheckerHttpTest {
 
 	@Test
 	fun `check reports a model without tool support as ModelLacksToolSupport`() {
-		server.enqueue(
-			MockResponse().setResponseCode(200).setBody(TAGS_WITH_MODEL).setHeader("Content-Type", "application/json")
-		)
-		server.enqueue(
-			MockResponse().setResponseCode(200).setBody(SHOW_WITHOUT_TOOLS).setHeader("Content-Type", "application/json")
-		)
+		server.enqueue(jsonResponse(TAGS_WITH_MODEL))
+		server.enqueue(jsonResponse(SHOW_WITHOUT_TOOLS))
 		val config = OllamaExecutorConfig(ollamaEndpoint = endpoint(), modelName = MODEL_NAME)
 
 		val result = runBlocking { OllamaConnectivityChecker.check(config) }
@@ -204,41 +206,31 @@ class OllamaConnectivityCheckerHttpTest {
 }
 
 /**
- * The #1341 round additions: the same cancellation contract the dispatcher's cycle timeout
- * [OllamaTimeoutAbortTest] enforces for the chat client, pinned here for the client the
- * [OllamaConnectivityChecker.check] path builds.
+ * The same cancellation contract the dispatcher's cycle timeout [OllamaTimeoutAbortTest] enforces
+ * for the chat client, pinned here for the client the [OllamaConnectivityChecker.check] path builds.
+ *
+ * The engine wiring on this path is red-first proven: before the check built its client on the
+ * pinned factory (via [cancellableOllamaClient]), Ktor's default engine (Apache5) served the
+ * answering `/api/tags` from a pooled keep-alive connection the held one reused, so the abandoned
+ * held request stayed open past the ceiling and this test was red. It also goes red when the pin
+ * itself is removed from the factory (mutation-proven).
  */
 class OllamaConnectivityCheckerCancellationTest {
 	private companion object {
-		const val NANOS_PER_MILLI = 1_000_000L
-		const val CANCEL_DEADLINE_MILLIS = 2_000L
+		const val CANCEL_DEADLINE_MILLIS = 1_000L
 		const val CLOSE_CEILING_MILLIS = 5_000L
-
-		/**
-		 * TDD red for the #1341 wiring on this path: before `check` built its client on
-		 * `cancellableOllamaHttpClientFactory`, Ktor's default engine (Apache5) served the
-		 * answering `/api/tags` from a pooled keep-alive connection the held one reused, so the
-		 * abandoned held request stayed open past the ceiling and this test was red. CIO sends
-		 * the held request on a connection of its own and closes that connection at once.
-		 */
-		private const val TAGS_ANSWER_BODY =
-			"""{"models":[{"name":"qwen2.5:7b-instruct","model":"qwen2.5:7b-instruct",""" +
-				""""modified_at":"2026-01-01T00:00:00.000000000Z","size":4683087536,""" +
-				""""digest":"sha256:testdigest","details":{"parent_model":"","format":"gguf",""" +
-				""""family":"qwen2","families":["qwen2"],"parameter_size":"7B",""" +
-				""""quantization_level":"Q4_K_M"}}]}"""
 	}
 
 	@Test
 	fun `an abandoned connectivity check closes its held Ollama connection within the ceiling`() {
-		HoldingOllamaServer(answeredRequests = 1, answerBody = TAGS_ANSWER_BODY).use { server ->
+		HoldingOllamaServer(answerBody = TAGS_WITH_MODEL).use { server ->
 			val config = OllamaExecutorConfig(ollamaEndpoint = server.baseUrl)
 
 			// A caller with a deadline abandons the check mid-flight: Koog answers `/api/tags`
 			// from the pooled connection and then blocks on the held `/api/show`. The first pool
 			// connection is gone from CIO's side (one connection per request), so the held one
 			// is fresh and the cancel must tear it down.
-			val cancelledAt = System.nanoTime() + CANCEL_DEADLINE_MILLIS * NANOS_PER_MILLI
+			val cancelledAt = System.nanoTime() + CANCEL_DEADLINE_MILLIS * HoldingOllamaServer.NANOS_PER_MILLI
 			val outcome =
 				runBlocking {
 					try {
@@ -253,9 +245,7 @@ class OllamaConnectivityCheckerCancellationTest {
 			assertThat(server.awaitHeldRequest(0), "the cancelled check had reached the held request")
 				.isTrue()
 
-			server.awaitHeldConnectionClosed(CLOSE_CEILING_MILLIS)
-			val closedAt = server.heldConnectionClosedAtNanos
-			val latencyMillis = closedAt?.let { (it - cancelledAt) / NANOS_PER_MILLI }
+			val latencyMillis = server.awaitCloseLatencyAfter(cancelledAt, CLOSE_CEILING_MILLIS)
 			println(
 				"Issue #1341: held connectivity-check connection close latency after the cancel = " +
 					(latencyMillis?.let { "$it ms" } ?: "not closed within $CLOSE_CEILING_MILLIS ms")

@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
-import ai.koog.prompt.executor.ollama.client.OllamaClient
 import ai.koog.prompt.llm.LLMCapability
 
 /**
@@ -70,8 +69,8 @@ object OllamaConnectivityChecker {
 	 * Query the Ollama instance described by [config] for its configured model and
 	 * evaluate the result via [evaluate].
 	 *
-	 * The client is built on [cancellableOllamaHttpClientFactory] (Issue #1341), so a caller that
-	 * abandons a hung check on a deadline also frees the Ollama slot; the same contract
+	 * The client is built on [cancellableOllamaClient] (Issue #1341), so a caller that abandons a
+	 * hung check on a deadline also frees the Ollama slot; the same contract
 	 * [OllamaTimeoutAbortTest] pins for the dispatcher's chat client
 	 * ([OllamaConnectivityCheckerCancellationTest] pins it here).
 	 *
@@ -82,11 +81,7 @@ object OllamaConnectivityChecker {
 	 *   before this function is even invoked (see `dispatcher-agent/build.gradle.kts`).
 	 */
 	suspend fun check(config: OllamaExecutorConfig): OllamaConnectivityResult {
-		val client =
-			OllamaClient(
-				httpClientFactory = cancellableOllamaHttpClientFactory(),
-				baseUrl = config.ollamaEndpoint
-			)
+		val client = cancellableOllamaClient(baseUrl = config.ollamaEndpoint)
 		try {
 			// pullIfMissing = false: a connectivity check must never trigger a multi-GB
 			// background model download as a side effect.

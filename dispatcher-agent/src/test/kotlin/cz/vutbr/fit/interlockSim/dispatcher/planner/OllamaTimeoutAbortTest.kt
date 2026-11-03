@@ -56,7 +56,6 @@ class OllamaTimeoutAbortTest {
 	private companion object {
 		val CYCLE_TIMEOUT: Duration = Duration.ofMillis(1_500)
 		const val CLOSE_CEILING_MILLIS = 5_000L
-		const val NANOS_PER_MILLI = 1_000_000L
 	}
 
 	private val observation =
@@ -69,7 +68,7 @@ class OllamaTimeoutAbortTest {
 
 	@Test
 	fun `a timed-out cycle closes its held Ollama connection within the ceiling`() {
-		HoldingOllamaServer(answeredRequests = 1).use { server ->
+		HoldingOllamaServer().use { server ->
 			val config = OllamaExecutorConfig(ollamaEndpoint = server.baseUrl)
 			val executor = OllamaSimpleExecutor(config)
 			try {
@@ -87,9 +86,7 @@ class OllamaTimeoutAbortTest {
 					.containsExactly(DispatchDecision.NoAction)
 				assertThat(server.awaitHeldRequest(0), "cycle 2 reached the held request").isTrue()
 
-				server.awaitHeldConnectionClosed(CLOSE_CEILING_MILLIS)
-				val closedAt = server.heldConnectionClosedAtNanos
-				val latencyMillis = closedAt?.let { (it - timeoutFiresAt) / NANOS_PER_MILLI }
+				val latencyMillis = server.awaitCloseLatencyAfter(timeoutFiresAt, CLOSE_CEILING_MILLIS)
 				println(
 					"Issue #1341: held Ollama connection close latency after the cycle timeout = " +
 						(latencyMillis?.let { "$it ms" } ?: "not closed within $CLOSE_CEILING_MILLIS ms")

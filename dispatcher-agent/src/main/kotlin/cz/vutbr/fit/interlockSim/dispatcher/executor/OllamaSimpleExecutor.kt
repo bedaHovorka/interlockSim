@@ -29,14 +29,14 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * `ai.koog:prompt-executor-llms-all`, which is not published as a standalone artifact at the
  * pinned `koogVersion` (1.0.0) — only pre-release `1.0.0-beta-preview*` versions exist on Maven
  * Central for that module. This class does exactly what that function does internally
- * (`MultiLLMPromptExecutor(LLMProvider.Ollama to OllamaClient(baseUrl = ...))`), using only
+ * (`MultiLLMPromptExecutor` over an Ollama client on `LLMProvider.Ollama`), using only
  * `prompt-executor-model` / `prompt-executor-ollama-client` / `prompt-llm`, which are already
  * transitive dependencies of `koog-agents` at 1.0.0.
  *
  * - Creates one shared [PromptExecutor] per application (singleton), backed by an [OllamaClient]
  *   at [OllamaExecutorConfig.ollamaEndpoint]
  * - Builds that client on Ktor's CIO engine, so a dispatcher cycle timeout closes the request it
- *   abandons and Ollama frees its slot (Issue #1341, see [cancellableOllamaHttpClientFactory])
+ *   abandons and Ollama frees its slot (Issue #1341, see [cancellableOllamaClient])
  * - Validates the configured model is tool-capable (deferred to the first [getExecutor] call,
  *   not at Koin wiring / construction time — see [getExecutor])
  * - Provides the executor to Koog agents for LLM-based decision-making
@@ -108,16 +108,15 @@ class OllamaSimpleExecutor(
 			// Validate that the model is tool-capable before constructing the executor
 			config.validateToolCapableModel()
 
-			// Issue #1341: the HTTP engine is pinned so a cycle timeout closes the abandoned request —
-			// see cancellableOllamaHttpClientFactory.
+			// Issue #1341: the Ollama client comes from the module-wide cancellable construction
+			// funnel, so the engine pin holds here too.
 			//
 			// SP2b.9: request a Fixed context window rather than Koog's default (None), which never
 			// sends `num_ctx` at all and leaves Ollama defaulting to a 2048-token window — too small
 			// to hold the static station topology loaded into the system prompt (see
 			// OllamaExecutorConfig.contextWindowTokens KDoc for the full rationale).
 			val client =
-				OllamaClient(
-					httpClientFactory = cancellableOllamaHttpClientFactory(),
+				cancellableOllamaClient(
 					baseUrl = config.ollamaEndpoint,
 					contextWindowStrategy = ContextWindowStrategy.Companion.Fixed(config.contextWindowTokens)
 				)

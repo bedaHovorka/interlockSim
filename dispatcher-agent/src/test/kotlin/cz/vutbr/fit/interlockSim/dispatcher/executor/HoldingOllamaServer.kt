@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
+import java.io.BufferedInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.InetAddress
@@ -23,34 +24,37 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 /**
- * A loopback stand-in for Ollama's `/api/chat` that answers the first [answeredRequests] requests
- * at once and then holds every later one without a reply, the way a runaway `stream=false`
+ * A loopback stand-in for Ollama's `/api/chat` that answers the first request at once with
+ * [answerBody] and then holds every later one without a reply, the way a runaway `stream=false`
  * generation does (Issue #1341).
  *
- * Built on a raw [ServerSocket] rather than MockWebServer because the one thing the test needs is
+ * Built on a raw [ServerSocket] rather than MockWebServer because the one thing the tests need is
  * the exact moment the client closes the held connection: a blocking read on the socket returns
  * `-1` (FIN) or throws (RST) at that moment. Connections are served HTTP/1.1 keep-alive, so a
  * client with a connection pool sends the held request on the connection the answered ones
- * already used — the production shape of the 2026-11-01 incident.
+ * already used — the production shape of the 2026-11-01 incident. Every client this fixture serves
+ * (Ktor CIO or Apache5 through Koog's OllamaClient) sends `Content-Length` on its requests, which
+ * is the only request shape the reader understands.
  *
- * A held request waits at most [holdMillis] for the client to close; if the client never does,
- * [heldConnectionClosedAtNanos] stays `null`.
+ * A held request waits at most 30 s for the client to close; if the client never does, the close
+ * measure ([awaitCloseLatencyAfter]) reports `null`.
+ *
+ * @property answerBody Body of the answering response; defaults to a completed `/api/chat` reply.
  */
 class HoldingOllamaServer(
-	private val answeredRequests: Int = 1,
-	private val holdMillis: Int = DEFAULT_HOLD_MILLIS,
-	/** Body of the answering responses; defaults to a completed `/api/chat` reply. */
 	private val answerBody: String = ANSWER_BODY
 ) : AutoCloseable {
 	companion object {
 		/** Ollama holds a runaway generation for minutes; 30 s is far past any test cycle timeout. */
-		const val DEFAULT_HOLD_MILLIS: Int = 30_000
+		private const val DEFAULT_HOLD_MILLIS = 30_000
+
+		/** Millis-to-nanos multiplier for the tests that compute a [System.nanoTime] reference. */
+		const val NANOS_PER_MILLI = 1_000_000L
 
 		private const val ANSWER_BODY =
 			"""{"model":"qwen2.5:7b-instruct","message":{"role":"assistant","content":"done"},"done":true}"""
 		private val CONTENT_LENGTH = Regex("(?i)content-length:\\s*(\\d+)")
 		private const val HEADER_END = "\r\n\r\n"
-		private const val CHUNKED_BODY_END = "0\r\n\r\n"
 	}
 
 	private val serverSocket = ServerSocket(0, 0, InetAddress.getLoopbackAddress())
@@ -88,11 +92,25 @@ class HoldingOllamaServer(
 	/** Blocks until the client closes the held connection, or [timeoutMillis] passes. */
 	fun awaitHeldConnectionClosed(timeoutMillis: Long): Boolean = heldClosed.await(timeoutMillis, TimeUnit.MILLISECONDS)
 
+	/**
+	 * Awaits the close of the held connection for up to [ceilingMillis] and measures how long after
+	 * [referenceNanos] it closed — the pattern both cancellation tests assert on. Returns the close
+	 * latency in milliseconds, or `null` when the client never closed within the ceiling.
+	 */
+	fun awaitCloseLatencyAfter(
+		referenceNanos: Long,
+		ceilingMillis: Long
+	): Long? {
+		awaitHeldConnectionClosed(ceilingMillis)
+		val closedAt = heldClosedAt.get().takeIf { it >= 0 } ?: return null
+		return (closedAt - referenceNanos) / NANOS_PER_MILLI
+	}
+
 	private fun serve(socket: Socket) {
 		socket.use {
-			val input = socket.getInputStream()
+			val input = BufferedInputStream(socket.getInputStream())
 			while (readRequest(input)) {
-				if (requestCount.incrementAndGet() <= answeredRequests) {
+				if (requestCount.incrementAndGet() <= 1) {
 					answer(socket)
 				} else {
 					hold(socket, input)
@@ -118,14 +136,14 @@ class HoldingOllamaServer(
 		socket: Socket,
 		input: InputStream
 	) {
-		socket.soTimeout = holdMillis
+		socket.soTimeout = DEFAULT_HOLD_MILLIS
 		held.countDown()
 		try {
 			// The client sends nothing more on this connection, so the read ends only when it closes.
 			input.read()
 			markClosed()
 		} catch (_: SocketTimeoutException) {
-			// Still open after the whole hold: heldConnectionClosedAtNanos stays null.
+			// Still open after the whole hold: awaitCloseLatencyAfter keeps reporting null.
 		} catch (_: IOException) {
 			markClosed()
 		}
@@ -136,7 +154,10 @@ class HoldingOllamaServer(
 		heldClosed.countDown()
 	}
 
-	/** Reads one HTTP request (head plus body); returns `false` when the client closed the connection. */
+	/**
+	 * Reads one HTTP request (head plus body); returns `false` when the client closed the connection
+	 * without completing a request.
+	 */
 	private fun readRequest(input: InputStream): Boolean {
 		val head = StringBuilder()
 		while (!head.endsWith(HEADER_END)) {
@@ -150,21 +171,7 @@ class HoldingOllamaServer(
 				?.groupValues
 				?.get(1)
 				?.toInt()
-		return when {
-			length != null -> input.readNBytes(length).size == length
-			head.contains("chunked", ignoreCase = true) -> skipChunkedBody(input)
-			else -> true
-		}
-	}
-
-	private fun skipChunkedBody(input: InputStream): Boolean {
-		val tail = StringBuilder()
-		while (!tail.endsWith(CHUNKED_BODY_END)) {
-			val b = input.read()
-			if (b < 0) return false
-			tail.append(b.toChar())
-		}
-		return true
+		return length == null || input.readNBytes(length).size == length
 	}
 
 	override fun close() {

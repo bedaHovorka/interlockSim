@@ -105,22 +105,16 @@ dependencies {
     // explicitly here for compile-time clarity and stable versioning.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 
-    // compileOnly: the Ktor CIO engine (Issue #1341). cancellableOllamaHttpClientFactory pins it
-    // for the Ollama client, because the engine Ktor picks by default (Apache5) leaves a
-    // cancelled request open when it was sent on a reused keep-alive connection.
-    //
-    // compileOnly on purpose: koog-agents already puts ktor-client-cio on the runtime classpath,
-    // and a runtime declaration here would move CIO ahead of Apache5 in Ktor's ServiceLoader
-    // order on this module's classpath — making CIO the default by accident, so
-    // OllamaTimeoutAbortTest could no longer catch a removed pin.
-    // If a Koog bump ever drops CIO, that test fails with NoClassDefFoundError instead.
+    // compileOnly: the Ktor CIO engine pin for the Ollama client (Issue #1341). The full
+    // rationale — why CIO, why compile-only, what the ServiceLoader order means — lives in
+    // CancellableOllamaHttpClientFactory's KDoc. Keep $ktorVersion in step with the Ktor version
+    // koog-agents ships (no new library reaches the runtime; koog's transitive copy runs).
     compileOnly("io.ktor:ktor-client-cio:$ktorVersion")
 
-    // Same artifact as testCompileOnly for the engine-pin test: a main `compileOnly` dependency
-    // is not exposed to test compilation at all, and the pin test names the CIOEngine class
-    // directly. Compile-only keeps the test RUNTIME classpath identical to the main one — a
-    // direct test dependency would move CIO ahead of Apache5 in Ktor's ServiceLoader order and
-    // make OllamaConnectivityCheckerHttpTest's un-pinned mutant pass (verified 2026-11-03).
+    // Test-compile twin of the line above: the engine-pin test asserts on the CIOEngine class,
+    // which a main compileOnly dependency does not expose to test compilation. Compile-only so
+    // the test runtime classpath (and with it the ServiceLoader order the pin tests rely on)
+    // stays identical to the main one; see that KDoc for the incident this guards.
     testCompileOnly("io.ktor:ktor-client-cio:$ktorVersion")
 
     // Test dependencies
