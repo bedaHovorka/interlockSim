@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.di
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoopHolder
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
@@ -127,6 +128,7 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
  * | [DispatchDecisionListenerHub] | per [DefaultSimulationContext] | new instance |
  * | [SemiAutoApprovalGateway] | per [DefaultSimulationContext] | new instance |
  * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance |
+ * | [AgentDriverLoopHolder] | per [DefaultSimulationContext] | new, empty instance |
  * | [SinkHolder] | per [DefaultSimulationContext] | new instance |
  * | [CycleHistory] | per [DefaultSimulationContext] | new instance |
  * | [KoogAgentFactory] | per [DefaultSimulationContext] | [KoogAgentFactory] |
@@ -326,6 +328,12 @@ val dispatcherAgentModule: Module =
 			// the run starts, pacing the agent loop with the existing real-time sync (speed
 			// multiplier, pause). One per context so concurrent simulations pace independently.
 			scoped<DelegatingSimulationController> { DelegatingSimulationController() }
+
+			// AgentDriverLoopHolder (Issue #1317) — one empty slot per context; the wiring layer
+			// (ExampleRegistry.wireDispatcherAgent) installs the loop it builds. Bound here, not
+			// published with Scope.declare: a declared instance is served to every later context
+			// that declares none, so a dispatcher-free run would see an earlier run's loop.
+			scoped<AgentDriverLoopHolder> { AgentDriverLoopHolder() }
 
 			// SinkHolder — one per context, shared by the four actuator tools and
 			// KoogAgentPlanAdapter. KoogAgentFactory installs the queue-posting wrapper on its

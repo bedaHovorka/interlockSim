@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
+import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoopHolder
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
@@ -944,7 +945,8 @@ class ExampleRegistry {
 		// about this thread — ticked on to the requested end time and the run still exited 0. Round
 		// 3's run 1 went quiet after simTime=216s for exactly this reason. AgentDriverLoop counts and
 		// logs each failure, survives transient ones, and gives up loudly on a persistent one.
-		// Declared in scope so the end-of-run summary reports its counters.
+		// Installed in the context's own AgentDriverLoopHolder so the end-of-run summary reports its
+		// counters. Never Scope.declare it: a declared instance leaks to later contexts (Issue #1317).
 		val driverLoop =
 			AgentDriverLoop(
 				isActive = loop::isSimActive,
@@ -982,7 +984,7 @@ class ExampleRegistry {
 						driver::runCycle
 					}
 			)
-		context.scope.declare(driverLoop)
+		context.scope.get<AgentDriverLoopHolder>().install(driverLoop)
 		loop.agentDriverAction = { driverLoop.run() }
 	}
 
