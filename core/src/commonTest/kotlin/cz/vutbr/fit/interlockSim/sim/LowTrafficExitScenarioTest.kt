@@ -9,13 +9,16 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import assertk.all
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.each
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isIn
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEmpty
+import assertk.assertions.isNull
 import kotlin.test.Test
 
 /**
@@ -116,6 +119,40 @@ class LowTrafficExitScenarioTest {
 		assertThat(run().copy(occupied = 1).failureCause).isEqualTo(ExitFailureCause.OTHER)
 	}
 
+	@Test
+	fun meanEntryGapIsTheMeanGapBetweenConsecutiveInjections() {
+		val specs =
+			listOf(100.0, 200.0, 400.0).map { inTime ->
+				MultiTrainLoop.TrainSpec("N-Lib-1", "S-Vin-1", inTime, MultiTrainStressSpecs.TRAIN_LENGTH)
+			}
+
+		assertThat(run().copy(specs = specs).meanEntryGapSeconds).isEqualTo(150.0)
+	}
+
+	@Test
+	fun firstEntryFailureTimeIsTheTimeOfTheFirstRecordedFailure() {
+		assertThat(run().firstEntryFailureSimTime).isNull()
+		assertThat(run().copy(entryFailures = listOf(exhausted())).firstEntryFailureSimTime).isEqualTo(100.0)
+	}
+
+	@Test
+	fun summaryPrintsNoneWhenNoEntryFailedAndNoStallWasReported() {
+		assertThat(run().summary()).all {
+			contains("firstEntryFailureAt=none")
+			contains("stallAt=none")
+		}
+	}
+
+	@Test
+	fun summaryPrintsTheFirstEntryFailureAndStallTimes() {
+		val failing = run().copy(entryFailures = listOf(exhausted()), stallReport = "deadlock", stallSimTime = 250.0)
+
+		assertThat(failing.summary()).all {
+			contains("firstEntryFailureAt=100.0")
+			contains("stallAt=250.0")
+		}
+	}
+
 	private fun run(): MultiTrainRun {
 		val specs = MultiTrainStressSpecs.twentyTrainSpecs().take(2)
 		return MultiTrainRun(
@@ -128,6 +165,7 @@ class LowTrafficExitScenarioTest {
 			occupied = 0,
 			entryFailures = emptyList(),
 			stallReport = null,
+			stallSimTime = null,
 			waitingAtEnd = emptyList(),
 			heldByCapAtEnd = 0,
 			firstBlockedSimTime = null,

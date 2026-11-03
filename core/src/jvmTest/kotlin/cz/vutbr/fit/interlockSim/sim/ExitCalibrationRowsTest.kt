@@ -26,7 +26,10 @@ import java.util.concurrent.TimeUnit
  * simulation time at which the first entry was refused ("blocking begins at"); each row ends with
  * an aggregate line. Both rows use the stress configuration of `MultiTrainScaleStressTest`
  * ([MultiTrainStressSpecs]: the legal pairs in rotation, a concurrency cap of 20, 1,800 entry
- * attempts, 3,600 s), so the entry gap is the only difference between them:
+ * attempts, 3,600 s), so the entry gap is the only difference between them. Every row line carries
+ * that configuration ("cap 20, 1,800 attempts, rotating legal pairs"): the rows' blocking points
+ * must never be compared with the blocking points of the exit gate's cap of 4. "Max concurrent"
+ * counts admitted trains, including those still waiting for their entry route:
  *
  * - **20-train high traffic:** 10 runs of [MultiTrainStressSpecs.twentyTrainSpecs], headway 5 s.
  * - **Shoulder traffic:** 10 runs of [MultiTrainStressSpecs.shoulderTrafficSpecs], gaps drawn from
@@ -46,6 +49,21 @@ class ExitCalibrationRowsTest : KoinTestBase() {
 
 		/** Hang detector for one row of [RUNS] runs, not a budget. */
 		private const val HANG_CEILING_SECONDS: Long = 600L
+
+		/**
+		 * The stress configuration both rows run, printed in every row line so a row is never read
+		 * against the exit gate's cap of 4: "cap 20, 1,800 attempts, rotating legal pairs".
+		 */
+		private val ROW_CONFIGURATION: String =
+			"cap ${MultiTrainStressSpecs.MAX_CONCURRENT_TRAINS}, " +
+				"${MultiTrainStressSpecs.MAX_ENTRY_ATTEMPTS.withThousandsSeparator()} attempts, rotating legal pairs"
+
+		private fun Int.withThousandsSeparator(): String =
+			toString()
+				.reversed()
+				.chunked(3)
+				.joinToString(",")
+				.reversed()
 	}
 
 	@Test
@@ -54,7 +72,10 @@ class ExitCalibrationRowsTest : KoinTestBase() {
 	fun twentyTrainHighTrafficRow() {
 		val runs =
 			List(RUNS) { index ->
-				runStressConfiguration("20-train run ${index + 1}/$RUNS", MultiTrainStressSpecs.twentyTrainSpecs())
+				runStressConfiguration(
+					"20-train run ${index + 1}/$RUNS ($ROW_CONFIGURATION)",
+					MultiTrainStressSpecs.twentyTrainSpecs()
+				)
 			}
 		logAggregate("20-train high traffic", runs)
 	}
@@ -65,7 +86,10 @@ class ExitCalibrationRowsTest : KoinTestBase() {
 	fun shoulderTrafficRow() {
 		val runs =
 			LowTrafficExitScenario.LOW_TRAFFIC_SEEDS.map { seed ->
-				runStressConfiguration("shoulder seed $seed", MultiTrainStressSpecs.shoulderTrafficSpecs(seed))
+				runStressConfiguration(
+					"shoulder seed $seed ($ROW_CONFIGURATION)",
+					MultiTrainStressSpecs.shoulderTrafficSpecs(seed)
+				)
 			}
 		logAggregate("shoulder traffic", runs)
 	}
@@ -89,12 +113,16 @@ class ExitCalibrationRowsTest : KoinTestBase() {
 	) {
 		val walls = runs.map { it.wallMs }
 		val blocking = runs.mapNotNull { it.firstBlockedSimTime }
+		val entryFailureTimes = runs.mapNotNull { it.firstEntryFailureSimTime }
+		val stallTimes = runs.mapNotNull { it.stallSimTime }
 		LowTrafficExitScenario.logger.info {
-			"Exit calibration row '$row': runs=${runs.size}, " +
+			"Exit calibration row '$row' ($ROW_CONFIGURATION; never compare with the exit cap 4): runs=${runs.size}, " +
 				"allEnteredAndExited=${runs.count { it.meetsFunctionalAssertions }}/${runs.size}, " +
 				"maxConcurrent=${runs.minOf { it.maxConcurrent }}..${runs.maxOf { it.maxConcurrent }}, " +
 				"blockingBeginsAt=${blocking.minOrNull() ?: "never"}..${blocking.maxOrNull() ?: "never"} " +
 				"(${blocking.size}/${runs.size} runs blocked), " +
+				"firstEntryFailureAt=${entryFailureTimes.minOrNull() ?: "none"}, " +
+				"stallAt=${stallTimes.minOrNull() ?: "none"}, " +
 				"wallMs min=${walls.min()} mean=${walls.average().toLong()} max=${walls.max()} total=${walls.sum()}"
 		}
 	}

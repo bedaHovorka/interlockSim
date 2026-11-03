@@ -64,7 +64,11 @@ internal object LowTrafficExitScenario {
 	/** Mean of the exponential inter-arrival time in simulated seconds (owner-approved: at least 120 s). */
 	const val MEAN_INTER_ARRIVAL_SECONDS: Double = 120.0
 
-	/** Minimum gap between two injections that name the same InOut, as entry or as exit. */
+	/**
+	 * Minimum gap between two injections that name the same InOut, as entry or as exit. Applying it
+	 * to the exit InOut too is stricter than the #1158 wording (TSE ruling on PR #1349) and lowers
+	 * the offered traffic slightly.
+	 */
 	const val MIN_GAP_PER_IN_OUT_SECONDS: Double = 30.0
 
 	/** Minimum gap between any two consecutive injections. */
@@ -177,6 +181,7 @@ internal object LowTrafficExitScenario {
 					occupied = loop.getOccupiedResourceCount(),
 					entryFailures = entryFailures,
 					stallReport = loop.stall?.message,
+					stallSimTime = loop.stall?.simTime,
 					waitingAtEnd = loop.getWaitingTrainNames(),
 					heldByCapAtEnd =
 						loop.getTrainsEntered() - loop.getTrainsExited() - entryFailures.size - approvedAtEnd,
@@ -314,6 +319,7 @@ internal enum class ExitFailureCause {
 /**
  * The observed result of one [LowTrafficExitScenario.runScenario] run.
  *
+ * @property stallSimTime simulation time of the deadlock watchdog's report, or `null` when none fired
  * @property heldByCapAtEnd generated trains never admitted by the concurrency cap at run end
  * @property firstBlockedSimTime simulation time of the first entry refusal that made a train wait,
  *   or `null` when no entry was ever refused ("blocking begins at")
@@ -333,6 +339,7 @@ internal data class MultiTrainRun(
 	val occupied: Int,
 	val entryFailures: List<MultiTrainLoop.EntryFailure>,
 	val stallReport: String?,
+	val stallSimTime: Double?,
 	val waitingAtEnd: List<String>,
 	val heldByCapAtEnd: Int,
 	val firstBlockedSimTime: Double?,
@@ -341,6 +348,24 @@ internal data class MultiTrainRun(
 	val dtMax: Double,
 	val wallMs: Long
 ) {
+	/**
+	 * Effective mean entry gap of [specs] in simulated seconds: the mean gap between consecutive
+	 * injections, `(last - first) / (n - 1)`; `0.0` for fewer than two specs. For the low-traffic
+	 * arrivals it is the realized sample mean, not the distribution parameter: the minimum gaps and
+	 * the whole-second rounding only ever move an injection later, but the mean of the 16 to 28
+	 * exponential gaps of one seed still scatters around [LowTrafficExitScenario.MEAN_INTER_ARRIVAL_SECONDS].
+	 */
+	val meanEntryGapSeconds: Double
+		get() {
+			if (specs.size < 2) return 0.0
+			val times = specs.map { it.inTime }
+			return (times.max() - times.min()) / (specs.size - 1)
+		}
+
+	/** Simulation time of the first recorded [MultiTrainLoop.EntryFailure], or `null` when none. */
+	val firstEntryFailureSimTime: Double?
+		get() = entryFailures.firstOrNull()?.simTime
+
 	/** Whether the run met every functional assertion of the exit gate. */
 	val meetsFunctionalAssertions: Boolean
 		get() =
@@ -358,11 +383,22 @@ internal data class MultiTrainRun(
 				else -> ExitFailureCause.OTHER
 			}
 
-	/** One log line with the counts, the blocking times and the wall time of this run. */
+	/**
+	 * One log line with the counts, the mean entry gap, the blocking, entry-failure and stall times,
+	 * and the wall time of this run.
+	 */
 	fun summary(): String =
-		"Exit calibration $label: specs=${specs.size}, entered=$entered, exited=$exited, " +
+		"Exit calibration $label: specs=${specs.size}, meanEntryGap=${meanEntryGapSeconds.roundedToTenths()}s, " +
+			"entered=$entered, exited=$exited, " +
 			"maxConcurrent=$maxConcurrent (cap $maxConcurrentTrainsCap), occupied=$occupied, " +
 			"entryFailures=${entryFailures.size}, cause=$failureCause, " +
 			"blockingBeginsAt=${firstBlockedSimTime ?: "never"}, capHoldBeginsAt=${firstCapHoldSimTime ?: "never"}, " +
+			"firstEntryFailureAt=${firstEntryFailureSimTime ?: "none"}, stallAt=${stallSimTime ?: "none"}, " +
 			"reservationExpiries=$reservationExpiries, dtMax=$dtMax, wall=${wallMs}ms"
+
+	private fun Double.roundedToTenths(): Double = kotlin.math.round(this * TENTHS) / TENTHS
+
+	private companion object {
+		const val TENTHS: Double = 10.0
+	}
 }
