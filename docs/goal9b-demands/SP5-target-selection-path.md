@@ -70,7 +70,7 @@ steering through the station toward it, belong to a destination-aware router (Go
 exit is listed in `candidateTargets` but not available, `ReservationTargetPolicy.pick` picks
 nothing (the train waits and is reconsidered next tick) instead of falling back to the other
 exit. The wait is bounded in simulation time by `ReservationTargetPolicy.OWN_EXIT_WAIT_BOUND_SECONDS`
-(proposed 120 s, awaiting traffic-simulation-expert confirmation); at the bound the fixed-order
+(120 s, confirmed by traffic-simulation-expert 2026-11-03); at the bound the fixed-order
 fallback applies again, so a holder that never releases — or a train that needs the waiting
 train's block to clear the throat; `ShuntingLoop` has no SP7 watchdog — cannot hold the train up
 for ever (`OwnExitWaitBoundTest` pins this with a stand-in occupant that never leaves the exit block).
@@ -91,6 +91,32 @@ seeds 0–9 and 1163, uncapped generator) the longest wait that ended within the
 15 to 0. The waits cost throughput in two of those runs (seed 5: 12 → 10 exited, seed 8:
 12 → 11; the others unchanged). On `vyhybna.xml` (one exit per side) the wait never changes a
 pick: a blocked own exit there leaves no other exit to fall back to.
+
+The two runs that exit fewer trains were checked train by train (2026-11-03, same harness, bound 0
+— the pre-#1299 behaviour — against bound 120). Every missing exit is a train still in the station
+or still queued at its entry at 600 s; none is lost and none is stuck. Each train in the station at
+the end moved on the last control tick, and the trains still waiting for their own exit at the end
+had waited 50 s (seed 5) and 36 s (seed 8), both below the bound. Entered = exited + in the station
++ queued at the entry in all four runs:
+
+| Seed | Bound | Entered | Exited | In the station at 600 s | Queued at the entry | Waiting for own exit at 600 s | Longest own-exit wait in the run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 5 | 0 s | 16 | 12 | 4 | 0 | — | 10 s |
+| 5 | 120 s | 16 | 10 | 4 | 2 | 1 (50 s, still moving) | 74 s |
+| 8 | 0 s | 14 | 12 | 2 | 0 | — | 18 s |
+| 8 | 120 s | 14 | 11 | 3 | 0 | 1 (36 s, still moving) | 36 s |
+
+With bound 0 the policy never holds a train; there the last column is how long the own exit stayed
+blocked while no other exit was free either. The station is full (capacity 4) in
+seed 5 at the end, so two generated trains are still queued at their entry: the waits delay the
+later trains, they do not stall them.
+
+**Condition (traffic-simulation-expert, 2026-11-03):** the SP10 Červený Újezd control-arm
+re-baseline (capacity 4, PR #1350 / #1303) must log the longest natural own-exit wait. If it
+exceeds 96 s (0.8 × the bound), the bound is reopened.
+
+The wait clock restarts when the own exit drops out of the candidate list for even one tick (the
+shell rebuilds its record every tick); the bound applies to the current uninterrupted wait.
 
 D5 is what this step works around: the dispatcher still cannot see *when* the exit frees, so
 the bound is a fixed number rather than an expected-free time.

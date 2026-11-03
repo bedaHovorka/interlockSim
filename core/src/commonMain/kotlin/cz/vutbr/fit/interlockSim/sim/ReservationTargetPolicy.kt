@@ -51,14 +51,20 @@ object ReservationTargetPolicy {
 	 * clear the throat) from holding the train up for ever — `ShuntingLoop` has no SP7 watchdog, so
 	 * this bound is what breaks such a wait.
 	 *
-	 * **Value (proposed, awaiting traffic-simulation-expert confirmation):** 120 s, a clear margin
-	 * above the measured time the holding train needs to clear the throat. Measured 2026-11-03 with
+	 * **Value — confirmed by traffic-simulation-expert 2026-11-03:** 120 s, a clear margin above the
+	 * measured time the holding train needs to clear the throat (1.6 × the longest natural wait). Measured 2026-11-03 with
 	 * an unbounded wait, sampled on the 2 s control tick: in the seeded `CervenyUjezdRunTest` run
 	 * Train #2 waits at `e32` for `east_exit_1` while Train #1 clears the throat — 14 s reported,
 	 * free 16 s after the wait began. Over eleven `cerveny_ujezd.xml` runs (600 s, seeds 0-9 and
 	 * 1163, uncapped generator) the longest wait that ended within the run lasted 76 s (median about
 	 * 14 s); with 120 s none of them reaches the bound, so every train leaves by its own exit.
-	 * On `vyhybna.xml` (one exit per side) the wait never changes a pick.
+	 * On `vyhybna.xml` (one exit per side) the wait never changes a pick. The SP10 Červený Újezd
+	 * control-arm re-baseline must log the longest natural wait; above 96 s (0.8 × this bound) the
+	 * value is reopened.
+	 *
+	 * The shell rebuilds its wait record on every tick, so a wait restarts from `0.0` when the own
+	 * exit drops out of the candidate list for even one tick; the bound counts the current
+	 * uninterrupted wait only.
 	 */
 	const val OWN_EXIT_WAIT_BOUND_SECONDS: Double = 120.0
 
