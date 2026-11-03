@@ -10,9 +10,9 @@
 package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
+import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DecisionRateReport
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
@@ -91,7 +91,7 @@ object DispatcherRunSummaries {
 	fun log(scope: Scope): Reported {
 		val planner = scope.getOrNull<MeasuringPlanAdapter>()
 		val sweeper = scope.getOrNull<OrphanReservationSweeper>()
-		val driverLoop = scope.getOrNull<AgentDriverLoop>()
+		val driverLoop = scope.agentDriverLoopOrNull()
 		val signal = scope.getOrNull<DefaultSnapshotSignal>()
 
 		planner?.logFinalSummary()
@@ -163,9 +163,9 @@ object DispatcherRunSummaries {
 		// zero-tick files into the sweep directory that are indistinguishable from a real run whose
 		// dispatcher did nothing — while counting towards #846's `runCount >= 10` gate.
 		//
-		// AgentDriverLoop is declared only by wireDispatcherAgent, so its presence is the precise
-		// signal that this context ran a dispatcher.
-		if (scope.getOrNull<AgentDriverLoop>() == null) return Persisted(null, effectiveCause, outcome)
+		// AgentDriverLoop is installed only by wireDispatcherAgent, into this context's own holder
+		// (Issue #1317), so its presence is the precise signal that this context ran a dispatcher.
+		if (scope.agentDriverLoopOrNull() == null) return Persisted(null, effectiveCause, outcome)
 		val store =
 			scope.getOrNull<RunSnapshotStore>()
 				?: return Persisted(null, effectiveCause, outcome)

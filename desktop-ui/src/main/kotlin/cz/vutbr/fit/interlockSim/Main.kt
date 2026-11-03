@@ -21,7 +21,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
-import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
+import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.AiSweepDriver
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGrid
@@ -180,7 +180,7 @@ class Main {
 				// kernel ticking on to the horizon with nobody dispatching, so sim-time alone
 				// would report COMPLETED and the aggregator would count a dead run as a passing
 				// data point. Read inside `use` -- the scope is gone once the context closes.
-				val dispatcherGaveUp = it.scope.getOrNull<AgentDriverLoop>()?.stoppedByFailures == true
+				val dispatcherGaveUp = it.scope.agentDriverLoopOrNull()?.stoppedByFailures == true
 				val reachedSimTime = resolveReachedSimTime(simTimeTracker.lastSimTime, it.lastRunEndTime)
 				outcome = classifyRun(reachedSimTime, requestedEndTime, dispatcherGaveUp)
 				// Issue #847 rounds 3 and 4: report what the dispatcher actually did — routes the

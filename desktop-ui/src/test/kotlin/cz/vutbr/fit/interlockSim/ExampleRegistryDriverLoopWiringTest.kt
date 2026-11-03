@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -81,11 +82,11 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("the supervised driver loop is declared in the context scope")
+	@DisplayName("the supervised driver loop is installed in the context scope")
 	fun driverLoopIsReachableFromTheScope() {
 		val context = createShuntingLoopAIContext()
 
-		assertThat(context.scope.getOrNull<AgentDriverLoop>()).isNotNull()
+		assertThat(context.scope.agentDriverLoopOrNull()).isNotNull()
 	}
 
 	@Test
@@ -160,7 +161,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	@DisplayName("a freshly built example has run no cycles and recorded no failures")
 	fun freshLoopHasCleanCounters() {
 		val context = createShuntingLoopAIContext()
-		val driverLoop = checkNotNull(context.scope.getOrNull<AgentDriverLoop>())
+		val driverLoop = checkNotNull(context.scope.agentDriverLoopOrNull())
 
 		assertThat(driverLoop.cycleCount, "cycleCount").isEqualTo(0L)
 		assertThat(driverLoop.failureCount, "failureCount").isEqualTo(0)

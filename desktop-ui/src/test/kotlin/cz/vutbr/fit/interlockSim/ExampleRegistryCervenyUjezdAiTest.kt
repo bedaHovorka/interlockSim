@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
+import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
@@ -73,7 +74,7 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 			.isNotNull()
 			.isInstanceOf<ThrottlingSimulationController>()
 		// DispatcherRunSummaries writes a run JSON only when an AgentDriverLoop exists.
-		assertThat(ctx.scope.getOrNull<AgentDriverLoop>(), "agent driver loop").isNotNull()
+		assertThat(ctx.scope.agentDriverLoopOrNull(), "agent driver loop").isNotNull()
 	}
 
 	@Test
@@ -110,7 +111,7 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.RULE_BASED)
-		assertThat(ctx.scope.getOrNull<AgentDriverLoop>(), "agent driver loop").isNotNull()
+		assertThat(ctx.scope.agentDriverLoopOrNull(), "agent driver loop").isNotNull()
 		assertThat(ctx.scope.getOrNull<MeasuringPlanAdapter>(), "measuring planner").isNull()
 		assertThat(registry.usesLlmDispatcher(ExampleNames.CERVENY_UJEZD)).isFalse()
 	}
@@ -130,7 +131,7 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 
 		val loop = assertCervenyUjezdLoop(ctx)
 		assertThat(loop.enableRealTimeSync).isFalse()
-		assertThat(ctx.scope.getOrNull<AgentDriverLoop>(), "agent driver loop").isNull()
+		assertThat(ctx.scope.agentDriverLoopOrNull(), "agent driver loop").isNull()
 		assertThat(registry.usesLlmDispatcher(ExampleNames.CERVENY_UJEZD_SYNC)).isFalse()
 	}
 }
