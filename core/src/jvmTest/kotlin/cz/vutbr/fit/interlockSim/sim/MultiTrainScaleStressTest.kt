@@ -60,17 +60,10 @@ class MultiTrainScaleStressTest : KoinTestBase() {
 	private companion object {
 		private val logger = KotlinLogging.logger {}
 
-		private const val TWENTY_TRAIN_END_TIME: Long = 3600L
+		private const val TWENTY_TRAIN_END_TIME: Long = MultiTrainStressSpecs.END_TIME
 		private const val TRAINS: Int = MultiTrainStressSpecs.TRAINS
-
-		private const val MAX_CONCURRENT_TRAINS: Int = 20
-
-		/**
-		 * Entry attempts per train before the run records a structured failure. One attempt per
-		 * two simulated seconds, so the cap covers the whole [TWENTY_TRAIN_END_TIME] horizon:
-		 * a train that waits for a route reused by an earlier train is never given up early.
-		 */
-		private const val MAX_ENTRY_ATTEMPTS: Int = 1800
+		private const val MAX_CONCURRENT_TRAINS: Int = MultiTrainStressSpecs.MAX_CONCURRENT_TRAINS
+		private const val MAX_ENTRY_ATTEMPTS: Int = MultiTrainStressSpecs.MAX_ENTRY_ATTEMPTS
 		private const val STRESS_RUNS: Int = 10
 		private const val MIN_REAL_TIME_RATIO: Double = 1.0
 
