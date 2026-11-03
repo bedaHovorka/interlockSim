@@ -151,37 +151,44 @@ varies between its runs.
 Budget: at most 15 s wall per run and 3 min total for the 10 JVM seeds. A measurement, never an
 assertion.
 
-Measured 2026-11-03 in a quiet window: the coordinator held an exclusive machine lock (no gate, heavy
-test, sweep or agent build ran), waited until the 1-minute load average was below 1.5, pinned the
-run to the P-cores (`taskset -c 0-7`, 5.5 GHz) and ran Gradle with `--no-daemon` and `--rerun`.
-Machine state at the start of each window (tag **QUIET**; the 5- and 15-minute averages still show
-the builds that ran before the window; one JVM outside the run, not a Gradle worker, used up to 80 %
-of one core):
+Measured 2026-11-03 at 18:06–18:09 in a quiet window: no gate, heavy test, sweep, agent build or other
+Gradle client ran; the run waited until the 1-minute load average was below 1.5, was pinned to the
+P-cores (`taskset -c 0-7`, 5.5 GHz) and ran Gradle with `--no-daemon` and `--rerun`. A power guard
+read the enforced GPU power limit before the window and after every step and would have stopped the
+run below 90 W. Machine state at the start (tag **QUIET**; the GPU limit stayed at 95 W through the
+end of the window):
 
-- Window 1 (native seed): `sha=9e069813 loadavg=[1.26 20.41 30.68] busyJava=[38.9%:java 23.2%:java] pin=taskset 0-7 (P-cores) AC=1 docker=1 gpu=[7.09 W idle]` at 2026-11-03T07:54:36+01:00
-- Window 2 (JVM seeds, rows, whole native binary): `sha=9e069813 loadavg=[1.22 6.06 19.31] busyJava=[80.0%:java 24.9%:java] pin=taskset 0-7 (P-cores) AC=1 docker=1 gpu=[7.10 W idle]` at 2026-11-03T08:14:46+01:00
+- `sha=ce4496f3 loadavg=[0.89 0.64 0.48] busyJava=[none] pin=taskset 0-7 (P-cores) AC=1 docker=1 gpu=[enforced limit 95.00 W, 10.76 W, P8] cpu=[PL1 95 W, PL2 160 W, powersave/balance_performance]` at 2026-11-03T18:06:23+01:00
+
+**Re-measured without the GPU power cap.** The first quiet windows (07:54–08:17 the same day, head
+`9e069813`, same commands) ran while the firmware held the GPU at a 35 W power limit (`nvidia-powerd`:
+SBIOS disabled Dynamic Boost; seen in the same session at 06:42 and again after the windows). Their
+state line read `power.limit`, which this GPU reports as `[N/A]`, so it did not show the cap. After the
+owner restarted `nvidia-powerd` (limit 95 W), the windows were run again; the numbers below replace
+them. The capped run was 5–10 % slower (JVM total 14.7 s, native seed 25.8 s, native binary 71.5 s)
+and did not change any verdict. `ce4496f3` differs from `9e069813` only in this document.
 
 | Seed | JVM wall (s) | Budget | Within |
 | ---: | ---: | ---: | --- |
-| 1 | 1.77 | 15 s | yes |
-| 2 | 1.69 | 15 s | yes |
-| 3 | 1.51 | 15 s | yes |
-| 4 | 1.37 | 15 s | yes |
-| 5 | 1.47 | 15 s | yes |
-| 6 | 1.83 | 15 s | yes |
-| 7 | 1.32 | 15 s | yes |
-| 8 | 1.47 | 15 s | yes |
-| 9 | 1.28 | 15 s | yes |
-| 10 | 1.05 | 15 s | yes |
-| **Total, 10 seeds** | **14.7** (JUnit suite time 15.1 s) | 3 min | yes |
+| 1 | 1.47 | 15 s | yes |
+| 2 | 1.52 | 15 s | yes |
+| 3 | 1.38 | 15 s | yes |
+| 4 | 1.33 | 15 s | yes |
+| 5 | 1.32 | 15 s | yes |
+| 6 | 1.63 | 15 s | yes |
+| 7 | 1.16 | 15 s | yes |
+| 8 | 1.33 | 15 s | yes |
+| 9 | 1.18 | 15 s | yes |
+| 10 | 0.96 | 15 s | yes |
+| **Total, 10 seeds** | **13.3** (JUnit suite time 13.5 s) | 3 min | yes |
 
-The slowest seed uses 12 % of its per-run budget; the 10 seeds together use 8 % of the total budget.
+The slowest seed uses 11 % of its per-run budget; the 10 seeds together use 7 % of the total budget.
 The counts of the quiet run are identical to the functional table above (10 of 10 pass).
 
 | Native measure | Quiet wall | Move-out limit | Within |
 | --- | ---: | ---: | --- |
-| Seed 1 (`LowTrafficExitNativeSeedTest`, debug test binary) | 25.8 s | 60 s | yes |
-| Whole `:core` native test binary (1,316 tests, includes seed 1) | 71.5 s | 3 min | yes |
+| Seed 1 (`LowTrafficExitNativeSeedTest`, debug test binary) | 24.6 s | 60 s | yes |
+| Whole `:core` native test binary (1,316 tests, includes seed 1) | 67.5 s | 3 min | yes |
 
 The native seed costs about 17 times the JVM seed-1 run (debug binary). Both native numbers are inside
 the move-out rule below, so the seed **stays in `linuxX64Test`**.
@@ -196,13 +203,13 @@ manual. Only quiet-window numbers decide this; times taken while other builds ra
 
 ## Measurement rows: wall time (quiet window)
 
-Same quiet window 2 (`sha=9e069813 loadavg=[1.22 6.06 19.31] busyJava=[80.0%:java 24.9%:java] pin=taskset 0-7 (P-cores) AC=1 docker=1 gpu=[7.10 W idle]` at 2026-11-03T08:14:46+01:00). Counts as in the functional table above (all runs 20/20 entered and
+Same quiet window (`sha=ce4496f3`, GPU enforced limit 95 W, 2026-11-03T18:06:45+01:00). Counts as in the functional table above (all runs 20/20 entered and
 exited, no entry failure, no stall).
 
 | Row (cap 20, 1,800 attempts, rotating legal pairs) | Runs | Max concurrent | Blocking begins at (s) | Wall min (s) | Wall mean (s) | Wall max (s) | Wall total (s) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 20-train high traffic, headway 5 s | 10 | 15 | 26 | 1.19 | 1.29 | 1.36 | 12.9 |
-| Shoulder traffic, gaps 15–30 s (seeds 1–10) | 10 | 4–5 | 118–184 | 1.22 | 1.35 | 1.86 | 13.5 |
+| 20-train high traffic, headway 5 s | 10 | 15 | 26 | 1.15 | 1.17 | 1.19 | 11.7 |
+| Shoulder traffic, gaps 15–30 s (seeds 1–10) | 10 | 4–5 | 118–184 | 1.11 | 1.21 | 1.59 | 12.1 |
 
 ## #895 re-baseline
 
@@ -284,9 +291,9 @@ including those still waiting for their entry route.
 
 | Configuration | Peak admitted / cap | Wall per run (quiet) |
 | --- | --- | ---: |
-| Exit gate, low traffic (mean gap 120 s), 1 h simulated | 2–3 / 4 | 1.1–1.8 s |
-| Row: shoulder traffic (gaps 15–30 s), 20 trains | 4–5 / 20 | 1.2–1.9 s |
-| Row: 20-train high traffic (headway 5 s) | 15 / 20 | 1.2–1.4 s |
+| Exit gate, low traffic (mean gap 120 s), 1 h simulated | 2–3 / 4 | 1.0–1.6 s |
+| Row: shoulder traffic (gaps 15–30 s), 20 trains | 4–5 / 20 | 1.1–1.6 s |
+| Row: 20-train high traffic (headway 5 s) | 15 / 20 | 1.1–1.2 s |
 
 Wall time does not grow with the number of admitted trains in this range: one simulated hour on Praha
 costs about 1–2 s on the JVM at 3, 5 or 15 admitted trains. Simulation cost is not the limit at the
