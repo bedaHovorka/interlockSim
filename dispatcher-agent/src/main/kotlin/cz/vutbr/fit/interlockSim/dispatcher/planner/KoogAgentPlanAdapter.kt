@@ -163,6 +163,7 @@ import kotlin.time.TimeSource
  *                       topology serialization and snapshot tooling.
  * @param fallbackDispatcher Deterministic rule-based fallback invoked when the LLM cannot
  *                       produce valid decisions (typically [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]).
+ *                       Readable so wiring tests can pin its admission cap (Issue #1303).
  * @param inferenceTimeout Maximum wall-clock time to wait for a single LLM response before
  *                       invoking the fallback. Defaults to 30 seconds (matches
  *                       [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig.DEFAULT_INFERENCE_TIMEOUT]).
@@ -182,7 +183,7 @@ import kotlin.time.TimeSource
 class KoogAgentPlanAdapter(
 	private val agentFactory: KoogAgentFactory,
 	private val context: DefaultSimulationContext,
-	private val fallbackDispatcher: Dispatcher,
+	val fallbackDispatcher: Dispatcher,
 	private val inferenceTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
 	private val commandQueue: ActuatorCommandQueue,
 	private val sinkHolder: SinkHolder,

@@ -51,6 +51,7 @@ import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.onClose
 import org.koin.core.module.dsl.withOptions
+import org.koin.core.parameter.parametersOf
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
 import java.nio.file.Path
@@ -109,8 +110,8 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
  *
  * | Component | Scope | Default |
  * |---|---|---|
- * | [Dispatcher] | singleton | [RuleBasedDispatcher] |
- * | [DispatcherPlanner] | singleton | [RuleBasedPlanAdapter] |
+ * | [Dispatcher] | factory, takes a [StationCapacity] | [RuleBasedDispatcher] |
+ * | [DispatcherPlanner] | factory, takes a [StationCapacity] | [RuleBasedPlanAdapter] |
  * | [AgentService] | singleton | [DefaultAgentService] |
  * | [DispatcherRunConfig] | singleton | [DispatcherRunConfig.fromProperties] |
  * | [OllamaExecutorConfig] | singleton | [OllamaExecutorConfig.default] |
@@ -143,21 +144,31 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
  * ### Scope rationale
  *
  * Singletons are stateless or explicitly shared-by-design components: the Ollama config and
- * executor, the tool registry, the agent service, and the pure rule-based dispatcher/planner.
+ * executor, the tool registry and the agent service. The rule-based dispatcher and planner are
+ * factories parameterised with the station's [StationCapacity] (Issue #1303): resolve them with
+ * `get<DispatcherPlanner> { parametersOf(StationCapacity(loop.stationCapacity)) }`.
  * Everything else is scoped per [DefaultSimulationContext] because it holds live references or
  * per-simulation state (ports, command queues, mode/approval state, the agent factory), so
  * concurrent simulations (e.g. in tests) never cross-wire.
  */
 val dispatcherAgentModule: Module =
 	module {
-		// Dispatcher: global singleton — RuleBasedDispatcher is stateless (pure function).
-		// In future, alternate implementations may include an Agentic/LLM dispatcher alongside Rule.
-		single<Dispatcher> { RuleBasedDispatcher() }
+		// Dispatcher: a factory parameterised with the station's StationCapacity (Issue #1303).
+		// RuleBasedDispatcher is a pure function of its observation, but its admission cap belongs
+		// to the station: 2 on vyhybna, 4 on Cerveny Ujezd. A singleton fixed every station at the
+		// vyhybna default. The caller passes the capacity explicitly — the wiring layer takes it
+		// from its own loop (ShuntingLoop.stationCapacity) — rather than this binding looking up a
+		// declared StationCapacity: in Koin 3.5 a declared instance is served to later contexts
+		// that declare none (Issue #1317). Resolving without the parameter fails, so no caller can
+		// fall back to the vyhybna default by accident.
+		factory<Dispatcher> { (capacity: StationCapacity) -> RuleBasedDispatcher(maxConcurrentTrains = capacity.value) }
 
-		// DispatcherPlanner — pluggable planning interface.
-		// Default is RuleBasedPlanAdapter wrapping the Dispatcher singleton above.
+		// DispatcherPlanner — pluggable planning interface; same StationCapacity parameter.
+		// Default is RuleBasedPlanAdapter wrapping the Dispatcher factory above.
 		// Swap this binding to plug in a search-based or LLM-backed planner.
-		single<DispatcherPlanner> { RuleBasedPlanAdapter(get()) }
+		factory<DispatcherPlanner> { (capacity: StationCapacity) ->
+			RuleBasedPlanAdapter(get<Dispatcher> { parametersOf(capacity) })
+		}
 
 		// AgentService: global singleton for creating Koog agents. DefaultAgentService builds a
 		// real Koog AIAgent, so it needs the Ollama executor + config singletons bound below.
