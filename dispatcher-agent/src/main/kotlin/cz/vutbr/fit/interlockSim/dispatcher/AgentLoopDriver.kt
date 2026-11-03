@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.LatestObservationReader
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerTickListener
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
@@ -130,6 +131,11 @@ class AgentLoopDriver(
 	 * planner such as [RuleBasedPlanAdapter]), every cycle is attributed
 	 * [ActionAuthor.RULE_BASED] — safe because a synchronous rule-based planner has no
 	 * internal LLM/fallback blend to distinguish.
+	 *
+	 * When non-null, this driver also installs a reader over its own [perceptionPort] and
+	 * [dispatchLoopSensorPort] as [KoogAgentPlanAdapter.latestObservationReader] (Issue #1343),
+	 * so the adapter's fallback after a failed inference decides on the latest state published
+	 * through exactly the ports [runCycle] senses from.
 	 */
 	private val plannerTickSource: KoogAgentPlanAdapter? = null,
 	/**
@@ -218,6 +224,12 @@ class AgentLoopDriver(
 				onTickRecord?.invoke(record)
 			}
 		)
+		// Issue #1343: after a timed-out or failed inference the adapter's rule-based fallback
+		// decides on the latest state published through this driver's own two ports, not on the
+		// cycle's observation, which is as old as the inference window. Reads only, never a
+		// capture (constraint C3 of the F1 paused-clock ruling).
+		plannerTickSource?.latestObservationReader =
+			LatestObservationReader.fromPorts(perceptionPort, dispatchLoopSensorPort)
 	}
 
 	private fun pauseUntilNextSnapshot() {
