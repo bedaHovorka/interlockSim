@@ -60,13 +60,14 @@ import java.util.concurrent.atomic.AtomicLong
  * @param inner [KoogAgentPlanAdapter] to wrap.  This constructor registers `this` through
  *   [KoogAgentPlanAdapter.addTickListener], which fans out to every registered listener — so
  *   other observers (e.g. [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]'s attribution
- *   listener) keep working alongside it, in either registration order.
+ *   listener) keep working alongside it, in either registration order. Readable so wiring tests
+ *   can reach the wrapped adapter's fallback (Issue #1303).
  *
  * @since Issue #817 (Goal 10 dispatcher metrics); moved onto [PlannerTickListener] and
  *   [TickOutcome] in Issue #713 Task 10
  */
 class MeasuringPlanAdapter(
-	private val inner: KoogAgentPlanAdapter
+	val inner: KoogAgentPlanAdapter
 ) : DispatcherPlanner by inner,
 	PlannerTickListener {
 	companion object {

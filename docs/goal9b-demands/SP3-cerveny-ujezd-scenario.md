@@ -141,6 +141,15 @@ runs write a run JSON. The synchronous builds — the `cervenyUjezdSync` parity 
 This repeats SP2 demand D1 and is
 owned by SP8 (#1155). Signal direction in the station-track rule (SP2 demand D4) is owned by #1192.
 
+**Resolved for the cap by #1303:** SP8 (#1155) moved the prompts, the cycle message and the applier to
+the station capacity; #1303 moves the last two readers of the vyhybna default. The rule-based planner
+of the control arm and the LLM arm's rule fallback are now built with `ShuntingLoop.stationCapacity`
+(4 here), passed explicitly by `ExampleRegistry.wireDispatcherAgent` to the Koin `Dispatcher` and
+`DispatcherPlanner` factories, which take a `StationCapacity` parameter instead of being singletons.
+This re-baselines the `cervenyUjezd` control arm: it may now run up to 4 trains at a time, so its
+#895-style counts from before #1303 (at most 2 concurrent) are not comparable with later runs.
+vyhybna's capacity is 2, so `shuntingLoop` and `shuntingLoopAI` are unchanged.
+
 ### D6 — Names for signals
 
 A loaded network with unnamed signals cannot be dispatched (see the finding above). The XML loader and the

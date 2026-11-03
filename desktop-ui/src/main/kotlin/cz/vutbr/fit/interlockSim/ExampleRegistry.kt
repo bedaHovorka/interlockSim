@@ -54,6 +54,7 @@ import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
+import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
@@ -64,6 +65,7 @@ import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
+import org.koin.core.parameter.parametersOf
 import org.koin.core.scope.Scope
 import java.time.Duration
 import java.util.UUID
@@ -523,7 +525,7 @@ class ExampleRegistry {
 			// assertPlannerPacingCompatible without `:desktop-ui`.
 			// Capped at AGENT_MAX_SPEED_MULTIPLIER so the agent driver has sufficient wall-clock
 			// time to produce decisions before the simulation advances past the relevant state.
-			val koogAdapter = createLlmPlanner(this)
+			val koogAdapter = createLlmPlanner(this, loop)
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory can retrieve it after the run
 			// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
@@ -629,7 +631,7 @@ class ExampleRegistry {
 			// DelegatingSimulationController provides the required pacing for
 			// assertPlannerPacingCompatible.
 			// Issue #817: wrap with MeasuringPlanAdapter to log and measure fallback vs LLM success rate.
-			val koogAdapter = createLlmPlanner(this)
+			val koogAdapter = createLlmPlanner(this, loop)
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory (e.g. Frame's
 			// SimulationController.STOPPED handler) can retrieve it after the run ends
@@ -667,16 +669,22 @@ class ExampleRegistry {
 	 * inference timeout and both circuit-breaker knobs, so the usual
 	 * system-property > committed-file > code-constant precedence applies to all of them alike.
 	 *
+	 * The fallback admits up to [loop]'s own capacity ([ShuntingLoop.stationCapacity], Issue #1303),
+	 * the cap the applier enforces and the prompt states, instead of the vyhybna default 2.
+	 *
 	 * @return a fresh [KoogAgentPlanAdapter] with a [RuleBasedDispatcher] fallback and an
 	 *   [LlmCircuitBreaker] (Issue #1058) built from the context's configuration
 	 */
-	private fun createLlmPlanner(context: DefaultSimulationContext): KoogAgentPlanAdapter {
+	private fun createLlmPlanner(
+		context: DefaultSimulationContext,
+		loop: ShuntingLoop
+	): KoogAgentPlanAdapter {
 		val scope = context.scope
 		val runConfig = scope.get<DispatcherRunConfig>()
 		return KoogAgentPlanAdapter(
 			agentFactory = scope.get<KoogAgentFactory>(),
 			context = context,
-			fallbackDispatcher = RuleBasedDispatcher(),
+			fallbackDispatcher = scope.get<Dispatcher> { parametersOf(StationCapacity(loop.stationCapacity)) },
 			inferenceTimeout = Duration.ofSeconds(runConfig.inferenceTimeoutSeconds),
 			commandQueue = scope.get<ActuatorCommandQueue>(),
 			sinkHolder = scope.get<SinkHolder>(),
@@ -700,7 +708,8 @@ class ExampleRegistry {
 	 *   (Goal 10 dispatcher-cannot-approve-trains fix: must be the same instances
 	 *   [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] injects into its tools —
 	 *   constructing separate ones here left the tools' perception port permanently unrefreshed)
-	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [DispatcherPlanner] (singleton)
+	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [DispatcherPlanner] (a factory
+	 *   given the loop's [StationCapacity], Issue #1303)
 	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [DispatcherPlanner] binding
 	 *   in [dispatcherAgentModule][cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule]
 	 *   (e.g. to an LLM-backed planner, SP3.6) takes effect here too (Goal 10 seam)
@@ -723,10 +732,10 @@ class ExampleRegistry {
 	 * sync (speed multiplier, pause).
 	 *
 	 * [plannerOverride] allows callers to supply a specific [DispatcherPlanner] instance
-	 * instead of resolving the global singleton from the Koin scope.  Pass a
+	 * instead of resolving the Koin binding.  Pass a
 	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] here for the
 	 * AI-dispatcher examples (SP2b.9, Issue #566); leave `null` for all rule-based examples
-	 * (falls back to the Koin-scoped singleton).
+	 * (falls back to the Koin [DispatcherPlanner] factory, given [loop]'s capacity — Issue #1303).
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10); SimulationRunner pacing wired in SP4.2 (Issue #564);
 	 *   [DispatcherModeState] + [SemiAutoApprovalGateway] passed to applier in Issue #806 (SP2b.6 follow-up);
@@ -765,9 +774,14 @@ class ExampleRegistry {
 		val actuatorPort = context.scope.get<NetworkActuatorPort>()
 
 		val queue = context.scope.get<ActuatorCommandQueue>()
+		// Issue #1155: the loop's own admission cap (4 on Červený Újezd, 2 on vyhybna). The applier,
+		// the agent's prompt and — since Issue #1303 — the rule-based planner all take this value.
+		val stationCapacity = StationCapacity(loop.stationCapacity)
 		// SP2b.9 (Issue #566): plannerOverride allows callers to supply a specific planner
-		// (e.g. KoogAgentPlanAdapter for AI examples) instead of the global Koin singleton.
-		val planner = plannerOverride ?: context.scope.get<DispatcherPlanner>()
+		// (e.g. KoogAgentPlanAdapter for AI examples) instead of the Koin binding. Issue #1303: the
+		// binding is a factory that takes the capacity explicitly, so each context plans with its
+		// own station's cap and never reads another context's declared StationCapacity.
+		val planner = plannerOverride ?: context.scope.get<DispatcherPlanner> { parametersOf(stationCapacity) }
 		// SP2b.6 (Issue #561): scoped sink that forwards each applied decision to the GUI
 		// DispatcherControlPanel (the "Why this route?" button). Null-tolerant: console runs
 		// resolve the hub but never attach a sink, so onDecisionApplied is a no-op there.
@@ -857,7 +871,7 @@ class ExampleRegistry {
 		context.scope.declare(driverSignal)
 		// Issue #1155: KoogAgentFactory reads this when it builds the agent, so the prompt and the
 		// cycle message state the cap this loop enforces (the applier above uses the same value).
-		context.scope.declare(StationCapacity(loop.stationCapacity))
+		context.scope.declare(stationCapacity)
 
 		val driver =
 			AgentLoopDriver(

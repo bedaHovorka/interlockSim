@@ -72,7 +72,8 @@ import kotlin.time.TimeSource
  *
  * @param perceptionPort Read-only sense port for the railway network state
  * @param planner        Pluggable planning function; must not retain the
- *   observation beyond the call or mutate simulation state
+ *   observation beyond the call or mutate simulation state. Readable so wiring tests can pin
+ *   which planner a context was given (Issue #1303)
  * @param commandQueue   Thread-safe queue to which decisions are posted;
  *   drained and applied by the sim-thread applier
  * @param controller     Pacing controller; injected into the driver **only** —
@@ -96,7 +97,7 @@ import kotlin.time.TimeSource
  */
 class AgentLoopDriver(
 	private val perceptionPort: NetworkPerceptionPort,
-	private val planner: DispatcherPlanner,
+	val planner: DispatcherPlanner,
 	private val commandQueue: ActuatorCommandQueue,
 	private val controller: SimulationController,
 	/**

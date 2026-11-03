@@ -23,7 +23,8 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.CERVENY_UJEZD_STATION_CAPACITY
@@ -68,34 +69,25 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 	}
 
 	/**
-	 * Pins the planner-side dispatcher fallback cap at the vyhybna-derived constant of
-	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2), while this station's loop capacity
-	 * is 4 — on both agent-stack arm wirings of this station: this GUI example and, since
-	 * Issue #1276 (PR #1282 review), the console control arm too. Since Issue #1155 the chain is
-	 * split: the apply-time admission gate takes the station's own capacity (`ExampleRegistry`
-	 * wires the applier's `maxConcurrentTrains = loop.stationCapacity`, 4 here), while the
-	 * planner-side `Dispatcher` fallback — a default-built `RuleBasedDispatcher`, the LLM
-	 * planner's fallback dispatcher — stays at 2, which is what this test pins. SP3 documents the
-	 * synchronous native run at capacity 4 as demand D5 in
-	 * `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`; raising the planner cap is tracked by
-	 * follow-up Issue #1303.
+	 * Both agent-stack arm wirings of this station — this GUI example and, since Issue #1276
+	 * (PR #1282 review), the console control arm — plan with the station's own capacity (4), the
+	 * same value the apply-time admission gate takes since Issue #1155. Until Issue #1303 the
+	 * planner's `RuleBasedDispatcher` was a Koin singleton at the vyhybna default
+	 * [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] (2), so the arm never ran more than 2
+	 * trains at a time (SP3 demand D5 in `docs/goal9b-demands/SP3-cerveny-ujezd-scenario.md`).
 	 */
 	@Test
-	fun `agent-stack arm wirings keep the dispatcher cap at the vyhybna constant while the station could take four`() {
+	fun `agent-stack arm wirings plan with the four-track station capacity`() {
 		val registry = get<ExampleRegistry>()
 
-		val dispatcher = checkNotNull(build(registry.guiExamples).scope.getOrNull<Dispatcher>())
-		assertThat(dispatcher).isInstanceOf<RuleBasedDispatcher>()
-		assertThat((dispatcher as RuleBasedDispatcher).maxConcurrentTrains)
-			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
-
-		// Issue #1276 (PR #1282 review): the console cervenyUjezd runs the same agent stack, so
-		// the SP10.1 doc's "both arms ran at most 2 trains at a time" is pinned here too, not
-		// only measured.
-		val cliDispatcher = checkNotNull(build(registry.examples).scope.getOrNull<Dispatcher>())
-		assertThat(cliDispatcher).isInstanceOf<RuleBasedDispatcher>()
-		assertThat((cliDispatcher as RuleBasedDispatcher).maxConcurrentTrains)
-			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
+		for ((arm, map) in listOf("GUI" to registry.guiExamples, "CLI" to registry.examples)) {
+			val planner = build(map).scope.get<AgentLoopDriver>().planner
+			assertThat(planner, arm).isInstanceOf<RuleBasedPlanAdapter>()
+			val dispatcher = (planner as RuleBasedPlanAdapter).dispatcher
+			assertThat(dispatcher, arm).isInstanceOf<RuleBasedDispatcher>()
+			assertThat((dispatcher as RuleBasedDispatcher).maxConcurrentTrains, arm)
+				.isEqualTo(CERVENY_UJEZD_STATION_CAPACITY)
+		}
 	}
 
 	@Test
