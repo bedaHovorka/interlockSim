@@ -126,8 +126,9 @@ kotlin {
         }
     }
 
-    // linuxX64 target: linuxX64Test runs every commonTest test natively (there is no separate
-    // nativeTest/linuxX64Test source set); jvmTest stays JVM-only (Issue #1148 audit).
+    // linuxX64 target: linuxX64Test runs every commonTest test natively, plus the native-only
+    // tests in src/nativeTest (the source set applyDefaultHierarchyTemplate() creates; today only
+    // the Goal 1B exit-calibration seed, Issue #1346); jvmTest stays JVM-only (Issue #1148 audit).
     // kDisco 0.5.0 ships a linuxX64 klib; kotlinx-coroutines-core, koin-core, assertk all have native variants.
     // Note: KMP automatically creates a debugTest binary for linuxX64 — no explicit binaries.test() needed.
     if (isLinuxHost) {
