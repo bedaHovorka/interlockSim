@@ -35,6 +35,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * - Creates one shared [PromptExecutor] per application (singleton), backed by an [OllamaClient]
  *   at [OllamaExecutorConfig.ollamaEndpoint]
+ * - Builds that client on Ktor's CIO engine, so a dispatcher cycle timeout closes the request it
+ *   abandons and Ollama frees its slot (Issue #1341, see [cancellableOllamaHttpClientFactory])
  * - Validates the configured model is tool-capable (deferred to the first [getExecutor] call,
  *   not at Koin wiring / construction time — see [getExecutor])
  * - Provides the executor to Koog agents for LLM-based decision-making
@@ -106,12 +108,16 @@ class OllamaSimpleExecutor(
 			// Validate that the model is tool-capable before constructing the executor
 			config.validateToolCapableModel()
 
+			// Issue #1341: the HTTP engine is pinned so a cycle timeout closes the abandoned request —
+			// see cancellableOllamaHttpClientFactory.
+			//
 			// SP2b.9: request a Fixed context window rather than Koog's default (None), which never
 			// sends `num_ctx` at all and leaves Ollama defaulting to a 2048-token window — too small
 			// to hold the static station topology loaded into the system prompt (see
 			// OllamaExecutorConfig.contextWindowTokens KDoc for the full rationale).
 			val client =
 				OllamaClient(
+					httpClientFactory = cancellableOllamaHttpClientFactory(),
 					baseUrl = config.ollamaEndpoint,
 					contextWindowStrategy = ContextWindowStrategy.Companion.Fixed(config.contextWindowTokens)
 				)
