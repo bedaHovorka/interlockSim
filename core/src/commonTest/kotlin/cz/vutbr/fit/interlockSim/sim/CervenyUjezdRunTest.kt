@@ -202,16 +202,17 @@ class CervenyUjezdRunTest : CommonKoinTestBase() {
 		assertThat(first.maxSwitchesOnARoute, name = "switches on the longest route")
 			.isGreaterThanOrEqualTo(MIN_ROUTE_SWITCHES)
 		// Exit side (Issue #1278): the policy prefers the timetable's exit when it is an available
-		// candidate. Train 3 now leaves by its own exit (before #1278: east_exit_1, the nearest).
-		// Train 2 still leaves by east_exit_2: at e32 its own exit east_exit_1 is a candidate but
-		// not available (train 1 holds the throat), so the fallback keeps the fixed order instead
-		// of waiting — one wrong-out report left, down from two.
+		// candidate. Train 3 leaves by its own exit (before #1278: east_exit_1, the nearest).
+		// Issue #1299: train 2 now leaves by its own exit too. At e32 its exit east_exit_1 is a
+		// candidate but not available while train 1 clears the throat (14 s reported on the 2 s
+		// control tick, free after 16 s); the policy waits for it instead of falling back to
+		// east_exit_2 (before #1299) — no wrong-out report left (2 before #1278, 1 before #1299).
 		assertThat(first.exitSide.journeys, name = "journeys in generation order").containsExactly(
 			Journey(origin = WEST_ENTRY_1, destination = EAST_EXIT_1, exitTaken = EAST_EXIT_1),
-			Journey(origin = WEST_ENTRY_2, destination = EAST_EXIT_1, exitTaken = EAST_EXIT_2),
+			Journey(origin = WEST_ENTRY_2, destination = EAST_EXIT_1, exitTaken = EAST_EXIT_1),
 			Journey(origin = WEST_ENTRY_1, destination = EAST_EXIT_2, exitTaken = EAST_EXIT_2)
 		)
-		assertThat(first.exitSide.wrongOutReports, name = "'ends in wrong out' reports").isEqualTo(1)
+		assertThat(first.exitSide.wrongOutReports, name = "'ends in wrong out' reports").isEqualTo(0)
 
 		assertThat(second.entered, name = "trains entered, second run").isEqualTo(TRAINS)
 		assertThat(second.exited, name = "trains exited, second run").isEqualTo(TRAINS)
