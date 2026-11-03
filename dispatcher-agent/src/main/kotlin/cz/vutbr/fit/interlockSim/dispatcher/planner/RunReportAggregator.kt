@@ -45,6 +45,7 @@ import java.time.format.DateTimeFormatter
  * | Section | Content |
  * |---|---|
  * | Arm Comparison | one row per arm, headline metrics |
+ * | Logged FATAL Simulation Exceptions | FATAL runs per arm, then each run that logged one |
  * | Per-Run Detail | one row per run, outcome histogram |
  * | Failure Modes | [RejectionCode] × arm — most actionable for prompt iteration |
  * | Apply Failures | [ApplyFailureCode] × arm |
@@ -399,6 +400,11 @@ class RunReportAggregator(
 	 * [DispatcherRunSnapshot.loggedFatalSimExceptionCount] — this section exists so a human
 	 * deciding whether to keep or discard a run's data has the fact in front of them, not buried
 	 * in a per-run log file nobody re-opens.
+	 *
+	 * Opens with one row per arm (Issue #1296) — runs with at least one FATAL, runs whose log was
+	 * scanned, and runs whose log was not — so an arm's FATAL count is read next to its A4 verdict
+	 * without adding up the per-run rows. "Not scanned" is kept apart from "scanned clean": absent
+	 * is not zero (see [DispatcherRunSnapshot.loggedFatalSimExceptionCount]).
 	 */
 	private fun appendFatalExceptions(
 		sb: StringBuilder,
@@ -407,6 +413,16 @@ class RunReportAggregator(
 		val flagged = reports.flatMap { it.snapshots }.filter { (it.loggedFatalSimExceptionCount ?: 0L) > 0L }
 
 		sb.appendLine("## Logged FATAL Simulation Exceptions")
+		sb.appendLine()
+		sb.appendLine("| Arm | Runs | Runs with FATAL | Runs scanned | Runs not scanned |")
+		sb.appendLine("|---|---|---|---|---|")
+		for (r in reports) {
+			val scanned = r.snapshots.mapNotNull { it.loggedFatalSimExceptionCount }
+			sb.appendLine(
+				"| ${r.arm} | ${r.runCount} | ${scanned.count { it > 0L }} | ${scanned.size} | " +
+					"${r.runCount - scanned.size} |"
+			)
+		}
 		sb.appendLine()
 		if (flagged.isEmpty()) {
 			sb.appendLine(

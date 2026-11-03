@@ -179,9 +179,9 @@ class AiSweepDriver(
 			}
 
 		// Scanned once the child is done, regardless of how it ended: a timeout or a crash can
-		// still carry FATAL evidence in its log, and a run that exits 0 needs it patched into the
-		// run JSON the child already wrote. See FatalExceptionScanner's KDoc for why this is a log
-		// scan rather than in-process capture.
+		// still carry FATAL evidence in its log, and every run whose child wrote its own JSON —
+		// exit 0 or exit 1 (Issue #1296) — needs it patched in there. See FatalExceptionScanner's
+		// KDoc for why this is a log scan rather than in-process capture.
 		val fatalScan = FatalExceptionScanner.scan(logFile)
 
 		if (result.timedOut) {
@@ -197,7 +197,11 @@ class AiSweepDriver(
 			logger.error { "[aiSweep] ${run.runId} exited with ${result.exitCode}" }
 			// Exit 1 is Main's TERMINATED_EARLY, which the run itself already persisted as
 			// TERMINATED_EARLY (Issue #909); anything else means the child died before it could record anything.
-			if (run.runId !in existingRunIds(outputRoot)) {
+			// A stalled run's FATAL is the failure mode that matters most, so the scan goes into the
+			// child's own JSON here exactly as it does for exit 0 (Issue #1296).
+			if (run.runId in existingRunIds(outputRoot)) {
+				patchFatalExceptionInfo(outputRoot, run.runId, fatalScan)
+			} else {
 				writeAbortSnapshot(run, RunEndCause.CRASH, fatalScan)
 			}
 			return SweepRunOutcome.FAILED
