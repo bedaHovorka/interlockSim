@@ -94,15 +94,6 @@ dependencies {
     // Koog: LLM agent framework for SP1 (Goal 10 dispatcher agent runtime, Issue #547)
     implementation("ai.koog:koog-agents:$koogVersion")
 
-    // Ktor CIO engine (Issue #1341): cancellableOllamaHttpClientFactory pins it for the Ollama
-    // client, because the engine Ktor picks by default (Apache5) leaves a cancelled request open
-    // when it was sent on a reused keep-alive connection. compileOnly on purpose: koog-agents
-    // already puts ktor-client-cio on the runtime classpath, and a runtime declaration here would
-    // move CIO ahead of Apache5 in Ktor's ServiceLoader order on this module's classpath — making
-    // CIO the default by accident, so OllamaTimeoutAbortTest could no longer catch a removed pin.
-    // If a Koog bump ever drops CIO, that test fails with NoClassDefFoundError instead.
-    compileOnly("io.ktor:ktor-client-cio:$ktorVersion")
-
     // kotlinx.serialization: SP3.2 vocab and SP3.3 proto packages use @Serializable
     // The core and json libs are also available transitively through koog-agents,
     // but listed explicitly here for compile-time clarity and stable versioning.
@@ -113,6 +104,24 @@ dependencies {
     // and CancellationException. Available transitively via koog-agents, but listed
     // explicitly here for compile-time clarity and stable versioning.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
+
+    // compileOnly: the Ktor CIO engine (Issue #1341). cancellableOllamaHttpClientFactory pins it
+    // for the Ollama client, because the engine Ktor picks by default (Apache5) leaves a
+    // cancelled request open when it was sent on a reused keep-alive connection.
+    //
+    // compileOnly on purpose: koog-agents already puts ktor-client-cio on the runtime classpath,
+    // and a runtime declaration here would move CIO ahead of Apache5 in Ktor's ServiceLoader
+    // order on this module's classpath — making CIO the default by accident, so
+    // OllamaTimeoutAbortTest could no longer catch a removed pin.
+    // If a Koog bump ever drops CIO, that test fails with NoClassDefFoundError instead.
+    compileOnly("io.ktor:ktor-client-cio:$ktorVersion")
+
+    // Same artifact as testCompileOnly for the engine-pin test: a main `compileOnly` dependency
+    // is not exposed to test compilation at all, and the pin test names the CIOEngine class
+    // directly. Compile-only keeps the test RUNTIME classpath identical to the main one — a
+    // direct test dependency would move CIO ahead of Apache5 in Ktor's ServiceLoader order and
+    // make OllamaConnectivityCheckerHttpTest's un-pinned mutant pass (verified 2026-11-03).
+    testCompileOnly("io.ktor:ktor-client-cio:$ktorVersion")
 
     // Test dependencies
     testImplementation(project(":core-test"))
