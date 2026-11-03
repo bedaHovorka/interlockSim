@@ -185,3 +185,39 @@ Both sweeps: every run `NATURAL_COMPLETION`, control gate PASS, C7 clean. Per ru
 15/15/15 (journeys/entered/exited) with 30 block transitions — *not* comparable to the #895-era
 control ceiling (15/11/25 on goal-10 in August 2026); the network and its rules have moved since.
 What the acceptance criterion needs is base == head, and it holds.
+
+### #895 re-baseline for Issue #1299 (2026-11-03)
+
+Same control-arm grid with `example: ["shuntingLoop", "cervenyUjezd"]`; base is `goal-1B` 375c54b1,
+head is the #1299 branch with the bound confirmed (e217d2e4). Railway outcomes summed over 10 runs:
+
+| Example | Revision | Runs | Journeys | Entered | Exited | Max concurrent | Block transitions | Conflicts | Failed reservations |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| shuntingLoop | base 375c54b1 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| shuntingLoop | head e217d2e4 | 10 | 150 | 150 | 150 | 2 | 300 | 0 | 20 |
+| cervenyUjezd | base 375c54b1 | 10 | 180 | 190 | 170 | 2 | 380 | 0 | 100 |
+| cervenyUjezd | head e217d2e4 | 10 | 180 | 190 | 170 | 2 | 370 | 0 | 140 |
+
+Every run `NATURAL_COMPLETION`. vyhybna (`shuntingLoop`): base == head. Červený Újezd: the 10 runs
+are deterministic, and every run changes the same way — block transitions 38 → 37, failed
+reservations 10 → 14, `ReservePath` decisions emitted 48 → 51; journeys, entries and exits are equal.
+The per-train block sequences of run r01 explain all three numbers:
+
+- **Train #3 now leaves by its own exit.** In the base run it ended in the wrong out
+  (`keast_exit_1`); at head it waits on track k3 at `e32` and leaves by `keast_exit_2`, its timetable
+  exit. The run's one "ends in wrong out" report is gone. Its journey has the same number of blocks.
+- **Train #5 is redirected and refused 4 times.** With k3 held by the waiting Train #3, Train #5's
+  next section from `homeW2` becomes `e30` (track k1). That route needs switch `vW5` in BRANCH, and
+  Train #4's live route holds `vW5` in MAIN. The interlocking refuses the request under SI-5
+  (`Switch vW5 is locked in MAIN by 'Train #4' but train Train #5's candidate needs BRANCH`, then
+  `all paths blocked for Train #5 (homeW2 → e30)`) on 4 consecutive dispatcher ticks, until Train #4
+  releases `vW5`; Train #5 then enters and leaves normally by `keast_exit_2`, about 11 s later than in
+  the base run. These 4 refusals are the +4 failed reservations and 4 of the extra emitted decisions.
+- **Train #19 is one block behind at the 600 s end.** Delayed by the above, it reaches `k1` but not
+  `vW5-w30` before the run ends: −1 block transition, and one hop fewer requested, so the emitted
+  `ReservePath` count is 4 − 1 = +3.
+
+The refusals are safety-correct, transient and deterministic, and no stall follows. The
+traffic-simulation-expert accepted them as the cost of waiting for the own exit (2026-11-03). The
+candidate list showed `e30` as available while `vW5` was locked against the route; that availability
+gap predates #1299 and is tracked in #1359.
