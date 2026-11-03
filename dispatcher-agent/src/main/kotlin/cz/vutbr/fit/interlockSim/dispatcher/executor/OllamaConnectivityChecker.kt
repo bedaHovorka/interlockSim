@@ -70,6 +70,11 @@ object OllamaConnectivityChecker {
 	 * Query the Ollama instance described by [config] for its configured model and
 	 * evaluate the result via [evaluate].
 	 *
+	 * The client is built on [cancellableOllamaHttpClientFactory] (Issue #1341), so a caller that
+	 * abandons a hung check on a deadline also frees the Ollama slot; the same contract
+	 * [OllamaTimeoutAbortTest] pins for the dispatcher's chat client
+	 * ([OllamaConnectivityCheckerCancellationTest] pins it here).
+	 *
 	 * @throws java.io.IOException (or a Koog client exception) if the Ollama endpoint is
 	 *   unreachable — callers that want a graceful "unreachable" outcome instead of a
 	 *   thrown exception should catch around this call; the Gradle-level probe used by
@@ -77,7 +82,11 @@ object OllamaConnectivityChecker {
 	 *   before this function is even invoked (see `dispatcher-agent/build.gradle.kts`).
 	 */
 	suspend fun check(config: OllamaExecutorConfig): OllamaConnectivityResult {
-		val client = OllamaClient(baseUrl = config.ollamaEndpoint)
+		val client =
+			OllamaClient(
+				httpClientFactory = cancellableOllamaHttpClientFactory(),
+				baseUrl = config.ollamaEndpoint
+			)
 		try {
 			// pullIfMissing = false: a connectivity check must never trigger a multi-GB
 			// background model download as a side effect.

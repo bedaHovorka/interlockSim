@@ -38,7 +38,9 @@ import kotlin.concurrent.thread
  */
 class HoldingOllamaServer(
 	private val answeredRequests: Int = 1,
-	private val holdMillis: Int = DEFAULT_HOLD_MILLIS
+	private val holdMillis: Int = DEFAULT_HOLD_MILLIS,
+	/** Body of the answering responses; defaults to a completed `/api/chat` reply. */
+	private val answerBody: String = ANSWER_BODY
 ) : AutoCloseable {
 	companion object {
 		/** Ollama holds a runaway generation for minutes; 30 s is far past any test cycle timeout. */
@@ -101,7 +103,7 @@ class HoldingOllamaServer(
 	}
 
 	private fun answer(socket: Socket) {
-		val body = ANSWER_BODY.toByteArray()
+		val body = answerBody.toByteArray()
 		val head =
 			"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n" +
 				"Content-Length: ${body.size}\r\n\r\n"
