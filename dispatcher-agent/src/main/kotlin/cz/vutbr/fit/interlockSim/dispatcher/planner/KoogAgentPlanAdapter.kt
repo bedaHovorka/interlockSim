@@ -123,9 +123,27 @@ import kotlin.time.TimeSource
  * 4. LLM times out → fall back to [fallbackDispatcher]
  * 5. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
  *
- * In cases 4 and 5 the fallback decides on the latest published state from
- * [latestObservationReader] rather than on the cycle's own observation, which is as old as the
- * failed inference window (Issue #1343) — see [recordFailureAndFallback]'s "Decision input".
+ * ## Fallback decision input (Issue #1343)
+ *
+ * The fallback always decides on ONE whole observation, never on fields of one combined with
+ * fields of another. Which one depends on how long the simulation ran since the cycle's own
+ * observation was taken:
+ *
+ * | Fallback cause | Decides on | Why |
+ * |---|---|---|
+ * | timeout (4) | latest published state | the simulation ran for the whole inference window |
+ * | exception (5) | latest published state | the same, for as long as the attempt(s) ran |
+ * | agent-creation failure | latest published state | `OllamaModelPrewarmer.warmUp` can take seconds on a cold model |
+ * | circuit-breaker skip | the cycle's own observation | no delay: no LLM call is made |
+ * | silent cycle on a non-idle station (3) | the cycle's own observation | judged on the state the LLM was shown |
+ * | failure after a partial emission | nothing (no fallback runs) | the emitted actions stand |
+ *
+ * "Latest published state" is what [latestObservationReader] returns when it is at least as new as
+ * the cycle's own observation; otherwise (no reader, nothing published yet, an older state) the
+ * cycle's own observation is used whole — see [latestObservationOr]. The read never requests or
+ * awaits a sim-thread capture (constraint C3, see [LatestObservationReader]). The reported tick and
+ * the circuit breaker keep the cycle's own sim time: they account for this cycle, which started
+ * then.
  *
  * ## How "the LLM acted via tools" is detected
  *
@@ -267,14 +285,15 @@ class KoogAgentPlanAdapter(
 	private var lastWarnedOpenCount: Long = 0L
 
 	/**
-	 * Source of the latest published state for the fallback after a failed inference (Issue #1343).
+	 * Source of the latest published state for the fallback after a failed cycle (Issue #1343).
 	 *
-	 * When a cycle times out or throws, the simulation has kept running for the whole inference
-	 * window — up to [inferenceTimeout], longer with the retry — so the cycle's own observation is
-	 * that much out of date. On 2026-11-01 the fallback asked `zB → doA1` for a train that had
-	 * already left `kB`, and the interlocking refused it as a non-contiguous origin.
-	 * [recordFailureAndFallback] therefore hands [fallbackDispatcher] the observation this reader
-	 * returns instead — see its "Decision input" KDoc for when the cycle's own observation is kept.
+	 * When a cycle times out, throws, or fails to create its agent, the simulation has kept running
+	 * meanwhile — up to [inferenceTimeout] for an inference, longer with the retry, seconds for a
+	 * cold model warm-up — so the cycle's own observation is that much out of date. On 2026-11-01
+	 * the fallback asked `zB → doA1` for a train that had already left `kB`, and the interlocking
+	 * refused it as a non-contiguous origin. Those fallbacks therefore decide on the observation
+	 * this reader returns instead — see the class KDoc's "Fallback decision input" table for every
+	 * cause.
 	 *
 	 * Installed after construction by the [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
 	 * this adapter is handed to as `plannerTickSource`, over the driver's own two ports
@@ -394,10 +413,13 @@ class KoogAgentPlanAdapter(
 			} catch (e: CancellationException) {
 				throw e
 			} catch (e: Exception) {
+				// Issue #1343 (TSE ruling on PR #1353): a cold warm-up can take seconds while the
+				// simulation runs, so this fallback decides on the latest published state too.
 				return runFallback(
 					observation = observation,
 					latencyMs = null,
-					outcomeFromFallbackOracle = false
+					outcomeFromFallbackOracle = false,
+					decisionInput = { latestObservationOr(observation) }
 				) {
 					logger.warn(e) {
 						"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
@@ -620,22 +642,12 @@ class KoogAgentPlanAdapter(
 	 * ## Decision input (Issue #1343)
 	 *
 	 * Both endings that reach this function — timeout and exception — come after an inference
-	 * window during which the simulation kept running, so [fallbackDispatcher] decides on the
-	 * observation [latestObservationReader] returns, not on [observation]. The input is always
-	 * ONE whole observation, never fields of one combined with fields of the other: the latest
-	 * one when the reader returns a state at least as new as [observation], otherwise
-	 * [observation] unchanged (no reader wired, nothing published yet, or — defensively — an
-	 * older state). The read happens inside [runFallback]'s decide step, after the tick has been
-	 * reported, so a throwing read is accounted exactly like a throwing fallback. It never
-	 * requests or awaits a sim-thread capture (constraint C3, see [LatestObservationReader]).
-	 *
-	 * The circuit-breaker failure and the reported tick keep [observation]'s sim time: they
-	 * account for this cycle, which started then.
-	 *
-	 * The other fallback causes keep the cycle's own observation: an agent-creation failure and
-	 * a circuit-breaker skip run no inference at all, and a silent cycle on a non-idle station
-	 * is classified (idle station, all trains moving, fallback oracle) against the state the LLM
-	 * was shown — judging it on a newer state would score the LLM on something it never saw.
+	 * window during which the simulation kept running, so [fallbackDispatcher] decides on
+	 * [latestObservationOr]'s result, not on [observation] — see the class KDoc's "Fallback
+	 * decision input" table for every fallback cause. The read happens inside [runFallback]'s
+	 * decide step, after the tick has been reported, so a throwing read is accounted exactly like
+	 * a throwing fallback. The circuit-breaker failure and the reported tick keep [observation]'s
+	 * sim time.
 	 *
 	 * @param latencyMs Elapsed time of the failed attempt, from [attemptInference]'s mark — for a
 	 *   timeout, the elapsed time IS the deadline (see [plan]'s "Latency measurement" KDoc).
@@ -674,7 +686,8 @@ class KoogAgentPlanAdapter(
 	/**
 	 * The latest published observation from [latestObservationReader] when it is at least as new
 	 * as [cycleObservation], otherwise [cycleObservation] — always one whole observation, never a
-	 * combination of the two (see [recordFailureAndFallback]'s "Decision input").
+	 * combination of the two. A defensively ignored older state, no reader and nothing published
+	 * yet all mean [cycleObservation]. See the class KDoc's "Fallback decision input".
 	 */
 	private fun latestObservationOr(cycleObservation: DispatchObservation): DispatchObservation {
 		val latest = latestObservationReader?.read() ?: return cycleObservation
@@ -772,7 +785,8 @@ class KoogAgentPlanAdapter(
 	 *   and finding nothing actionable means [TickOutcome.LLM_SILENT_NONACTIONABLE]. `false` to
 	 *   report [TickOutcome.RULE_FALLBACK] unconditionally, because the LLM path itself failed.
 	 * @param decisionInput What [fallbackDispatcher] decides on — [observation] itself unless the
-	 *   caller supplies another whole observation ([recordFailureAndFallback], Issue #1343).
+	 *   caller supplies another whole observation ([recordFailureAndFallback] and the
+	 *   agent-creation failure in [plan], Issue #1343).
 	 *   [observation] still carries the reported sim time.
 	 */
 	private fun runFallback(

@@ -221,6 +221,30 @@ class KoogAgentPlanAdapterLatestStateFallbackTest {
 		assertThat(decisions).containsExactly(FRESH_REQUEST)
 	}
 
+	/**
+	 * Agent creation runs `OllamaModelPrewarmer.warmUp`, real network I/O that can take seconds on
+	 * a cold model while the simulation keeps running — the cycle's observation goes stale the
+	 * same way as during an inference (TSE ruling on PR #1353).
+	 */
+	@Test
+	@DisplayName("after an agent-creation failure, the fallback's request starts at the train's new position")
+	fun agentCreationFailureFallbackStartsAtTheNewPosition() {
+		val published = PublishedState()
+		val factory = mockk<KoogAgentFactory>()
+		coEvery { factory.createAgent(any()) } coAnswers {
+			published.publishTrainMovedOntoK1()
+			throw IllegalStateException("model not found")
+		}
+		val planAdapter = adapter(mockk(), agentFactory = factory)
+		planAdapter.latestObservationReader = published.reader
+
+		val decisions = runBlocking { planAdapter.plan(cycleObservation) }
+
+		assertThat(decisions).containsExactly(FRESH_REQUEST)
+		verify(exactly = 1) { published.perceptionPort.snapshot() }
+		confirmVerified(published.perceptionPort)
+	}
+
 	@Test
 	@DisplayName("the post-timeout fallback reads only the published snapshot and requests no sim-thread capture (C3)")
 	fun postTimeoutFallbackRequestsNoCapture() {
@@ -335,19 +359,6 @@ class KoogAgentPlanAdapterLatestStateFallbackTest {
 		val decisions = runBlocking { planAdapter.plan(cycleObservation) }
 
 		assertThat(breaker.state).isEqualTo(LlmCircuitBreaker.State.OPEN)
-		assertThat(decisions).containsExactly(STALE_REQUEST)
-	}
-
-	@Test
-	@DisplayName("an agent-creation failure decides on the cycle's own observation (no inference ran)")
-	fun agentCreationFailureKeepsTheCycleObservation() {
-		val factory = mockk<KoogAgentFactory>()
-		coEvery { factory.createAgent(any()) } throws IllegalStateException("model not found")
-		val planAdapter = adapter(mockk(), agentFactory = factory)
-		planAdapter.latestObservationReader = forbiddenReader
-
-		val decisions = runBlocking { planAdapter.plan(cycleObservation) }
-
 		assertThat(decisions).containsExactly(STALE_REQUEST)
 	}
 

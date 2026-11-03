@@ -134,7 +134,7 @@ class AgentLoopDriver(
 	 *
 	 * When non-null, this driver also installs a reader over its own [perceptionPort] and
 	 * [dispatchLoopSensorPort] as [KoogAgentPlanAdapter.latestObservationReader] (Issue #1343),
-	 * so the adapter's fallback after a failed inference decides on the latest state published
+	 * so the adapter's fallback after a failed cycle decides on the latest state published
 	 * through exactly the ports [runCycle] senses from.
 	 */
 	private val plannerTickSource: KoogAgentPlanAdapter? = null,
@@ -224,9 +224,9 @@ class AgentLoopDriver(
 				onTickRecord?.invoke(record)
 			}
 		)
-		// Issue #1343: after a timed-out or failed inference the adapter's rule-based fallback
-		// decides on the latest state published through this driver's own two ports, not on the
-		// cycle's observation, which is as old as the inference window. Reads only, never a
+		// Issue #1343: after a failed cycle (timeout, exception, agent-creation failure) the
+		// adapter's rule-based fallback decides on the latest state published through this
+		// driver's own two ports, not on the cycle's stale observation. Reads only, never a
 		// capture (constraint C3 of the F1 paused-clock ruling).
 		plannerTickSource?.latestObservationReader =
 			LatestObservationReader.fromPorts(perceptionPort, dispatchLoopSensorPort)
