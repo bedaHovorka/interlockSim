@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
@@ -92,7 +93,12 @@ class OllamaTimeoutAbortTest {
 						(latencyMillis?.let { "$it ms" } ?: "not closed within $CLOSE_CEILING_MILLIS ms")
 				)
 				assertThat(latencyMillis, "the held connection was closed").isNotNull()
-				assertThat(latencyMillis!!, "close latency after the timeout (ms)")
+				// The fixture stamps the earliest close a connection ever made, so a future extra
+				// request before the reference would measure negative; bound it from below too.
+				val closedLatency = latencyMillis!!
+				assertThat(closedLatency, "close latency after the timeout (ms) lower bound")
+					.isGreaterThanOrEqualTo(0)
+				assertThat(closedLatency, "close latency after the timeout (ms)")
 					.isLessThanOrEqualTo(CLOSE_CEILING_MILLIS)
 			} finally {
 				executor.close()

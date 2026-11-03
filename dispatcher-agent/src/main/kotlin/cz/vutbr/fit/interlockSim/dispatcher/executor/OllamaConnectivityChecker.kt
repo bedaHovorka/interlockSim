@@ -71,8 +71,8 @@ object OllamaConnectivityChecker {
 	 *
 	 * The client is built on [cancellableOllamaClient] (Issue #1341), so a caller that abandons a
 	 * hung check on a deadline also frees the Ollama slot; the same contract
-	 * [OllamaTimeoutAbortTest] pins for the dispatcher's chat client
-	 * ([OllamaConnectivityCheckerCancellationTest] pins it here).
+	 * `OllamaTimeoutAbortTest` pins for the dispatcher's chat client
+	 * (`OllamaConnectivityCheckerCancellationTest` pins it here).
 	 *
 	 * @throws java.io.IOException (or a Koog client exception) if the Ollama endpoint is
 	 *   unreachable — callers that want a graceful "unreachable" outcome instead of a

@@ -108,14 +108,12 @@ dependencies {
     // compileOnly: the Ktor CIO engine pin for the Ollama client (Issue #1341). The full
     // rationale — why CIO, why compile-only, what the ServiceLoader order means — lives in
     // CancellableOllamaHttpClientFactory's KDoc. Keep $ktorVersion in step with the Ktor version
-    // koog-agents ships (no new library reaches the runtime; koog's transitive copy runs).
+    // koog's Ollama client ships (no new library reaches the runtime; koog's transitive copy runs).
+    // The tests need no CIO symbol at compile time (the pin test reads the engine's runtime class
+    // name over reflection); if one ever does, add a testCompileOnly twin of this line — never a
+    // test dependency, which would reorder Ktor's ServiceLoader on the test classpath and blind
+    // the un-pinned mutants of the pin tests.
     compileOnly("io.ktor:ktor-client-cio:$ktorVersion")
-
-    // Test-compile twin of the line above: the engine-pin test asserts on the CIOEngine class,
-    // which a main compileOnly dependency does not expose to test compilation. Compile-only so
-    // the test runtime classpath (and with it the ServiceLoader order the pin tests rely on)
-    // stays identical to the main one; see that KDoc for the incident this guards.
-    testCompileOnly("io.ktor:ktor-client-cio:$ktorVersion")
 
     // Test dependencies
     testImplementation(project(":core-test"))
