@@ -268,7 +268,16 @@ class AiSweepDriverTest {
 
 	// ── FATAL-exception log scanning (measurement-integrity fix for #834's C2 condition) ──────
 
-	private fun runnerWritingLogAndSnapshot(logContent: String): SweepProcessRunner =
+	/**
+	 * A child that writes [logContent] to its log, persists its own run JSON ending in [endCause],
+	 * and exits with [exitCode] — exit 1 with [RunEndCause.TERMINATED_EARLY] is the shape `Main`
+	 * produces when the kDisco queue drains early (Issue #909).
+	 */
+	private fun runnerWritingLogAndSnapshot(
+		logContent: String,
+		endCause: RunEndCause = RunEndCause.NATURAL_COMPLETION,
+		exitCode: Int = 0
+	): SweepProcessRunner =
 		SweepProcessRunner { request ->
 			Files.writeString(request.logFile, logContent)
 			val runId = request.systemProperties.getValue("interlocksim.dispatcher.runId")
@@ -277,10 +286,10 @@ class AiSweepDriverTest {
 					runId,
 					DispatcherArm.LLM_TOOL_CALLING,
 					SweepAxes().cells().single().runParameters(),
-					RunEndCause.NATURAL_COMPLETION
-				).copy(completedNaturally = true)
+					endCause
+				).copy(completedNaturally = endCause == RunEndCause.NATURAL_COMPLETION)
 			)
-			SweepProcessResult(exitCode = 0, timedOut = false)
+			SweepProcessResult(exitCode = exitCode, timedOut = false)
 		}
 
 	@Test
@@ -342,6 +351,52 @@ class AiSweepDriverTest {
 		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
 		assertThat(written.single().endCause).isEqualTo(RunEndCause.TIMEOUT_ABORT)
 		assertThat(written.single().loggedFatalSimExceptionCount).isEqualTo(1L)
+	}
+
+	/**
+	 * Issue #1296: a child that exits 1 is `Main`'s TERMINATED_EARLY, and the run already persisted
+	 * its own JSON before exiting. The #1276 sweep had six such runs, every one with a FATAL in its
+	 * log, and the report showed `n/a` for all six because only exit-0 runs got the scan patched in.
+	 */
+	@Test
+	@DisplayName("a run that exits 1 after writing its own JSON carries the FATAL found in its log")
+	fun exitOneRunCarriesTheFatalFromItsLog() {
+		val realLine =
+			TrackOperationException("track operation failed", mockk<StaticTrack>(relaxed = true)).toString()
+		driverWith(runnerWritingLogAndSnapshot("$realLine\n", RunEndCause.TERMINATED_EARLY, exitCode = 1))
+			.run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written).hasSize(1)
+		assertThat(written.single().endCause).isEqualTo(RunEndCause.TERMINATED_EARLY)
+		assertThat(written.single().loggedFatalSimExceptionCount).isEqualTo(1L)
+		assertThat(written.single().loggedFatalSimExceptionFirstMessage).isEqualTo(realLine)
+	}
+
+	@Test
+	@DisplayName("a run that exits 1 with a clean log reports zero FATALs, not absent")
+	fun exitOneRunWithACleanLogReportsZero() {
+		driverWith(runnerWritingLogAndSnapshot("queue drained\n", RunEndCause.TERMINATED_EARLY, exitCode = 1))
+			.run(grid(repeat = 1), outputRoot, mainClass)
+
+		val written = DefaultRunSnapshotStore(outputRoot).readAll(outputRoot)
+		assertThat(written).hasSize(1)
+		assertThat(written.single().loggedFatalSimExceptionCount).isEqualTo(0L)
+	}
+
+	@Test
+	@DisplayName("the report of a sweep counts the FATAL of a run that exited 1 under its arm")
+	fun reportCountsTheFatalOfAnExitOneRun() {
+		val realLine =
+			TrackOperationException("track operation failed", mockk<StaticTrack>(relaxed = true)).toString()
+		driverWith(runnerWritingLogAndSnapshot("$realLine\n", RunEndCause.TERMINATED_EARLY, exitCode = 1))
+			.run(grid(repeat = 1), outputRoot, mainClass)
+
+		val report = Files.readString(outputRoot.resolve("report.md"))
+		val section =
+			report.substringAfter("## Logged FATAL Simulation Exceptions").substringBefore("## Per-Run Detail")
+		// Arm | Runs | Runs with FATAL | Runs scanned | Runs not scanned
+		assertThat(section).contains("| ${DispatcherArm.LLM_TOOL_CALLING} | 1 | 1 | 1 | 0 |")
 	}
 
 	@Test

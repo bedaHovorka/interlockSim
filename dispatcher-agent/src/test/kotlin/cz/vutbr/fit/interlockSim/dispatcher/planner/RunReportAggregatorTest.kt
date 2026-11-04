@@ -798,6 +798,67 @@ class RunReportAggregatorTest {
 		assertThat(section).transform("omits the clean run") { !it.contains("ok2") }.isTrue()
 	}
 
+	/** The "Logged FATAL Simulation Exceptions" section of [md], up to the next section. */
+	private fun fatalSection(md: String): String =
+		md.substringAfter("## Logged FATAL Simulation Exceptions").substringBefore("## Per-Run Detail")
+
+	/**
+	 * Issue #1296: the section counts FATAL runs per arm, and keeps the three states apart — a run
+	 * with a FATAL, a run scanned clean, a run whose log was never scanned (absent, not zero).
+	 */
+	@Test
+	fun `the FATAL section counts runs with a FATAL, runs scanned and runs not scanned per arm`() {
+		val llm =
+			aggregator.aggregate(
+				listOf(
+					runSnapshot(
+						runId = "stalled1",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						loggedFatalSimExceptionCount = 1L,
+						loggedFatalSimExceptionFirstMessage = "SimulationException[FATAL]: path setup at time 202.0"
+					),
+					runSnapshot(
+						runId = "stalled2",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						loggedFatalSimExceptionCount = 3L,
+						loggedFatalSimExceptionFirstMessage = "SimulationException[FATAL]: path setup at time 300.0"
+					),
+					runSnapshot(runId = "fine", arm = DispatcherArm.LLM_TOOL_CALLING, loggedFatalSimExceptionCount = 0L),
+					runSnapshot(runId = "unscanned", arm = DispatcherArm.LLM_TOOL_CALLING)
+				)
+			)
+		val control = aggregator.aggregate(listOf(runSnapshot(runId = "ctl", loggedFatalSimExceptionCount = 0L)))
+
+		val section = fatalSection(aggregator.renderMarkdown(listOf(control, llm)))
+
+		assertThat(section)
+			.transform("has the per-arm header") {
+				it.contains("| Arm | Runs | Runs with FATAL | Runs scanned | Runs not scanned |")
+			}.isTrue()
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "4", "2", "3", "1"))
+		assertThat(tableRowCells(section, DispatcherArm.RULE_BASED.name))
+			.isEqualTo(listOf(DispatcherArm.RULE_BASED.name, "1", "0", "1", "0"))
+	}
+
+	@Test
+	fun `the per-arm FATAL count is rendered even when no run recorded a FATAL`() {
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "ok1", loggedFatalSimExceptionCount = 0L)))
+		val section = fatalSection(aggregator.renderMarkdown(listOf(report)))
+
+		assertThat(tableRowCells(section, DispatcherArm.RULE_BASED.name))
+			.isEqualTo(listOf(DispatcherArm.RULE_BASED.name, "1", "0", "1", "0"))
+	}
+
+	@Test
+	fun `an arm with no runs shows zero runs in the FATAL count, not a missing row`() {
+		val empty = aggregator.aggregate(emptyList()).copy(arm = DispatcherArm.LLM_TOOL_CALLING)
+		val section = fatalSection(aggregator.renderMarkdown(listOf(empty)))
+
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "0", "0", "0", "0"))
+	}
+
 	@Test
 	fun `repair-success rate is marked as having no live producer, not presented as a bare measurement`() {
 		val report = aggregator.aggregate(listOf(runSnapshot(runId = "repair1")))
