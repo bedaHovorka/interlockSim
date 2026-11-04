@@ -181,8 +181,9 @@ class OllamaConnectivityCheckerHttpTest {
 		// engine the Ollama client of check() runs on. This red-ifies when the pin is removed:
 		// Ktor then resolves the first ServiceLoader engine — Apache5 comes first in
 		// koog-agents' loader order.
+		val (factory, baseClient) = cancellableOllamaHttpClientFactory()
 		val client =
-			cancellableOllamaHttpClientFactory().create(
+			factory.create(
 				"connectivity-check-pin-test",
 				"http://127.0.0.1:1",
 				emptyMap(),
@@ -204,6 +205,10 @@ class OllamaConnectivityCheckerHttpTest {
 				.isEqualTo("io.ktor.client.engine.cio.CIOEngine")
 		} finally {
 			client.close()
+			// The base client derives the served copy; closing it here (idempotent, after the
+			// served close) is the same release the funnel does for its own clients — see
+			// CancellableOllamaClientLifecycleTest.
+			baseClient.close()
 		}
 	}
 }

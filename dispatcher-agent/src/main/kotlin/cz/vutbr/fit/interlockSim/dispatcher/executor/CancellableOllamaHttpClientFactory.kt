@@ -14,6 +14,8 @@ import ai.koog.prompt.executor.ollama.client.ContextWindowStrategy
 import ai.koog.prompt.executor.ollama.client.OllamaClient
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import kotlinx.coroutines.CompletableJob
+import kotlinx.coroutines.Job
 
 /**
  * The HTTP client factory for the dispatcher's Ollama client, pinned to Ktor's CIO engine so that a
@@ -36,8 +38,17 @@ import io.ktor.client.engine.cio.CIO
  * answer-then-hold two-request shape the production client produces, pooled or not. The extra TCP
  * connect per request is negligible on loopback.
  *
- * A new base client per call: closing the Ollama client built from this factory closes that
- * client's own engine, and no engine is shared between clients.
+ * A new base client per call, returned together with the factory as a pair: Ktor's
+ * `baseClient.config(...)` inside the Koog factory derives the served copy from that base, the
+ * copy shares the base's engine (so no engine is shared between clients built from different
+ * factories), and Ktor attaches every client's request job to the engine's request job as a child.
+ * Closing only the served copy (what Koog's `OllamaClient.close()` does) then leaves the base job
+ * attached, the engine's request job can never complete, and CIO's selector manager (its epoll fd
+ * and its processing coroutine) never stops — one leak per created-and-closed client, including
+ * the executor client and every connectivity-check call. The base client sends nothing itself and
+ * the served copy keeps the engine's management on close, so releasing the base job after the
+ * copy exists lets the engine's request job complete once the Ollama client closes;
+ * `cancellableOllamaClient` does exactly that and `CancellableOllamaClientLifecycleTest` pins it.
  *
  * ## The one construction funnel
  *
@@ -46,8 +57,10 @@ import io.ktor.client.engine.cio.CIO
  * reverts to the Apache5 default again. `DispatcherOllamaClientTripwireTest` fails the build when
  * any `OllamaClient` construction appears outside this file.
  */
-internal fun cancellableOllamaHttpClientFactory(): KtorKoogHttpClient.Factory =
-	KtorKoogHttpClient.Factory(baseClient = HttpClient(CIO))
+internal fun cancellableOllamaHttpClientFactory(): Pair<KtorKoogHttpClient.Factory, HttpClient> {
+	val baseClient = HttpClient(CIO)
+	return KtorKoogHttpClient.Factory(baseClient = baseClient) to baseClient
+}
 
 /**
  * The one construction funnel for the module's Ollama clients ([OllamaClient] is Koog's class):
@@ -59,9 +72,23 @@ internal fun cancellableOllamaHttpClientFactory(): KtorKoogHttpClient.Factory =
 internal fun cancellableOllamaClient(
 	baseUrl: String,
 	contextWindowStrategy: ContextWindowStrategy = ContextWindowStrategy.Companion.None
-): OllamaClient =
-	OllamaClient(
-		httpClientFactory = cancellableOllamaHttpClientFactory(),
-		baseUrl = baseUrl,
-		contextWindowStrategy = contextWindowStrategy
-	)
+): OllamaClient {
+	val (factory, baseClient) = cancellableOllamaHttpClientFactory()
+	val client =
+		OllamaClient(
+			httpClientFactory = factory,
+			baseUrl = baseUrl,
+			contextWindowStrategy = contextWindowStrategy
+		)
+	// Release the base client's request job only now, after the served copy exists. Ktor derives
+	// the copy with `baseClient.config(...)`: it shares the base's engine, and both clients' request
+	// jobs are attached children of the engine's request job, so a closed client would leave the
+	// base job behind and CIO's selector manager (its epoll fd and its processing coroutine) would
+	// never stop. The base client sends nothing itself, and the served copy keeps the engine's
+	// management on close, so releasing this job after the copy exists lets the engine's request
+	// job complete once the OllamaClient closes. The order is load-bearing: completed before the
+	// copy exists, every request of the copy dies immediately with "Engine failed" (probe-proven
+	// on the resolved Koog/Ktor versions).
+	(baseClient.coroutineContext[Job] as? CompletableJob)?.complete()
+	return client
+}
