@@ -142,6 +142,10 @@ next open step).
 ## Ollama Setup
 
 - Default endpoint `http://localhost:11434`; model `qwen2.5:7b-instruct`.
+- The Ollama HTTP client is pinned to Ktor's CIO engine (Issue #1341): build model clients only
+  through `cancellableOllamaClient` — the module's single construction funnel, guarded by
+  `DispatcherOllamaClientTripwireTest`. Full rationale in
+  [CancellableOllamaHttpClientFactory.kt](src/main/kotlin/cz/vutbr/fit/interlockSim/dispatcher/executor/CancellableOllamaHttpClientFactory.kt)'s KDoc.
 - Start natively (`ollama serve`) or with `docker compose --profile ollama up -d --wait ollama`
   (the compose file defines an `ollama` profile).
 - Executor setup and troubleshooting:

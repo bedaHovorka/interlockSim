@@ -144,7 +144,12 @@ jobs:
         if-no-files-found: error
 
     - name: Run linuxX64 native tests
-      timeout-minutes: 5
+      # 5 minutes was measured dead on 2026-11-03: 2m23s at 05:45Z, 4m59s at 18:26Z (1 s under
+      # the limit), 5m07s at 19:03Z timed out with all 1316 tests passing. Goal 1B added native
+      # tests (the LowTrafficExitNativeSeedTest seed alone is tens of seconds), so the limit
+      # grew past the suite even before runner variance. 10 gives honest headroom; a real
+      # native-test failure still fails far under it (the suite reports verdicts in seconds).
+      timeout-minutes: 10
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
