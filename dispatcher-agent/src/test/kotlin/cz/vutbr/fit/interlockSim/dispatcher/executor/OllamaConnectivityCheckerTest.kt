@@ -17,8 +17,10 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -214,11 +216,19 @@ class OllamaConnectivityCheckerHttpTest {
  * pinned factory (via [cancellableOllamaClient]), Ktor's default engine (Apache5) served the
  * answering `/api/tags` from a pooled keep-alive connection the held one reused, so the abandoned
  * held request stayed open past the ceiling and this test was red. It also goes red when the pin
- * itself is removed from the factory (mutation-proven).
+ * itself is removed from the factory (mutation-proven). The cancellation itself is the test's,
+ * not a deadline's: the production check imposes no timeout of its own, it only relies on the
+ * caller's Job cancelling it mid-request.
  */
 class OllamaConnectivityCheckerCancellationTest {
 	private companion object {
-		const val CANCEL_DEADLINE_MILLIS = 1_000L
+		/**
+		 * Time the check may take to reach the held request. It must fit the whole client cold start
+		 * plus the answered `/api/tags` round trip, so it is generous for a loaded CI runner — and far
+		 * under the fixture's 30 s hold, so the close measure below still watches the cancel close the
+		 * connection rather than the hold timing out.
+		 */
+		const val HOLD_BUDGET_MILLIS = 10_000L
 		const val CLOSE_CEILING_MILLIS = 5_000L
 	}
 
@@ -227,38 +237,39 @@ class OllamaConnectivityCheckerCancellationTest {
 		HoldingOllamaServer(answerBody = TAGS_WITH_MODEL).use { server ->
 			val config = OllamaExecutorConfig(ollamaEndpoint = server.baseUrl)
 
-			// A caller with a deadline abandons the check mid-flight: Koog answers `/api/tags`
+			// A caller abandons the check mid-flight by cancelling its Job: Koog answers `/api/tags`
 			// from the pooled connection and then blocks on the held `/api/show`. The first pool
 			// connection is gone from CIO's side (one connection per request), so the held one
-			// is fresh and the cancel must tear it down.
-			val cancelledAt = System.nanoTime() + CANCEL_DEADLINE_MILLIS * HoldingOllamaServer.NANOS_PER_MILLI
-			val outcome =
-				runBlocking {
-					try {
-						Result.success(withTimeout(CANCEL_DEADLINE_MILLIS) { OllamaConnectivityChecker.check(config) })
-					} catch (ex: Throwable) {
-						Result.failure(ex)
-					}
-				}
+			// is fresh and the cancel must tear it down. Dispatchers.IO, not the default child
+			// dispatcher, carries the check: the runBlocking thread blocks on the fixture's latch
+			// below, and a child left to the runBlocking event loop is merely queued until the
+			// parent suspends (the same reasoning KoogAgentFactory.kt documents for its warm-up),
+			// so it would never reach the hold.
+			runBlocking {
+				val checkJob = launch(Dispatchers.IO) { OllamaConnectivityChecker.check(config) }
 
-			assertThat(outcome.exceptionOrNull(), "the deadline actually abandoned the check")
-				.isNotNull()
-			assertThat(server.awaitHeldRequest(0), "the cancelled check had reached the held request")
-				.isTrue()
+				// Observe the hold with a real budget first; only then take the abandonment reference,
+				// so the close latency below is measured from the cancel, not from a guessed deadline.
+				val holdReached = server.awaitHeldRequest(HOLD_BUDGET_MILLIS)
+				val abandonedAt = System.nanoTime()
+				checkJob.cancelAndJoin()
 
-			val latencyMillis = server.awaitCloseLatencyAfter(cancelledAt, CLOSE_CEILING_MILLIS)
-			println(
-				"Issue #1341: held connectivity-check connection close latency after the cancel = " +
-					(latencyMillis?.let { "$it ms" } ?: "not closed within $CLOSE_CEILING_MILLIS ms")
-			)
-			assertThat(latencyMillis, "the held connection was closed").isNotNull()
-			// The fixture stamps the earliest close a connection ever made, so a future extra
-			// request before the reference would measure negative; bound it from below too.
-			val closedLatency = latencyMillis!!
-			assertThat(closedLatency, "close latency after the cancel (ms) lower bound")
-				.isGreaterThanOrEqualTo(0)
-			assertThat(closedLatency, "close latency after the cancel (ms)")
-				.isLessThanOrEqualTo(CLOSE_CEILING_MILLIS)
+				assertThat(holdReached, "the check reached the held request").isTrue()
+
+				val latencyMillis = server.awaitCloseLatencyAfter(abandonedAt, CLOSE_CEILING_MILLIS)
+				println(
+					"Issue #1341: held connectivity-check connection close latency after the cancel = " +
+						(latencyMillis?.let { "$it ms" } ?: "not closed within $CLOSE_CEILING_MILLIS ms")
+				)
+				assertThat(latencyMillis, "the held connection was closed").isNotNull()
+				// The fixture stamps the earliest close a connection ever made, so a future extra
+				// request before the reference would measure negative; bound it from below too.
+				val closedLatency = latencyMillis!!
+				assertThat(closedLatency, "close latency after the cancel (ms) lower bound")
+					.isGreaterThanOrEqualTo(0)
+				assertThat(closedLatency, "close latency after the cancel (ms)")
+					.isLessThanOrEqualTo(CLOSE_CEILING_MILLIS)
+			}
 		}
 	}
 }
