@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.ksimulantenbande.kdisco.emitCustom
+import cz.vutbr.fit.interlockSim.sim.emitCustomGuarded
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlin.math.round
@@ -73,17 +73,13 @@ import kotlin.math.round
  *   [RouteReleaser.releasePathDetailed] in production. A constructor parameter rather than a writable
  *   hook, so a test that must pin that a throwing release is contained (Issue #1174) builds its own
  *   expiry over the same registry and candidate screen
- * @param emitExpired Delivers the [ReservationExpired] event of each completed expiry (Issue #1243);
- *   the kDisco [emitCustom] by default (a no-op outside a running simulation). A constructor seam, not
- *   a writable hook, like [expiryRelease]; a throwing delivery is contained by [countAndAnnounce]
  * @since Issue #1174
  */
 internal class DefaultReservationExpiry(
 	private val registry: PathReservationRegistry,
 	private val candidateScreen: RouteCandidateScreen,
 	private val ttlSimSeconds: Double,
-	private val expiryRelease: (String) -> PathRelease,
-	private val emitExpired: (ReservationExpired) -> Unit = { emitCustom(it) }
+	private val expiryRelease: (String) -> PathRelease
 ) {
 	companion object {
 		/** Rounding factor of the logged expiry age (one decimal). */
@@ -269,22 +265,20 @@ internal class DefaultReservationExpiry(
 	}
 
 	/**
-	 * Count the completed expiry [event] reports, then deliver it through [emitExpired], so a listener
-	 * reading [expiredHoldingCount] or [expiredTailCount] sees it included (Issue #1243). A throwing
-	 * delivery is logged and cannot undo the completed expiry: this guard catches a raw kDisco
-	 * subscriber, which ends delivery to the subscribers after it; an `onReservationExpired`
-	 * subscriber is isolated by that function already.
+	 * Count the completed expiry [event] reports, then send it on the kDisco bus, so a listener reading
+	 * [expiredHoldingCount] or [expiredTailCount] sees it included (Issue #1243). The send goes through
+	 * the guarded emit of the journey events, [emitCustomGuarded] (Issue #1310): a raw kDisco subscriber
+	 * that throws is logged at WARN and cannot undo the completed expiry or end the process running it
+	 * (the raw subscribers after it miss the event), while kDisco's process control -- a
+	 * `CancellationException` or a subscriber terminating that process -- passes through, and an
+	 * [Error] is never caught. An `onReservationExpired` subscriber is isolated by that function.
 	 */
 	private fun countAndAnnounce(event: ReservationExpired) {
 		when (event.kind) {
 			ReservationExpired.Kind.WHOLE_HOLDING -> expiredHoldingCount++
 			ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL -> expiredTailCount++
 		}
-		try {
-			emitExpired(event)
-		} catch (e: Exception) {
-			logger.warn(e) { "ReservationExpired for '${event.trainId}' could not be delivered (Issue #1243)" }
-		}
+		emitCustomGuarded(event)
 	}
 
 	/** [value] rounded to one decimal, so the expiry log lines stay stable to grep. */

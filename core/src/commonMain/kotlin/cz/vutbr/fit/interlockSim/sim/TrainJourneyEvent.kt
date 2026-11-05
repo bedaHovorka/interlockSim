@@ -113,7 +113,8 @@ internal fun emitTrainJourneyEvent(event: TrainJourneyEvent) = emitCustomGuarded
 /**
  * Send [payload] on the kDisco event bus with the top-level kDisco `emitCustom`, a no-op outside a
  * running simulation. Shared by every record-only announcement (journey steps of Issue #673, the
- * run-end accounting events of Issue #1304).
+ * run-end accounting events of Issue #1304, the reservation kernel's `ReservationExpired` of Issue
+ * #1310).
  *
  * Guarded so that announcing never changes the run. kDisco's bus calls its raw listeners with no
  * guard of its own, so a raw [SimulationEnvironment.onSimulationEvent] subscriber that throws would
@@ -132,7 +133,7 @@ internal fun emitCustomGuarded(payload: Any) {
 		rethrowProcessControl(e)
 		logger.warn(e) {
 			"A raw simulation event listener failed on $payload; the emitting process continues and the " +
-				"listeners after the failing one miss this step (Issue #673)"
+				"listeners after the failing one miss this event (Issue #673)"
 		}
 	}
 }
