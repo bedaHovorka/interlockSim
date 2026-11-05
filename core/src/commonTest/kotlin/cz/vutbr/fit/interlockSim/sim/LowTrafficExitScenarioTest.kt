@@ -24,7 +24,7 @@ import kotlin.test.Test
 /**
  * Pins the exit parameters of [LowTrafficExitScenario] without running a simulation, so the
  * spacing rules hold on every target and in every gate. The simulation runs themselves are the
- * heavy `LowTrafficExitCalibrationTest` (JVM) and the native seed-1 test.
+ * integration test `LowTrafficExitCalibrationTest` (JVM) and the native seed-1 test.
  */
 class LowTrafficExitScenarioTest {
 	@Test

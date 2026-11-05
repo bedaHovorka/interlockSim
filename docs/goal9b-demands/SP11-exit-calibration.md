@@ -62,13 +62,13 @@ heavier-than-nominal traffic. The parameter and the seeds stay unchanged.
 | --- | --- | --- | --- |
 | `LowTrafficExitScenario` | `core` `commonTest` | (helper, not a test) | the parameters, the arrival builder, one run on Praha (`runScenario`), the functional assertions (`assertFunctional`) and the failure-cause classification (`MultiTrainRun.failureCause`) |
 | `LowTrafficExitScenarioTest` | `core` `commonTest` | untagged (every gate, JVM and native) | pins the seed list and the spacing rules of the arrivals for all 10 seeds, and the cause classification; runs no simulation |
-| `LowTrafficExitCalibrationTest` | `core` `jvmTest` | `heavy-test` | `@RepeatedTest(10)`, repetition `i` runs seed `i`; `@Timeout(120 s, SEPARATE_THREAD)` as a safety ceiling only |
+| `LowTrafficExitCalibrationTest` | `core` `jvmTest` | `integration-test` (since the #591 part 2 flip; `heavy-test` before) | `@RepeatedTest(10)`, repetition `i` runs seed `i`; `@Timeout(120 s, SEPARATE_THREAD)` as a safety ceiling only |
 | `LowTrafficExitNativeSeedTest` | `core` `nativeTest` (new) | untagged (every `linuxX64Test`) | seed 1 on `linuxX64`, functional assertions plus the JVM seed-1 counts pinned; no `@Timeout` |
 | `ExitCalibrationRowsTest` | `core` `jvmTest` | `heavy-test` | the 20-train and shoulder measurement rows, log-only |
 
 `nativeTest` is the source set `applyDefaultHierarchyTemplate()` creates between `commonTest` and
 `linuxX64Test`; the directory did not exist before. Putting the native seed there, not in
-`commonTest`, keeps it off the JVM `test` task (the JVM runs every seed in the heavy class).
+`commonTest`, keeps it off the JVM `test` task (the JVM runs every seed in the integration-test class).
 
 **Functional assertions only.** Entered == exited == number of specs, zero occupied block resources at
 run end, observed concurrency at most the cap. No wall-time, real-time-ratio or other timing assertion
@@ -266,6 +266,24 @@ the cap of 4 is never filled (`capHoldBeginsAt=never`).
 
 **Verdict: SP14 (incremental reservation) does not open.** No capacity cause exists at the exit
 parameters.
+
+### B8: the flip (#591 part 2)
+
+On 2026-11-05 `LowTrafficExitCalibrationTest` moved from `heavy-test` to `integration-test` (commit
+`813e6442`), so the 10 seeds run in every `integrationTest` gate and in the CI step "Run integration
+tests". The 120 s safety ceiling per seed stays; `ExitCalibrationRowsTest` stays `heavy-test`.
+
+| Run | Machine state | Seeds | Per-seed time (s) | Total (s) |
+| --- | --- | ---: | --- | ---: |
+| Local gate, `:core:integrationTest` | LOADED (three agent builds in parallel) | 10 of 10 | not used | 27.3 |
+| CI run 42040274099 (attempt 2), GitHub-hosted runner | CI (shared runner, not quiet) | 10 of 10 | 3.08, 5.72, 3.73, 3.58, 3.53, 5.08, 3.18, 3.73, 3.19, 2.63 | 37.4 |
+
+The CI step "Run integration tests" (all modules) took 2 min 22 s. Every CI seed stays far inside the
+15 s per-run budget and the CI total inside the 3 min budget, although a shared runner is slower than the
+quiet-window machine (1.0–1.6 s per seed). The budget itself stays a quiet-window figure; it is never
+asserted.
+
+**Verdict: B8 is met.** The Goal 1B exit test is green in `integrationTest`, locally and in CI.
 
 ## Why other wave-5 issues cannot change these numbers
 

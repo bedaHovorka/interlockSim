@@ -21,8 +21,8 @@ import kotlin.test.Test
  * [LowTrafficExitScenario.LOW_TRAFFIC_SEEDS] on `linuxX64`, with the functional exit assertions.
  *
  * It lives in `nativeTest` (created by `applyDefaultHierarchyTemplate()`), not in `commonTest`,
- * so it runs in `:core:linuxX64Test` only: the JVM runs every seed in the heavy
- * `LowTrafficExitCalibrationTest`. Untagged, so it runs in every gate and in the CI
+ * so it runs in `:core:linuxX64Test` only: the JVM runs every seed in the
+ * integration test `LowTrafficExitCalibrationTest`. Untagged, so it runs in every gate and in the CI
  * `linuxX64Test` step; there is no `@Timeout` on Kotlin/Native, the CI step's own limit is the
  * ceiling. No wall time is asserted.
  *
