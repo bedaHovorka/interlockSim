@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.module.Module
@@ -32,6 +33,7 @@ import java.util.concurrent.TimeUnit
  * admitted at once, the run ends (no deadlock holds it past the JUnit timeout), and at least
  * [MIN_EXITED] trains exit within the 600 s.
  */
+@Tag("integration-test")
 @DisplayName("Praha low-traffic control arm: one 600 s run (#1366)")
 class PrahaLowTrafficRunTest : KoinTestBase() {
 	private companion object {
