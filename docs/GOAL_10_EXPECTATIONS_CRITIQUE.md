@@ -23,6 +23,15 @@ examples only for now, and the first example is the paramount of all future effo
 >    (#591: 5-train correctness, 20-train performance).
 > 3. **Goal 9 as shipped is judged not realistic**; a more realistic **Goal 9B**
 >    update will be prepared in the future, **after Goal 1B**.
+> 4. **Premise correction (recorded 2026-11-06),** from the Goal 1B SP4 ruling of
+>    2026-10-11 and the SP11 calibration: the "~2.7 s per route search" figure in
+>    this document measured the **switch-blind** `findAllTopologicalPaths` listing,
+>    not the switch-constrained search — the search is milliseconds per pair,
+>    bounded and cached since SP4 (#1190; `docs/goal9b-demands/SP4-bounded-route-search.md`).
+>    SP11 additionally recorded 20/20 completions at a 3,600 s horizon without
+>    incremental reservation (`docs/goal9b-demands/SP11-exit-calibration.md`).
+>    Notes at the affected passages carry the same date; C3's real-time-ratio
+>    (DES mis-typing) argument is unaffected.
 >
 > Read §5's recommendation and §6's Stage-A2 wording as historical analysis;
 > the Praha scenario's acceptance role moves from Goal 10 Stage A to Goal 1B.
@@ -49,6 +58,10 @@ carry stale dependency claims (Goal 9 is now ✅ COMPLETE; Goal 3 is ✅ COMPLET
 assumptions invalidated by the #591 findings (a single exhaustive route search on
 Praha costs ~2.7 s — the issue's own "decisions within 500 ms" criterion is
 unachievable on that fixture with today's search).
+
+*Corrected 2026-11-06: the 2.7 s premise is withdrawn (switch-blind measurement;
+the search is milliseconds since SP4). The 500 ms criterion's surviving problem
+is that it is mis-typed for a discrete-event engine — see C3's second paragraph.*
 
 **Core recommendations** (detail in §6–§8):
 
@@ -151,6 +164,10 @@ the body — so the body is *de facto* obsolete but *de jure* the issue's defini
   Goal 10 inherits a *dispatcher substrate with known open defects* that no
   dependency line currently captures.
 
+  *(Correction 2026-11-06: SP1 and SP4 landed; the cost half of this bullet is
+  withdrawn — the substrate's open point is entry serialization at scale, tracked
+  by the SP11 exit calibration.)*
+
 ### C3. The 500 ms criterion is falsified by measurement
 
 Issue body verification: "5-train scenario; routing decisions issued within 500 ms."
@@ -162,6 +179,17 @@ station-scale fixture costs *minutes*, not 500 ms. The criterion is fine as an
 aspiration but must be **conditioned on the route-cache / k-shortest work** (parent
 analysis §4) or scoped to the small fixture (`vyhybna.xml`) where it is trivially
 met today.
+
+*Corrected 2026-11-06 (the measurement half is withdrawn):* the 2.3–5.9 s figure
+measured the switch-blind `findAllTopologicalPaths` listing, not `findRoutes`'s
+switch-constrained search. SP4 measured the search itself in milliseconds — all
+110 InOut pairs in 121 ms uncached — and shipped the bounded, cached search
+(`docs/goal9b-demands/SP4-bounded-route-search.md`). A conflict-aware decision
+costs ~0.1 s before any cache, so the 500 ms criterion is *not* falsified by
+search cost today. Drop the "conditioned on route-cache work" conclusion. The
+next paragraph below (criterion conceptually mis-typed for a discrete-event
+engine) stands and remains the reason to replace the criterion with a
+real-time-ratio budget.
 
 Moreover, for a discrete-event engine the criterion is **conceptually mis-typed**:
 kDisco's clock does not advance while a decision is computed, so decision latency
@@ -253,7 +281,7 @@ goal. Candidates:
 | Candidate | Pros | Cons |
 |---|---|---|
 | **(a) `vyhybna.xml` shunting loop, 2–3 trains** (SP4's choice) | Tiny; every search is milliseconds; existing `ShuntingLoop`/`ThreeTrainLoop` tests; zero risk | No real routing choice (≤ ~4 paths) — a dispatcher that only ever has one viable route demonstrates plumbing, not dispatching |
-| **(b) Praha 5-train** (#591 `fiveTrainCompleteness`, currently green) | Real station ladder (117 blocks, 50 switches, 11 InOuts); genuine route alternatives; already has a passing acceptance test and fixtures in `commonTest`; directly redeems the #591 investment | Route search costs ~2.7 s until caching lands; test currently passes only because routes are block-disjoint |
+| **(b) Praha 5-train** (#591 `fiveTrainCompleteness`, currently green) | Real station ladder (117 blocks, 50 switches, 11 InOuts); genuine route alternatives; already has a passing acceptance test and fixtures in `commonTest`; directly redeems the #591 investment | Route search costs ~2.7 s until caching lands (withdrawn 2026-11-06: milliseconds since SP4, caching landed); test currently passes only because routes are block-disjoint |
 | **(c) Praha 20-train** (#591 `twentyTrainStress`) | The true scale bar | Known-livelocked; blocked on P0–P2 of the #591 sequencing — cannot be the *first* example |
 
 **Recommendation: (a) as the Stage-A smoke slice, (b) as the paramount example, (c)
@@ -282,10 +310,18 @@ Concretely (as originally recommended):
   contention heat-map from Goal 9 telemetry) but is **not** an acceptance gate
   until the #591 P1/P2 work (route caching, incremental reservation) lands.
 
+  *(Corrected 2026-11-06: route caching landed (SP4); and the completion linkage
+  is withdrawn — SP11 measured 20/20 completions at a 3,600 s horizon without
+  incremental reservation. The measurement-first stance stands on its own.)*
+
 This choice keeps the example small (5 trains, one fixture, headless), maximally
 reuses paid-for assets (#591 fixtures/tests, Goal 9 pipeline), and puts the known
 performance debt (route search) on the critical path *visibly* instead of hiding it
 behind a 500 ms number.
+
+*(Correction 2026-11-06: the route-search debt landed in SP4. The paragraph's final
+clause is superseded — the 500 ms critique now rests solely on the DES mis-typing
+argument in C3.)*
 
 ---
 
@@ -318,6 +354,8 @@ document does not edit either.)
 > - A4. Wall-clock: the 5-train paramount run keeps real-time ratio ≥ 1×.
 >   *(Precondition: #591 P0 hot-loop fix and route-result caching; a per-decision
 >   wall-clock budget is reported as a metric, not gated, until Goal 6 lands.)*
+>   *(Corrected 2026-11-06: both named preconditions landed — SP1 (#1148), SP4
+>   (#1190).)*
 >
 > **Stage B — Authority and explainability:**
 > - B1. `DispatcherMode` AUTO / SEMI_AUTO / MANUAL with persistent override;
@@ -334,6 +372,9 @@ document does not edit either.)
 > - C2. 20-train Praha measured and reported (real-time ratio, exits, contention
 >   heat-map); becomes a gate only after #591 P1/P2 (route caching, incremental
 >   reservation) land.
+>   *(Corrected 2026-11-06: route caching landed (SP4); the incremental-reservation
+>   completion linkage is withdrawn — SP11 measured 20/20 completions without it.
+>   C2 stays measured-not-gated as an outcome-first policy.)*
 >
 > **Dependencies (status as of 2026-07-06):** Goal 1 ✅ (except #591 scale slice —
 > open defects are Stage-A preconditions), Goal 2 ✅, Goal 3 ✅ (verify SP5 #615),
@@ -353,7 +394,7 @@ document does not edit either.)
 | Staging A/B/C with per-stage gates | Flat 4-item success list | Limited resources: Stage A alone is shippable and useful; C is explicitly stretch |
 | Paramount example named in the goal | "multi-train scenario" (unspecified) | Owner constraint: this example is the paramount of future effort — it must be in the definition, not folklore |
 | Determinism clause (A2, C1) | *(absent)* | Resolves the "undeterministic reasoning" objection structurally: acceptance never depends on an LLM |
-| Real-time-ratio budget + metric-only latency | "decisions within 500 ms" | 500 ms is falsified on Praha today (§C3) and mis-typed for a DES engine; ratio is measurable with existing #591 scaffolding |
+| Real-time-ratio budget + metric-only latency | "decisions within 500 ms" | 500 ms is mis-typed for a DES engine (§C3; the cost-based "falsified on Praha" half was withdrawn 2026-11-06 — the search runs in milliseconds since SP4); ratio is measurable with existing #591 scaffolding |
 | Planner-vs-planner comparison | "matching or exceeding average human dispatcher" | Unfalsifiable without a human baseline; comparison on Goal 6 metrics is falsifiable and cheaper |
 | New agent module placement | `core/.../context/` critical files | Owner decision (submodule over core, no GUI dependency); keeps agent deps (Koog) out of `:core` and `:fast-sim` native builds |
 | Dependency statuses corrected | Goal 9 "open", Goal 3 SP5 "blocker" | Goals 3 and 9 are ✅ COMPLETE in the register; real blockers are #591 defects and Goal 6 |
@@ -369,7 +410,11 @@ document does not edit either.)
 2. **Fix dependencies:** mark Goal 9 (#531) and Goal 3 (#610) complete; add
    "#591 P0 fix + route caching" and "Goal 6 for comparative metrics" as the live
    preconditions; confirm or clear the stale SP5 (#615) blocker claim.
+   *(Corrected 2026-11-06: the "#591 P0 fix + route caching" precondition is met —
+   SP1, SP4. Goal 6 stays as the comparative-metrics precondition.)*
 3. **Replace the two broken criteria** (500 ms; human-dispatcher parity) per §6.
+   *(500 ms: still broken because it is mis-typed for a discrete-event engine —
+   corrected 2026-11-06, the cost-based falsification is withdrawn.)*
 4. **Name the paramount example** (Praha 5-train, dispatcher-chosen routes) in the
    Verification Plan, and demote the 20-train run to "measured, not gated".
 5. **Move "Critical Files"** out of `core/.../context/` into the agreed new agent
@@ -394,6 +439,9 @@ document does not edit either.)
   first). This is honest sequencing, not new scope: the same fixes are prerequisites
   under *any* Goal 10 description, since the dispatcher cannot decide in frozen-clock
   minutes.
+  *(Corrected 2026-11-06: the fixes landed — SP1, SP4 — and the "frozen-clock
+  minutes" sizing is withdrawn (milliseconds per decision since SP4); the
+  sequencing logic is unaffected.)*
 - **Dropping the human-parity criterion weakens the marketing claim.** The
   planner-vs-planner formulation is strictly more defensible for a BSc-thesis-scale
   project and can be upgraded later if a baseline (e.g., scripted "human-like"

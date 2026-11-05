@@ -6,6 +6,26 @@
 **Branch:** `feat/issue-591-scale-validation` (PR #631)
 **Status of CI:** `Run unit tests` times out after 10 minutes on both runs
 
+> **Corrections recorded 2026-11-06** (from the Goal 1B SP4 ruling of 2026-10-11 on
+> [#591](https://github.com/bedaHovorka/interlockSim/issues/591#issuecomment-6107334402)
+> and the SP11 calibration evidence):
+>
+> 1. The "~2.7 s per `reservePath` call" figure in this analysis measured the
+>    **switch-blind** `findAllTopologicalPaths` listing (§2.3), not the switch-constrained
+>    search that `reservePath` runs. That search costs milliseconds: all 110 Praha InOut
+>    pairs enumerate in 121 ms uncached, the slowest pair in 2.6 ms
+>    (`docs/goal9b-demands/SP4-bounded-route-search.md`, "Cost of a failing `reservePath`
+>    today"). Every derived "34-minute" figure below is superseded. What this document got
+>    right — the path-independent `reservePath` hot loop in `MultiTrainLoop.reserveEntryPath`
+>    (§3) — was real, and SP1 (#1148) removed the switch-blind enumeration from the hot path.
+> 2. The §5.1 completion claim is withdrawn: a cap on *simultaneous* block-disjoint routes
+>    does not cap *throughput*, because a released route is reusable by the next train.
+>    SP11 recorded 20/20 completions inside the horizon under high traffic with full-path
+>    reservation and without incremental reservation
+>    (`docs/goal9b-demands/SP11-exit-calibration.md`, the "20-train high traffic" row).
+>
+> Individual corrections at the affected passages below carry the same date.
+
 ---
 
 ## 1. Executive Summary
@@ -27,6 +47,11 @@ classic wait-for-graph deadlock:
    enumeration** of the station (~2.7 s wall-clock on the Praha fixture, measured),
    so one dispatcher iteration for one blocked train costs
    **760 × 2.7 s ≈ 34 minutes** of CPU.
+
+   *Corrected 2026-11-06:* the ~2.7 s figure is §2.3's switch-blind listing, not the
+   switch-constrained search `reservePath` runs (milliseconds per SP4). The wall-time
+   of the observed freeze came from the switch-blind enumeration inside
+   `reserveEntryPath` itself, which SP1 (#1148) removed. See the note under the title.
 4. All of this happens inside a single kDisco event. kDisco is a single-threaded
    discrete-event engine, so **simulated time is frozen** during the entire
    computation: trains 1–4 stop moving mid-journey, never release their blocks,
@@ -67,6 +92,8 @@ dispatcher retries — the sim clock never advances again:
 ```
 
 - 77 "all paths blocked" lines in 209 wall-seconds ⇒ **~2.72 s per line**.
+  *Corrected 2026-11-06:* that cadence was the switch-blind `findAllTopologicalPaths`
+  inside `reserveEntryPath` (removed by SP1), not the reservation search.
 - Train #6 (`inTime = 25.0`) is **never generated** ⇒ the generator's `hold(1.0)`
   never fires ⇒ virtual time is frozen.
 - No `BLOCK_TRANSITION` / `POSITION` events after t ≈ 21.5 ⇒ trains 1–4 are
@@ -111,6 +138,11 @@ Station ladders multiply alternatives: the path count grows roughly with the
 product of parallel-track choices at each throat, i.e. **exponentially** with
 route length across the ladder.
 
+*Scope of this table (corrected 2026-11-06):* these times measure the switch-blind
+topological listing. §1, §2.4 and §3 reused them as the per-call cost of
+`reservePath`, which was a conflation — see the note under the title and
+`docs/goal9b-demands/SP4-bounded-route-search.md`.
+
 ### 2.4 Cost model of the hang
 
 For one blocked train with `P` candidate paths and a per-`reservePath` cost `C`:
@@ -118,6 +150,11 @@ For one blocked train with `P` candidate paths and a per-`reservePath` cost `C`:
 ```
 one dispatcher iteration  ≈  P × C  =  760 × 2.7 s  ≈  34 minutes  (Train #5)
 ```
+
+*Corrected 2026-11-06:* with the SP4-measured millisecond-scale `C`, this formula
+no longer yields minutes; the observed wall-time of the freeze came from the
+switch-blind outer enumeration, removed by SP1. Kept here as the historical
+reasoning chain.
 
 During those 34 minutes the sim clock is frozen, so nothing that could unblock
 the train can happen. When the loop finally exhausts all candidates, the
@@ -160,6 +197,9 @@ Two independent mistakes compound:
    candidates. If it returns `AllPathsBlocked` once, iterating the outer loop
    cannot change the outcome (no other process can run — the event loop is
    occupied). The outer loop multiplies a ~2.7 s global failure by 760.
+   *Corrected 2026-11-06:* the per-call cost is milliseconds (SP4); the observed
+   seconds-long failure per iteration was the switch-blind outer enumeration,
+   later removed by SP1.
 2. **Duplicate path search.** The dispatcher enumerates all topological paths
    itself (`findAllTopologicalPaths`), and `reservePath` then enumerates them
    again internally. The outer enumeration exists only to feed the kDisco
@@ -179,6 +219,10 @@ first candidate; `Success` short-circuits the loop; the pathological
 removed or replaced by a single `reservePath` attempt per train per iteration.
 That alone converts the 34-minute frozen event into one ~2.7 s attempt per
 sim-second — still slow (§4), but no longer a hang.
+
+*Corrected 2026-11-06:* with the per-call cost at milliseconds (SP4) and the
+switch-blind enumeration removed by SP1, this fix direction is not "still slow";
+it is what Goal 1B SP1 shipped.
 
 ---
 
@@ -200,6 +244,12 @@ Consequences on a station-scale topology:
   because the cap is applied after full enumeration (the KDoc on
   `AutomaticPathFindingService` line 94 admits "the real bound on enumeration
   breadth" is `maxDepth`, not `maxPaths`).
+  *Corrected 2026-11-06:* SP4 measured the switch-constrained search itself at
+  milliseconds per call — B5 (≤ 10 s on a Praha pair) was already met on the
+  migration base, with 25 calls in 0.61 s
+  (`docs/goal9b-demands/SP4-bounded-route-search.md`). The enumeration-breadth
+  concern stands only for the switch-blind listing, which SP1 removed. The static
+  route cache below landed in Goal 1B SP4 (#1190).
 - The topology is **static and frozen** (`BaseContext.freeze()`), yet the
   enumeration is recomputed from scratch on every reservation attempt of every
   train, every sim-second. Nothing is memoized.
@@ -245,6 +295,15 @@ Consequences of the current model at scale:
   unreachable regardless of CPU speed. (This confirms review finding #5 on
   PR #631.)
 
+*Corrected 2026-11-06: the second bullet's completion inference is withdrawn.*
+A bound on simultaneous block-disjoint routes caps *steady-state concurrency*,
+not throughput: a route is released when its train finishes, so later trains
+reuse it and 20 trains can still finish inside the horizon on far fewer than 20
+simultaneous routes. SP11 measured 20/20 completions at a 3,600 s horizon under
+high traffic with full-path reservation and no incremental reservation
+(`docs/goal9b-demands/SP11-exit-calibration.md`). The §5.1 capacity problem is
+entry serialization and admission timing, not a completion prerequisite.
+
 The infrastructure for incremental reservation already half-exists:
 `InOutWorker`/`ShuntingLoop` use `reservePathToAnyNextSemaphore` (semaphore-hop
 granularity), and the `Tail` site already releases blocks behind the train
@@ -267,6 +326,12 @@ each hold half of a corridor — a real deadlock. The model needs one of:
 
 None of these exist today; they are prerequisites for removing the full-path
 constraint that #591's scale bar effectively requires.
+
+*Corrected 2026-11-06:* the safety prerequisites (deadlock avoidance) stand.
+Their motivation no longer rests on 20-train completion, which SP11 showed is
+possible without incremental reservation (3,600 s horizon); the case is spare
+capacity and entry serialization under higher traffic, not a completion
+requirement.
 
 ### 5.3 Dispatcher fairness, retry policy and head-of-line blocking
 
@@ -315,6 +380,10 @@ even a correct dispatcher cannot meet the ≥ 1× real-time ratio on a
 station-scale topology: a *single* uncached exhaustive search (~2.7 s) already
 exceeds the 1 s sim-time budget of a dispatcher tick.
 
+*Corrected 2026-11-06:* the 2.7 s premise is withdrawn — it was the switch-blind
+measurement, and the switch-constrained search runs in milliseconds (SP4, which
+shipped the bounded, cached search).
+
 ### 5.6 kDisco `Resource` gate is currently inert
 
 The `BlockResourceRegistry` gate can never be contended: resources are acquired
@@ -340,6 +409,10 @@ The defect is O(P × C) with P = topological path count and C = per-search cost.
 Both P and C were negligible on `vyhybna.xml` (P ≤ ~4, C ≈ ms). The Praha
 station is the first fixture where both explode simultaneously.
 
+*Corrected 2026-11-06:* the explosion was `P` only, and only for the switch-blind
+listing — `C` for the reservation search was already ≈ ms (SP4), and SP1 removed
+the switch-blind listing.
+
 ---
 
 ## 7. Recommended Sequencing (for follow-up issues)
@@ -349,14 +422,27 @@ station is the first fixture where both explode simultaneously.
    `findAllTopologicalPaths`. Restores clock progress; test then *fails fast*
    on unmet throughput instead of hanging. Test-only guard (§5.4 test-level)
    can land in the same PR.
+
+   *Landed 2026-11:* SP1 (#1148) removed the switch-blind enumeration from the
+   multi-train hot paths. The fail-fast principle stands; the 34-minute sizing
+   above is superseded (SP4).
 2. **P1 – event-driven dispatcher retry** (§5.3): reuse #569 block-release
    events; retry route setting only on release. Removes per-second re-search.
 3. **P1 – route search cost** (§5.5/§4): static route cache per InOut pair +
    first-free-candidate short-circuit. Targets the ≥ 1× real-time ratio.
+
+   *Landed 2026-11:* SP4 (#1190) shipped the bounded, cached switch-constrained
+   search, measured in milliseconds (`docs/goal9b-demands/SP4-bounded-route-search.md`).
+   The real-time-ratio worry that motivated this item is withdrawn.
 4. **P2 – incremental reservation + deadlock avoidance** (§5.1, §5.2): the
    actual capacity unlock needed for 20 trains to *complete* on Praha. This is
    the "future slice" `MultiTrainLoop`'s KDoc already anticipates and should be
    its own design spec.
+
+   *Corrected 2026-11-06: "needed for 20 trains to complete" is withdrawn —*
+   SP11 measured 20/20 completions at a 3,600 s horizon without incremental
+   reservation. The case is spare capacity and entry serialization under higher
+   traffic (a Goal 9B question), not a completion requirement.
 5. **P2 – watchdog/deadlock reporter** (§5.4): makes #591's "no deadlock in 10
    runs" criterion directly assertable rather than inferred from CI timeouts.
 
@@ -364,6 +450,12 @@ Until at least items 1–3 land, the #591 acceptance criteria cannot be met on
 this branch; with items 1–3, the 5-train case stays green and the 20-train case
 becomes a genuine measurement (expected to fail `trainsExited == 20` until
 item 4, which is a scope decision for the issue).
+
+*Corrected 2026-11-06, after items 1 and 3 landed:* the flip that carries this
+document runs the low-traffic exit test in the `integrationTest` gate
+(`docs/goal9b-demands/SP11-exit-calibration.md`, section "B8"). The 20-train case
+is a measurement; SP11 already recorded 20/20 completions at a 3,600 s horizon
+without item 4.
 
 ---
 

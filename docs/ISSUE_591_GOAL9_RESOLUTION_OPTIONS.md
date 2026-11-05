@@ -13,6 +13,19 @@
 > loop). Read the options below as an inventory of what exists to build Goal 9B
 > from — not as machinery to wire into the dispatcher as-is.
 
+> **⚠️ Premise correction (recorded 2026-11-06):** the Goal 1B SP4 ruling of
+> 2026-10-11 (`docs/goal9b-demands/SP4-bounded-route-search.md`, ruling comment on
+> [#591](https://github.com/bedaHovorka/interlockSim/issues/591#issuecomment-6107334402))
+> withdrew the parent doc's cost model: the ~2.7 s per-pair figure measured the
+> **switch-blind** `findAllTopologicalPaths` listing, not the switch-constrained
+> search `findRoutes` runs — the real per-pair cost is milliseconds (all 110 Praha
+> pairs in 121 ms uncached, slowest single pair 2.6 ms), and SP4 shipped the bounded,
+> cached search (#1190). SP11 additionally recorded 20/20 completions at a 3,600 s
+> horizon with full-path reservation and no incremental reservation, which withdraws
+> the "completion requires incremental reservation" premise
+> (`docs/goal9b-demands/SP11-exit-calibration.md`). Passage-level notes below carry
+> the same date; the Goal 9B inventory value of the options is unchanged.
+
 ---
 
 ## 1. Executive Summary
@@ -47,6 +60,13 @@ that loop has a Goal 9 counterpart designed to replace it:
    enumerates **all ~110 InOut pairs** through `RouteFinder.findRoutes`, i.e. the same
    exhaustive search the parent doc measured at ~2.7 s *per pair* on Praha (§4.2).
    Every option below that touches `Reroute` is gated on bounding that search first.
+
+   *Corrected 2026-11-06:* the ~2.7 s figure is the parent doc's §2.3 switch-blind
+   listing, not the search `findRoutes` runs. SP4 measured all 110 pairs at 121 ms
+   uncached (slowest pair 2.6 ms) and shipped the bounded, cached search
+   (`docs/goal9b-demands/SP4-bounded-route-search.md`). Pair-scoping the resolver
+   call to the blocked train's `(inIo, outIo)` remains a latency nicety, not a
+   prerequisite.
 4. **Goal 9 does not remove the need for the P0 hot-loop fix** (parent doc §3) or the
    route-search cost work (§4): those are prerequisites, not alternatives. Goal 9
    features slot in *after* the clock can advance again (§6).
@@ -68,6 +88,10 @@ guaranteed identical ~2.7 s failures, freezing the kDisco clock for ~34 minutes 
 dispatcher iteration. Trains 1–4 park mid-journey holding their full entry-to-exit
 reservations, so the blockage can never clear. Full detail, evidence, and cost model:
 [`ISSUE_591_SCALE_LIVELOCK_ANALYSIS.md`](ISSUE_591_SCALE_LIVELOCK_ANALYSIS.md) §2–§4.
+
+*Corrected 2026-11-06: the seconds-per-failure figure came from the switch-blind
+listing that SP1 removed; the reservation search itself runs in milliseconds (SP4).
+The hot-loop structure described in this paragraph is unchanged.*
 
 ---
 
@@ -137,6 +161,9 @@ events (~10–50×, scenario-dependent). This is the direct realisation of paren
 §5.3 using shipped Goal 9/SP1 machinery, and it is the same event-driven pattern
 `Train.createPathAvailableCondition` (#582) already uses successfully at the train
 level.
+
+*Corrected 2026-11-06: with SP1/SP4, a failed search runs in milliseconds, so the
+event-driven benefit is a latency and log-noise gain, not a CPU-hours saving.*
 
 **Gaps / risks.**
 - A release event does not guarantee a *full path* is now free — full-path
@@ -221,6 +248,13 @@ what makes `trainsExited == 20` arithmetically reachable at all under full-path
 reservation. Also removes the head-of-line pattern where one unroutable train's
 retries starve the dispatch queue.
 
+*Corrected 2026-11-06: the completion argument is withdrawn.* A cap on block-disjoint
+routes is a concurrency bound, not a completion bound — released routes are reused by
+later trains, and SP11 measured 20/20 completions on full-path reservation without
+rerouting (`docs/goal9b-demands/SP11-exit-calibration.md`). Rerouting raises
+throughput and removes head-of-line blocking; it is not what makes completion
+reachable.
+
 **Gaps / risks.**
 - **The cost caveat (critical).** `generateRerouteCandidates` calls
   `routeFinder.findRoutes` for **every ordered InOut pair** — 11 InOuts ⇒ 110 pairs
@@ -232,6 +266,12 @@ retries starve the dispatch queue.
   microseconds. For the dispatcher use-case the pair loop should also be constrained
   to the blocked train's actual `(inIo, outIo)` pair — a 110× reduction available by
   API parameterisation alone.
+
+  *Corrected 2026-11-06: the "minutes" estimate rests on the withdrawn 2.7 s figure.
+  SP4 measured a full 110-pair scan at 121 ms uncached and shipped the bounded, cached
+  search (`docs/goal9b-demands/SP4-bounded-route-search.md`, SP4 = #1190). Calling the
+  resolver from the dispatcher hot path is no longer prohibited on cost grounds.*
+- Reroute equality relies on dynamic-block identity (`route.segments.none { it ==
 - Reroute equality relies on dynamic-block identity (`route.segments.none { it ==
   conflict.block }`); the resolver **must** be built via
   `DefaultConflictResolver.forEnvironment` on the same simulation context, or the
@@ -243,7 +283,8 @@ retries starve the dispatch queue.
 
 **Cost/benefit:** Medium-high effort (route caching prerequisite + dispatcher
 integration), **highest throughput benefit** of all options under full-path
-reservation.
+reservation. *(Corrected 2026-11-06: throughput gain, not completion enablement
+— see §5.3; and the route cache landed in SP4, #1190.)*
 
 ---
 
@@ -354,6 +395,8 @@ the review note that the problem "needs at least Goal 3, 9": Goal 3's
 - `applyTopRanked` calls `generateResolutions`, so it inherits the Option C cost
   caveat in full — the resolver behind it must be cheap (route cache / pair-scoped
   search) before SP5 may run inside dispatcher events.
+  *Corrected 2026-11-06: the resolver is cheap since SP4 (bounded, cached,
+  milliseconds); SP5 wiring is no longer cost-gated.*
 - The listener-context constraint from Option A applies: `applyTopRanked` may be
   *selected* inside the event callback, but *enactment* (hold/reroute) must be
   scheduled as kDisco process work.
@@ -437,10 +480,15 @@ To keep expectations honest, four things remain outside Goal 9's reach:
 1. **The P0 defect itself.** The path-independent 760-iteration loop (parent §3) is
    a dispatcher bug; no amount of conflict resolution helps while a single event
    freezes the clock for 34 minutes. P0 lands first, unconditionally.
+   *Corrected 2026-11-06: the 34-minute figure is superseded (SP4); SP1 already
+   landed the P0 fix.*
 2. **Route-search cost.** Goal 9 *consumes* the Goal 2 pathfinding API; it inherits,
    and via reroute generation **amplifies** (110-pair scan), the exhaustive-search
    cost of parent §4. Route caching / k-shortest / pair-scoped search is a
    prerequisite for Options C and F, not a Goal 9 deliverable.
+   *Corrected 2026-11-06: the cost premise is withdrawn — milliseconds per pair (SP4),
+   and SP4 shipped the bounded, cached search. Pair-scoping the resolver call remains
+   a latency nicety.*
 3. **Full-path reservation capacity ceiling.** Hold/reroute/speed-adjust redistribute
    trains among block-disjoint routes but cannot create more of them; if Praha admits
    ~4–6 disjoint entry-to-exit routes, 20 *simultaneous* trains still require
@@ -448,6 +496,14 @@ To keep expectations honest, four things remain outside Goal 9's reach:
    is complementary: incremental reservation *creates* the opposing-route deadlock
    hazard, and Goal 9's detection + Option H's wait-for graph are the natural
    avoidance/detection layer for it.
+
+   *Corrected 2026-11-06: distinguish concurrency from throughput.* A ceiling on
+   simultaneous disjoint routes does not set a completion ceiling — released routes
+   are reused by later trains. SP11 measured 20/20 completions at a 3,600 s horizon
+   with full-path reservation and no incremental reservation
+   (`docs/goal9b-demands/SP11-exit-calibration.md`); the shorter 1,200 s horizon is
+   unproven in either direction without a transit-time bound. Incremental reservation
+   remains a concurrency/headway improvement case, not a completion prerequisite.
 4. **Enactment plumbing.** SP3 resolutions are advisory data classes; `holdTrain()`,
    `rerouteTrain()`, `adjustSpeed()` effects on a live `Train`/`Motor` are new
    dispatcher capabilities (the SP5 KDoc assigns them to the caller). This is
@@ -461,9 +517,9 @@ To keep expectations honest, four things remain outside Goal 9's reach:
 |---|---|---|---|---|---|---|
 | A — event-driven retry | retry frequency | M | P0 fix | ★★★ | ★ | no-livelock, RT-ratio |
 | B — HoldTrain backoff | retry frequency | **L** | P0 fix | ★★ | ★ | no-livelock |
-| C — Reroute | capacity / HOL blocking | M–H | route cache (+#568 for C2) | ★ | ★★★ | 20-train completion |
+| C — Reroute | capacity / HOL blocking | M–H | route cache (+#568 for C2) | ★ | ★★★ | throughput (completion needs no reroute — SP11, §5.3) |
 | D — SpeedAdjust | conflict generation | M | E | ★ | ★★ | RT-ratio |
-| E — temporal lookahead | conflict generation / admission | M | none (provider only) | ★★ | ★★ | no-livelock, completion |
+| E — temporal lookahead | conflict generation / admission | M | none (provider only) | ★★ | ★★ | no-livelock, admission control |
 | F — SP5 auto-resolution core | architecture / Goal 10 seam | L (after B–D) | cheap resolver | — | — | bottleneck summary |
 | G — preference learning | strategy tuning | policy-only | none | — | ★ | ⚠ determinism — see §4.G |
 | H — watchdog on telemetry | observability | **L** | none | — (diagnosis) | — | no-deadlock **assertable** |
@@ -482,6 +538,11 @@ To keep expectations honest, four things remain outside Goal 9's reach:
    and **Option F** land here, giving Goal 10 its finished SP2b seam.
 5. **Throughout:** **Option G** fixed to deterministic mode (null store or per-run
    reset) for the acceptance runs.
+
+*Corrected 2026-11-06: parts of this sequencing landed in Goal 1B (SP1 hot-loop fix,
+SP4 bounded + cached search, the low-traffic exit test as the #591 gate). SP11
+already measured 20/20 completions at a 3,600 s horizon without Wave 3, so Wave 3
+is a Goal 9B concurrency/headway case, not a completion prerequisite.*
 
 ---
 
@@ -532,3 +593,8 @@ To keep expectations honest, four things remain outside Goal 9's reach:
 None of these substitutes for the P0 hot-loop fix, the route-search cost work, or —
 for full 20-train completion — incremental reservation; Goal 9 is the *control and
 observability layer* that makes those fixes effective and verifiable.
+
+*Corrected 2026-11-06: the first two "prerequisites" landed (SP1, SP4) and the third
+— 20-train completion requiring incremental reservation — is withdrawn (SP11
+measured 20/20 completions without it). Goal 9's remaining role is the control and
+observability layer for the dispatcher.*
