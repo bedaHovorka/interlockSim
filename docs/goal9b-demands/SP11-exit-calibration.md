@@ -62,13 +62,13 @@ heavier-than-nominal traffic. The parameter and the seeds stay unchanged.
 | --- | --- | --- | --- |
 | `LowTrafficExitScenario` | `core` `commonTest` | (helper, not a test) | the parameters, the arrival builder, one run on Praha (`runScenario`), the functional assertions (`assertFunctional`) and the failure-cause classification (`MultiTrainRun.failureCause`) |
 | `LowTrafficExitScenarioTest` | `core` `commonTest` | untagged (every gate, JVM and native) | pins the seed list and the spacing rules of the arrivals for all 10 seeds, and the cause classification; runs no simulation |
-| `LowTrafficExitCalibrationTest` | `core` `jvmTest` | `heavy-test` | `@RepeatedTest(10)`, repetition `i` runs seed `i`; `@Timeout(120 s, SEPARATE_THREAD)` as a safety ceiling only |
+| `LowTrafficExitCalibrationTest` | `core` `jvmTest` | `integration-test` (since the #591 part 2 flip; `heavy-test` before) | `@RepeatedTest(10)`, repetition `i` runs seed `i`; `@Timeout(120 s, SEPARATE_THREAD)` as a safety ceiling only |
 | `LowTrafficExitNativeSeedTest` | `core` `nativeTest` (new) | untagged (every `linuxX64Test`) | seed 1 on `linuxX64`, functional assertions plus the JVM seed-1 counts pinned; no `@Timeout` |
 | `ExitCalibrationRowsTest` | `core` `jvmTest` | `heavy-test` | the 20-train and shoulder measurement rows, log-only |
 
 `nativeTest` is the source set `applyDefaultHierarchyTemplate()` creates between `commonTest` and
 `linuxX64Test`; the directory did not exist before. Putting the native seed there, not in
-`commonTest`, keeps it off the JVM `test` task (the JVM runs every seed in the heavy class).
+`commonTest`, keeps it off the JVM `test` task (the JVM runs every seed in the integration-test class).
 
 **Functional assertions only.** Entered == exited == number of specs, zero occupied block resources at
 run end, observed concurrency at most the cap. No wall-time, real-time-ratio or other timing assertion

@@ -32,7 +32,7 @@ import kotlin.random.Random
 /**
  * The low-traffic exit scenario of Goal 1B (#591 part 1, Issue #1346): the owner-approved exit
  * parameters, the seeded arrival builder, one run on the Praha stress fixture and the functional
- * assertions. A plain helper, not a test: the heavy JVM `LowTrafficExitCalibrationTest` runs it
+ * assertions. A plain helper, not a test: the JVM integration test `LowTrafficExitCalibrationTest` runs it
  * for every seed of [LOW_TRAFFIC_SEEDS], the native seed test for the first seed, and the JVM
  * `ExitCalibrationRowsTest` reuses [runScenario] for its measurement rows.
  *

@@ -23,18 +23,18 @@ import java.util.concurrent.TimeUnit
  * [LowTrafficExitScenario.LOW_TRAFFIC_SEEDS] (repetition `i` runs seed `i`), each asserting only
  * the functional exit contract of [LowTrafficExitScenario.assertFunctional].
  *
- * Tagged `heavy-test` until #591 part 2 flips the exit into `integration-test`; the flip changes
- * only this tag. Run it with:
+ * Tagged `integration-test` since #591 part 2 (the flip): it is the Goal 1B exit gate (B8) and runs
+ * in every `integrationTest` gate and in the CI integration-test step. Run it alone with:
  * ```
- * ./gradlew :core:heavyTest --tests '*LowTrafficExitCalibrationTest*'
+ * ./gradlew :core:integrationTest --tests '*LowTrafficExitCalibrationTest*'
  * ```
  *
  * No wall time is asserted: the 15 s per run / 3 min total budget is measured on a quiet machine
  * from the logged `wall=` values. The `@Timeout` is a safety ceiling only; `SEPARATE_THREAD` makes
  * it fire even while the CPU-bound simulation never checks the interrupt flag.
  */
-@Tag("heavy-test")
-@DisplayName("MultiTrainLoop — low-traffic exit calibration (heavy, manual only until the #591 flip)")
+@Tag("integration-test")
+@DisplayName("MultiTrainLoop — low-traffic exit gate (Goal 1B B8, integration test)")
 class LowTrafficExitCalibrationTest : KoinTestBase() {
 	private companion object {
 		/** Safety ceiling per seed, not a budget (the budget is 15 s per run, measured). */
