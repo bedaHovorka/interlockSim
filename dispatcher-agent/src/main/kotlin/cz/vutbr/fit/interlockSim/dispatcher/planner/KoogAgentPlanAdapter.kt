@@ -808,13 +808,17 @@ class KoogAgentPlanAdapter(
 		// must run before the tick is reported. If decide() throws, report a degraded
 		// RULE_FALLBACK before propagating — the cycle is still accounted for exactly once,
 		// never silently dropped (#1058 review round restores the #927/#999 invariant).
+		// Only the silent non-idle cycle consults the oracle, so its tick names its correlation
+		// cycle: the decisions posted for it are the fallback's, computed on the kept cycle
+		// observation (Issue #1365 counts their stale-origin refusals). Reporting only.
+		val silentCycleIndex = commandQueue.currentCorrelationCycle()
 		val decisions =
 			try {
 				fallbackDispatcher.decide(decisionInput())
 			} catch (e: CancellationException) {
 				throw e
 			} catch (e: Exception) {
-				reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
+				reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs, silentCycleIndex)
 				throw e
 			}
 		// The Dispatcher contract guarantees decide() never returns empty (it returns
@@ -827,7 +831,7 @@ class KoogAgentPlanAdapter(
 			} else {
 				TickOutcome.RULE_FALLBACK
 			}
-		reportTick(outcome, observation.snapshot.simTime, latencyMs)
+		reportTick(outcome, observation.snapshot.simTime, latencyMs, silentCycleIndex)
 		return decisions
 	}
 
@@ -928,13 +932,18 @@ class KoogAgentPlanAdapter(
 	 *   `null` when this cycle never reached the measured window. Forwarded to
 	 *   [TickRecord.latencyMs]; not part of [cycleHistory] (the model's own memory does not need
 	 *   its own timing).
+	 * @param silentNonIdleCycleIndex Forwarded to [TickRecord.silentNonIdleCycleIndex]: set only by
+	 *   [runFallback] for a silent cycle on a non-idle station (Issue #1365).
 	 */
 	private fun reportTick(
 		outcome: TickOutcome,
 		simTime: Double,
-		latencyMs: Long?
+		latencyMs: Long?,
+		silentNonIdleCycleIndex: Long? = null
 	) {
-		tickListeners.onTick(TickRecord(outcome, simTime, latencyMs = latencyMs))
+		tickListeners.onTick(
+			TickRecord(outcome, simTime, latencyMs = latencyMs, silentNonIdleCycleIndex = silentNonIdleCycleIndex)
+		)
 		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())
 	}
 

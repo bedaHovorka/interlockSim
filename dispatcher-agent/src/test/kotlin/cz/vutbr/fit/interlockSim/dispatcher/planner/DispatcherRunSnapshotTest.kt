@@ -176,8 +176,31 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 10`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END)
+	fun `current schema version is 11`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS)
+	}
+
+	/** Issue #1365 (schema version 11): the stale-origin refusal count survives the JSON round-trip. */
+	@Test
+	fun `serialization round-trips the stale-origin refusals after a silent cycle`() {
+		val snap = snapshotWith().copy(staleOriginRefusalsAfterSilentCycle = 4L)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"staleOriginRefusalsAfterSilentCycle\": 4")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded).isEqualTo(snap)
+	}
+
+	/**
+	 * Issue #1365: a run JSON written before the field existed still loads, with the count absent
+	 * (not measured), never zero.
+	 */
+	@Test
+	fun `a version-8 fixture without the stale-origin count loads it as absent`() {
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), SCHEMA_V8_JSON)
+
+		assertThat(decoded.staleOriginRefusalsAfterSilentCycle).isNull()
 	}
 
 	/**
@@ -416,8 +439,8 @@ class DispatcherRunSnapshotTest {
 		/** Issue #988 added the [TickOutcome.LLM_SILENT_ALL_MOVING] tick outcome. */
 		private const val SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME: Int = 9
 
-		/** Issue #1280 split the end-of-run contentions out of `conflicts` into `unresolvedAtRunEnd`. */
-		private const val SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END: Int = 10
+		/** Issue #1365 added the stale-origin refusal count after silent non-idle LLM cycles. */
+		private const val SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS: Int = 11
 
 		private val json =
 			Json {

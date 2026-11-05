@@ -859,6 +859,60 @@ class RunReportAggregatorTest {
 			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "0", "0", "0", "0"))
 	}
 
+	/** The stale-origin sub-section of the "Apply Failures" section of [md], up to the next section. */
+	private fun staleOriginSection(md: String): String =
+		md
+			.substringAfter("### Stale-Origin Refusals After a Silent Non-Idle LLM Cycle")
+			.substringBefore("## Author Attribution")
+
+	/**
+	 * Issue #1365: the stale-origin refusals that follow a silent non-idle LLM cycle are summed per
+	 * arm, next to how many runs had one, how many runs measured the count and how many did not
+	 * (a run JSON written before the field existed: absent, not zero).
+	 */
+	@Test
+	fun `the stale-origin refusals after a silent cycle are counted per arm`() {
+		val llm =
+			aggregator.aggregate(
+				listOf(
+					runSnapshot(
+						runId = "refused2",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						staleOriginRefusalsAfterSilentCycle = 2L
+					),
+					runSnapshot(
+						runId = "refused3",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						staleOriginRefusalsAfterSilentCycle = 3L
+					),
+					runSnapshot(runId = "clean", arm = DispatcherArm.LLM_TOOL_CALLING, staleOriginRefusalsAfterSilentCycle = 0L),
+					runSnapshot(runId = "old", arm = DispatcherArm.LLM_TOOL_CALLING)
+				)
+			)
+		val control = aggregator.aggregate(listOf(runSnapshot(runId = "ctl", staleOriginRefusalsAfterSilentCycle = 0L)))
+
+		val section = staleOriginSection(aggregator.renderMarkdown(listOf(control, llm)))
+
+		assertThat(section)
+			.transform("has the per-arm header") {
+				it.contains("| Arm | Runs | Refusals | Runs with a refusal | Runs measured | Runs not measured |")
+			}.isTrue()
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "4", "5", "2", "3", "1"))
+		assertThat(tableRowCells(section, DispatcherArm.RULE_BASED.name))
+			.isEqualTo(listOf(DispatcherArm.RULE_BASED.name, "1", "0", "0", "1", "0"))
+	}
+
+	@Test
+	fun `an arm whose runs never measured stale-origin refusals shows n-a, not zero`() {
+		val report =
+			aggregator.aggregate(listOf(runSnapshot(runId = "old", arm = DispatcherArm.LLM_TOOL_CALLING)))
+		val section = staleOriginSection(aggregator.renderMarkdown(listOf(report)))
+
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "1", "n/a", "n/a", "0", "1"))
+	}
+
 	@Test
 	fun `repair-success rate is marked as having no live producer, not presented as a bare measurement`() {
 		val report = aggregator.aggregate(listOf(runSnapshot(runId = "repair1")))
