@@ -204,6 +204,17 @@ class StationCapacityTest : CommonKoinTestBase() {
 	}
 
 	@Test
+	fun shuntingLoopAcceptsPrahaHlavniNadraziAsAStation() {
+		// SP10.2 (Issue #1366): the Praha Station built the way the cervenyUjezd example builds its
+		// Station -- ShuntingLoop(context, endTime) with no override, so the capacity is the topology's
+		// 9 station tracks, not the dispatcher default 2 -- must be one ShuntingLoop can carry.
+		val station = Station.from(load(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML))
+
+		assertThat(station.capacity()).isEqualTo(9)
+		assertThat(ShuntingLoop.compatibilityIssues(station)).isEmpty()
+	}
+
+	@Test
 	fun shuntingLoopRejectsAHomeSignalFacingItsInOut() {
 		// zA ends the entry/exit block kA but governs travel towards the InOut A, so a train entering from A has
 		// no home signal (signal direction, Issue #1272); the issue names zA instead of claiming
