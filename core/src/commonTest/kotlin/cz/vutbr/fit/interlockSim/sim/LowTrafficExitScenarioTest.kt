@@ -171,7 +171,7 @@ class LowTrafficExitScenarioTest {
 			firstBlockedSimTime = null,
 			firstCapHoldSimTime = null,
 			reservationExpiries = 0,
-			dtMax = 1e-3,
+			dtMax = LowTrafficExitScenario.DT_MAX,
 			wallMs = 0L
 		)
 	}

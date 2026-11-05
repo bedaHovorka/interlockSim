@@ -84,12 +84,12 @@ internal object LowTrafficExitScenario {
 	const val RUN_END_MARGIN_SECONDS: Double = 600.0
 
 	/**
-	 * The integration step cap of the exit parameters. [MultiTrainLoop]'s generator sets kDisco's
-	 * `dtMax` to this value when it starts (`Generator.startAction`), so the helper does not set it;
-	 * every run records the effective value at its last dispatcher tick in [MultiTrainRun.dtMax] and
-	 * logs it.
+	 * The integration step cap of the exit parameters: the global [Generator.DT_MAX] (Goal 1B SP13).
+	 * [MultiTrainLoop]'s generator sets kDisco's `dtMax` to it when it starts
+	 * (`Generator.startAction`), so the helper does not set it; every run records the effective value
+	 * at its last dispatcher tick in [MultiTrainRun.dtMax] and logs it.
 	 */
-	const val DT_MAX: Double = 1e-3
+	const val DT_MAX: Double = Generator.DT_MAX
 
 	/**
 	 * The seeded arrivals of one run: exponential gaps with mean [MEAN_INTER_ARRIVAL_SECONDS] from
