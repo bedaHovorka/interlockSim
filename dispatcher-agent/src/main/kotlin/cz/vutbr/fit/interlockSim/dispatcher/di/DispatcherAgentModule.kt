@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoopHolder
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
+import cz.vutbr.fit.interlockSim.dispatcher.ContextSlots
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
@@ -37,6 +38,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -130,6 +132,7 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
  * | [SemiAutoApprovalGateway] | per [DefaultSimulationContext] | new instance |
  * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance |
  * | [AgentDriverLoopHolder] | per [DefaultSimulationContext] | new, empty instance |
+ * | [ContextSlots] | per [DefaultSimulationContext] | new, empty instance |
  * | [SinkHolder] | per [DefaultSimulationContext] | new instance |
  * | [CycleHistory] | per [DefaultSimulationContext] | new instance |
  * | [KoogAgentFactory] | per [DefaultSimulationContext] | [KoogAgentFactory] |
@@ -346,6 +349,11 @@ val dispatcherAgentModule: Module =
 			// that declares none, so a dispatcher-free run would see an earlier run's loop.
 			scoped<AgentDriverLoopHolder> { AgentDriverLoopHolder() }
 
+			// ContextSlots (Issue #1348) — the same per-context fix for every other instance a wiring
+			// layer publishes (measuring planner, pacing controller, snapshot signal, orphan sweeper,
+			// agent loop driver, station capacity). Scope.publish / publishedOrNull use it.
+			scoped<ContextSlots> { ContextSlots() }
+
 			// SinkHolder — one per context, shared by the four actuator tools and
 			// KoogAgentPlanAdapter. KoogAgentFactory installs the queue-posting wrapper on its
 			// `current` at agent construction; KoogAgentPlanAdapter reads its per-cycle emission
@@ -387,7 +395,7 @@ val dispatcherAgentModule: Module =
 					// Issue #1155: the loop's own admission cap, declared by the wiring layer
 					// (ExampleRegistry.wireDispatcherAgent) after this factory is resolved — so read
 					// lazily, like runRecorderProvider above.
-					stationCapacityProvider = { getOrNull<StationCapacity>() }
+					stationCapacityProvider = { publishedOrNull<StationCapacity>() }
 				)
 			}
 

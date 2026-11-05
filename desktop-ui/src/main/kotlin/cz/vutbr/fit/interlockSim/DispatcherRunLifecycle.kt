@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.scope.Scope
 import org.koin.mp.KoinPlatform.getKoin
@@ -42,8 +43,8 @@ object DispatcherRunLifecycle {
 	fun releaseKoogAgent(scope: Scope?) {
 		if (scope == null) return
 		try {
-			scope.getOrNull<MeasuringPlanAdapter>()?.releaseAgent()
-				?: scope.getOrNull<KoogAgentPlanAdapter>()?.releaseAgent()
+			scope.publishedOrNull<MeasuringPlanAdapter>()?.releaseAgent()
+				?: scope.publishedOrNull<KoogAgentPlanAdapter>()?.releaseAgent()
 		} catch (e: Exception) {
 			logger.warn(e) { "Failed to release Koog agent at end of run" }
 		}

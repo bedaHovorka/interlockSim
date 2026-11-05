@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.AiSweepDriver
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGrid
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGridException
@@ -171,7 +172,7 @@ class Main {
 			// to pace the async LLM planner). Without retrieving it here, run() would silently
 			// default to NoOpSimulationController and the declared controller would never reach
 			// the kDisco kernel loop it was built to pace.
-			val controller = context.scope.getOrNull<SimulationController>() ?: NoOpSimulationController
+			val controller = context.scope.publishedOrNull<SimulationController>() ?: NoOpSimulationController
 			var outcome = RunOutcome.NOT_STARTED
 			context.use {
 				it.run(controller)

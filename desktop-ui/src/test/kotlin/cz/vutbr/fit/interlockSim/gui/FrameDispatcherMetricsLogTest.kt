@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
+import cz.vutbr.fit.interlockSim.dispatcher.publish
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
@@ -94,7 +95,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		val context = createMockShuntingContext()
 
 		val measuringAdapter = mockk<MeasuringPlanAdapter>(relaxed = true)
-		context.scope.declare(measuringAdapter)
+		context.scope.publish(measuringAdapter)
 
 		frame.withStartedSimulation(context) {
 			SwingUtilities.invokeAndWait { frame.stopSimulation() }
@@ -260,7 +261,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 		val context = createMockShuntingContext()
 		val measuringAdapter = mockk<MeasuringPlanAdapter>(relaxed = true)
 		val runRecorder = mockk<DispatcherRunRecorder>(relaxed = true)
-		context.scope.declare(measuringAdapter)
+		context.scope.publish(measuringAdapter)
 		context.scope.declare(runRecorder)
 
 		frame.withStartedSimulation(context) {
@@ -284,7 +285,7 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 	fun animationPausedAndAgentReleasedOnNaturalCompletion() {
 		val context = createMockShuntingContext()
 		val measuringAdapter = mockk<MeasuringPlanAdapter>(relaxed = true)
-		context.scope.declare(measuringAdapter)
+		context.scope.publish(measuringAdapter)
 
 		frame.withStartedSimulation(context) {
 			verify(timeout = 5000) { measuringAdapter.releaseAgent() }

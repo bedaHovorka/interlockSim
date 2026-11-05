@@ -46,6 +46,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
+import cz.vutbr.fit.interlockSim.dispatcher.publish
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
@@ -529,7 +530,7 @@ class ExampleRegistry {
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory can retrieve it after the run
 			// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
-			scope.declare(aiPlanner)
+			scope.publish(aiPlanner)
 			// Issue #847 round 4 (R4-5): DispatcherAgentModule binds the recorder with
 			// arm = RULE_BASED and model = "" for EVERY context, with a comment saying LLM arms
 			// would override it — nothing ever did. Left as-is, every LLM run would be written to
@@ -555,7 +556,7 @@ class ExampleRegistry {
 			// built to be paced against. assertPlannerPacingCompatible checks that the
 			// controller TYPE can pace; nothing previously checked that the SAME INSTANCE
 			// reaches the simulation kernel.
-			scope.declare<SimulationController>(pacingController)
+			scope.publish<SimulationController>(pacingController)
 			setMainProcess(loop)
 		}
 	}
@@ -636,7 +637,7 @@ class ExampleRegistry {
 			// Register in scope so callers outside this factory (e.g. Frame's
 			// SimulationController.STOPPED handler) can retrieve it after the run ends
 			// and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
-			scope.declare(aiPlanner)
+			scope.publish(aiPlanner)
 			// Issue #928: DispatcherAgentModule binds the recorder with arm = RULE_BASED and
 			// model = "" for EVERY context. createShuntingLoopAIExample (the console variant)
 			// overrides this since #847 round 4, but this GUI variant never did — so every GUI
@@ -868,10 +869,10 @@ class ExampleRegistry {
 		// control ticks were coalesced away while the driver was busy inside an inference. That
 		// number is the whole of round 3's unreconciled "301 control ticks vs 20-29 planner cycles".
 		val driverSignal = DefaultSnapshotSignal()
-		context.scope.declare(driverSignal)
+		context.scope.publish(driverSignal)
 		// Issue #1155: KoogAgentFactory reads this when it builds the agent, so the prompt and the
 		// cycle message state the cap this loop enforces (the applier above uses the same value).
-		context.scope.declare(stationCapacity)
+		context.scope.publish(stationCapacity)
 
 		val driver =
 			AgentLoopDriver(
@@ -900,7 +901,7 @@ class ExampleRegistry {
 		// wiring above — drop `isSimActive = loop::isSimActive` and the driver reverts to its
 		// `{ true }` default, which flips that test red instead of silently disabling the
 		// discard guard in production.
-		context.scope.declare(driver)
+		context.scope.publish(driver)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
 		// The signal fires from controlStepListener — NOT from snapshotCaptureHook — because
@@ -932,7 +933,7 @@ class ExampleRegistry {
 						pathReservationService = context.getRoutingServices().getPathReservationService()
 					)
 			)
-		context.scope.declare(orphanSweeper)
+		context.scope.publish(orphanSweeper)
 
 		// Issue #907: per-tick semaphore used when barrierControlStep = true to lock-step the
 		// sim thread with the driver thread. One permit is released by the driver after each
