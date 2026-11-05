@@ -14,7 +14,9 @@
        signal are joined into one block of their summed length;
      - the 6 south InOuts move from X=60 to X=61 and get a home signal (vjezdové návěstidlo) at X=60,
        before the first south switch, as on the north side: InOut, home signal, then switches
-       (InOut-to-home-signal block 150 m, like the north approaches).
+       (InOut-to-home-signal block 150 m, like the north approaches);
+     - the switch at (44,18) is named SW72 so the two SW70-adjacent throat blocks get distinct
+       stableBlockIds (the LLM must tell their occupancies apart).
      Kept: the 11 InOut names, the 9 signal-bounded station tracks (8 platforms + bypass) with their
      signals, all 50 switches.
 
@@ -110,7 +112,7 @@
 	<RailSwitch X="49" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW68" />
 	<!-- South throat — Y=18, 20 area switches -->
 	<RailSwitch X="46" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW70" />
-	<RailSwitch X="44" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
+	<RailSwitch X="44" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW72" />
 	<RailSwitch X="46" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW71" />
 	<RailSwitch X="48" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW73" />
 	<!-- South throat — middle area, Vršovice/bypass exit switches, InOuts and home signals -->

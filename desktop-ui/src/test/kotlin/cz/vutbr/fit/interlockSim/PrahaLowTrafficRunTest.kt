@@ -32,8 +32,12 @@ import java.util.concurrent.TimeUnit
  * traffic of the traffic-simulation-expert ruling: all 8 trains are generated, at most 4 are
  * admitted at once, the run ends (no deadlock holds it past the JUnit timeout), and at least
  * [MIN_EXITED] trains exit within the 600 s.
+ *
+ * Tagged `heavy-test` per the traffic-simulation-expert ruling: it runs only via
+ * `:desktop-ui:heavyTest`, manually, as the SP10 measurement — never as a `test` or
+ * `integrationTest` gate in CI.
  */
-@Tag("integration-test")
+@Tag("heavy-test")
 @DisplayName("Praha low-traffic control arm: one 600 s run (#1366)")
 class PrahaLowTrafficRunTest : KoinTestBase() {
 	private companion object {
