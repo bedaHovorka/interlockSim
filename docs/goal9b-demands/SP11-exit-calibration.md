@@ -267,6 +267,24 @@ the cap of 4 is never filled (`capHoldBeginsAt=never`).
 **Verdict: SP14 (incremental reservation) does not open.** No capacity cause exists at the exit
 parameters.
 
+### B8: the flip (#591 part 2)
+
+On 2026-11-05 `LowTrafficExitCalibrationTest` moved from `heavy-test` to `integration-test` (commit
+`813e6442`), so the 10 seeds run in every `integrationTest` gate and in the CI step "Run integration
+tests". The 120 s safety ceiling per seed stays; `ExitCalibrationRowsTest` stays `heavy-test`.
+
+| Run | Machine state | Seeds | Per-seed time (s) | Total (s) |
+| --- | --- | ---: | --- | ---: |
+| Local gate, `:core:integrationTest` | LOADED (three agent builds in parallel) | 10 of 10 | not used | 27.3 |
+| CI run 42040274099 (attempt 2), GitHub-hosted runner | CI (shared runner, not quiet) | 10 of 10 | 3.08, 5.72, 3.73, 3.58, 3.53, 5.08, 3.18, 3.73, 3.19, 2.63 | 37.4 |
+
+The CI step "Run integration tests" (all modules) took 2 min 22 s. Every CI seed stays far inside the
+15 s per-run budget and the CI total inside the 3 min budget, although a shared runner is slower than the
+quiet-window machine (1.0–1.6 s per seed). The budget itself stays a quiet-window figure; it is never
+asserted.
+
+**Verdict: B8 is met.** The Goal 1B exit test is green in `integrationTest`, locally and in CI.
+
 ## Why other wave-5 issues cannot change these numbers
 
 The numbers were taken on `375c54b1`. Three wave-5 issues change routing or dispatch code; none of
