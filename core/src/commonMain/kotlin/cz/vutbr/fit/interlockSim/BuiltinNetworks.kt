@@ -41,4 +41,21 @@ object BuiltinNetworks {
 	val CERVENY_UJEZD_XML: String by lazy {
 		Resources.read(CERVENY_UJEZD_XML_PATH)
 	}
+
+	/**
+	 * Classpath location of the Praha hlavni nadrazi Station variant (Goal 1B SP10.2, Issue #1366):
+	 * derived from the hand-tuned `praha-hlavni-nadrazi.xml` test fixture so that ShuntingLoop can
+	 * carry it. Not the real station plan; see the file's header comment.
+	 */
+	const val PRAHA_HLAVNI_NADRAZI_STATION_XML_PATH =
+		"cz/vutbr/fit/interlockSim/resource/praha-hlavni-nadrazi-station.xml"
+
+	/**
+	 * Praha hlavni nadrazi Station variant (11 InOuts, 50 switches, 29 signals, capacity 9). Used by
+	 * the `prahaHlavniNadrazi` examples of the desktop CLI and GUI; the sole XML copy --
+	 * `NetworkResources.PRAHA_HLAVNI_NADRAZI_STATION_XML` delegates here.
+	 */
+	val PRAHA_HLAVNI_NADRAZI_STATION_XML: String by lazy {
+		Resources.read(PRAHA_HLAVNI_NADRAZI_STATION_XML_PATH)
+	}
 }

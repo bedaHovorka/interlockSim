@@ -204,14 +204,65 @@ class StationCapacityTest : CommonKoinTestBase() {
 	}
 
 	@Test
-	fun shuntingLoopAcceptsPrahaHlavniNadraziAsAStation() {
-		// SP10.2 (Issue #1366): the Praha Station built the way the cervenyUjezd example builds its
-		// Station -- ShuntingLoop(context, endTime) with no override, so the capacity is the topology's
-		// 9 station tracks, not the dispatcher default 2 -- must be one ShuntingLoop can carry.
-		val station = Station.from(load(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML))
+	fun shuntingLoopAcceptsPrahaStationVariant() {
+		// SP10.2 (Issue #1366): the Praha Station variant, built the way the cervenyUjezd example builds
+		// its Station -- ShuntingLoop(context, endTime) with no override, so the capacity is the topology's
+		// 9 station tracks, not the dispatcher default 2 -- is one ShuntingLoop can carry. The hand-tuned
+		// file stays rejected (shuntingLoopRejectsPrahaHlavniNadrazi).
+		val ctx = load(NetworkResources.PRAHA_HLAVNI_NADRAZI_STATION_XML)
+		val station = Station.from(ctx)
 
 		assertThat(station.capacity()).isEqualTo(9)
 		assertThat(ShuntingLoop.compatibilityIssues(station)).isEmpty()
+		assertThat(ShuntingLoop(ctx, endTime = 10L).stationCapacity).isEqualTo(9)
+	}
+
+	@Test
+	fun prahaStationVariantKeepsTheInOutPlatformAndBypassNames() {
+		// The variant only removes the inner throat signals and adds the south home signals (Issue #1366):
+		// the 11 InOut names, the 9 station tracks with their departure signals and the bypass stay.
+		val station = Station.from(load(NetworkResources.PRAHA_HLAVNI_NADRAZI_STATION_XML))
+
+		assertThat(station.inOuts.map { it.name }).containsExactly(
+			"N-Lib-1",
+			"N-Lib-2",
+			"N-Vys-1",
+			"N-Vys-2",
+			"N-Bypass",
+			"S-Vin-1",
+			"S-Vin-2",
+			"S-Vrs-3",
+			"S-Vrs-2",
+			"S-Vrs-1",
+			"S-Bypass"
+		)
+		assertThat(station.platformTracks.map { track -> "${track.id} ${track.signals.joinToString("/") { it.name }}" })
+			.containsExactly(
+				"(16,4)-(42,4) S2/S5",
+				"(16,6)-(42,6) S3/S4",
+				"(16,8)-(42,8) S6/S12",
+				"(16,10)-(42,10) S7/S13",
+				"(16,12)-(42,12) S8/S14",
+				"(16,14)-(42,14) S9/S15",
+				"(16,16)-(42,16) S20/S16",
+				"(16,18)-(42,18) S11/S17",
+				"(16,20)-(42,20) S19/S18"
+			)
+		assertThat(station.entryExitBlocks.map { "${it.name} ${it.signals.single().name}" }).containsExactly(
+			"kN-Lib-1 S_4_4",
+			"kN-Lib-2 S_4_8",
+			"kN-Vys-1 S_4_12",
+			"kN-Vys-2 S_4_16",
+			"kN-Bypass S_4_20",
+			"kS-Vin-1 S_60_4",
+			"kS-Vin-2 S_60_8",
+			"kS-Vrs-3 S_60_16",
+			"kS-Vrs-2 S_60_14",
+			"kS-Vrs-1 S_60_12",
+			"kS-Bypass S_60_20"
+		)
+		assertThat(station.signals.size).isEqualTo(29)
+		assertThat(station.switches.size).isEqualTo(50)
 	}
 
 	@Test
