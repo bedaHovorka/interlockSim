@@ -52,6 +52,12 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
  *   Empty if the simulation has not yet started.
  * @property outerBlockInputs Directional block-input observations for all outer track blocks.
  *   Empty if the simulation has not yet started.
+ * @property tick Iteration counter of the tick these fields come from (Issue #1354): 1 for the
+ *   first control step, rising by one per step; 0 when nothing has been published. Not
+ *   simulation time.
+ * @property snapshot The perception snapshot captured on the sim thread in the same tick as the
+ *   lists above (Issue #1354), so a reader never pairs a queue with another tick's snapshot;
+ *   [SimulationSnapshot.EMPTY] when nothing has been captured.
  *
  * @see DispatchLoopSensorPort
  * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
@@ -59,7 +65,9 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 data class DispatchLoopSnapshot(
 	val queuedTrains: List<QueuedTrainObservation>,
 	val innerBlockInputs: List<BlockInputObservation>,
-	val outerBlockInputs: List<BlockInputObservation>
+	val outerBlockInputs: List<BlockInputObservation>,
+	val tick: Long = 0L,
+	val snapshot: SimulationSnapshot = SimulationSnapshot.EMPTY
 ) {
 	companion object {
 		/**

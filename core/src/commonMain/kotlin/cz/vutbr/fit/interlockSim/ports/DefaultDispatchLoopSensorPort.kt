@@ -25,8 +25,9 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
  * ## Atomic vs per-field reads
  *
  * [snapshot] invokes [observationProvider] exactly once and bundles all three fields
- * (queued trains, inner block inputs, outer block inputs) into a [DispatchLoopSnapshot]
- * from the same simulation tick — no inter-tick tearing. This is the method callers must
+ * (queued trains, inner block inputs, outer block inputs), the tick stamp and the perception
+ * snapshot of that tick (Issue #1354) into a [DispatchLoopSnapshot] from the same simulation
+ * tick — no inter-tick tearing. This is the method callers must
  * use when they need more than one field together.
  *
  * The three per-field accessors ([getQueuedTrains], [getInnerBlockInputs],
@@ -65,7 +66,7 @@ class DefaultDispatchLoopSensorPort(
 ) : DispatchLoopSensorPort {
 	override fun snapshot(): DispatchLoopSnapshot {
 		val o = observationProvider()
-		return DispatchLoopSnapshot(o.queuedTrains, o.innerBlockInputs, o.outerBlockInputs)
+		return DispatchLoopSnapshot(o.queuedTrains, o.innerBlockInputs, o.outerBlockInputs, o.tick, o.snapshot)
 	}
 
 	override fun getQueuedTrains(): List<QueuedTrainObservation> = observationProvider().queuedTrains

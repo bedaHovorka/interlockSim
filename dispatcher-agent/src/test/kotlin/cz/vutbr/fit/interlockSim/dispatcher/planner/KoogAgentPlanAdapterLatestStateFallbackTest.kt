@@ -22,15 +22,14 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
-import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
-import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.inOutCandidate
 import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import io.mockk.coEvery
@@ -56,10 +55,11 @@ import java.time.Duration
  * the latest published state asks `doA1 → A` instead.
  *
  * The published state is served through the production composition
- * ([LatestObservationReader.fromPorts]) over a strict [NetworkPerceptionPort] mock that answers
- * only [NetworkPerceptionPort.snapshot]: any sim-thread capture request
- * ([NetworkPerceptionPort.captureSnapshot]) would throw, and [confirmVerified] proves none was
- * made (constraint C3 of `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`).
+ * ([LatestObservationReader.fromPorts]) over a strict [DispatchLoopSensorPort] mock that answers
+ * only [DispatchLoopSensorPort.snapshot] with the one tick-stamped record (Issue #1354). The
+ * reader takes no perception port, so it cannot request a sim-thread capture, and
+ * [confirmVerified] proves it made no other read (constraint C3 of
+ * `docs/GOAL_10_SP2C26_F1_PAUSED_CLOCK_RULING.md`).
  */
 @DisplayName("KoogAgentPlanAdapter post-failure fallback decides on the latest published state (#1343)")
 class KoogAgentPlanAdapterLatestStateFallbackTest {
@@ -135,28 +135,31 @@ class KoogAgentPlanAdapterLatestStateFallbackTest {
 		)
 
 	/**
-	 * Stand-in for the simulation thread's two published references: the perception snapshot
-	 * (`snapshotCaptureHook`) and the per-tick dispatch-loop observation (`latestObservation`).
+	 * Stand-in for the simulation thread's one published tick-stamped record
+	 * (`ShuntingLoop.latestObservation`): the dispatch-loop observation together with the
+	 * perception snapshot of the same tick (Issue #1354).
 	 */
 	private inner class PublishedState {
 		@Volatile
-		var snapshot: SimulationSnapshot = cycleObservation.snapshot
+		var record: DispatchLoopSnapshot =
+			DispatchLoopSnapshot(emptyList(), emptyList(), listOf(trainOnKb), tick = 1L, snapshot = cycleObservation.snapshot)
 
-		@Volatile
-		var tick: ShuntingLoop.TickObservation =
-			ShuntingLoop.TickObservation(emptyList(), emptyList(), listOf(trainOnKb))
+		/** Strict: answers only [DispatchLoopSensorPort.snapshot]; a per-field read throws. */
+		val sensorPort: DispatchLoopSensorPort =
+			mockk<DispatchLoopSensorPort>().also { port -> every { port.snapshot() } answers { record } }
 
-		/** Strict: answers only [NetworkPerceptionPort.snapshot]; a capture request throws. */
-		val perceptionPort: NetworkPerceptionPort =
-			mockk<NetworkPerceptionPort>().also { port -> every { port.snapshot() } answers { snapshot } }
-
-		val reader: LatestObservationReader =
-			LatestObservationReader.fromPorts(perceptionPort, DefaultDispatchLoopSensorPort { tick })
+		val reader: LatestObservationReader = LatestObservationReader.fromPorts(sensorPort)
 
 		/** The simulation advances while the LLM call is in flight: Train #4 is now on k1. */
 		fun publishTrainMovedOntoK1() {
-			snapshot = snapshotAt(MOVED_SIM_TIME)
-			tick = ShuntingLoop.TickObservation(emptyList(), listOf(trainOnK1), listOf(kbFree))
+			record =
+				DispatchLoopSnapshot(
+					emptyList(),
+					listOf(trainOnK1),
+					listOf(kbFree),
+					tick = 16L,
+					snapshot = snapshotAt(MOVED_SIM_TIME)
+				)
 		}
 	}
 
@@ -241,12 +244,12 @@ class KoogAgentPlanAdapterLatestStateFallbackTest {
 		val decisions = runBlocking { planAdapter.plan(cycleObservation) }
 
 		assertThat(decisions).containsExactly(FRESH_REQUEST)
-		verify(exactly = 1) { published.perceptionPort.snapshot() }
-		confirmVerified(published.perceptionPort)
+		verify(exactly = 1) { published.sensorPort.snapshot() }
+		confirmVerified(published.sensorPort)
 	}
 
 	@Test
-	@DisplayName("the post-timeout fallback reads only the published snapshot and requests no sim-thread capture (C3)")
+	@DisplayName("the post-timeout fallback reads only the published record and requests no sim-thread capture (C3)")
 	fun postTimeoutFallbackRequestsNoCapture() {
 		val published = PublishedState()
 		val planAdapter = adapter(timingOutAgent(published), inferenceTimeout = timeout)
@@ -254,8 +257,8 @@ class KoogAgentPlanAdapterLatestStateFallbackTest {
 
 		runBlocking { planAdapter.plan(cycleObservation) }
 
-		verify(exactly = 1) { published.perceptionPort.snapshot() }
-		confirmVerified(published.perceptionPort)
+		verify(exactly = 1) { published.sensorPort.snapshot() }
+		confirmVerified(published.sensorPort)
 	}
 
 	@Test

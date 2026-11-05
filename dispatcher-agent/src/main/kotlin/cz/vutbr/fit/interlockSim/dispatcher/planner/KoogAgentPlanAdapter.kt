@@ -296,7 +296,7 @@ class KoogAgentPlanAdapter(
 	 * cause.
 	 *
 	 * Installed after construction by the [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
-	 * this adapter is handed to as `plannerTickSource`, over the driver's own two ports
+	 * this adapter is handed to as `plannerTickSource`, over the driver's own sensor port
 	 * ([LatestObservationReader.fromPorts]); a property rather than a constructor parameter, like
 	 * [addTickListener], so the constructor stays as it is. `null` (the default, e.g. for an
 	 * adapter no driver drives) keeps the pre-#1343 behaviour: the fallback decides on the cycle's
