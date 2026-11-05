@@ -202,9 +202,19 @@ data class BlockInputObservation(
 	 * The timetable's `out` InOut of [ownerTrainId] — the station exit the train is scheduled to
 	 * leave by — resolved only when [candidateTargets] is non-empty (Issue #1278); `null` otherwise,
 	 * and `null` when the owner is not one of the shell's approved trains. [ReservationTargetPolicy.pick]
-	 * prefers it among the available station-exit candidates; with `null` the pick keeps the plain order.
+	 * prefers it among the available station-exit candidates, and waits for it when it is a candidate
+	 * but not available ([destinationWaitSeconds], Issue #1299); with `null` the pick keeps the plain order.
 	 */
-	val destinationName: String? = null
+	val destinationName: String? = null,
+	/**
+	 * How long, in simulation seconds, [ownerTrainId] has waited at this input for [destinationName]
+	 * (Issue #1299): set only while that exit is listed in [candidateTargets] but not available
+	 * ([ReservationTargetPolicy.isWaitingForOwnExit]) — `0.0` on the first such tick, then the time
+	 * since it — and `null` otherwise. The shell keeps the clock, so every dispatcher arm reads the
+	 * same wait. [ReservationTargetPolicy.pick] holds out for the own exit while the wait is below
+	 * [ReservationTargetPolicy.OWN_EXIT_WAIT_BOUND_SECONDS]; `null` keeps the immediate fallback.
+	 */
+	val destinationWaitSeconds: Double? = null
 )
 
 /**

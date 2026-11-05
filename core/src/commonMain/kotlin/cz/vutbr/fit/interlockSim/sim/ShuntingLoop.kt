@@ -319,6 +319,17 @@ class ShuntingLoop(
 	private var failedReservationsCount: Int = 0
 	private val blockTransitionsByTrain: MutableMap<String, Int> = mutableMapOf()
 
+	/**
+	 * Issue #1299: when each train started waiting for its own exit at a block input — the
+	 * simulation time of the first tick at which [ReservationTargetPolicy.isWaitingForOwnExit] held
+	 * there, keyed by train and input. It lives in the shell, not in a dispatcher, so every
+	 * dispatcher arm reads the same wait from [BlockInputObservation.destinationWaitSeconds].
+	 * Rebuilt on every tick from the inputs that are still waiting ([ownExitWaitsThisTick]), so a
+	 * wait ends as soon as the exit becomes available, the train moves on or leaves.
+	 */
+	private var ownExitWaitingSince: Map<String, Double> = emptyMap()
+	private val ownExitWaitsThisTick: MutableMap<String, Double> = mutableMapOf()
+
 	private inner class RealTimeSynch : LoopProcess() {
 		private var beginTime: Long = 0
 
@@ -440,6 +451,8 @@ class ShuntingLoop(
 					},
 				outerBlockInputs = outerTrackblocks.map { (block, sem) -> toBlockInputObservation(block, sem) }
 			)
+		ownExitWaitingSince = ownExitWaitsThisTick.toMap()
+		ownExitWaitsThisTick.clear()
 
 		// SP0.9: Drain and apply any decisions posted to the cross-thread command queue.
 		controlStepListener?.onControlStep()
@@ -468,7 +481,9 @@ class ShuntingLoop(
 	 * read-only twin of the pre-#729 `reservePathToAnyNextSemaphore(to)` call; the
 	 * [Dispatcher] chooses among them (Issue #970), and that list is the only target-selection
 	 * input it gets (Issue #1152). [BlockInputObservation.destinationName] carries the owning
-	 * train's timetable exit next to it (Issue #1278).
+	 * train's timetable exit next to it (Issue #1278), and [BlockInputObservation.destinationWaitSeconds]
+	 * how long the train has waited here for that exit while it is a candidate but not available
+	 * (Issue #1299).
 	 */
 	private fun toBlockInputObservation(
 		block: DynamicTrackBlock,
@@ -515,8 +530,15 @@ class ShuntingLoop(
 			} else {
 				approwedTrains.firstOrNull { it.name == ownerTrainId }?.timetableDestinationName
 			}
+		val blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" }
+		val destinationWaitSeconds =
+			if (ReservationTargetPolicy.isWaitingForOwnExit(candidateTargets, destinationName)) {
+				ownExitWaitSeconds("$ownerTrainId@$blockId>${to.name}")
+			} else {
+				null
+			}
 		return BlockInputObservation(
-			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
+			blockId = blockId,
 			towardSemaphoreName = to.name,
 			candidateTargets = candidateTargets,
 			state = state,
@@ -526,8 +548,20 @@ class ShuntingLoop(
 			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond,
 			awaitingRouteExtension = awaitingRouteExtension,
 			heldRouteEndName = heldRouteEndName,
-			destinationName = destinationName
+			destinationName = destinationName,
+			destinationWaitSeconds = destinationWaitSeconds
 		)
+	}
+
+	/**
+	 * The simulation seconds the wait under [waitKey] has lasted (Issue #1299): `0.0` on the tick it
+	 * starts, then the time since that tick. Marks the wait as still running this tick.
+	 */
+	private fun ownExitWaitSeconds(waitKey: String): Double {
+		val now = time()
+		val since = ownExitWaitingSince[waitKey] ?: now
+		ownExitWaitsThisTick[waitKey] = since
+		return now - since
 	}
 
 	/**
