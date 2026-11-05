@@ -14,6 +14,7 @@ import cz.ksimulantenbande.kdisco.Head
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -37,7 +38,37 @@ class InOutWorker(
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/**
+		 * Issue #1295: the wait before the next entry-path attempt while the queued train still holds a
+		 * stale reservation that makes its entry route non-contiguous — one control period. A plain
+		 * `hold`, not a `waitUntil`: some scenarios (MultiTrainLoop, ThreeTrainLoop) never expire
+		 * reservations, so a state condition could block forever.
+		 */
+		internal const val STALE_ORIGIN_RETRY_SECONDS = 2.0
+
+		/**
+		 * Issue #1295: the longest a stale-origin episode may last, counted from its first denial,
+		 * before the run stops with a [SimulationException] — the bounded-retry precedent of
+		 * [Train.MAX_ORIGIN_NO_PATH_RETRIES]. Assumes the stale reservation expires within one
+		 * reservation TTL plus one control period, which must stay at most this value.
+		 */
+		internal const val STALE_ORIGIN_MAX_WAIT_SECONDS =
+			2 * DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS
 	}
+
+	/**
+	 * Issue #1295: how many stale-origin episodes this worker has recorded — one per queued train
+	 * whose entry route was refused as non-contiguous with a reservation it still held.
+	 */
+	var staleOriginDenials: Int = 0
+		private set
+
+	/** The train of the running stale-origin episode, or `null` when none runs (Issue #1295). */
+	private var staleOriginTrainId: String? = null
+
+	/** Simulation time of the running episode's first denial (Issue #1295). */
+	private var staleOriginSince: Double = 0.0
 
 	private val queqe = Head()
 	private var myIdle = true
@@ -106,6 +137,7 @@ class InOutWorker(
 								"Path reserved successfully for train $trainId, " +
 								"${result.reservedBlocks.size} blocks"
 						}
+						staleOriginTrainId = null
 						// Train can now proceed
 					}
 					is PathReservationService.ReservationResult.NoPathExists -> {
@@ -135,29 +167,9 @@ class InOutWorker(
 						throw SimulationException(errorMsg)
 					}
 					is PathReservationService.ReservationResult.NonContiguousStart -> {
-						// Issue #893. Unreachable by construction: this branch is only reached for
-						// the train at the head of THIS InOut's admission queue, i.e. one that has
-						// not entered the network. Such a train holds no registry block (the only
-						// reservation ever made for it is the one being attempted right here) and
-						// occupies none (it has never entered a block), so its footprint is empty
-						// and the contiguity predicate passes vacuously.
-						//
-						// NOTE the failure mode if that reasoning is ever wrong: the throw is
-						// caught below and turned into env.errorStop(e) + return -- a HARD stop of
-						// the simulation and permanent termination of this worker, not a retry.
-						// That is nevertheless the right choice here, and the AllPathsBlocked
-						// `continue` is NOT a usable alternative: `continue` re-enters
-						// waitUntil(pathFree), whose condition is about path AVAILABILITY. A
-						// non-contiguous origin leaves the path perfectly free, so the condition
-						// would be immediately true, the reservation would be re-attempted and
-						// re-rejected, and the loop would spin without advancing simulation time --
-						// a silent hang, which is strictly worse to diagnose than a named stop.
-						// Same reasoning as the Conflict branch above.
-						val errorMsg =
-							"InOut ${inOut.name} - Route origin rejected as non-contiguous for " +
-								"train $trainId: ${result.reason}"
-						logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
-						throw SimulationException(errorMsg)
+						// Issue #1295: retried while the train holds a stale reservation, FATAL otherwise.
+						waitForStaleOriginOrFail(trainId, result.reason)
+						continue
 					}
 					is PathReservationService.ReservationResult.GeometricallyImpossible -> {
 						// Issue #903, same reasoning as the NonContiguousStart branch above: this
@@ -206,6 +218,71 @@ class InOutWorker(
 		}
 		inOut.setOccupied(!queqe.empty())
 		myIdle = true
+	}
+
+	/**
+	 * Issue #1295: handles an entry route refused as non-contiguous with the footprint of [trainId].
+	 *
+	 * Recoverable only while the train still holds a stale reservation of its own (for example a route
+	 * set up from the wrong InOut): the reservation expiry releases it, so this waits
+	 * [STALE_ORIGIN_RETRY_SECONDS] (the caller's `continue` then retries with simulation time advanced).
+	 * The first denial of an episode (a new train, or the first after a success) is logged at WARN,
+	 * reported and counted in [staleOriginDenials]; retries log at DEBUG. The stale reservation is
+	 * not released here — [cz.vutbr.fit.interlockSim.context.navigation.ReservationExpiry] does that.
+	 *
+	 * @throws SimulationException when the train holds no reservation (a real invariant violation),
+	 *   or when the episode has lasted [STALE_ORIGIN_MAX_WAIT_SECONDS]
+	 */
+	private suspend fun waitForStaleOriginOrFail(
+		trainId: String,
+		reason: String
+	) {
+		if (pathReservationService.getReservedBlocks(trainId).isEmpty()) {
+			// Issue #893. Unreachable by construction: the refusal only comes for the train at
+			// the head of THIS InOut's admission queue, i.e. one that has not entered the
+			// network. Holding no registry block (checked above), it occupies none either
+			// (it has never entered a block), so its footprint is empty and the contiguity
+			// predicate passes vacuously.
+			//
+			// NOTE the failure mode if that reasoning is ever wrong: the throw is
+			// caught in iteration() and turned into env.errorStop(e) + return -- a HARD stop of
+			// the simulation and permanent termination of this worker, not a retry.
+			// That is nevertheless the right choice here, and the AllPathsBlocked
+			// `continue` is NOT a usable alternative: `continue` re-enters
+			// waitUntil(pathFree), whose condition is about path AVAILABILITY. A
+			// non-contiguous origin leaves the path perfectly free, so the condition
+			// would be immediately true, the reservation would be re-attempted and
+			// re-rejected, and the loop would spin without advancing simulation time --
+			// a silent hang, which is strictly worse to diagnose than a named stop.
+			// Same reasoning as the Conflict branch above.
+			val errorMsg = "InOut ${inOut.name} - Route origin rejected as non-contiguous for train $trainId: $reason"
+			logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
+			throw SimulationException(errorMsg)
+		}
+		val now = time()
+		if (staleOriginTrainId != trainId) {
+			staleOriginTrainId = trainId
+			staleOriginSince = now
+			staleOriginDenials++
+			val message =
+				"InOut ${inOut.name} - Entry route for train $trainId refused as non-contiguous with " +
+					"the stale reservation it still holds: $reason; waiting for the reservation to expire"
+			logger.warn { "$now APPROVAL_DENIED: $message" }
+			env.report(message, inOut, ReportType.NODE_EVENTS)
+		} else {
+			val waited = now - staleOriginSince
+			if (waited >= STALE_ORIGIN_MAX_WAIT_SECONDS) {
+				throw SimulationException(
+					"InOut ${inOut.name} - train $trainId waited $waited s for its entry route: " +
+						"stale reservation not expired. $reason"
+				)
+			}
+			logger.debug {
+				"$now APPROVAL_WAIT: InOut ${inOut.name} - train $trainId still holds a stale " +
+					"reservation after $waited s, will retry"
+			}
+		}
+		hold(STALE_ORIGIN_RETRY_SECONDS)
 	}
 
 	/**
