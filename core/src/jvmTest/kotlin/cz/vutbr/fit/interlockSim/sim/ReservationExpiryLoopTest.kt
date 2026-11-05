@@ -13,12 +13,14 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultReservationExpiry
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
 import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import org.junit.jupiter.api.Tag
@@ -86,6 +88,68 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 		val summary = context.getMetricsServices().getMetricsCollectionService().runEndSummary()
 		assertThat(summary.expiredHoldingCount, name = "expiries the metrics counted").isEqualTo(1)
 		assertThat(summary.expiredTailCount, name = "tail expiries the metrics counted").isEqualTo(0)
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `a raw subscriber throwing on ReservationExpired does not change a ShuntingLoop run`() {
+		// Issue #1310: the counters and the run's outcome are the evidence, never a second
+		// subscriber -- a raw subscriber that throws ends the bus's delivery to the ones after it.
+		val baseline = phantomExpiryRun(throwingRawSubscriber = false)
+		val withThrowing = phantomExpiryRun(throwingRawSubscriber = true)
+
+		assertThat(withThrowing.subscriberCalls, name = "calls of the throwing subscriber").isEqualTo(1)
+		assertThat(withThrowing.expiredHoldingCount, name = "expiries counted").isEqualTo(1)
+		assertThat(withThrowing.phantomBlocksLeft, name = "phantom blocks still reserved").isEqualTo(0)
+		assertThat(withThrowing.copy(subscriberCalls = 0), name = "run outcome").isEqualTo(baseline)
+	}
+
+	/** What [phantomExpiryRun] observed: the expiry counters, the phantom's holding and the run-end record. */
+	private data class PhantomExpiryOutcome(
+		val subscriberCalls: Int,
+		val expiredHoldingCount: Int,
+		val expiredTailCount: Int,
+		val phantomBlocksLeft: Int,
+		val summary: RunEndSummary
+	)
+
+	/**
+	 * The phantom-route `ShuntingLoop` run of [assertPhantomRouteExpiresOnTicksOnly], optionally with a
+	 * raw `onSimulationEvent` subscriber that throws on every [ReservationExpired].
+	 */
+	private fun phantomExpiryRun(throwingRawSubscriber: Boolean): PhantomExpiryOutcome {
+		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
+		grantPhantomRoute(context)
+		context.setMainProcess(ShuntingLoop(context, endTime = 100L))
+		var calls = 0
+		if (throwingRawSubscriber) {
+			context.onSimulationEvent { event ->
+				if ((event as? SimulationEvent.Custom)?.payload is ReservationExpired) {
+					calls++
+					error("raw subscriber failure injected by the test")
+				}
+			}
+		}
+
+		context.run()
+
+		val expiry = expiryOf(context)
+		val reservations = context.getRoutingServices().getPathReservationService()
+		return PhantomExpiryOutcome(
+			subscriberCalls = calls,
+			expiredHoldingCount = expiry.expiredHoldingCount,
+			expiredTailCount = expiry.expiredTailCount,
+			phantomBlocksLeft = reservations.getReservedBlocks(PHANTOM).size,
+			// The wall-clock performance row differs run to run. The metrics count expiries from the event
+			// through their own subscriber, registered after the throwing one, so they miss it: those two
+			// counts are left out, and the expiry's own counters above stand for them.
+			summary =
+				context
+					.getMetricsServices()
+					.getMetricsCollectionService()
+					.runEndSummary()
+					.copy(performance = null, expiredHoldingCount = 0, expiredTailCount = 0)
+		)
 	}
 
 	@Test
