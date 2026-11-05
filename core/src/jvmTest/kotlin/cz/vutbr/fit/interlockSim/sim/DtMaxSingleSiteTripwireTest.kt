@@ -73,6 +73,7 @@ class DtMaxSingleSiteTripwireTest {
 		assertThat(statementOf("\t\tdtMax = minOf(a, b)")).isEqualTo("dtMax = minOf(a, b)")
 		assertThat(statementOf("\t\tif (step != null)" + " dtMax = step")).isEqualTo("dtMax = step")
 		assertThat(statementOf("\t\tif (fast) x() else" + " dtMax = 1e-1")).isEqualTo("dtMax = 1e-1")
+		assertThat(statementOf("\t\tthis." + "dtMax = 1e-1")).isEqualTo("this.dtMax = 1e-1")
 		assertThat(statementOf("\t\tobservedDtMax = dtMax")).isEqualTo(null)
 	}
 
@@ -124,7 +125,7 @@ class DtMaxSingleSiteTripwireTest {
 		 * A `dtMax = …` statement: at the start of the line or after `{`, `;`, `)` (an `if` without
 		 * braces) or `else`; not `==`, and not a named argument (which ends with a comma).
 		 */
-		val STATEMENT = Regex("""(?:^|[{;)]|\belse)\s*(dtMax\s*=(?!=).*?)\s*}?\s*$""")
+		val STATEMENT = Regex("""(?:^|[{;)]|\belse)\s*((?:\w+\.)*dtMax\s*=(?!=).*?)\s*}?\s*$""")
 
 		fun statementOf(line: String): String? =
 			STATEMENT

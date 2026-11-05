@@ -91,13 +91,13 @@ So the 1e-1 stall cannot be reproduced on the current code; the test pins the ca
 ## E1 bound: what a Goal 9B planner may assume
 
 "E1" is the per-step bound of the Issue #760 design memo: within one integration step a speed can change by at most
-the largest acceleration times the step, `|a|max × dtMax`, with `|a|max` = 3 m/s² (the braking and acceleration
-bound). At the chosen step:
+the largest acceleration times the step, `|a|max × dtMax`, with `|a|max` = 4 m/s² (`MAXIMAL_TRAIN_ACCELERATION`; braking is clamped at 3 m/s²,
+`MINIMAL_TRAIN_DECELERATION`). At the chosen step:
 
 | Quantity | Bound at `dtMax` = 1e-3 s | For comparison at 1e-1 s |
 | --- | --- | --- |
 | Integration step | at most 1 ms of simulated time; events and root-finding cut it further | 100 ms |
-| E1 speed error of one step | 3 m/s² × 1e-3 s = 0.003 m/s | 0.3 m/s |
+| E1 speed error of one step | 4 m/s² × 1e-3 s = 0.004 m/s | 0.4 m/s |
 | Distance covered in one step | `v × dtMax`, 0.02 m at 20 m/s | 2 m at 20 m/s |
 | Polled waits (`waitUntil`, e.g. the ownership-conflict horizon and the path-available condition) | resolve at most one step late: ≤ 1 ms | ≤ 100 ms |
 | Root-found waits (block boundaries, tail entry, every Engine wait) | located inside the step by kDisco; no step error | same |
@@ -105,7 +105,7 @@ bound). At the chosen step:
 | Stand residual at the clearance gate (Issue #1057 ramp case, after PR #1146) | 0.015 m/s (one 5 ms sample at the bound) | not measured on this code |
 
 Demand for Goal 9B: a planner may treat the simulator's event times as exact to within 1 ms of simulated time and
-its speeds to within 0.003 m/s per step. That is far below any headway or dwell a dispatcher plans with, so a plan
+its speeds to within 0.004 m/s per step. That is far below any headway or dwell a dispatcher plans with, so a plan
 needs no margin for the integration step. A planner must not assume a coarser step for speed: the cost is already
 small (SP11 D1), and a coarser step moves the pinned numbers (see "Decision").
 
