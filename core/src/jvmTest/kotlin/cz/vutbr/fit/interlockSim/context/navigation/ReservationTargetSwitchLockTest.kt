@@ -16,6 +16,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
@@ -31,9 +34,11 @@ import org.koin.core.component.get
  * switch-compatible — every switch on it is unlocked, locked in the position the route needs, or
  * locked by the asking train itself.
  *
- * The lock is put in place the way a live route leaves it — switch thrown, locked and registered to
- * its train — without reserving blocks, so the switch is the only thing that can make a target
- * unavailable here.
+ * Most tests put the lock in place the way a live route leaves it — switch thrown, locked and
+ * registered to its train — without reserving blocks, so the switch is the only thing that can make
+ * a target unavailable there. The block half of the conjunction is guarded separately: one test
+ * reserves a route's blocks the way a live reservation leaves them ([DynamicTrackBlock.setUpPath]),
+ * and the route, though switch-compatible, must not make the target available.
  *
  * Routes measured on the fixtures (switch-constrained enumeration):
  * - `cerveny_ujezd.xml`, from `homeW2`: `e31` over vW2/vW3 BRANCH + vW5 MAIN, `e30` over vW2/vW3/vW5
@@ -72,16 +77,57 @@ class ReservationTargetSwitchLockTest : CommonKoinTestBase() {
 		registry.registerSwitches(owner, listOf(switch))
 	}
 
+	/** The dynamic separator cell named [name], as [separatorLabel] spells it. */
+	private fun separatorNamed(name: String): DynamicPathSeparator =
+		ctx.cellsOfType<DynamicPathSeparator>().single { separatorLabel(it) == name }
+
 	/** Target name to availability, for the candidates one section ahead of the separator [start]. */
 	private fun availabilityFrom(
 		start: String,
 		ownerTrainId: String? = null
-	): Map<String, Boolean> {
-		val separator =
-			ctx.cellsOfType<DynamicPathSeparator>().single { separatorLabel(it) == start } as OrientedPathSeparator
-		return query
-			.findReservationTargetCandidates(separator, ownerTrainId)
+	): Map<String, Boolean> =
+		query
+			.findReservationTargetCandidates(separatorNamed(start) as OrientedPathSeparator, ownerTrainId)
 			.associate { separatorLabel(it.separator) to it.available }
+
+	/**
+	 * The blocks of the route from [start] to the separator named [target] that runs over SW5 and SW9
+	 * only — the Praha fixture's MAIN route to `S5` — MINUS the blocks its BRANCH route (over SW7 and
+	 * SW8) shares with it. Enumerated the way the availability conjunction enumerates its route paths,
+	 * so the reserved blocks fall on exactly the paths availability is evaluated over.
+	 *
+	 * The reservation must not touch a shared block: with every route block-held, the block-only first
+	 * pass rules the target out and the two-conjunct switch pass — the code under test — is never
+	 * reached; the BRANCH route must stay block-free so only its switch lock can kill it there.
+	 */
+	private fun exclusiveMainRouteBlocks(
+		start: PathSeparator,
+		target: String
+	): List<DynamicTrackBlock> {
+		val navigator = ctx.getRoutingServices().getTopologyNavigator()
+		val targetSeparator = separatorNamed(target)
+		val paths = navigator.findAllSwitchConstrainedPaths(start, targetSeparator)
+		val mainRoute = paths.single { path -> switchesOn(start, path).none { it.name in BRANCH_ONLY_SWITCHES } }
+		val branchBlocks =
+			paths
+				.filter { path -> path !== mainRoute }
+				.flatMapTo(mutableSetOf()) { path -> extractUniqueBlocks(path) }
+		return extractUniqueBlocks(mainRoute).filterNot { it in branchBlocks }
+	}
+
+	/** The switches [path] (a route out of [start]) joins its sections through, the way availability walks a route. */
+	private fun switchesOn(
+		start: PathSeparator,
+		path: List<TrackSection>
+	): List<DynamicRailSwitch> {
+		var separator: PathSeparator = start
+		return path
+			.zipWithNext()
+			.map { (incoming, _) ->
+				separator = incoming.getSecondEnd(separator)
+				ctx.toDynamic(separator) as? DynamicRailSwitch
+			}.filterNotNull()
+			.distinct()
 	}
 
 	@Test
@@ -129,9 +175,33 @@ class ReservationTargetSwitchLockTest : CommonKoinTestBase() {
 			.isEqualTo(false)
 	}
 
+	@Test
+	fun `a switch-compatible route does not make the target available while another train holds its blocks`() {
+		load(NetworkResources.PRAHA_HLAVNI_NADRAZI_XML)
+		val start = separatorNamed("S_8_4")
+
+		lockFor(TRAIN_4, switchNamed("SW9"), RailSwitch.Conf.MAIN)
+		val mainOnlyBlocks = exclusiveMainRouteBlocks(start, "S5")
+		mainOnlyBlocks.forEach { it.setUpPath(start, TRAIN_5) }
+
+		assertThat(
+			availabilityFrom("S_8_4").getValue("S5"),
+			name = "SW9 MAIN held, MAIN route's blocks held by Train #5"
+		).isEqualTo(false)
+
+		mainOnlyBlocks.forEach { it.cancelPathSetup(start) }
+		assertThat(
+			availabilityFrom("S_8_4").getValue("S5"),
+			name = "blocks released, SW9 still locked in MAIN"
+		).isEqualTo(true)
+	}
+
 	private companion object {
 		const val TRAIN_4 = "Train #4"
 		const val TRAIN_5 = "Train #5"
 		const val TRAIN_6 = "Train #6"
+
+		/** Switches only the `S_8_4` to `S5` BRANCH route runs over; the MAIN route weaves through SW5 and SW9. */
+		val BRANCH_ONLY_SWITCHES = setOf("SW7", "SW8")
 	}
 }
