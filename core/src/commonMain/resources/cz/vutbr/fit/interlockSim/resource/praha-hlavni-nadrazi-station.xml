@@ -22,7 +22,7 @@
      Total elements: 50 switches, 29 signals, 11 InOuts
 -->
 <net X="70" Y="25" currentMaxSpeed="24.0" currentTrackLength="100.0" >
-	<!-- North entry points and entry signals -->
+	<!-- North entry points and home signals -->
 	<InOut X="2" Y="4" SpatialType="HORIZONTAL" orientation="false" name="N-Lib-1" />
 	<RailSemaphore X="4" Y="4" SpatialType="HORIZONTAL" orientation="false" />
 	<InOut X="2" Y="8" SpatialType="HORIZONTAL" orientation="false" name="N-Lib-2" />
@@ -33,7 +33,7 @@
 	<RailSemaphore X="4" Y="16" SpatialType="HORIZONTAL" orientation="false" />
 	<InOut X="2" Y="20" SpatialType="HORIZONTAL" orientation="false" name="N-Bypass" />
 	<RailSemaphore X="4" Y="20" SpatialType="HORIZONTAL" orientation="false" />
-	<!-- North throat — top track (Y=4): entry switch and intermediate signals -->
+	<!-- North throat — top track (Y=4): entry switch -->
 	<RailSwitch X="5" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW1" />
 	<!-- Platform-zone entry/exit signals: top tracks (Y=4, 6) -->
 	<RailSemaphore X="42" Y="4" SpatialType="HORIZONTAL" orientation="false" name="S5" />
@@ -60,7 +60,7 @@
 	<RailSemaphore X="42" Y="10" SpatialType="HORIZONTAL" orientation="false" name="S13" />
 	<RailSemaphore X="16" Y="8" SpatialType="HORIZONTAL" orientation="true" name="S6" />
 	<RailSemaphore X="42" Y="8" SpatialType="HORIZONTAL" orientation="false" name="S12" />
-	<!-- North throat — entry switches and connection signals (Y=8, 12, 16) -->
+	<!-- North throat — entry switches (Y=8, 12, 16) -->
 	<RailSwitch X="9" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW10" />
 	<RailSwitch X="9" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW11" />
 	<RailSwitch X="9" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW12" />
@@ -68,7 +68,6 @@
 	<RailSwitch X="5" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW13" />
 	<RailSwitch X="5" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW14" />
 	<RailSwitch X="5" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW15" />
-	<!-- North throat — diagonal connection signals (Y=10, 14, 18) -->
 	<!-- North throat — bypass row and Y=18 row switches -->
 	<RailSwitch X="15" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW16" />
 	<RailSwitch X="9" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW18" />
@@ -88,12 +87,12 @@
 	<!-- South throat — L1 entry switches at X=44 (Y=12, 16) -->
 	<RailSwitch X="44" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
 	<RailSwitch X="44" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
-	<!-- South throat — Y=4 row: exit switches and signals -->
+	<!-- South throat — Y=4 row: InOut, home signal and exit switches -->
 	<RailSwitch X="59" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW36" />
 	<InOut X="61" Y="4" SpatialType="HORIZONTAL" orientation="true" name="S-Vin-1" />
 	<RailSemaphore X="60" Y="4" SpatialType="HORIZONTAL" orientation="true" />
 	<RailSwitch X="51" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW37" />
-	<!-- South throat — Y=8 row: exit switches and signals -->
+	<!-- South throat — Y=8 row: InOut, home signal and exit switches -->
 	<RailSwitch X="59" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW38" />
 	<InOut X="61" Y="8" SpatialType="HORIZONTAL" orientation="true" name="S-Vin-2" />
 	<RailSemaphore X="60" Y="8" SpatialType="HORIZONTAL" orientation="true" />
@@ -105,16 +104,16 @@
 	<RailSwitch X="46" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW57" />
 	<RailSwitch X="46" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW62" />
 	<RailSwitch X="44" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW60" />
-	<!-- South throat — Y=12 to Y=16 area switches and signals -->
+	<!-- South throat — Y=12 to Y=16 area switches -->
 	<RailSwitch X="47" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW63" />
 	<RailSwitch X="46" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW67" />
 	<RailSwitch X="49" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW68" />
-	<!-- South throat — Y=18, 20 area switches and signals -->
+	<!-- South throat — Y=18, 20 area switches -->
 	<RailSwitch X="46" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW70" />
 	<RailSwitch X="44" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
 	<RailSwitch X="46" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW71" />
 	<RailSwitch X="48" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW73" />
-	<!-- South throat — middle area, Vršovice/bypass exit switches and InOuts -->
+	<!-- South throat — middle area, Vršovice/bypass exit switches, InOuts and home signals -->
 	<RailSwitch X="51" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW75" />
 	<RailSwitch X="59" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW81" />
 	<InOut X="61" Y="16" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-3" />
@@ -133,13 +132,13 @@
 	<RailSemaphore X="60" Y="20" SpatialType="HORIZONTAL" orientation="true" />
 	<!-- Car-train terminal InOut (S-CarTrain at Y=22) is DEFERRED -->
 	<!-- Track blocks -->
-	<!-- North approach: entry InOuts to entry signals -->
+	<!-- North approach: entry InOuts to home signals -->
 	<SimpleTrackBlock fromX="2" fromY="4" toX="4" toY="4" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
 	<SimpleTrackBlock fromX="2" fromY="8" toX="4" toY="8" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
 	<SimpleTrackBlock fromX="2" fromY="12" toX="4" toY="12" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
 	<SimpleTrackBlock fromX="2" fromY="16" toX="4" toY="16" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
 	<SimpleTrackBlock fromX="2" fromY="20" toX="4" toY="20" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
-	<!-- North throat — entry signal to switch SW1 and onward connections -->
+	<!-- North throat — home signal to switch SW1 and onward connections -->
 	<SimpleTrackBlock fromX="5" fromY="4" toX="4" toY="4" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="5" fromY="4" toX="11" toY="6" fromSegment="G" toSegment="A" length="200.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="5" fromY="4" toX="9" toY="4" fromSegment="F" toSegment="A" length="105.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
@@ -162,7 +161,7 @@
 	<SimpleTrackBlock fromX="16" fromY="12" toX="42" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="16" fromY="10" toX="42" toY="10" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="16" fromY="8" toX="42" toY="8" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
-	<!-- North throat — entry signal to switches SW10–SW15 -->
+	<!-- North throat — home signals to switches SW13–SW15 and SW10–SW12 connections -->
 	<SimpleTrackBlock fromX="5" fromY="8" toX="9" toY="8" fromSegment="F" toSegment="A" length="105.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="5" fromY="12" toX="9" toY="12" fromSegment="F" toSegment="A" length="105.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="5" fromY="16" toX="9" toY="16" fromSegment="F" toSegment="A" length="105.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />

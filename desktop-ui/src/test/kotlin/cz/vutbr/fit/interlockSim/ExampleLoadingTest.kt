@@ -96,7 +96,7 @@ class ExampleLoadingTest : KoinTestBase() {
 			val exampleNames = registry.getAvailableExamples()
 
 			// Assert
-			assertThat(exampleNames).hasSize(8)
+			assertThat(exampleNames).hasSize(10)
 			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP_AI)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP_SYNC)).isTrue()
@@ -105,6 +105,8 @@ class ExampleLoadingTest : KoinTestBase() {
 			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_AI)).isTrue()
 			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_SYNC)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.PRAHA_HLAVNI_NADRAZI)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.PRAHA_HLAVNI_NADRAZI_AI)).isTrue()
 		}
 	}
 
@@ -474,6 +476,8 @@ class ExampleLoadingTest : KoinTestBase() {
 					ExampleNames.CERVENY_UJEZD_AI,
 					ExampleNames.CERVENY_UJEZD_SYNC,
 					ExampleNames.MULTI_TRAIN_LOOP,
+					ExampleNames.PRAHA_HLAVNI_NADRAZI,
+					ExampleNames.PRAHA_HLAVNI_NADRAZI_AI,
 					ExampleNames.SHUNTING_LOOP,
 					ExampleNames.SHUNTING_LOOP_AI,
 					ExampleNames.SHUNTING_LOOP_SYNC,
