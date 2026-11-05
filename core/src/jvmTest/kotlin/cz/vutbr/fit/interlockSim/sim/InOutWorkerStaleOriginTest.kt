@@ -18,6 +18,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThan
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import cz.ksimulantenbande.kdisco.Process
@@ -31,6 +32,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.Reser
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -210,6 +212,58 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 		assertThat(stoppedAt - requireNotNull(firstRefusalAt))
 			.isBetween(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS, InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS + 2.0)
 		assertThat(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS).isEqualTo(120.0)
+	}
+
+	/**
+	 * Issue #1295 review fix: after the first denial the entry path stays unavailable (another train
+	 * blocks it), so the worker can no longer re-attempt the reservation — and with the bare
+	 * `waitUntil(pathFree)` the denial-driven deadline check could never run again, parking the
+	 * worker past the episode's 120 s bound. The deadline must stay armed and stop the run at the
+	 * bound exactly as when further denials keep arriving (the test above). Ordinary contention
+	 * without a stale-origin episode stays on the plain `waitUntil` and must remain untimed-out —
+	 * that branch is what the healthy scenarios in this file already cover, since every run here
+	 * starts with no episode running.
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("an entry path that stays unavailable keeps the stale-origin deadline armed")
+	fun staleOriginDeadlineSurvivesAnUnavailableEntryPath() {
+		var firstRefusalAt: Double? = null
+		val heldBlock = mockk<DynamicTrackBlock>()
+		val context =
+			loadContext { env, inOut, real ->
+				val refusingService =
+					refusing(real) {
+						if (firstRefusalAt == null) firstRefusalAt = Process.time()
+						ReservationResult.NonContiguousStart(inOut.name, "injected by the test")
+					}
+				InOutWorker(
+					env,
+					inOut,
+					pathReservationService =
+						object : PathReservationService by refusingService {
+							override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> = listOf(heldBlock)
+
+							// Available only until (and matching) the first NonContiguousStart denial: after it
+							// another train occupies the entry, so the worker's own waitUntil(pathFree) can no
+							// longer pass and the reservation is never re-attempted.
+							override fun isPathToAnyNextSemaphoreAvailable(
+								start: PathSeparator,
+								next: TrackSection?
+							): Boolean = firstRefusalAt == null
+						}
+				)
+			}
+
+		runShuntingLoop(context, END_TIME)
+
+		assertThat(errorStops, "the run must still stop on the stale-origin deadline despite the unavailable path")
+			.isNotEmpty()
+		val (stoppedAt, error) = errorStops.single()
+		assertThat(error).isInstanceOf(SimulationException::class)
+		assertThat(error.message.orEmpty()).contains("stale reservation not expired")
+		assertThat(stoppedAt - requireNotNull(firstRefusalAt))
+			.isBetween(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS, InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS + 2.0)
 	}
 
 	/**
