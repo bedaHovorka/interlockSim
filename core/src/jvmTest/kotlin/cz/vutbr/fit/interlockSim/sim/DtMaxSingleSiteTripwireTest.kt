@@ -31,7 +31,9 @@ import java.io.File
  *   step on purpose (an engine stand-alone run, two hand-driven processes, the 1e-1 reproducer).
  *   Each of them must still set it, so the list cannot go stale.
  *
- * A named argument (`dtMax = x,` in a constructor call) is not a statement and is not matched.
+ * A named argument (`dtMax = x,` in a constructor call) is not a statement and is not matched, and
+ * neither is a `dtMax` inside a comment or a string literal: [statementOf] cuts both before it
+ * looks for the statement. A statement after a `when` branch arrow (`->`) IS a statement.
  *
  * The grep reads files outside `:core`, which Gradle does not track as inputs of this test task,
  * so a change in another module alone can leave this test up to date until `:core` changes too.
@@ -61,19 +63,23 @@ class DtMaxSingleSiteTripwireTest {
 	}
 
 	@Test
-	fun `the matcher sees statements and ignores named arguments, comments and strings`() {
+	fun `the matcher sees statements and ignores named arguments, comments, strings and when labels`() {
 		assertThat(statementOf("\t\tdtMax = 1e-3")).isEqualTo("dtMax = 1e-3")
 		// Split so that this file's own source line is not a match.
 		assertThat(statementOf("\t\t\tpinnedDtMax?.let {" + " dtMax = it }")).isEqualTo("dtMax = it")
 		assertThat(statementOf("\t\t\tdtMax = loop.observedDtMax,")).isEqualTo(null)
 		assertThat(statementOf("\t * `dtMax = 1e-3` in a KDoc line")).isEqualTo(null)
 		assertThat(statementOf("\t\t// dtMax = 1e-1 in a comment")).isEqualTo(null)
+		assertThat(statementOf("\t\t// if (fast) dtMax = 1e-1")).isEqualTo(null)
 		assertThat(statementOf("\t\tval text = \"dtMax = 1e-1\"")).isEqualTo(null)
+		assertThat(statementOf("\t\tval text = \"if (fast) dtMax = 1e-1\"")).isEqualTo(null)
 		assertThat(statementOf("\t\tif (dtMax == 1e-3) return")).isEqualTo(null)
 		assertThat(statementOf("\t\tdtMax = minOf(a, b)")).isEqualTo("dtMax = minOf(a, b)")
 		assertThat(statementOf("\t\tif (step != null)" + " dtMax = step")).isEqualTo("dtMax = step")
 		assertThat(statementOf("\t\tif (fast) x() else" + " dtMax = 1e-1")).isEqualTo("dtMax = 1e-1")
 		assertThat(statementOf("\t\tthis." + "dtMax = 1e-1")).isEqualTo("this.dtMax = 1e-1")
+		assertThat(statementOf("\t\tFAST -> dtMax = 1e-1")).isEqualTo("dtMax = 1e-1")
+		assertThat(statementOf("\t\telse -> this.dtMax = 1e-1")).isEqualTo("this.dtMax = 1e-1")
 		assertThat(statementOf("\t\tobservedDtMax = dtMax")).isEqualTo(null)
 	}
 
@@ -123,16 +129,30 @@ class DtMaxSingleSiteTripwireTest {
 
 		/**
 		 * A `dtMax = …` statement: at the start of the line or after `{`, `;`, `)` (an `if` without
-		 * braces) or `else`; not `==`, and not a named argument (which ends with a comma).
+		 * braces), `>` (a `when` branch arrow) or `else`; not `==`, and not a named argument (which
+		 * ends with a comma). [statementOf] cuts comments and string literals out first.
 		 */
-		val STATEMENT = Regex("""(?:^|[{;)]|\belse)\s*((?:\w+\.)*dtMax\s*=(?!=).*?)\s*}?\s*$""")
+		val STATEMENT = Regex("""(?:^|[{;)]|>|\belse)\s*((?:\w+\.)*dtMax\s*=(?!=).*?)\s*}?\s*$""")
 
-		fun statementOf(line: String): String? =
-			STATEMENT
-				.find(line)
+		/**
+		 * A string literal with Kotlin's backslash escapes (an inner `\"`), blanked before the
+		 * statement search so a `dtMax` in one cannot match.
+		 */
+		val STRING_LITERAL = Regex("\"(?:[^\"\\\\]|\\\\.)*\"")
+
+		/**
+		 * The `dtMax = …` statement [line] holds outside comments and string literals, or null: named
+		 * arguments (trailing comma) and assignments inside comments or string literals are not
+		 * statements. String literals go first — a `//` inside one must not truncate a real statement.
+		 */
+		fun statementOf(line: String): String? {
+			val code = line.replace(STRING_LITERAL, "").substringBefore("//")
+			return STATEMENT
+				.find(code)
 				?.groupValues
 				?.get(1)
 				?.trim()
 				?.takeUnless { it.endsWith(",") }
+		}
 	}
 }
