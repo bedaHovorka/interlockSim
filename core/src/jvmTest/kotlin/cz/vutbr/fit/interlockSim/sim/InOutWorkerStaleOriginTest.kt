@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isBetween
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -38,6 +37,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
+import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
@@ -91,18 +92,10 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 				loop.controlStepListener =
 					ControlStepListener {
 						if (delayedTrainId == null) {
-							loop.getQueuedTrains().firstOrNull()?.let { queued ->
-								val inOuts = context.getInOuts()
-								val wrong = inOuts.single { it.name == queued.destinationInOutName }
-								val entry = inOuts.single { it.name != queued.destinationInOutName }
-								assertThat(wrong).isNotEqualTo(entry)
-								// Bypasses the SP8 wrong-origin refusal on purpose: the stale holding is the
-								// state under test, however it came about.
-								assertThat(reservations.reservePathToAnyNextSemaphore(queued.trainId, wrong))
-									.isInstanceOf(ReservationResult.Success::class)
-								delayedTrainId = queued.trainId
+							seedStaleWrongOriginRoute(loop, context, reservations)?.let { (id, entry, worker) ->
+								delayedTrainId = id
 								entryInOut = entry
-								entryWorker = context.getWorkerFor(entry)
+								entryWorker = worker
 							}
 						}
 						wired.onControlStep()
@@ -180,7 +173,7 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 
 		val (stoppedAt, error) = errorStops.single()
 		assertThat(error).isInstanceOf(SimulationException::class)
-		assertThat(error.message.orEmpty()).contains("non-contiguous")
+		assertCapturedErrorStop(errorStops.map { it.second }, "non-contiguous")
 		assertThat(stoppedAt).isEqualTo(requireNotNull(firstRefusalAt))
 	}
 
@@ -211,7 +204,7 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 
 		val (stoppedAt, error) = errorStops.single()
 		assertThat(error).isInstanceOf(SimulationException::class)
-		assertThat(error.message.orEmpty()).contains("stale reservation not expired")
+		assertCapturedErrorStop(errorStops.map { it.second }, "stale reservation not expired")
 		assertThat(stoppedAt - requireNotNull(firstRefusalAt))
 			.isBetween(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS, InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS + 2.0)
 		assertThat(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS).isEqualTo(120.0)
@@ -264,7 +257,7 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 			.isNotEmpty()
 		val (stoppedAt, error) = errorStops.single()
 		assertThat(error).isInstanceOf(SimulationException::class)
-		assertThat(error.message.orEmpty()).contains("stale reservation not expired")
+		assertCapturedErrorStop(errorStops.map { it.second }, "stale reservation not expired")
 		assertThat(stoppedAt - requireNotNull(firstRefusalAt))
 			.isBetween(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS, InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS + 2.0)
 	}
@@ -359,50 +352,50 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 		var deniedAt: Double? = null
 		var regrantAt: Double? = null
 		val heldBlock = mockk<DynamicTrackBlock>()
-		val context = loadContext { env, inOut, real ->
-			InOutWorker(
-				env,
-				inOut,
-				pathReservationService =
-					object : PathReservationService by real {
-						override fun reservePathToAnyNextSemaphore(
-							trainId: String,
-							start: DynamicPathSeparator,
-							next: TrackSection
-						): ReservationResult {
-							if (regrantAt == null) {
-								if (deniedAt == null) deniedAt = Process.time()
-								return ReservationResult.NonContiguousStart(inOut.name, "injected by the test")
+		val context =
+			loadContext { env, inOut, real ->
+				InOutWorker(
+					env,
+					inOut,
+					pathReservationService =
+						object : PathReservationService by real {
+							override fun reservePathToAnyNextSemaphore(
+								trainId: String,
+								start: DynamicPathSeparator,
+								next: TrackSection
+							): ReservationResult {
+								if (regrantAt == null) {
+									if (deniedAt == null) deniedAt = Process.time()
+									return ReservationResult.NonContiguousStart(inOut.name, "injected by the test")
+								}
+								return real.reservePathToAnyNextSemaphore(trainId, start, next)
 							}
-							return real.reservePathToAnyNextSemaphore(trainId, start, next)
-						}
 
-						// The replacement's fresh holding persists while the entry stays occupied past the
-						// episode's 120 s bound (the expert scenario: a late grant or a train stranded
-						// mid-leg on its own legitimately granted block — a real holding releases only as
-						// the train travels or at journey end, which in vyhybna happens well inside the
-						// bound). Real registry state answers everywhere else; inside the window only the
-						// worker's own episode poll reads this.
-						override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> {
-							val findingWindow = regrantAt != null && Process.time() < requireNotNull(deniedAt) + ENTRY_BLOCKED_FOR
-							return if (findingWindow) listOf(heldBlock) else real.getReservedBlocks(trainId)
-						}
+							// The replacement's fresh holding persists while the entry stays occupied past the
+							// episode's 120 s bound (the expert scenario: a late grant or a train stranded
+							// mid-leg on its own legitimately granted block — a real holding releases only as
+							// the train travels or at journey end, which in vyhybna happens well inside the
+							// bound). Real registry state answers everywhere else; inside the window only the
+							// worker's own episode poll reads this.
+							override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> {
+								val findingWindow = regrantAt != null && Process.time() < requireNotNull(deniedAt) + ENTRY_BLOCKED_FOR
+								return if (findingWindow) listOf(heldBlock) else real.getReservedBlocks(trainId)
+							}
 
-						// After the replacement the entry stays occupied past the episode's 120 s bound (a
-						// late dispatcher grant, or a train stranded mid-leg on its own granted block);
-						// outside that window the real availability answers, so it agrees with the real
-						// reservation (a fake "free" with a real AllPathsBlocked would spin the worker
-						// in place).
-						override fun isPathToAnyNextSemaphoreAvailable(
-							start: PathSeparator,
-							next: TrackSection?
-						): Boolean {
-							val entryOccupied = regrantAt != null && Process.time() < requireNotNull(deniedAt) + ENTRY_BLOCKED_FOR
-							return !entryOccupied && real.isPathToAnyNextSemaphoreAvailable(start, next)
+							// After the replacement the entry stays occupied past the episode's 120 s bound (a
+							// late dispatcher grant, or a train stranded mid-leg on its own granted block);
+							// outside the injected window the fake defers to the real availability — the
+							// deferral rule is stated once on the sibling fake above.
+							override fun isPathToAnyNextSemaphoreAvailable(
+								start: PathSeparator,
+								next: TrackSection?
+							): Boolean {
+								val entryOccupied = regrantAt != null && Process.time() < requireNotNull(deniedAt) + ENTRY_BLOCKED_FOR
+								return !entryOccupied && real.isPathToAnyNextSemaphoreAvailable(start, next)
+							}
 						}
-					}
-			)
-		}
+				)
+			}
 
 		val navigation = context.getRoutingServices().getTrainNavigationService()
 		val reservations = context.getRoutingServices().getPathReservationService()
@@ -418,18 +411,10 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 				loop.controlStepListener =
 					ControlStepListener {
 						if (delayedTrainId == null) {
-							loop.getQueuedTrains().firstOrNull()?.let { queued ->
-								val inOuts = context.getInOuts()
-								val wrong = inOuts.single { it.name == queued.destinationInOutName }
-								val entry = inOuts.single { it.name != queued.destinationInOutName }
-								assertThat(wrong).isNotEqualTo(entry)
-								// Bypasses the SP8 wrong-origin refusal on purpose: the stale holding is the
-								// state under test, however it came about.
-								assertThat(reservations.reservePathToAnyNextSemaphore(queued.trainId, wrong))
-									.isInstanceOf(ReservationResult.Success::class)
-								delayedTrainId = queued.trainId
+							seedStaleWrongOriginRoute(loop, context, reservations)?.let { (id, entry, worker) ->
+								delayedTrainId = id
 								entryInOut = entry
-								entryWorker = context.getWorkerFor(entry)
+								entryWorker = worker
 							}
 						}
 						wired.onControlStep()
@@ -444,15 +429,14 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 							// valid entry route in one control step, so the bounded poll never observes
 							// the briefly-empty window.
 							reservations.releasePath(trainId)
-							assertThat(reservations.reservePathToAnyNextSemaphore(trainId, requireNotNull(entryInOut)))
-								.isInstanceOf(ReservationResult.Success::class)
+							assertReservationSuccess(reservations.reservePathToAnyNextSemaphore(trainId, requireNotNull(entryInOut)))
 							regrantAt = now
 						}
 					}
 			}
 
 		assertThat(errorStops, "a replaced stale holding must not stop the run").isEmpty()
-		assertThat(requireNotNull(delayedTrainId) { "a queued train must have been seeded" }).isNotNull()
+		assertThat(delayedTrainId, "a queued train must have been seeded").isNotNull()
 		val denied = requireNotNull(deniedAt) { "the stale-origin denial never happened" }
 		val regranted = requireNotNull(regrantAt) { "the dispatcher replacement never happened" }
 		assertThat(regranted, "the replacement follows the first denial").isGreaterThanOrEqualTo(denied)
@@ -508,6 +492,29 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 				next: TrackSection
 			): ReservationResult = refusal()
 		}
+
+	/**
+	 * Seeds the state under test — Issue #1295's stale wrong-origin holding — for the first queued
+	 * train, through the real reservation service. Bypasses the SP8 wrong-origin refusal on purpose:
+	 * the stale holding is the state under test, however it came about.
+	 *
+	 * @return the seeded train's id, its entry InOut (the other one), and the entry InOut's worker in
+	 *   [context] — or `null` when no train is queued yet, so a [ControlStepListener] can call this
+	 *   until it returns non-null
+	 */
+	private fun seedStaleWrongOriginRoute(
+		loop: ShuntingLoop,
+		context: DefaultSimulationContext,
+		reservations: PathReservationService
+	): Triple<String, DynamicInOut, InOutWorker>? {
+		val queued = loop.getQueuedTrains().firstOrNull() ?: return null
+		val inOuts = context.getInOuts()
+		val wrong = inOuts.single { it.name == queued.destinationInOutName }
+		val entry = inOuts.single { it.name != queued.destinationInOutName }
+		assertThat(wrong).isNotEqualTo(entry)
+		assertReservationSuccess(reservations.reservePathToAnyNextSemaphore(queued.trainId, wrong))
+		return Triple(queued.trainId, entry, context.getWorkerFor(entry))
+	}
 
 	private companion object {
 		const val END_TIME = 300L

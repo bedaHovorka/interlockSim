@@ -36,13 +36,7 @@ class InOutWorker(
 	private val inOut: DynamicInOut,
 	val navigator: TopologyNavigator = env.getRoutingServices().getTopologyNavigator(),
 	private val pathReservationService: PathReservationService = env.getRoutingServices().getPathReservationService(),
-	/**
-	 * Issue #1295 review fix: read-only train-side view of the path registry, used by the episode-end
-	 * check in [waitUntilPathFreeBoundedByStaleOrigin] — the registry cannot tell a stale wrong-origin
-	 * holding from a fresh valid grant ([getReservedBlocks] is non-empty for both), while
-	 * [TrainNavigationService.isPathReservedForTrain] answers for THIS InOut's separator, i.e. usable
-	 * entry authority exactly.
-	 */
+	/** Train-side view of the path registry, used by the episode-end check in [waitUntilPathFreeBoundedByStaleOrigin]. */
 	private val trainNavigationService: TrainNavigationService = env.getRoutingServices().getTrainNavigationService()
 ) : LoopProcess() {
 	companion object {
@@ -161,6 +155,9 @@ class InOutWorker(
 								"Path reserved successfully for train $trainId, " +
 								"${result.reservedBlocks.size} blocks"
 						}
+						// Issue #1295: disarm the episode if one was armed on this train — the success is
+						// the entry grant the episode was waiting for. since/reason stay unset; they are
+						// re-written at the next episode's first denial.
 						staleOriginTrainId = null
 						// Train can now proceed
 					}
@@ -311,9 +308,7 @@ class InOutWorker(
 	 * with the previously inline check alone, no deadline check — can arrive there).
 	 *
 	 * @return the seconds already waited since the episode's first denial ([staleOriginSince])
-	 * @throws SimulationException when the episode has lasted [STALE_ORIGIN_MAX_WAIT_SECONDS] — the
-	 *   exact message the inline check produced before the extraction, so no caller's failure
-	 *   semantics change
+	 * @throws SimulationException when the episode has lasted [STALE_ORIGIN_MAX_WAIT_SECONDS]
 	 */
 	private fun checkStaleOriginDeadline(
 		trainId: String,
@@ -342,18 +337,10 @@ class InOutWorker(
 	 * [checkStaleOriginDeadline] each pass, so a stale reservation that cannot expire still stops
 	 * the run at [STALE_ORIGIN_MAX_WAIT_SECONDS]; a path that frees while the reservation is still
 	 * unexpired simply lets the loop pass and the caller re-attempts the reservation. Each pass also
-	 * re-reads the episode's premise and ends the episode when it has become void: the stale holding
-	 * is gone ([PathReservationService.getReservedBlocks] empty — a still-blocked entry is then
-	 * ordinary contention), the train no longer heads this InOut's admission queue, or the train
-	 * already holds usable entry authority from this InOut
-	 * ([TrainNavigationService.isPathReservedForTrain]). The last check is the load-bearing one: a
-	 * dispatcher can replace the stale holding with a fresh valid grant between two passes (cancel
-	 * and re-request inside one control step), the fresh grant keeps [getReservedBlocks] non-empty,
-	 * and the registry cannot tell the two holdings apart — only the train-side view can. The
-	 * head-of-queue and authority conditions together cover the grant landing late: the train departs
-	 * on the foreign grant on its own ([Train.actions] starts the moment the registry shows its
-	 * entry path), so what is then left on this InOut is healthy operation, which must never be
-	 * timed out.
+	 * re-reads the episode's premise and ends the episode when it has become void — the full rule
+	 * (and why the registry's own bookkeeping cannot answer it) sits with the check in
+	 * [waitUntilPathFreeBoundedByStaleOrigin]: a still-blocked entry without the premise is ordinary
+	 * contention, which must never be timed out.
 	 *
 	 * The poll sits before the reservation `try` in [iteration], so a deadline thrown here cannot
 	 * reach any caller catch: this method restores occupancy, reports the fire to the environment
