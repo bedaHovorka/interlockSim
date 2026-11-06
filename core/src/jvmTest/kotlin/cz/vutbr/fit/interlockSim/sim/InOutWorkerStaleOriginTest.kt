@@ -267,6 +267,80 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 	}
 
 	/**
+	 * Issue #1295 review fix (round 2): the stale holding expires mid-episode while another train keeps
+	 * the entry path blocked past the episode's 120 s bound. Once the holding is gone the episode is
+	 * over — what is left is ordinary contention, which must never be timed out — so the bounded poll
+	 * must fall back to the plain availability wait instead of stopping the run with "stale
+	 * reservation not expired". The entry route then succeeds when the path frees.
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("a stale holding that expires while the entry stays blocked ends the episode, not the run")
+	fun staleHoldingThatExpiresWhileTheEntryStaysBlockedEndsTheEpisode() {
+		var firstRefusalAt: Double? = null
+		var entryReservedAt: Double? = null
+		val heldBlock = mockk<DynamicTrackBlock>()
+		val context =
+			loadContext { env, inOut, real ->
+				InOutWorker(
+					env,
+					inOut,
+					pathReservationService =
+						object : PathReservationService by real {
+							private fun holdingExpired(): Boolean =
+								firstRefusalAt?.let { Process.time() >= it + HOLDING_EXPIRES_AFTER } ?: false
+
+							override fun reservePathToAnyNextSemaphore(
+								trainId: String,
+								start: DynamicPathSeparator,
+								next: TrackSection
+							): ReservationResult {
+								if (!holdingExpired()) {
+									if (firstRefusalAt == null) firstRefusalAt = Process.time()
+									return ReservationResult.NonContiguousStart(inOut.name, "injected by the test")
+								}
+								val result = real.reservePathToAnyNextSemaphore(trainId, start, next)
+								if (result is ReservationResult.Success && entryReservedAt == null) {
+									entryReservedAt = Process.time()
+								}
+								return result
+							}
+
+							override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> =
+								if (firstRefusalAt == null) {
+									real.getReservedBlocks(trainId)
+								} else if (holdingExpired()) {
+									emptyList()
+								} else {
+									listOf(heldBlock)
+								}
+
+							// After the first denial another train blocks the entry until well past the
+							// 120 s episode bound; the stale holding expires long before that. Outside that
+							// window the real availability answers, so it agrees with the real reservation
+							// (a fake "free" with a real AllPathsBlocked would spin the worker in place).
+							override fun isPathToAnyNextSemaphoreAvailable(
+								start: PathSeparator,
+								next: TrackSection?
+							): Boolean {
+								val blockedUntil = firstRefusalAt?.let { it + ENTRY_BLOCKED_FOR }
+								return (blockedUntil == null || Process.time() >= blockedUntil) &&
+									real.isPathToAnyNextSemaphoreAvailable(start, next)
+							}
+						}
+				)
+			}
+
+		runShuntingLoop(context, END_TIME)
+
+		assertThat(errorStops, "ordinary contention after the holding expired must not stop the run").isEmpty()
+		val deniedAt = requireNotNull(firstRefusalAt) { "the stale-origin denial never happened" }
+		val reservedAt = requireNotNull(entryReservedAt) { "the train never got its entry route" }
+		assertThat(reservedAt - deniedAt).isGreaterThanOrEqualTo(ENTRY_BLOCKED_FOR)
+		assertThat(ENTRY_BLOCKED_FOR).isGreaterThan(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS)
+	}
+
+	/**
 	 * Loads `vyhybna.xml` with a process factory whose InOut workers come from [buildWorker]; every
 	 * worker sees an environment that records `errorStop` into [errorStops].
 	 */
@@ -312,5 +386,11 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 
 	private companion object {
 		const val END_TIME = 300L
+
+		/** Seconds after the first denial at which the injected stale holding expires. */
+		const val HOLDING_EXPIRES_AFTER = 60.0
+
+		/** Seconds after the first denial during which the entry path stays blocked (past the 120 s bound). */
+		const val ENTRY_BLOCKED_FOR = 150.0
 	}
 }

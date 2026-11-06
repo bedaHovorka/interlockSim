@@ -332,7 +332,10 @@ class InOutWorker(
 	 * [STALE_ORIGIN_RETRY_SECONDS] and re-arms the episode deadline through
 	 * [checkStaleOriginDeadline] each pass, so a stale reservation that cannot expire still stops
 	 * the run at [STALE_ORIGIN_MAX_WAIT_SECONDS]; a path that frees while the reservation is still
-	 * unexpired simply lets the loop pass and the caller re-attempts the reservation.
+	 * unexpired simply lets the loop pass and the caller re-attempts the reservation. Once the stale
+	 * holding is gone ([PathReservationService.getReservedBlocks] empty) the episode ends and the
+	 * poll falls back to the plain `waitUntil(pathFree)`, because a still-blocked entry is then
+	 * ordinary contention.
 	 *
 	 * The poll sits before the reservation `try` in [iteration], so a deadline thrown here cannot
 	 * reach any caller catch: this method restores occupancy, reports the fire to the environment
@@ -352,6 +355,13 @@ class InOutWorker(
 		}
 		return try {
 			while (!pathFree.test()) {
+				if (pathReservationService.getReservedBlocks(staleTrainId).isEmpty()) {
+					// The stale holding expired while the entry stayed blocked: the episode is over and
+					// what remains is ordinary contention, which must never be timed out.
+					staleOriginTrainId = null
+					waitUntil(pathFree)
+					return false
+				}
 				checkStaleOriginDeadline(staleTrainId, staleOriginReason)
 				hold(STALE_ORIGIN_RETRY_SECONDS)
 			}
