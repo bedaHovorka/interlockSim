@@ -33,6 +33,7 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -408,7 +409,9 @@ class AgentLoopDriverTest {
 								pathSetUpTowardThisInput = false,
 								pathAlreadyExtendedBeyond = false
 							)
-						)
+						),
+					tick = 1L,
+					snapshot = emptySnapshot(0.0)
 				)
 			// A second, distinguishable tick — if the driver ever split its reads across two
 			// provider calls, some fields would come from tickB instead of tickA.
@@ -434,6 +437,46 @@ class AgentLoopDriverTest {
 			assertThat(capturedObs.captured.unapprovedTrains).isSameInstanceAs(tickA.queuedTrains)
 			assertThat(capturedObs.captured.innerBlockInputs).isSameInstanceAs(tickA.innerBlockInputs)
 			assertThat(capturedObs.captured.outerBlockInputs).isSameInstanceAs(tickA.outerBlockInputs)
+		}
+
+		/**
+		 * Issue #1354: the snapshot and the queue come from one tick-stamped record. The perception
+		 * port already holds a newer snapshot (tick 6) than the record (tick 5) — the torn state a
+		 * second read could pair with tick 5's queue. The planner must get tick 5's snapshot with
+		 * tick 5's queue, and the perception port must not be touched at all.
+		 */
+		@Test
+		@DisplayName("the planner gets the snapshot and the queue of one tick-stamped record")
+		fun snapshotAndQueueComeFromOneRecord() {
+			val snapshot5 = emptySnapshot(10.0)
+			val queue5 = listOf(QueuedTrainObservation("T5", "OUT5"))
+			val record5 =
+				ShuntingLoop.TickObservation(
+					queuedTrains = queue5,
+					innerBlockInputs = emptyList(),
+					outerBlockInputs = emptyList(),
+					tick = 5L,
+					snapshot = snapshot5
+				)
+			val strictPerceptionPort = mockk<NetworkPerceptionPort>()
+			every { strictPerceptionPort.snapshot() } returns emptySnapshot(12.0)
+			every { strictPerceptionPort.captureSnapshot() } throws IllegalStateException("no capture on a reader path")
+			val driver =
+				AgentLoopDriver(
+					strictPerceptionPort,
+					planner,
+					commandQueue,
+					controller,
+					DefaultDispatchLoopSensorPort { record5 }
+				)
+			val capturedObs = slot<DispatchObservation>()
+			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+
+			runBlocking { driver.runCycle() }
+
+			assertThat(capturedObs.captured.snapshot).isSameInstanceAs(snapshot5)
+			assertThat(capturedObs.captured.unapprovedTrains).isSameInstanceAs(queue5)
+			confirmVerified(strictPerceptionPort)
 		}
 	}
 

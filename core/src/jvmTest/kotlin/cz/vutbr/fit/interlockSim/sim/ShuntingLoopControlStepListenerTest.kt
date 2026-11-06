@@ -3,6 +3,8 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isSameInstanceAs
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -132,5 +134,40 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 		assertThat(refusalCount).isGreaterThanOrEqualTo(1)
 		// ...and at no tick did more than the cap get approved.
 		assertThat(maxConcurrent).isEqualTo(1)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `each control step publishes its own hook snapshot in the tick-stamped observation`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		// Issue #1354: the tick observation and the perception snapshot are one record. The hook
+		// returns a new snapshot instance on every call; after the publish (controlStepListener
+		// runs on the sim thread after it) the record must carry exactly this tick's instance, and
+		// its tick stamp must rise by one per control step, starting at 1.
+		var hookCalls = 0
+		var lastHookResult: SimulationSnapshot? = null
+		val stamps = mutableListOf<Long>()
+		var mismatches = 0
+		val shuntingLoop = ShuntingLoop(context, endTime = 20L)
+		shuntingLoop.snapshotCaptureHook = {
+			hookCalls++
+			SimulationSnapshot.EMPTY.copy(simTime = hookCalls.toDouble()).also { lastHookResult = it }
+		}
+		shuntingLoop.controlStepListener =
+			ControlStepListener {
+				val record = shuntingLoop.getLatestObservation()
+				if (record.snapshot !== lastHookResult) mismatches++
+				stamps += record.tick
+			}
+		context.setMainProcess(shuntingLoop)
+		context.run()
+
+		logger.info { "hookCalls=$hookCalls, stamps=$stamps, mismatches=$mismatches" }
+		assertThat(mismatches).isEqualTo(0)
+		assertThat(stamps).isEqualTo((1L..hookCalls.toLong()).toList())
+		assertThat(shuntingLoop.getLatestObservation().snapshot).isSameInstanceAs(lastHookResult)
+		assertThat(hookCalls).isEqualTo(11)
 	}
 }

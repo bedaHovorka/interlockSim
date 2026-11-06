@@ -204,8 +204,7 @@ class HeadlessPacingFeasibilityTest : IntegrationKoinTestBase() {
 		// has published the per-tick observation.
 		val decisionsApplied = Semaphore(0)
 		loop.snapshotCaptureHook = {
-			perceptionPort.captureSnapshot()
-			projector.captureOnSimThread()
+			perceptionPort.captureSnapshot().also { projector.captureOnSimThread() }
 		}
 		loop.controlStepListener =
 			ControlStepListener {
