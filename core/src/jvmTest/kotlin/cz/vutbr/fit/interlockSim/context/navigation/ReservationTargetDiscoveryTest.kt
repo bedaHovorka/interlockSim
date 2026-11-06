@@ -490,7 +490,9 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 			val candidates = discovery.findReservationTargetCandidates(separator("zA") as OrientedPathSeparator, null)
 
 			assertThat(candidates.map { separatorLabel(it.separator) }).containsExactly("doB1", "doB2")
-			assertThat(counting.evaluations, name = "availability evaluations").isEqualTo(2)
+			// Two per target: the block check of evaluateTargets, then, for a block-free target, the
+			// switch-compatibility pass (Issue #1359; a route-cache hit in a simulation context).
+			assertThat(counting.evaluations, name = "route enumerations").isEqualTo(4)
 		}
 	}
 

@@ -9,9 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -88,11 +90,16 @@ internal sealed interface TargetAttempt {
  *
  * @property navigator Static topology navigator; paths for sorting and availability checks
  * @property environment Simulation environment; grid, graph and dynamic wrappers
+ * @property switchOwnerOf The train a switch is registered to, or `null` (the registry's
+ *   [PathReservationRegistry.getSwitchOwner]); read only by [findReservationTargetCandidates] to
+ *   tell the asking train's own switch locks from those of other trains (Issue #1359). The
+ *   default knows no owner, so every lock counts as another train's.
  * @since Issue #1171 (extracted from [DefaultPathReservationService])
  */
 internal class ReservationTargetDiscovery(
 	private val navigator: TopologyNavigator,
-	private val environment: SimulationEnvironment
+	private val environment: SimulationEnvironment,
+	private val switchOwnerOf: (DynamicRailSwitch) -> String? = { null }
 ) {
 	/**
 	 * Every [DynamicRailSemaphore] in this context's grid, in grid-scan order (column by column,
@@ -190,7 +197,20 @@ internal class ReservationTargetDiscovery(
 		// as unavailable), so the lazy sequence is materialised. isPathAvailableFor is read-only,
 		// so the extra evaluations past the first available target change no state and the pick
 		// stays byte-identical.
-		val candidates = evaluateTargets(dynamicStart, targets, ownerTrainId).toList()
+		// Issue #1359: a block-free target is narrowed further to one with a route that is both
+		// block-free and switch-compatible, so the observation does not offer a target the
+		// interlocking would refuse under SI-5. Only here: evaluateTargets also serves the exit
+		// probe isAnyNextTargetAvailable, which keeps its block-only answer.
+		val candidates =
+			evaluateTargets(dynamicStart, targets, ownerTrainId)
+				.map { candidate ->
+					if (candidate.available) {
+						val fits = hasFreeSwitchCompatibleRoute(dynamicStart, candidate.separator, ownerTrainId)
+						candidate.copy(available = fits)
+					} else {
+						candidate
+					}
+				}.toList()
 		logger.debug {
 			"findReservationTargetCandidates: ${targets.size} target(s) from $start via $next, " +
 				"available = ${candidates.filter { it.available }.map { it.separator }}"
@@ -283,11 +303,68 @@ internal class ReservationTargetDiscovery(
 	): Boolean {
 		val candidatePaths = navigator.findAllSwitchConstrainedPaths(start, target, maxDepth)
 
-		return candidatePaths.any { path ->
-			val blocks = extractUniqueBlocks(path)
-			blocks.areAllFree() || (ownerTrainId != null && blocks.areAllFreeOrOwnedBy(ownerTrainId))
+		return candidatePaths.any { path -> areBlocksAvailable(path, ownerTrainId) }
+	}
+
+	/** The block test of [isPathAvailableFor] for one [path]: all FREE, or FREE or owned by [ownerTrainId]. */
+	private fun areBlocksAvailable(
+		path: List<TrackSection>,
+		ownerTrainId: String?
+	): Boolean {
+		val blocks = extractUniqueBlocks(path)
+		return blocks.areAllFree() || (ownerTrainId != null && blocks.areAllFreeOrOwnedBy(ownerTrainId))
+	}
+
+	/**
+	 * Whether some route from [start] to [target] is both block-free ([areBlocksAvailable]) and
+	 * switch-compatible ([areSwitchesCompatible]) — the availability [findReservationTargetCandidates]
+	 * reports (Issue #1359).
+	 */
+	private fun hasFreeSwitchCompatibleRoute(
+		start: PathSeparator,
+		target: PathSeparator,
+		ownerTrainId: String?
+	): Boolean =
+		navigator.findAllSwitchConstrainedPaths(start, target, DEFAULT_MAX_PATH_DEPTH).any { path ->
+			areBlocksAvailable(path, ownerTrainId) && areSwitchesCompatible(start, path, ownerTrainId)
+		}
+
+	/**
+	 * Whether every switch [path] (a route from [start]) runs through is either unlocked, locked in
+	 * the position the route needs, or locked by [ownerTrainId] itself (Issue #1359).
+	 *
+	 * The position test is the one the interlocking refuses a route with under safety SI-5
+	 * (`SwitchConfigurator.switchOwnershipPreCheck`): the switch is locked and the
+	 * [DynamicRailSwitch.pathConf] joining the route's two sections differs from its `conf`. A switch
+	 * whose two sections no configuration joins counts as compatible, as there.
+	 */
+	private fun areSwitchesCompatible(
+		start: PathSeparator,
+		path: List<TrackSection>,
+		ownerTrainId: String?
+	): Boolean {
+		var separator = start
+		return path.zipWithNext().all { (incoming, outgoing) ->
+			separator = incoming.getSecondEnd(separator)
+			val switch = environment.toDynamic(separator) as? DynamicRailSwitch
+			if (switch == null || !isLockedAgainst(switch, ownerTrainId)) {
+				return@all true
+			}
+			val context =
+				checkNotNull(environment as? SimulationContext) {
+					"areSwitchesCompatible requires SimulationContext for getSegment() access, " +
+						"but got ${environment::class.simpleName}"
+				}
+			val required = switch.pathConf(context.getSegment(switch, incoming), context.getSegment(switch, outgoing))
+			required == null || required == switch.conf
 		}
 	}
+
+	/** Whether [switch] is locked by a train other than [ownerTrainId] (any lock when it is `null`). */
+	private fun isLockedAgainst(
+		switch: DynamicRailSwitch,
+		ownerTrainId: String?
+	): Boolean = switch.locked && (ownerTrainId == null || switchOwnerOf(switch) != ownerTrainId)
 
 	/**
 	 * Every whole-network target of [PathReservationService.reservePathToAny] from [start], in the
