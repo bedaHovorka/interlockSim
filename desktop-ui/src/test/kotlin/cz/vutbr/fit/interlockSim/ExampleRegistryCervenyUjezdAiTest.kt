@@ -32,6 +32,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.CERVENY_UJEZD_STATION_CAPACITY
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -68,9 +69,9 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
-		assertThat(ctx.scope.getOrNull<MeasuringPlanAdapter>(), "measuring planner").isNotNull()
+		assertThat(ctx.scope.publishedOrNull<MeasuringPlanAdapter>(), "measuring planner").isNotNull()
 		// The headless pacing controller must be the SAME instance Main hands to context.run().
-		assertThat(ctx.scope.getOrNull<SimulationController>())
+		assertThat(ctx.scope.publishedOrNull<SimulationController>())
 			.isNotNull()
 			.isInstanceOf<ThrottlingSimulationController>()
 		// DispatcherRunSummaries writes a run JSON only when an AgentDriverLoop exists.
@@ -92,7 +93,7 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
-		assertThat(ctx.scope.getOrNull<MeasuringPlanAdapter>(), "measuring planner").isNotNull()
+		assertThat(ctx.scope.publishedOrNull<MeasuringPlanAdapter>(), "measuring planner").isNotNull()
 	}
 
 	/**
@@ -112,7 +113,7 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 		assertCervenyUjezdLoop(ctx)
 		assertThat(recordedArm(ctx), "recorded arm").isEqualTo(DispatcherArm.RULE_BASED)
 		assertThat(ctx.scope.agentDriverLoopOrNull(), "agent driver loop").isNotNull()
-		assertThat(ctx.scope.getOrNull<MeasuringPlanAdapter>(), "measuring planner").isNull()
+		assertThat(ctx.scope.publishedOrNull<MeasuringPlanAdapter>(), "measuring planner").isNull()
 		assertThat(registry.usesLlmDispatcher(ExampleNames.CERVENY_UJEZD)).isFalse()
 	}
 

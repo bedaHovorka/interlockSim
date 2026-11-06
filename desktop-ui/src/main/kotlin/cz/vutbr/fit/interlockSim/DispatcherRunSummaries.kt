@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayProgress
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.progress
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -89,10 +90,10 @@ object DispatcherRunSummaries {
 	 * @return which summaries were emitted.
 	 */
 	fun log(scope: Scope): Reported {
-		val planner = scope.getOrNull<MeasuringPlanAdapter>()
-		val sweeper = scope.getOrNull<OrphanReservationSweeper>()
+		val planner = scope.publishedOrNull<MeasuringPlanAdapter>()
+		val sweeper = scope.publishedOrNull<OrphanReservationSweeper>()
 		val driverLoop = scope.agentDriverLoopOrNull()
-		val signal = scope.getOrNull<DefaultSnapshotSignal>()
+		val signal = scope.publishedOrNull<DefaultSnapshotSignal>()
 
 		planner?.logFinalSummary()
 		sweeper?.logSummary()

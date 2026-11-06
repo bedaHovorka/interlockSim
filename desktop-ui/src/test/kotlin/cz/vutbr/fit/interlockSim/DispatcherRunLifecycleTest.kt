@@ -15,6 +15,7 @@ import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.publish
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import io.mockk.every
@@ -44,7 +45,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	fun releaseKoogAgentCallsMeasuringAdapter() {
 		val context = createMockShuntingContext()
 		val measuring = mockk<MeasuringPlanAdapter>(relaxed = true)
-		context.scope.declare(measuring)
+		context.scope.publish(measuring)
 
 		DispatcherRunLifecycle.releaseKoogAgent(context.scope)
 
@@ -58,7 +59,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	fun releaseKoogAgentFallsBackToBareAdapter() {
 		val context = createMockShuntingContext()
 		val bare = mockk<KoogAgentPlanAdapter>(relaxed = true)
-		context.scope.declare(bare)
+		context.scope.publish(bare)
 
 		DispatcherRunLifecycle.releaseKoogAgent(context.scope)
 
@@ -115,7 +116,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 		val context = createMockShuntingContext()
 		val measuring = mockk<MeasuringPlanAdapter>()
 		every { measuring.releaseAgent() } throws RuntimeException("release-boom")
-		context.scope.declare(measuring)
+		context.scope.publish(measuring)
 
 		DispatcherRunLifecycle.releaseKoogAgent(context.scope)
 
@@ -149,7 +150,7 @@ class DispatcherRunLifecycleTest : KoinTestBase() {
 	fun releaseKoogAgentInBackgroundReleasesOffCallingThread() {
 		val context = createMockShuntingContext()
 		val measuring = mockk<MeasuringPlanAdapter>(relaxed = true)
-		context.scope.declare(measuring)
+		context.scope.publish(measuring)
 		val releaseThreadName = AtomicReference<String?>(null)
 		every { measuring.releaseAgent() } answers {
 			releaseThreadName.set(Thread.currentThread().name)

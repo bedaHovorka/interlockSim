@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
@@ -251,7 +252,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							controlPanel.setStopEnabled(true)
 							// Capture now so the STOPPED transition logs metrics for the run that just
 							// ended, not whatever context happens to be current when STOPPED fires.
-							wiredMeasuringAdapter = currentSimulationContext?.scope?.getOrNull<MeasuringPlanAdapter>()
+							wiredMeasuringAdapter = currentSimulationContext?.scope?.publishedOrNull<MeasuringPlanAdapter>()
 							// SP2c.22 (#845): capture DispatcherRunRecorder at RUNNING so the STOPPED
 							// transition can call finish() and logFinalSummary() for this specific run.
 							wiredRunRecorder = currentSimulationContext?.scope?.getOrNull<DispatcherRunRecorder>()

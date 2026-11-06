@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createExampleContext
@@ -95,7 +96,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	fun snapshotSignalIsReachableFromTheScope() {
 		val context = createShuntingLoopAIContext()
 
-		assertThat(context.scope.getOrNull<DefaultSnapshotSignal>()).isNotNull()
+		assertThat(context.scope.publishedOrNull<DefaultSnapshotSignal>()).isNotNull()
 	}
 
 	@Test
@@ -104,7 +105,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	fun controlStepSignalsTheDriver() {
 		val context = createShuntingLoopAIContext()
 		val loop = context.mainProcess as ShuntingLoop
-		val signal = checkNotNull(context.scope.getOrNull<DefaultSnapshotSignal>())
+		val signal = checkNotNull(context.scope.publishedOrNull<DefaultSnapshotSignal>())
 		val before = signal.signalCount
 
 		checkNotNull(loop.controlStepListener) { "no ControlStepListener was wired" }.onControlStep()
@@ -119,7 +120,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 		val context = createShuntingLoopAIContext()
 		val loop = context.mainProcess as ShuntingLoop
 
-		assertThat(context.scope.getOrNull<StationCapacity>()?.value).isEqualTo(loop.stationCapacity)
+		assertThat(context.scope.publishedOrNull<StationCapacity>()?.value).isEqualTo(loop.stationCapacity)
 	}
 
 	/**
@@ -183,7 +184,7 @@ class ExampleRegistryDriverLoopWiringTest : KoinTestBase() {
 	@DisplayName("the driver's post-plan liveness probe is the loop's own flag (#1032)")
 	fun driverLivenessProbeIsWiredToTheLoop() {
 		val context = createShuntingLoopAIContext().tracked()
-		val driver = checkNotNull(context.scope.getOrNull<AgentLoopDriver>())
+		val driver = checkNotNull(context.scope.publishedOrNull<AgentLoopDriver>())
 
 		val probeField = AgentLoopDriver::class.java.getDeclaredField("isSimActive")
 		probeField.isAccessible = true

@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
@@ -65,7 +66,7 @@ class StationCapacityDispatcherWiringTest : KoinTestBase() {
 
 	/** The rule-based planner the driver of a control-arm context runs. */
 	private fun ruleBasedPlanner(ctx: DefaultSimulationContext): RuleBasedPlanAdapter {
-		val planner = ctx.scope.get<AgentLoopDriver>().planner
+		val planner = checkNotNull(ctx.scope.publishedOrNull<AgentLoopDriver>()).planner
 		assertThat(planner).isInstanceOf<RuleBasedPlanAdapter>()
 		return planner as RuleBasedPlanAdapter
 	}
@@ -79,7 +80,7 @@ class StationCapacityDispatcherWiringTest : KoinTestBase() {
 
 	/** The rule-based fallback of an LLM-arm context. */
 	private fun llmFallbackDispatcher(ctx: DefaultSimulationContext): RuleBasedDispatcher {
-		val planner = ctx.scope.get<AgentLoopDriver>().planner
+		val planner = checkNotNull(ctx.scope.publishedOrNull<AgentLoopDriver>()).planner
 		assertThat(planner).isInstanceOf<MeasuringPlanAdapter>()
 		val fallback = (planner as MeasuringPlanAdapter).inner.fallbackDispatcher
 		assertThat(fallback).isInstanceOf<RuleBasedDispatcher>()

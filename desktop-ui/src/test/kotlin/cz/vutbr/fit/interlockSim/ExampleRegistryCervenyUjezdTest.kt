@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.CERVENY_UJEZD_STATION_CAPACITY
@@ -81,7 +82,7 @@ class ExampleRegistryCervenyUjezdTest : KoinTestBase() {
 		val registry = get<ExampleRegistry>()
 
 		for ((arm, map) in listOf("GUI" to registry.guiExamples, "CLI" to registry.examples)) {
-			val planner = build(map).scope.get<AgentLoopDriver>().planner
+			val planner = checkNotNull(build(map).scope.publishedOrNull<AgentLoopDriver>()).planner
 			assertThat(planner, arm).isInstanceOf<RuleBasedPlanAdapter>()
 			val dispatcher = (planner as RuleBasedPlanAdapter).dispatcher
 			assertThat(dispatcher, arm).isInstanceOf<RuleBasedDispatcher>()

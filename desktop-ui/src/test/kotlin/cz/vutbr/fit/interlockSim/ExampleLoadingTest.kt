@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
 import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -346,7 +347,7 @@ class ExampleLoadingTest : KoinTestBase() {
 				val result = createMethod.invoke(registry, factory, args)
 				val context = result as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 				assertThat(
-					context.scope.getOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
+					context.scope.publishedOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
 				).isNotNull()
 			} catch (e: java.lang.reflect.InvocationTargetException) {
 				val cause = e.cause
@@ -386,7 +387,7 @@ class ExampleLoadingTest : KoinTestBase() {
 				val result = createMethod.invoke(registry, factory, args)
 				val context = result as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 				assertThat(
-					context.scope.getOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
+					context.scope.publishedOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
 				).isNotNull()
 			} catch (e: java.lang.reflect.InvocationTargetException) {
 				val cause = e.cause
