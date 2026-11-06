@@ -39,6 +39,15 @@ open class Generator(
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/**
+		 * The one global integration step cap, in simulated seconds: kDisco's `dtMax` for every
+		 * scenario run. [startAction] is its only production use, and every loop that starts a
+		 * generator (`MultiTrainLoop`, `ShuntingLoop`, …) runs with it; there is no per-scenario
+		 * override (Goal 1B SP13, Issue #1160; `DtMaxSingleSiteTripwireTest` pins this). The value
+		 * and its accuracy bound are recorded in `docs/goal9b-demands/SP13-dtmax.md`.
+		 */
+		const val DT_MAX: Double = 1e-3
 	}
 
 	init {
@@ -56,10 +65,9 @@ open class Generator(
 		// the approach, Issue #760 for the rest) are located by kDisco root-finding
 		// (`Process.waitCrossing` / `waitUntilCrossing`), so no Engine wait resolves to a whole
 		// step, and Engine runs ahead of the velocity integration (Issue #1126), so each RK stage
-		// integrates the velocity with the acceleration of that stage. `dtMax` stays at 1 ms: the
-		// Issue #760 ladder (1e-3, 1e-2, 1e-1, 1.0; table in PR #1133) was walked before #1126,
-		// and a raise is a separate decision with its own re-run of that ladder.
-		dtMax = 1e-3
+		// integrates the velocity with the acceleration of that stage. `dtMax` is the global
+		// [DT_MAX] (1 ms; decided in Goal 1B SP13, Issue #1160).
+		dtMax = DT_MAX
 		maxRelError = 1e-2
 		maxAbsError = 1e-2
 	}

@@ -23,7 +23,7 @@ while other builds ran are not results and are not recorded here.
 | Concurrency cap | `maxConcurrentTrains = 4`, passed to `MultiTrainLoop` | `MAX_CONCURRENT_TRAINS` |
 | Horizon | `endTime` 3,600 s | `END_TIME` |
 | Last injection | at most `endTime − 600 s` = 3,000 s | `RUN_END_MARGIN_SECONDS` |
-| Integration step | `dtMax` 1e-3 | set by the loop's generator (`Generator.startAction`); every run logs the effective value |
+| Integration step | `dtMax` 1e-3 | the global `Generator.DT_MAX` (SP13, see `SP13-dtmax.md`), set by the loop's generator (`Generator.startAction`); every run logs the effective value |
 | Seeds | 1 to 10, fixed before the first run | `LOW_TRAFFIC_SEEDS` |
 | Entry attempts | `MultiTrainLoop.DEFAULT_MAX_ENTRY_ATTEMPTS` (3,600) | not an exit parameter; the loop default |
 
