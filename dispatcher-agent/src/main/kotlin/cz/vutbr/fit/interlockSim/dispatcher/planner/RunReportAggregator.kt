@@ -48,7 +48,7 @@ import java.time.format.DateTimeFormatter
  * | Logged FATAL Simulation Exceptions | FATAL runs per arm, then each run that logged one |
  * | Per-Run Detail | one row per run, outcome histogram |
  * | Failure Modes | [RejectionCode] × arm — most actionable for prompt iteration |
- * | Apply Failures | [ApplyFailureCode] × arm |
+ * | Apply Failures | [ApplyFailureCode] × arm, then stale-origin refusals after a silent cycle per arm |
  * | Author Attribution | [ActionAuthor] × arm |
  * | Latency | arm × tick period, p50/p95/max and deadline-miss count |
  * | Parameter Sweep | one row per [RunParameters] cell |
@@ -501,6 +501,35 @@ class RunReportAggregator(
 						"${r.applyFailureCounts[code] ?: 0L}"
 					} + " |"
 			sb.appendLine(row)
+		}
+		sb.appendLine()
+		appendStaleOriginRefusals(sb, reports)
+	}
+
+	/**
+	 * One row per arm counting the [ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS] refusals of decisions a
+	 * silent non-idle LLM cycle emitted (Issue #1365, part 1 of #1355) — see
+	 * [DispatcherRunSnapshot.staleOriginRefusalsAfterSilentCycle] for what is counted. Refusals and
+	 * runs with a refusal are summed over the runs that measured the count; "Runs not measured" (a
+	 * run JSON written before the field existed, or an aborted run) is kept apart, and an arm
+	 * without any measured run shows `n/a`, not `0`: absent is not zero.
+	 */
+	private fun appendStaleOriginRefusals(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
+		sb.appendLine("### Stale-Origin Refusals After a Silent Non-Idle LLM Cycle")
+		sb.appendLine()
+		sb.appendLine("| Arm | Runs | Refusals | Runs with a refusal | Runs measured | Runs not measured |")
+		sb.appendLine("|---|---|---|---|---|---|")
+		for (r in reports) {
+			val measured = r.snapshots.mapNotNull { it.staleOriginRefusalsAfterSilentCycle }
+			val refusals = if (measured.isEmpty()) "n/a" else measured.sum().toString()
+			val runsWithRefusal = if (measured.isEmpty()) "n/a" else measured.count { it > 0L }.toString()
+			sb.appendLine(
+				"| ${r.arm} | ${r.runCount} | $refusals | $runsWithRefusal | ${measured.size} | " +
+					"${r.runCount - measured.size} |"
+			)
 		}
 		sb.appendLine()
 	}

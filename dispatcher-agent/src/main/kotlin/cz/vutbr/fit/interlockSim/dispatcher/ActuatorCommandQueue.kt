@@ -166,4 +166,12 @@ class ActuatorCommandQueue(
 	fun advanceCorrelationCycle() {
 		correlationMap?.newCycle()
 	}
+
+	/**
+	 * The tick index decisions posted now receive ([CommandCorrelationMap.currentCycle]), or `null`
+	 * when this queue has no [CommandCorrelationMap] — then no outcome can be traced to a cycle.
+	 *
+	 * @since Issue #1365
+	 */
+	fun currentCorrelationCycle(): Long? = correlationMap?.currentCycle()
 }

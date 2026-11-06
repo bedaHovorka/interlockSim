@@ -177,9 +177,11 @@ class AiSweepDriverTest {
 	 * its breaker state and tick latency are unknowable from outside. Both go through
 	 * abortedSnapshot and must stay null -- "not recorded" -- rather than read as "the breaker never
 	 * opened" or enter RunReportAggregator's latency medians as zeros (see DispatcherRunSnapshot's
-	 * KDoc and GOAL_10_SP2C14_RELIABILITY_REPORT.md §3.4).
+	 * KDoc and GOAL_10_SP2C14_RELIABILITY_REPORT.md §3.4). The stale-origin refusal count (Issue
+	 * #1365) is unknowable the same way and must stay null too.
 	 */
 	private fun assertBreakerAndLatencyNotRecorded(snapshot: DispatcherRunSnapshot) {
+		assertThat(snapshot.staleOriginRefusalsAfterSilentCycle).isNull()
 		assertThat(snapshot.circuitBreakerState).isNull()
 		assertThat(snapshot.circuitBreakerTotalSkips).isNull()
 		assertThat(snapshot.circuitBreakerOpenCount).isNull()

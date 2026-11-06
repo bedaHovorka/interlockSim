@@ -107,6 +107,13 @@ class CommandCorrelationMap {
 	}
 
 	/**
+	 * The tick index that [register] stamps on decisions posted now: the cycle counter's current
+	 * value. Lets a planner name the cycle it is reporting, so an outcome correlated later can be
+	 * traced back to it (Issue #1365).
+	 */
+	fun currentCycle(): Long = cycleCounter.get()
+
+	/**
 	 * Issues a fresh [CommandId] for each decision in [decisions] and registers the
 	 * pair `(identity → CommandAndTick(id, currentCycleIndex, author, reason))` in the map.
 	 *
