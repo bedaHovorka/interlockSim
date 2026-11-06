@@ -56,7 +56,10 @@ import java.util.concurrent.TimeUnit
  * [ReservationResult.NonContiguousStart] while the queued train still holds a stale reservation of
  * its own (non-empty [PathReservationService.getReservedBlocks]). The worker records the denial once,
  * re-tries every [InOutWorker.STALE_ORIGIN_RETRY_SECONDS] until the reservation expiry releases the
- * stale holding, and stops the run only after [InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS].
+ * stale holding, and stops the run only after [InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS]. The
+ * episode also ends without stopping the run when its premise turns void by other means: the stale
+ * holding was replaced by a usable entry grant from this InOut, or the train stops heading the
+ * queue (round-4 arms, tested below).
  */
 @Tag("integration-test")
 @DisplayName("InOutWorker recovers from a stale non-contiguous origin and keeps FATAL otherwise (Issue #1295)")

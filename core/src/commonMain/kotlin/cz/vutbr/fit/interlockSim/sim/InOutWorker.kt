@@ -156,8 +156,8 @@ class InOutWorker(
 								"${result.reservedBlocks.size} blocks"
 						}
 						// Issue #1295: disarm the episode if one was armed on this train — the success is
-						// the entry grant the episode was waiting for. since/reason stay unset; they are
-						// re-written at the next episode's first denial.
+						// the entry grant the episode was waiting for. since/reason keep the previous
+						// episode's values until the next episode's first denial overwrites them.
 						staleOriginTrainId = null
 						// Train can now proceed
 					}
