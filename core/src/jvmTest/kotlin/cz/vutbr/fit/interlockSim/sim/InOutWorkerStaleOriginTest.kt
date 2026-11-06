@@ -125,6 +125,9 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 		val deniedAt = requireNotNull(denialSeenAt) { "the stale-origin denial was never recorded" }
 		val reservedAt = requireNotNull(entryReservedAt) { "the delayed train never got its entry route" }
 		assertThat(reservedAt).isGreaterThan(deniedAt)
+		// Round-1 PR-body review note: one retry period must really elapse between the recorded
+		// denial and the entry grant — the episode's hold is not a no-op.
+		assertThat(reservedAt - deniedAt).isGreaterThanOrEqualTo(InOutWorker.STALE_ORIGIN_RETRY_SECONDS)
 		assertThat(requireNotNull(entryWorker).staleOriginDenials, "one denial per episode").isEqualTo(1)
 		assertThat(loop.getTrainsExited()).isGreaterThanOrEqualTo(1)
 		assertThat(requireNotNull(exitedAt) { "the delayed train never exited" }).isLessThan(END_TIME.toDouble())
@@ -338,6 +341,128 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 		val reservedAt = requireNotNull(entryReservedAt) { "the train never got its entry route" }
 		assertThat(reservedAt - deniedAt).isGreaterThanOrEqualTo(ENTRY_BLOCKED_FOR)
 		assertThat(ENTRY_BLOCKED_FOR).isGreaterThan(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS)
+	}
+
+	/**
+	 * Issue #1295 review fix (round 3): the dispatcher replaces the stale holding with a valid entry
+	 * route between two poll passes (cancel and re-grant run in one control step, so the poll never
+	 * sees the briefly-empty window). The episode must then end: the train gains usable entry
+	 * authority from the registry and departs on its own, so what the old deadline was still armed
+	 * on is healthy operation, not the stale holding. Before the round-4 fix the bounded poll kept
+	 * the deadline armed and error-stopped the run ~120 s after the first denial, possibly after the
+	 * train had already left the queue.
+	 */
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("a stale holding replaced by a valid entry route mid-episode keeps the run alive")
+	fun staleHoldingReplacedByAValidEntryRouteMidEpisodeKeepsTheRunAlive() {
+		var deniedAt: Double? = null
+		var regrantAt: Double? = null
+		val heldBlock = mockk<DynamicTrackBlock>()
+		val context = loadContext { env, inOut, real ->
+			InOutWorker(
+				env,
+				inOut,
+				pathReservationService =
+					object : PathReservationService by real {
+						override fun reservePathToAnyNextSemaphore(
+							trainId: String,
+							start: DynamicPathSeparator,
+							next: TrackSection
+						): ReservationResult {
+							if (regrantAt == null) {
+								if (deniedAt == null) deniedAt = Process.time()
+								return ReservationResult.NonContiguousStart(inOut.name, "injected by the test")
+							}
+							return real.reservePathToAnyNextSemaphore(trainId, start, next)
+						}
+
+						// The replacement's fresh holding persists while the entry stays occupied past the
+						// episode's 120 s bound (the expert scenario: a late grant or a train stranded
+						// mid-leg on its own legitimately granted block — a real holding releases only as
+						// the train travels or at journey end, which in vyhybna happens well inside the
+						// bound). Real registry state answers everywhere else; inside the window only the
+						// worker's own episode poll reads this.
+						override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> {
+							val findingWindow = regrantAt != null && Process.time() < requireNotNull(deniedAt) + ENTRY_BLOCKED_FOR
+							return if (findingWindow) listOf(heldBlock) else real.getReservedBlocks(trainId)
+						}
+
+						// After the replacement the entry stays occupied past the episode's 120 s bound (a
+						// late dispatcher grant, or a train stranded mid-leg on its own granted block);
+						// outside that window the real availability answers, so it agrees with the real
+						// reservation (a fake "free" with a real AllPathsBlocked would spin the worker
+						// in place).
+						override fun isPathToAnyNextSemaphoreAvailable(
+							start: PathSeparator,
+							next: TrackSection?
+						): Boolean {
+							val entryOccupied = regrantAt != null && Process.time() < requireNotNull(deniedAt) + ENTRY_BLOCKED_FOR
+							return !entryOccupied && real.isPathToAnyNextSemaphoreAvailable(start, next)
+						}
+					}
+			)
+		}
+
+		val navigation = context.getRoutingServices().getTrainNavigationService()
+		val reservations = context.getRoutingServices().getPathReservationService()
+
+		var delayedTrainId: String? = null
+		var entryInOut: DynamicInOut? = null
+		var entryWorker: InOutWorker? = null
+		var authoritySeenAt: Double? = null
+
+		val loop =
+			runShuntingLoop(context, END_TIME) { loop ->
+				val wired = requireNotNull(loop.controlStepListener) { "runShuntingLoop did not install a listener" }
+				loop.controlStepListener =
+					ControlStepListener {
+						if (delayedTrainId == null) {
+							loop.getQueuedTrains().firstOrNull()?.let { queued ->
+								val inOuts = context.getInOuts()
+								val wrong = inOuts.single { it.name == queued.destinationInOutName }
+								val entry = inOuts.single { it.name != queued.destinationInOutName }
+								assertThat(wrong).isNotEqualTo(entry)
+								// Bypasses the SP8 wrong-origin refusal on purpose: the stale holding is the
+								// state under test, however it came about.
+								assertThat(reservations.reservePathToAnyNextSemaphore(queued.trainId, wrong))
+									.isInstanceOf(ReservationResult.Success::class)
+								delayedTrainId = queued.trainId
+								entryInOut = entry
+								entryWorker = context.getWorkerFor(entry)
+							}
+						}
+						wired.onControlStep()
+						val trainId = delayedTrainId ?: return@ControlStepListener
+						val now = Process.time()
+						val entry = entryInOut
+						if (entry != null && authoritySeenAt == null && navigation.isPathReservedForTrain(trainId, entry)) {
+							authoritySeenAt = now
+						}
+						if (regrantAt == null && requireNotNull(entryWorker).staleOriginDenials == 1) {
+							// Production-shaped dispatcher replace: cancel the stale holding and grant a
+							// valid entry route in one control step, so the bounded poll never observes
+							// the briefly-empty window.
+							reservations.releasePath(trainId)
+							assertThat(reservations.reservePathToAnyNextSemaphore(trainId, requireNotNull(entryInOut)))
+								.isInstanceOf(ReservationResult.Success::class)
+							regrantAt = now
+						}
+					}
+			}
+
+		assertThat(errorStops, "a replaced stale holding must not stop the run").isEmpty()
+		assertThat(requireNotNull(delayedTrainId) { "a queued train must have been seeded" }).isNotNull()
+		val denied = requireNotNull(deniedAt) { "the stale-origin denial never happened" }
+		val regranted = requireNotNull(regrantAt) { "the dispatcher replacement never happened" }
+		assertThat(regranted, "the replacement follows the first denial").isGreaterThanOrEqualTo(denied)
+		assertThat(requireNotNull(entryWorker).staleOriginDenials, "one denial per episode").isEqualTo(1)
+		assertThat(
+			requireNotNull(authoritySeenAt) { "the replacement must have granted entry authority" },
+			"entry authority is seen at or after the replacement"
+		).isGreaterThanOrEqualTo(regranted)
+		assertThat(loop.getTrainsExited(), "the train must depart on the granted route and exit")
+			.isGreaterThanOrEqualTo(1)
 	}
 
 	/**

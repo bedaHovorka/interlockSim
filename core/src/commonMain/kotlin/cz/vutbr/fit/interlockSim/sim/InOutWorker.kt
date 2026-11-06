@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -34,7 +35,15 @@ class InOutWorker(
 	private val env: SimulationEnvironment,
 	private val inOut: DynamicInOut,
 	val navigator: TopologyNavigator = env.getRoutingServices().getTopologyNavigator(),
-	private val pathReservationService: PathReservationService = env.getRoutingServices().getPathReservationService()
+	private val pathReservationService: PathReservationService = env.getRoutingServices().getPathReservationService(),
+	/**
+	 * Issue #1295 review fix: read-only train-side view of the path registry, used by the episode-end
+	 * check in [waitUntilPathFreeBoundedByStaleOrigin] — the registry cannot tell a stale wrong-origin
+	 * holding from a fresh valid grant ([getReservedBlocks] is non-empty for both), while
+	 * [TrainNavigationService.isPathReservedForTrain] answers for THIS InOut's separator, i.e. usable
+	 * entry authority exactly.
+	 */
+	private val trainNavigationService: TrainNavigationService = env.getRoutingServices().getTrainNavigationService()
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -332,10 +341,19 @@ class InOutWorker(
 	 * [STALE_ORIGIN_RETRY_SECONDS] and re-arms the episode deadline through
 	 * [checkStaleOriginDeadline] each pass, so a stale reservation that cannot expire still stops
 	 * the run at [STALE_ORIGIN_MAX_WAIT_SECONDS]; a path that frees while the reservation is still
-	 * unexpired simply lets the loop pass and the caller re-attempts the reservation. Once the stale
-	 * holding is gone ([PathReservationService.getReservedBlocks] empty) the episode ends and the
-	 * poll falls back to the plain `waitUntil(pathFree)`, because a still-blocked entry is then
-	 * ordinary contention.
+	 * unexpired simply lets the loop pass and the caller re-attempts the reservation. Each pass also
+	 * re-reads the episode's premise and ends the episode when it has become void: the stale holding
+	 * is gone ([PathReservationService.getReservedBlocks] empty — a still-blocked entry is then
+	 * ordinary contention), the train no longer heads this InOut's admission queue, or the train
+	 * already holds usable entry authority from this InOut
+	 * ([TrainNavigationService.isPathReservedForTrain]). The last check is the load-bearing one: a
+	 * dispatcher can replace the stale holding with a fresh valid grant between two passes (cancel
+	 * and re-request inside one control step), the fresh grant keeps [getReservedBlocks] non-empty,
+	 * and the registry cannot tell the two holdings apart — only the train-side view can. The
+	 * head-of-queue and authority conditions together cover the grant landing late: the train departs
+	 * on the foreign grant on its own ([Train.actions] starts the moment the registry shows its
+	 * entry path), so what is then left on this InOut is healthy operation, which must never be
+	 * timed out.
 	 *
 	 * The poll sits before the reservation `try` in [iteration], so a deadline thrown here cannot
 	 * reach any caller catch: this method restores occupancy, reports the fire to the environment
@@ -345,7 +363,8 @@ class InOutWorker(
 	 * retry constant.
 	 *
 	 * @return `true` when the stale-origin deadline fired and the run was error-stopped, `false`
-	 *   when the path became free (or there is no episode) and the caller may continue.
+	 *   when the path became free, there is no episode, or the episode ended because its premise
+	 *   turned void — in every `false` case the caller may continue.
 	 */
 	private suspend fun waitUntilPathFreeBoundedByStaleOrigin(): Boolean {
 		val staleTrainId = staleOriginTrainId
@@ -355,9 +374,26 @@ class InOutWorker(
 		}
 		return try {
 			while (!pathFree.test()) {
-				if (pathReservationService.getReservedBlocks(staleTrainId).isEmpty()) {
-					// The stale holding expired while the entry stayed blocked: the episode is over and
-					// what remains is ordinary contention, which must never be timed out.
+				// Issue #1295 review fix (round 4): end the episode once its premise is observably
+				// void. The stale wrong-origin holding was the only thing between the head train and
+				// its entry, so the episode ends when any of these holds:
+				// - the holding is gone (expired or cancelled): what remains is ordinary contention;
+				// - the train no longer heads this admission queue: it departed on a grant booked
+				//   without this reservation attempt; or
+				// - the train already holds usable entry authority FROM THIS InOut: a fresh VALID
+				//   grant (cancellation + re-request inside one control step) replaced the stale
+				//   holding, which keeps getReservedBlocks non-empty — the registry cannot tell the
+				//   two holdings apart, the train-side view can.
+				// Healthy operation in all three shapes must never be timed out; any re-attempt the
+				// caller makes right after runs the normal path (self-owned blocks accept, so the
+				// entry route completes, and real refusals keep their own handling).
+				if (
+					pathReservationService.getReservedBlocks(staleTrainId).isEmpty() ||
+					(queqe.first() as? Train)?.name != staleTrainId ||
+					trainNavigationService.isPathReservedForTrain(staleTrainId, inOut)
+				) {
+					// Disarm only: the deadline arm's own catch owns the occupancy restore and the
+					// errorStop; a premise that turned void never reaches them.
 					staleOriginTrainId = null
 					waitUntil(pathFree)
 					return false
