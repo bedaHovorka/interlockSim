@@ -16,24 +16,17 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -49,20 +42,15 @@ import java.util.concurrent.TimeUnit
  *    extension and must still reserve and MERGE (the gate must not be over-eager), and
  *  - the outer semaphore scan (`reservePathToAnyNextSemaphore`) reports the divergent verdict —
  *    not a retryable "all paths blocked" — when every enumerated semaphore diverges
- *    (review thread lABQY).
+ *    (review thread lABQY). Since Issue #1188 this branch is pinned directly on
+ *    `classifyExhaustedSemaphores`: the switch origin that reached it through the real scan is
+ *    now refused at Step 0.
  *
  * Topology (vyhybna.xml): `zA(14,8) - vA(15,8) - doA1(16,8) ... doB1(25,8)` on the main leg and
  * `vA - doA2(17,9) ... doB2(24,9)` on the branch leg. InOuts: `A(11,8)`, `B(30,8)`.
  */
 @DisplayName("Issue #1066 Regression: a candidate diverging from the held route is refused before any mutation")
-class Issue1066RegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var service: PathReservationService
-
+class Issue1066RegressionTest : PathReservationServiceTestBase() {
 	private lateinit var zA: DynamicPathSeparator
 	private lateinit var doB2: DynamicPathSeparator
 	private lateinit var doB1: DynamicPathSeparator
@@ -71,21 +59,12 @@ class Issue1066RegressionTest : KoinTestBase() {
 	private val trainId = "train_1066"
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-		registry = simulationContext.scope.get()
-		service = simulationContext.getRoutingServices().getPathReservationService()
-
+	fun setUpFixtures() {
 		zA = simulationContext.separatorAt(14, 8)
 		doB2 = simulationContext.separatorAt(24, 9)
 		doB1 = simulationContext.separatorAt(25, 8)
 		switchVA = simulationContext.separatorAt(15, 8) as? DynamicRailSwitch
 			?: throw IllegalStateException("Switch 'vA' is not a DynamicRailSwitch")
-	}
-
-	@AfterEach
-	fun tearDown() {
-		simulationContext.close()
 	}
 
 	/** Signal aspect of every semaphore on the two legs, keyed by grid position. */
@@ -177,26 +156,25 @@ class Issue1066RegressionTest : KoinTestBase() {
 	}
 
 	/**
-	 * Pins the outer aggregation (review thread lABQY on PR #1082):
-	 * [PathReservationService.reservePathToAnyNextSemaphore] counts a divergent attempt in
-	 * `divergentAttempts`. When EVERY enumerated semaphore diverges, the gate in
-	 * `classifyExhaustedSemaphores` holds (`geometricAttempts + divergentAttempts == attemptCount`)
-	 * and the caller sees the distinct [PathReservationService.ReservationResult.DivergesFromHeldRoute]
-	 * verdict, not a retryable "all paths blocked".
+	 * Converted for Issue #1188. This test used to pin the outer aggregation (review thread lABQY
+	 * on PR #1082) by starting [PathReservationService.reservePathToAnyNextSemaphore] at switch
+	 * `vA`: only that origin made every candidate diverge. A switch is no longer a legal route
+	 * origin, so the same request is now refused by the Step 0 guard, ahead of the Step 1.6
+	 * divergence check, and still mutates nothing. Every legal, contiguous origin (`zA`, `doA2`)
+	 * finds a sub-route of the held route, which succeeds; so the all-divergent branch is pinned
+	 * directly in [classifyExhaustedSemaphoresKeepsDivergentVerdictOnlyWhenEveryAttemptIsPermanent].
 	 */
 	@Test
 	@Timeout(10, unit = TimeUnit.SECONDS)
-	@DisplayName("reservePathToAnyNextSemaphore with every target divergent reports DivergesFromHeldRoute")
-	fun outerScanReportsDivergentWhenEveryTargetDiverges() {
+	@DisplayName("reservePathToAnyNextSemaphore from switch vA with a held route is refused as GeometricallyImpossible")
+	fun outerScanFromSwitchWithHeldRouteIsRefusedBeforeDivergenceCheck() {
 		// Given: the train stands at zA holding zA -> doB2 (branch), so old.target = doB2.
 		assertThat(service.reservePath(trainId, zA, doB2))
 			.isInstanceOf<PathReservationService.ReservationResult.Success>()
 		val infoBefore = registry.getPathInfo(trainId)
 		val blocksBefore = registry.getBlocks(trainId).map { it.getState() }
 
-		// When: the semaphore scan starts at vA along the main leg. The only forward semaphore
-		// it finds is doB1; every candidate for vA -> doB1 either starts elsewhere than old.target
-		// (divergent, Step 1.6) or arrives at doB1 rear-facing (geometric, Step 1.5).
+		// When: the semaphore scan starts at switch vA along the main leg.
 		val result =
 			service.reservePathToAnyNextSemaphore(
 				trainId,
@@ -204,13 +182,31 @@ class Issue1066RegressionTest : KoinTestBase() {
 				sectionBetween(switchVA, simulationContext.separatorAt(16, 8))
 			)
 
-		// Then: the outer verdict is the distinct divergent refusal, naming the held target.
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
-		val denial = result as PathReservationService.ReservationResult.DivergesFromHeldRoute
-		assertThat(denial.heldTarget).isEqualTo("doB2")
+		// Then: the non-oriented origin is refused first, naming the switch.
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		val denial = result as PathReservationService.ReservationResult.GeometricallyImpossible
 		assertThat(denial.reason).contains("vA")
 		// And nothing was reserved or merged behind it.
 		assertThat(registry.getPathInfo(trainId)).isSameInstanceAs(infoBefore)
 		assertThat(registry.getBlocks(trainId).map { it.getState() }).isEqualTo(blocksBefore)
+	}
+
+	/**
+	 * Pins the outer aggregation (review thread lABQY on PR #1082) directly: when EVERY
+	 * enumerated semaphore was refused permanently and the last refusal was divergent, the caller
+	 * sees the distinct [PathReservationService.ReservationResult.DivergesFromHeldRoute] verdict.
+	 * If even one attempt was only blocked, the verdict is a retryable "all paths blocked".
+	 */
+	@Test
+	@DisplayName("classifyExhaustedSemaphores keeps the divergent verdict only when every attempt is permanent")
+	fun classifyExhaustedSemaphoresKeepsDivergentVerdictOnlyWhenEveryAttemptIsPermanent() {
+		val impl = service as DefaultPathReservationService
+		val divergent =
+			PathReservationService.ReservationResult.DivergesFromHeldRoute("doB2", "Route origin 'zA' diverges")
+
+		assertThat(impl.classifyExhaustedSemaphores(divergent, permanentAttempts = 2, attemptCount = 2))
+			.isSameInstanceAs(divergent)
+		assertThat(impl.classifyExhaustedSemaphores(divergent, permanentAttempts = 1, attemptCount = 2))
+			.isEqualTo(PathReservationService.ReservationResult.AllPathsBlocked(2))
 	}
 }

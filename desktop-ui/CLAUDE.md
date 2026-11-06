@@ -1,6 +1,6 @@
 # CLAUDE.md — :desktop-ui
 
-**Last Updated:** 2026-08-27
+**Last Updated:** 2026-10-29
 
 Guidance for Claude Code when working in `:desktop-ui`. Repo-wide rules
 (English-only output, heavy-test policy, Koin rules, code quality) live in the
@@ -44,7 +44,8 @@ AnimatedSim renders physics-accurate train movement (Issue #268). Speed control:
 - `StatusBar.updateSpeedIndicator()` — shows the multiplier whenever speed ≠ `1.0x`
 - `SimulationKeyBindings` — global shortcuts in simulation mode:
   `1`-`5` → 0.5x/1x/2x/5x/10x, `+`/`-` → ×1.5 / ÷1.5, `Space` → pause/resume
-  (toggles `SimulationRunner.isPaused`; Goal 8 groundwork)
+  (toggles `SimulationRunner.isPaused`), `S` → step one event, `T` → step by a time delta
+  (Goal 8 is complete)
 
 For an XML file loaded in the desktop UI, start the run with
 **Simulation → Start...**, then adjust the speed with the slider, the presets,
@@ -75,7 +76,8 @@ desktop-ui/src/
 │   ├── AppMetadata.kt       - Application name, version, window titles
 │   ├── ExampleRegistry.kt   - Built-in console and GUI examples
 │   ├── AiSweepCommand.kt    - aiSweep CLI mode (grid runner front end)
-│   ├── DispatcherRunSummaries.kt, RunCompletionCheck.kt, SimulationTimeTracker.kt
+│   ├── DispatcherRunLifecycle.kt, DispatcherRunSummaries.kt, RunCompletionCheck.kt,
+│   │                          SimulationTimeTracker.kt
 │   ├── di/                  - Desktop Koin modules
 │   └── gui/                 - Swing editor + animated GUI (action/, animation/,
 │                              conflict/, gridcanvas/, warning/)

@@ -61,6 +61,18 @@ import java.util.concurrent.atomic.AtomicReference
  * every figure is `null`. That is deliberate: `null` means *not measured* and `0` means *measured
  * as none*, and a sweep that cannot tell them apart cannot rank on either.
  *
+ * ## Stale-origin refusals after a silent non-idle cycle (Issue #1365)
+ *
+ * [onTick] remembers the correlation tick index of every silent LLM cycle on a non-idle station
+ * ([TickRecord.silentNonIdleCycleIndex]); [onActionOutcome] counts an
+ * [ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS] apply failure into
+ * [DispatcherRunSnapshot.staleOriginRefusalsAfterSilentCycle] when its decision carries one of those
+ * indices ([AuthoredAction.tickIndex]) — that is, when the refused decision was **posted by the
+ * silent cycle itself**. Those are the rule-based fallback's decisions computed on the kept cycle
+ * observation, so their refusals are the ones attributable to it; a refusal of a later cycle's
+ * decision is not counted. The index is reported inside `plan()`, before `AgentLoopDriver` posts the
+ * cycle's decisions, so the queue's post/drain hand-off orders it before the outcome it attributes.
+ *
  * @param runId Opaque unique identifier (typically a UUID or `yyyyMMdd-HHmmss-<short-uuid>`).
  * @param arm Which dispatcher implementation arm is active.
  * @param params Fixed run parameters captured at run start.
@@ -116,6 +128,12 @@ class DefaultDispatcherRunRecorder(
 
 	private val unattributedApplies = AtomicLong(0L)
 
+	// Correlation tick indices of the silent non-idle cycles (Issue #1365): written on the driver
+	// thread by onTick, read on the sim thread by onActionOutcome. One entry per such cycle.
+	private val silentNonIdleCycleIndices: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
+	private val staleOriginRefusalsAfterSilentCycle = AtomicLong(0L)
+
 	// ── Railway outcome (Issue #834, SP2c.11) ────────────────────────────────
 
 	// Not an accumulator: the recorder has no view of the railway, so the figures arrive whole
@@ -135,6 +153,7 @@ class DefaultDispatcherRunRecorder(
 		ticksByOutcome.getValue(record.outcome.name).incrementAndGet()
 		record.timeoutNoOpCause?.let { cause -> timeoutNoOpByCause.getValue(cause.name).incrementAndGet() }
 		record.latencyMs?.let { latencySamplesMs.add(it) }
+		record.silentNonIdleCycleIndex?.let { silentNonIdleCycleIndices.add(it) }
 	}
 
 	override fun onActionOutcome(outcome: ActionOutcome) {
@@ -155,6 +174,13 @@ class DefaultDispatcherRunRecorder(
 		// Unattributed applies: tickIndex == -1 means the correlation map had no entry
 		if (outcome.authored.tickIndex == -1L) {
 			unattributedApplies.incrementAndGet()
+		}
+
+		// Issue #1365: a non-contiguous-origin refusal of a decision the silent cycle posted
+		if (outcome.applyFailure == ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS &&
+			outcome.authored.tickIndex in silentNonIdleCycleIndices
+		) {
+			staleOriginRefusalsAfterSilentCycle.incrementAndGet()
 		}
 	}
 
@@ -204,6 +230,8 @@ class DefaultDispatcherRunRecorder(
 				"blockTransitions=${formatFigure(railway.blockTransitions)} " +
 				"conflicts=${formatFigure(railway.conflicts)} " +
 				"failedReservations=${formatFigure(railway.failedReservations)} " +
+				// Issue #1280: contentions still open at run end, apart from the mid-run `conflicts`.
+				"unresolvedAtRunEnd=${formatFigure(railway.unresolvedAtRunEnd)} " +
 				// Issue #1074: the breaker figures, so one run is readable without opening the
 				// JSON — same reasoning as the railway figures above (#834).
 				"circuitBreakerState=${snap.circuitBreakerState ?: "n/a"} " +
@@ -328,7 +356,8 @@ class DefaultDispatcherRunRecorder(
 			railwayOutcome = railwayOutcome.get(),
 			circuitBreakerState = breaker?.state,
 			circuitBreakerTotalSkips = breaker?.totalSkips,
-			circuitBreakerOpenCount = breaker?.openCount
+			circuitBreakerOpenCount = breaker?.openCount,
+			staleOriginRefusalsAfterSilentCycle = staleOriginRefusalsAfterSilentCycle.get()
 		)
 	}
 

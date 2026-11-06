@@ -158,6 +158,38 @@ class RequestRouteToolTest {
 	}
 
 	/**
+	 * Issue #1155: on a station with more than two InOuts the queued train's entry point is not
+	 * known to this tool (the queue observation carries only the destination), so "any InOut but the
+	 * destination" no longer pins it. The #1276 Červený Újezd baseline stalled in all 6 of its early
+	 * terminations this way: a queued train got a route from another InOut, and its own entry then
+	 * failed on a non-contiguous path. Such a request is refused as premature instead.
+	 */
+	@Test
+	@DisplayName("on a station with more than two InOuts a queued train gets no route, whatever the origin")
+	fun queuedTrainGetsNoRouteWhenTheEntryIsAmbiguous() {
+		val fourInOuts = setOf("east_1", "east_2", "west_1", "west_2")
+		val tool =
+			RequestRouteTool(
+				SinkHolder(),
+				fourInOuts + setOf("homeE1", "homeW1"),
+				perceptionPort(emptyList()),
+				sensorPort(listOf("Train #6"), destination = "west_1"),
+				inOutNames = fourInOuts
+			)
+
+		for (origin in listOf("east_1", "homeE1")) {
+			val error =
+				errorOf(
+					runBlocking {
+						tool.execute(mapOf("trainName" to "Train #6", "fromEndpointName" to origin, "toEndpointName" to "homeW1"))
+					}
+				)
+			assertThat(error.rejection, "rejection code for origin $origin").isEqualTo(RejectionCode.TRAIN_NOT_ADMITTED)
+			assertThat(error.message, "message").contains("approve_train")
+		}
+	}
+
+	/**
 	 * The same call with the entry InOut as origin is the legitimate one and must pass.
 	 *
 	 * The target is a Signal rather than the far InOut because this test is about the *origin*

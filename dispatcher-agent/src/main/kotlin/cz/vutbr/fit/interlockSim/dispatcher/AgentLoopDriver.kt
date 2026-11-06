@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.LatestObservationReader
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerTickListener
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
@@ -72,7 +73,8 @@ import kotlin.time.TimeSource
  *
  * @param perceptionPort Read-only sense port for the railway network state
  * @param planner        Pluggable planning function; must not retain the
- *   observation beyond the call or mutate simulation state
+ *   observation beyond the call or mutate simulation state. Readable so wiring tests can pin
+ *   which planner a context was given (Issue #1303)
  * @param commandQueue   Thread-safe queue to which decisions are posted;
  *   drained and applied by the sim-thread applier
  * @param controller     Pacing controller; injected into the driver **only** —
@@ -96,7 +98,7 @@ import kotlin.time.TimeSource
  */
 class AgentLoopDriver(
 	private val perceptionPort: NetworkPerceptionPort,
-	private val planner: DispatcherPlanner,
+	val planner: DispatcherPlanner,
 	private val commandQueue: ActuatorCommandQueue,
 	private val controller: SimulationController,
 	/**
@@ -129,6 +131,11 @@ class AgentLoopDriver(
 	 * planner such as [RuleBasedPlanAdapter]), every cycle is attributed
 	 * [ActionAuthor.RULE_BASED] — safe because a synchronous rule-based planner has no
 	 * internal LLM/fallback blend to distinguish.
+	 *
+	 * When non-null, this driver also installs a reader over its own [perceptionPort] and
+	 * [dispatchLoopSensorPort] as [KoogAgentPlanAdapter.latestObservationReader] (Issue #1343),
+	 * so the adapter's fallback after a failed cycle decides on the latest state published
+	 * through exactly the ports [runCycle] senses from.
 	 */
 	private val plannerTickSource: KoogAgentPlanAdapter? = null,
 	/**
@@ -217,6 +224,12 @@ class AgentLoopDriver(
 				onTickRecord?.invoke(record)
 			}
 		)
+		// Issue #1343: after a failed cycle (timeout, exception, agent-creation failure) the
+		// adapter's rule-based fallback decides on the latest state published through this
+		// driver's own two ports, not on the cycle's stale observation. Reads only, never a
+		// capture (constraint C3 of the F1 paused-clock ruling).
+		plannerTickSource?.latestObservationReader =
+			LatestObservationReader.fromPorts(perceptionPort, dispatchLoopSensorPort)
 	}
 
 	private fun pauseUntilNextSnapshot() {

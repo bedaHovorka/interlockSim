@@ -60,7 +60,7 @@ several dispatcher agents. See "Goal Stages" above and "Implementation Strategy"
 | ID | Stage | Title | Category | Priority | Status | Estimate |
 |----|-------|-------|----------|----------|----------|----------|
 | 1 | — | Multi-Train Simulation | E: Advanced Simulation | Critical | ✅ Complete | 6 months |
-| 1 | **B** | Scale and Routing Test Scenarios | E: Advanced Simulation | **Critical (next)** | 🆕 Open (#591) | 4 months |
+| 1 | **B** | Scale and Routing Test Scenarios | E: Advanced Simulation | **Critical (next)** | 🟡 In progress (#1147) | 4 months |
 | 2 | — | Automatic Path Finding | E: Advanced Simulation | Critical | ✅ Complete | 3 months |
 | 3 | — | Collision Detection and Warning | J: Safety & Compliance | Critical | ✅ Complete | 2 months |
 | 3 | **B** | Snapshot Collision Detection on a Separate Thread | J: Safety & Compliance | High | 🆕 Planned | 2 months |
@@ -573,7 +573,7 @@ order they will be worked, rather than beside their first stages. See "Goal Stag
 **Category:** E: Advanced Simulation
 **Priority:** **Critical — the top-priority work as of 2026-08-23**
 **Development Estimate:** 4 months
-**Status:** 🆕 OPEN — GitHub milestone *Goal 1B*, currently holding #591
+**Status:** 🟡 IN PROGRESS — parent issue #1147, GitHub milestone *Goal 1B*; SP1, SP2, SP4, SP5, SP9 and SP12 are ✅ complete
 
 **Paramount example:** the **Praha hlavní nádraží 5-train scenario** (owner decision
 2026-07-11). Goal 10 keeps `vyhybna.xml` as its paramount example; the Praha scale scenario moves
@@ -582,7 +582,9 @@ here.
 **User Value:**
 The scale bar that Goal 1 left unverified is finally closed, with routing tested on real station layouts instead of a two-switch loop.
 
-**Scope.** Build a fresh task plan out of #591's test expectations, its `.md` documents, its code
+**Progress (2026-10-29).** The plan is written and tracked in #1147 (sub-issues SP1-SP13, #1148-#1160). ✅ Done: SP1 fail-fast harness (#1148), SP2 station abstraction (#1149), SP4 bounded route search (#1151), SP5 one target-selection path (#1152), SP9 kDisco review (#1156), SP12 routing decomposition (#1159). 🆕 Open: SP3 Červený Újezd (#1150), SP6 (#1153), SP7 (#1154), SP8 (#1155), SP10 (#1157), SP11 (#1158), SP13 (#1160), and #591 last. Per-task Goal 9B demands: [docs/goal9b-demands/](docs/goal9b-demands/).
+
+**Scope (as planned).** Build a fresh task plan out of #591's test expectations, its `.md` documents, its code
 comments, and the current state of the code. Note that **#591 is an issue, not a pull request**;
 its work lives on the branch `feat/issue-591-scale-validation`, where the 5-train case passes and
 the 20-train stress case livelocks. The plan must cover:
@@ -603,14 +605,14 @@ the 20-train stress case livelocks. The plan must cover:
 
 kDisco prerequisites known today: the package rename (kdisco#53) is consumed. kdisco#42/#43/#44 block
 Goal 5, not this goal. kdisco#83 (filed from #1112: unhandled process exceptions are absorbed instead of
-reaching the embedder) is open and is the kind of weak point the review above must classify as a
-prerequisite or not.
+reaching the embedder) was classified by SP9 (#1156); see section 4 of
+[docs/goal9b-demands/SP9-kdisco-review.md](docs/goal9b-demands/SP9-kdisco-review.md).
 
 **Exit condition:** #591's failing tests are green at the end of the whole plan. That issue is
 therefore created **last** in the plan. It runs with low traffic — long lambda times in the
 parameters, and a low maximum of concurrent trains.
 
-**Open questions to answer when the plan is written:**
+**Open questions (carried into #1147):**
 - Is each item already part of some goal or issue?
 - Does it depend on an existing open issue?
 - Is the multi-loop example only usable with an agent?
@@ -898,7 +900,7 @@ away from this phase.
 
 | Order | Goal | Title | Months | Rationale | Tracking |
 |-------|------|-------|--------|-----------|----------|
-| 1 | 1B | Scale and Routing Test Scenarios | 4 | **Top-priority work.** Closes #591; produces the routing cleanup and the kDisco review everything else needs | #591, milestone *Goal 1B* |
+| 1 | 1B | Scale and Routing Test Scenarios | 4 | **Top-priority work.** Closes #591; produces the routing cleanup and the kDisco review everything else needs | #1147 (parent), #591 (exit condition), milestone *Goal 1B* |
 | 2 | 9B | Realistic Conflict Resolution and Command Threading | 4 | Specified during Goal 1B, built from its findings | — |
 | 3 | 12 | Inter-station Tracks and Multiple Dispatcher Agents | 5 | Needs the Goal 10 dispatcher seam and Goal 1B's routing cleanup | #821 |
 | 4 | 3B | Snapshot Collision Detection on a Separate Thread | 2 | Feeds Goal 9B's resolution suggestions | — |
@@ -993,7 +995,7 @@ Goal 11 is Very Low priority and carries no schedule risk.
   - Order the models by difficulty: Červený Újezd first, Praha last
   - Run with low traffic first — long lambda times, low maximum of concurrent trains
   - Create the #591 closing task **last** in the plan, so the failing tests are the exit condition
-  - Research existing scanners before hand-auditing kDisco
+  - ✅ Research existing scanners before hand-auditing kDisco (done in SP9, #1156)
 
 **Goal 19: Czech Timetable Import**
 - **Risk:** GVD/KADR format may be undocumented, proprietary, or vary between sources; data quality inconsistencies

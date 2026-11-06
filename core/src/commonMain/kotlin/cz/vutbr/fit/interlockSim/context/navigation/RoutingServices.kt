@@ -23,6 +23,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
  * - [getTopologyNavigator] - Static topology navigation (no dynamic-state dependency)
  * - [getPathReservationService] - Atomic path reservation with train ownership tracking
  * - [getReservationTargetQuery] - Read-only next-target candidate query (reservation capability, Issue #970)
+ * - [getReservationExpiry] - Kernel-side reservation expiry trigger (Issue #1174)
  * - [getTrainNavigationService] - Train-specific navigation over RESERVED paths only
  *
  * @see cz.vutbr.fit.interlockSim.context.SimulationEnvironment.getRoutingServices
@@ -81,6 +82,18 @@ interface RoutingServices {
 	 * @since Issue #970
 	 */
 	fun getReservationTargetQuery(): ReservationTargetQuery
+
+	/**
+	 * Get the kernel-side reservation expiry trigger (Issue #1174) alone, for a caller that must not
+	 * hold the whole [PathReservationService] -- `ShuntingLoop`, which deliberately holds no
+	 * reservation handle (Issue #1152). Served by the same instance as [getPathReservationService],
+	 * whose superinterface it is, so an implementation need not override it.
+	 *
+	 * @return the ReservationExpiry of this simulation context's reservation service
+	 * @see ReservationExpiry
+	 * @since Issue #1174
+	 */
+	fun getReservationExpiry(): ReservationExpiry = getPathReservationService()
 
 	/**
 	 * Get train navigation service for train-specific path following.

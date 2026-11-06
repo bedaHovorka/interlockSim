@@ -299,7 +299,7 @@ abstract class AbstractPath protected constructor(
 				requireSimulation(following === to) {
 					"Separator $dynamicSeparator: getFollowingSegment($from) returned $following but expected $to"
 				}
-				// Note: Switch configuration is handled by PathReservationService.configureSwitchesInPath()
+				// Note: Switch configuration is handled by SwitchConfigurator.configureSwitchesInPath()
 				// See Issue #300 - AbstractPath iteration was causing incorrect switch configuration
 			}
 

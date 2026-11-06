@@ -18,18 +18,14 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.Util
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Deterministic event-driven block handover tests (Issue #582).
@@ -41,16 +37,11 @@ import org.koin.test.inject
  */
 @Tag("integration-test")
 @DisplayName("Block release event-driven wait")
-class BlockReleaseWaitTest : KoinTestBase() {
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
+class BlockReleaseWaitTest : PathReservationServiceTestBase() {
 	@Test
 	fun `train B waits for train A to release a block then reserves it in a later event`() =
 		runBlocking {
-			val context = TestFixtures.loadShuntingSimulationContext(simulationContextFactory).tracked()
-
-			val registry = context.scope.get<PathReservationRegistry>()
-			val block = Util.assertInstanceOf<DynamicTrackBlock>(context.getGraph().values().first())
+			val block = Util.assertInstanceOf<DynamicTrackBlock>(simulationContext.getGraph().values().first())
 			val from = block.ends()[0] as DynamicPathSeparator
 
 			val occupantA = FakeTrackOccupant("Train A")

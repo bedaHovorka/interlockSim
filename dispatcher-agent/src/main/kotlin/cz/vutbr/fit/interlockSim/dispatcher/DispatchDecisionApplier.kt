@@ -511,8 +511,10 @@ class DispatchDecisionApplier(
 				ApplyResult(admitted, if (!admitted) ApplyFailureCode.CAP_EXCEEDED_APPLY else null)
 			}
 			is DispatchDecision.ReservePath -> {
-				applyReservePath(decision)
-				ApplyResult(true)
+				// Same decisionApplied convention as the RequestRoute branch below: the actuator
+				// was reached either way, only applyFailure — driving the actionOutcomeSink's
+				// phase/code — varies with the reservation result (Issue #1365).
+				ApplyResult(true, applyReservePath(decision))
 			}
 			DispatchDecision.NoAction -> ApplyResult(false)
 			// ── Train-lifecycle subtypes ──────────────────────────────────────────
@@ -649,26 +651,31 @@ class DispatchDecisionApplier(
 	 * Skipping a triple already recorded in [appliedReservations] restores "at most one
 	 * real application per reservation need", without touching the shared
 	 * navigation/registry code that other callers (e.g. `InOutWorker`) also depend on.
+	 *
+	 * @return The [ApplyFailureCode] for the reservation result — `null` for a success or a
+	 *   duplicate skipped before the actuator was consulted; the refusal's own code otherwise,
+	 *   mirroring the mapping in [applyRequestRoute] (Issue #1365 — a refused `ReservePath` must
+	 *   reach the run recorder under its code, like a refused `RequestRoute` does).
 	 */
-	private fun applyReservePath(decision: DispatchDecision.ReservePath) {
-		val reservationKey = ReservationKey(decision.trainId, decision.fromSemaphoreName, decision.toSeparatorName)
+	private fun applyReservePath(decision: DispatchDecision.ReservePath): ApplyFailureCode? {
+		val reservationKey = ReservationKey(decision.trainId, decision.fromSemaphoreName, decision.toTargetName)
 		if (reservationKey in appliedReservations) {
 			logger.debug {
 				"Skipping duplicate ReservePath: trainId=${decision.trainId} " +
-					"${decision.fromSemaphoreName} → ${decision.toSeparatorName} (already applied)"
+					"${decision.fromSemaphoreName} → ${decision.toTargetName} (already applied)"
 			}
-			return
+			return null
 		}
 
 		logger.debug {
 			"Applying ReservePath: trainId=${decision.trainId} " +
-				"${decision.fromSemaphoreName} → ${decision.toSeparatorName}"
+				"${decision.fromSemaphoreName} → ${decision.toTargetName}"
 		}
 		val result =
 			networkActuator.requestRoute(
 				decision.trainId,
 				decision.fromSemaphoreName,
-				decision.toSeparatorName
+				decision.toTargetName
 			)
 		// Exhaustive `when` *expression* over the sealed RouteRequestResult type —
 		// returning the `when` forces the compiler to enforce coverage, so a future
@@ -681,14 +688,16 @@ class DispatchDecisionApplier(
 				}
 				appliedReservations.add(reservationKey)
 				onBlockTransition(decision.trainId)
+				null
 			}
 			is RouteRequestResult.AllPathsBlocked -> {
 				logger.warn {
 					"ReservePath: all paths blocked for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}); " +
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName}); " +
 						"attempted: ${result.attemptedPaths}"
 				}
 				onFailedReservation()
+				ApplyFailureCode.ALL_PATHS_BLOCKED
 			}
 			is RouteRequestResult.Conflict -> {
 				logger.warn {
@@ -696,21 +705,24 @@ class DispatchDecisionApplier(
 						"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
 				}
 				onFailedReservation()
+				ApplyFailureCode.CONFLICT
 			}
 			is RouteRequestResult.NoRouteExists -> {
 				logger.warn {
 					"ReservePath: no route exists " +
-						"${decision.fromSemaphoreName} → ${decision.toSeparatorName} " +
+						"${decision.fromSemaphoreName} → ${decision.toTargetName} " +
 						"for ${decision.trainId}"
 				}
 				onFailedReservation()
+				ApplyFailureCode.NO_ROUTE_EXISTS
 			}
 			is RouteRequestResult.UnresolvedEndpoint -> {
 				logger.warn {
 					"ReservePath: unresolved endpoint '${result.endpointName}' for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName})"
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName})"
 				}
 				onFailedReservation()
+				ApplyFailureCode.UNRESOLVED_ENDPOINT
 			}
 			is RouteRequestResult.OriginNotContiguous -> {
 				logger.warn {
@@ -718,29 +730,33 @@ class DispatchDecisionApplier(
 						"with ${decision.trainId}: ${result.reason}"
 				}
 				onFailedReservation()
+				ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS
 			}
 			is RouteRequestResult.ConditionFailed -> {
 				logger.warn {
 					"ReservePath: four-condition refusal for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}" +
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName}" +
 						"${if (result.retryable) ", transient" else ", permanent"}): ${result.reason}"
 				}
 				onFailedReservation()
+				ApplyFailureCode.CONDITION_FAILED
 			}
 			is RouteRequestResult.GeometricallyImpossible -> {
 				logger.warn {
 					"ReservePath: geometrically impossible for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}): ${result.reason}"
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName}): ${result.reason}"
 				}
 				onFailedReservation()
+				ApplyFailureCode.GEOMETRICALLY_IMPOSSIBLE
 			}
 			is RouteRequestResult.DivergesFromHeldRoute -> {
 				logger.warn {
 					"ReservePath: route diverges from the held route for ${decision.trainId} " +
-						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}, " +
+						"(${decision.fromSemaphoreName} → ${decision.toTargetName}, " +
 						"held target ${result.heldTarget}): ${result.reason}"
 				}
 				onFailedReservation()
+				ApplyFailureCode.DIVERGES_FROM_HELD_ROUTE
 			}
 		}
 	}
@@ -967,7 +983,8 @@ class DispatchDecisionApplier(
 	 * LongMethod budget).
 	 *
 	 * Publishes [AppliedOutcome.GeometricallyImpossible] so the agent learns the requested route
-	 * is permanently impossible (rear-facing START or unconfigurable switch), not merely busy.
+	 * is permanently impossible, not merely busy (classes:
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible]).
 	 *
 	 * @since Issue #903
 	 */

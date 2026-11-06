@@ -20,7 +20,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
  * ## Purpose
  *
  * Provides static graph traversal without any dependency on dynamic state (block reservations,
- * occupancy, etc.). This is Phase 1 of the Path Discovery Restructuring (Issue #292).
+ * occupancy, etc.). This is the static-topology half of the Path Discovery Restructuring (Issue #292).
+ *
+ * Every `maxDepth` default in this interface is 100, the value of `DEFAULT_MAX_PATH_DEPTH`.
  *
  * ## Design Principles
  *
@@ -34,13 +36,13 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
  * 1. **Network validation** - Check connectivity, find dead-ends, detect loops
  * 2. **Editor features** - Highlight possible paths, validate network design
  * 3. **Path planning** - Find all topologically possible routes between points
- * 4. **Foundation for reservation** - Phase 2 will build on this for reservation logic
+ * 4. **Foundation for reservation** - [PathReservationService] builds on this for reservation logic
  *
  * ## Separation of Concerns
  *
  * This interface is intentionally separated from:
- * - **Dynamic state** - Block reservations/occupancy (handled by PathReservationService in Phase 2)
- * - **Train navigation** - Following reserved paths (handled by TrainNavigationService in Phase 3)
+ * - **Dynamic state** - Block reservations/occupancy (handled by [PathReservationService])
+ * - **Train navigation** - Following reserved paths (handled by [TrainNavigationService])
  * - **Simulation execution** - Runtime state management (handled by SimulationContext)
  *
  * ## Thread Safety
@@ -93,12 +95,6 @@ interface TopologyNavigator {
 	 * // Dead-end at buffer stop
 	 * val end = navigator.getNextTrackSection(bufferStop, lastSection) // returns null
 	 * ```
-	 *
-	 * ## Comparison with SimulationContext.getNextTrackSection
-	 *
-	 * This method extracts lines 567-608 from DefaultSimulationContext.getNextTrackSection(),
-	 * removing all block state validation (lines 614-632). The simulation method will eventually
-	 * delegate to this interface and add state validation on top.
 	 *
 	 * @see findAllTopologicalPaths
 	 */
@@ -154,7 +150,7 @@ interface TopologyNavigator {
 	 *
 	 * @param start The starting path separator (typically InOut or switch)
 	 * @param target The target path separator to reach
-	 * @param maxDepth Maximum search depth to prevent infinite loops (default: 100)
+	 * @param maxDepth Maximum search depth to prevent infinite loops
 	 *
 	 * ## Return Value
 	 *
@@ -179,7 +175,7 @@ interface TopologyNavigator {
 	 *
 	 * - Network validation: Check if route exists between two points
 	 * - Editor features: Show all possible routes for user selection
-	 * - Foundation for Phase 2: PathReservationService will filter by availability
+	 * - Foundation for reservation: [PathReservationService] filters by availability
 	 *
 	 * @see getNextTrackSection
 	 * @see findCandidatePaths
@@ -189,6 +185,31 @@ interface TopologyNavigator {
 		target: PathSeparator,
 		maxDepth: Int = 100
 	): List<List<TrackSection>>
+
+	/**
+	 * Length of the shortest route from [start] to [target] over the same switch-blind moves as
+	 * [findAllTopologicalPaths], or `null` when no route exists.
+	 *
+	 * The default body returns `findAllTopologicalPaths(start, target, maxDepth).minOfOrNull { it.sumOf(length) }`.
+	 * An implementation can compute the same value without listing every path; see
+	 * [DefaultTopologyNavigator.findShortestTopologicalDistance] for where its search may differ. Listing them grows
+	 * exponentially with the number of switches: on the Praha fixture (50 switches) one pair has
+	 * 912 paths and takes seconds on the JVM and about a minute on linuxX64 (Issue #1148).
+	 *
+	 * @param start    The starting path separator.
+	 * @param target   The target path separator to reach.
+	 * @param maxDepth Maximum search depth, as in [findAllTopologicalPaths].
+	 * @return the shortest route length in meters, or `null` when no route exists
+	 * @since Issue #1148
+	 */
+	fun findShortestTopologicalDistance(
+		start: PathSeparator,
+		target: PathSeparator,
+		maxDepth: Int = 100
+	): Double? =
+		findAllTopologicalPaths(start, target, maxDepth).minOfOrNull { path ->
+			path.sumOf { section -> section.length() }
+		}
 
 	/**
 	 * Find all routes from [start] to [target] that respect static switch constraints.
@@ -207,8 +228,9 @@ interface TopologyNavigator {
 	 *
 	 * @param start    The starting path separator.
 	 * @param target   The target path separator to reach.
-	 * @param maxDepth Maximum search depth to prevent infinite loops (default: 100).
-	 * @return List of switch-legal paths; empty when none exists.
+	 * @param maxDepth Maximum search depth to prevent infinite loops.
+	 * @return List of switch-legal paths; empty when none exists, and also when the implementation's
+	 *   search-node budget is exceeded (Issue #1151, see [DefaultTopologyNavigator.findAllSwitchConstrainedPaths]).
 	 * @see findAllTopologicalPaths
 	 */
 	fun findAllSwitchConstrainedPaths(
@@ -240,7 +262,7 @@ interface TopologyNavigator {
 	 *
 	 * @param start    The starting path separator (typically InOut or switch).
 	 * @param target   The target path separator to reach.
-	 * @param maxDepth Maximum search depth to prevent infinite loops (default: 100).
+	 * @param maxDepth Maximum search depth to prevent infinite loops.
 	 * @return List of [PathCandidate]; empty when no topological path exists.
 	 *
 	 * @see findAllTopologicalPaths

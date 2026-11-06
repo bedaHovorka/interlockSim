@@ -458,6 +458,7 @@ class DefaultDispatcherRunRecorderTest {
 		assertThat(outcome.maxConcurrentTrains).isNull()
 		assertThat(outcome.blockTransitions).isNull()
 		assertThat(outcome.conflicts).isNull()
+		assertThat(outcome.unresolvedAtRunEnd).isNull()
 		assertThat(outcome.failedReservations).isNull()
 	}
 
@@ -472,7 +473,8 @@ class DefaultDispatcherRunRecorderTest {
 				maxConcurrentTrains = 2L,
 				blockTransitions = 173L,
 				conflicts = 4L,
-				failedReservations = 9L
+				failedReservations = 9L,
+				unresolvedAtRunEnd = 2L
 			)
 		)
 
@@ -484,6 +486,7 @@ class DefaultDispatcherRunRecorderTest {
 		assertThat(outcome.blockTransitions).isEqualTo(173L)
 		assertThat(outcome.conflicts).isEqualTo(4L)
 		assertThat(outcome.failedReservations).isEqualTo(9L)
+		assertThat(outcome.unresolvedAtRunEnd).isEqualTo(2L)
 	}
 
 	/**
@@ -576,6 +579,38 @@ class DefaultDispatcherRunRecorderTest {
 			assertThat(noteLines.first()).contains("[DispatcherRunRecorder] note:")
 			assertThat(noteLines.first()).contains("llmSuccessRate and actionableTickRate")
 			assertThat(noteLines.first()).contains("LLM_SILENT_ALL_MOVING")
+		}
+
+		/**
+		 * Issue #1280: the summary line keeps mid-run conflicts and the contentions still open at
+		 * run end in two separate figures, so a cutoff run with trains still queued reads
+		 * `conflicts=0 unresolvedAtRunEnd=2` instead of `conflicts=2`.
+		 */
+		@Test
+		fun `final summary reports unresolved contentions at run end apart from conflicts`() {
+			val r = recorder()
+			r.recordRailwayOutcome(RailwayOutcome(conflicts = 0L, unresolvedAtRunEnd = 2L))
+			r.finish(RunEndCause.NATURAL_COMPLETION)
+
+			r.logFinalSummary()
+
+			val summary =
+				appender.list
+					.map { it.formattedMessage }
+					.single { it.contains("final summary") }
+			assertThat(summary).contains("conflicts=0 ")
+			assertThat(summary).contains("unresolvedAtRunEnd=2 ")
+		}
+
+		@Test
+		fun `final summary marks unresolved contentions as n-a when nothing measured them`() {
+			recorder().logFinalSummary()
+
+			val summary =
+				appender.list
+					.map { it.formattedMessage }
+					.single { it.contains("final summary") }
+			assertThat(summary).contains("unresolvedAtRunEnd=n/a ")
 		}
 	}
 

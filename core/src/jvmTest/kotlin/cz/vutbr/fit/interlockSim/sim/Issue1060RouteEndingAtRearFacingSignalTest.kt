@@ -10,10 +10,13 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
+import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
@@ -38,6 +41,12 @@ import java.util.concurrent.TimeUnit
  * by cutting the stored PathInfo of a legitimate B → A train back to `doB1` before the train
  * reaches `zB`. The rule dispatcher, the only one running, must notice the stand and extend the
  * route from `zB`, and the train must go on and leave the station.
+ *
+ * The extension must come by dispatching, not by the reservation expiry: no [ReservationExpired]
+ * may occur for the cut train. A rear-facing end is never a candidate, so the dispatcher's pick
+ * differs from the held route end and the Issue #1244 same-route guard stays silent here. A guard
+ * that also fired here would hold the train until its tail expired and an ordinary reservation
+ * followed: the train would still leave, but only after a `ReservationExpired`.
  */
 @Tag("integration-test")
 @DisplayName("A route ending at a rear-facing signal is extended for the train standing before it (#1060)")
@@ -94,6 +103,10 @@ class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
 				}
 			}
 
+		// Registered before run(), as the event's contract asks (Issue #1243).
+		val expiredForCutTrain = mutableListOf<ReservationExpired>()
+		context.onReservationExpired { event -> if (event.trainId == cutTrain?.name) expiredForCutTrain += event }
+
 		context.setMainProcess(loop)
 		context.run()
 
@@ -101,6 +114,8 @@ class Issue1060RouteEndingAtRearFacingSignalTest : KoinTestBase() {
 		assertThat(cutTrainStoodAtSignal, name = "the cut train stood at its signal").isTrue()
 		assertThat(routeExtendedWhileStanding, name = "route extended past $REAR_FACING_END while standing").isTrue()
 		assertThat(cutTrain!!.terminated(), name = "the cut train itself finished its journey").isTrue()
+		assertThat(expiredForCutTrain, name = "ReservationExpired events of the cut train (extended by dispatching)")
+			.isEmpty()
 	}
 
 	/**

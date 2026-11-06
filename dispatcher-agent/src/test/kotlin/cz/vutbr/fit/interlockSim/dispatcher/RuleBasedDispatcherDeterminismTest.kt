@@ -52,7 +52,7 @@ private val logger = KotlinLogging.logger {}
  * `trainsExited == 0` on every run (the [DispatchAction.RequestRoute] `scope` discriminant —
  * see [RouteScope]) and a same-tick same-target reservation race in
  * [RuleBasedDispatcher.checkAllInputs] (two trains at a track merge both computing the same
- * `toSeparatorName` from one frozen per-tick observation). Both fixes are verified: the
+ * `toTargetName` from one frozen per-tick observation). Both fixes are verified: the
  * two-trains-same-target race no longer reproduces (covered by
  * `RuleBasedDispatcherTest.sameTargetSeparatorDefersSecondTrainThisTick`).
  *

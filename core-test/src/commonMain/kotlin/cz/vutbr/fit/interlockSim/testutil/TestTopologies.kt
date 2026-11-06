@@ -68,6 +68,15 @@ object TestTopologies {
 	 */
 	const val LINEAR_BLOCK_MAX_SPEED_MPS = 80.0
 
+	/** Name of the entry [InOut] of [yJunctionWithSwitch]. */
+	const val Y_JUNCTION_ENTRY = "Entry"
+
+	/** Name of the main-route exit [InOut] of [yJunctionWithSwitch]. */
+	const val Y_JUNCTION_EXIT_MAIN = "ExitMain"
+
+	/** Name of the branch-route exit [InOut] of [yJunctionWithSwitch]. */
+	const val Y_JUNCTION_EXIT_BRANCH = "ExitBranch"
+
 	/**
 	 * The builder chain behind the single-semaphore linear family:
 	 * `A —[approachLength]— Sem —100 m— B`, all blocks at [LINEAR_BLOCK_MAX_SPEED_MPS].
@@ -108,9 +117,9 @@ object TestTopologies {
 	fun yJunctionWithSwitch(): EditingContext {
 		val context = DefaultEditingContext(60, 50)
 
-		val entry = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
-		val exitMain = InOut("ExitMain", true, Cell.SpatialType.HORIZONTAL)
-		val exitBranch = InOut("ExitBranch", true, Cell.SpatialType.HORIZONTAL)
+		val entry = InOut(Y_JUNCTION_ENTRY, false, Cell.SpatialType.HORIZONTAL)
+		val exitMain = InOut(Y_JUNCTION_EXIT_MAIN, true, Cell.SpatialType.HORIZONTAL)
+		val exitBranch = InOut(Y_JUNCTION_EXIT_BRANCH, true, Cell.SpatialType.HORIZONTAL)
 		val switch = RailSwitch("Junction", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 		context.putCell(Point(5, 30), entry)

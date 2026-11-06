@@ -207,7 +207,6 @@ class DispatchLoopPortsTest {
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = semaphoreName,
-			toSeparatorName = null,
 			state = TrackFacility.State.FREE,
 			ownerTrainId = null,
 			isApproachingThisInput = false,

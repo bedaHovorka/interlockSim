@@ -96,4 +96,41 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 		// only happen via approveQueuedTrain -> moved to approwedTrains.
 		assertThat(maxConcurrent).isGreaterThanOrEqualTo(1)
 	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	fun `approveQueuedTrain refuses trains while the station is at capacity`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		// SP2.2 review (Issue #1162): the hard capacity gate in approveQueuedTrain. The
+		// rule-based dispatcher never over-approves, so this listener over-approves instead: it
+		// offers every queued train each tick. With the override at 1, every offer after the
+		// first must hit the gate and keep the train queued. The refusal is observed from state,
+		// not logs: a train offered in one tick that is still queued in the next tick was
+		// refused, because approveQueuedTrain is the only thing that leaves the queue.
+		var previouslyQueued: Set<String> = emptySet()
+		var refusalCount = 0
+		val shuntingLoop = ShuntingLoop(context, endTime = 120L, maxConcurrentTrains = 1)
+		shuntingLoop.controlStepListener =
+			ControlStepListener {
+				val queued = shuntingLoop.getQueuedTrains().map { it.trainId }.toSet()
+				refusalCount += queued.intersect(previouslyQueued).size
+				previouslyQueued = queued
+				queued.forEach { name -> shuntingLoop.approveQueuedTrain(name) }
+			}
+		context.setMainProcess(shuntingLoop)
+		context.run()
+
+		val entered = shuntingLoop.getTrainsEntered()
+		val maxConcurrent = shuntingLoop.getMaxConcurrentTrains()
+		logger.info { "entered=$entered, maxConcurrent=$maxConcurrent, refusals=$refusalCount" }
+
+		// The generator queued at least two trains...
+		assertThat(entered).isGreaterThanOrEqualTo(2)
+		// ...so with the override at 1 every offer after the first hit the gate...
+		assertThat(refusalCount).isGreaterThanOrEqualTo(1)
+		// ...and at no tick did more than the cap get approved.
+		assertThat(maxConcurrent).isEqualTo(1)
+	}
 }

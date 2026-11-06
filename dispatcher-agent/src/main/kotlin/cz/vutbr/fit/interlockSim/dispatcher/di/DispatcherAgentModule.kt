@@ -12,8 +12,10 @@ package cz.vutbr.fit.interlockSim.dispatcher.di
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoopHolder
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
+import cz.vutbr.fit.interlockSim.dispatcher.ContextSlots
 import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
@@ -21,6 +23,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -35,6 +38,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
@@ -49,6 +53,7 @@ import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.onClose
 import org.koin.core.module.dsl.withOptions
+import org.koin.core.parameter.parametersOf
 import org.koin.core.scope.Scope
 import org.koin.dsl.module
 import java.nio.file.Path
@@ -107,8 +112,8 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
  *
  * | Component | Scope | Default |
  * |---|---|---|
- * | [Dispatcher] | singleton | [RuleBasedDispatcher] |
- * | [DispatcherPlanner] | singleton | [RuleBasedPlanAdapter] |
+ * | [Dispatcher] | factory, takes a [StationCapacity] | [RuleBasedDispatcher] |
+ * | [DispatcherPlanner] | factory, takes a [StationCapacity] | [RuleBasedPlanAdapter] |
  * | [AgentService] | singleton | [DefaultAgentService] |
  * | [DispatcherRunConfig] | singleton | [DispatcherRunConfig.fromProperties] |
  * | [OllamaExecutorConfig] | singleton | [OllamaExecutorConfig.default] |
@@ -126,6 +131,8 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
  * | [DispatchDecisionListenerHub] | per [DefaultSimulationContext] | new instance |
  * | [SemiAutoApprovalGateway] | per [DefaultSimulationContext] | new instance |
  * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance |
+ * | [AgentDriverLoopHolder] | per [DefaultSimulationContext] | new, empty instance |
+ * | [ContextSlots] | per [DefaultSimulationContext] | new, empty instance |
  * | [SinkHolder] | per [DefaultSimulationContext] | new instance |
  * | [CycleHistory] | per [DefaultSimulationContext] | new instance |
  * | [KoogAgentFactory] | per [DefaultSimulationContext] | [KoogAgentFactory] |
@@ -140,21 +147,31 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
  * ### Scope rationale
  *
  * Singletons are stateless or explicitly shared-by-design components: the Ollama config and
- * executor, the tool registry, the agent service, and the pure rule-based dispatcher/planner.
+ * executor, the tool registry and the agent service. The rule-based dispatcher and planner are
+ * factories parameterised with the station's [StationCapacity] (Issue #1303): resolve them with
+ * `get<DispatcherPlanner> { parametersOf(StationCapacity(loop.stationCapacity)) }`.
  * Everything else is scoped per [DefaultSimulationContext] because it holds live references or
  * per-simulation state (ports, command queues, mode/approval state, the agent factory), so
  * concurrent simulations (e.g. in tests) never cross-wire.
  */
 val dispatcherAgentModule: Module =
 	module {
-		// Dispatcher: global singleton — RuleBasedDispatcher is stateless (pure function).
-		// In future, alternate implementations may include an Agentic/LLM dispatcher alongside Rule.
-		single<Dispatcher> { RuleBasedDispatcher() }
+		// Dispatcher: a factory parameterised with the station's StationCapacity (Issue #1303).
+		// RuleBasedDispatcher is a pure function of its observation, but its admission cap belongs
+		// to the station: 2 on vyhybna, 4 on Cerveny Ujezd. A singleton fixed every station at the
+		// vyhybna default. The caller passes the capacity explicitly — the wiring layer takes it
+		// from its own loop (ShuntingLoop.stationCapacity) — rather than this binding looking up a
+		// declared StationCapacity: in Koin 3.5 a declared instance is served to later contexts
+		// that declare none (Issue #1317). Resolving without the parameter fails, so no caller can
+		// fall back to the vyhybna default by accident.
+		factory<Dispatcher> { (capacity: StationCapacity) -> RuleBasedDispatcher(maxConcurrentTrains = capacity.value) }
 
-		// DispatcherPlanner — pluggable planning interface.
-		// Default is RuleBasedPlanAdapter wrapping the Dispatcher singleton above.
+		// DispatcherPlanner — pluggable planning interface; same StationCapacity parameter.
+		// Default is RuleBasedPlanAdapter wrapping the Dispatcher factory above.
 		// Swap this binding to plug in a search-based or LLM-backed planner.
-		single<DispatcherPlanner> { RuleBasedPlanAdapter(get()) }
+		factory<DispatcherPlanner> { (capacity: StationCapacity) ->
+			RuleBasedPlanAdapter(get<Dispatcher> { parametersOf(capacity) })
+		}
 
 		// AgentService: global singleton for creating Koog agents. DefaultAgentService builds a
 		// real Koog AIAgent, so it needs the Ollama executor + config singletons bound below.
@@ -326,6 +343,17 @@ val dispatcherAgentModule: Module =
 			// multiplier, pause). One per context so concurrent simulations pace independently.
 			scoped<DelegatingSimulationController> { DelegatingSimulationController() }
 
+			// AgentDriverLoopHolder (Issue #1317) — one empty slot per context; the wiring layer
+			// (ExampleRegistry.wireDispatcherAgent) installs the loop it builds. Bound here, not
+			// published with Scope.declare: a declared instance is served to every later context
+			// that declares none, so a dispatcher-free run would see an earlier run's loop.
+			scoped<AgentDriverLoopHolder> { AgentDriverLoopHolder() }
+
+			// ContextSlots (Issue #1348) — the same per-context fix for every other instance a wiring
+			// layer publishes (measuring planner, pacing controller, snapshot signal, orphan sweeper,
+			// agent loop driver, station capacity). Scope.publish / publishedOrNull use it.
+			scoped<ContextSlots> { ContextSlots() }
+
 			// SinkHolder — one per context, shared by the four actuator tools and
 			// KoogAgentPlanAdapter. KoogAgentFactory installs the queue-posting wrapper on its
 			// `current` at agent construction; KoogAgentPlanAdapter reads its per-cycle emission
@@ -363,7 +391,11 @@ val dispatcherAgentModule: Module =
 					// Which system-prompt revision this run assembles (#834, SP2c.11). Read from the
 					// same DispatcherRunConfig every other per-run knob comes from, so the sweep's
 					// existing forked-JVM `-D` mechanism selects the A/B arm with no new channel.
-					promptVariant = get<DispatcherRunConfig>().promptVariant
+					promptVariant = get<DispatcherRunConfig>().promptVariant,
+					// Issue #1155: the loop's own admission cap, declared by the wiring layer
+					// (ExampleRegistry.wireDispatcherAgent) after this factory is resolved — so read
+					// lazily, like runRecorderProvider above.
+					stationCapacityProvider = { publishedOrNull<StationCapacity>() }
 				)
 			}
 

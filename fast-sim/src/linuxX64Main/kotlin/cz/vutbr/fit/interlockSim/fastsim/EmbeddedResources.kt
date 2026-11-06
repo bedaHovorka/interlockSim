@@ -21,4 +21,5 @@ import cz.vutbr.fit.interlockSim.BuiltinNetworks
  */
 internal object EmbeddedResources {
 	val VYHYBNA_XML = BuiltinNetworks.VYHYBNA_XML
+	val CERVENY_UJEZD_XML = BuiltinNetworks.CERVENY_UJEZD_XML
 }

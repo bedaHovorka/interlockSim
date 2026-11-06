@@ -49,8 +49,9 @@ private val logger = KotlinLogging.logger {}
  *   anywhere in the requested route is treated as a denial (fail closed), not as "assumed free".
  *
  * - **Whole-route release:** [releaseRoute] releases the entire route in one call through the
- *   approach lock (Issue #974); approach-locked, occupied and deferral-window blocks are kept
- *   reserved. There is no progressive, block-by-block release in this facade.
+ *   approach lock (Issue #974); the blocks it keeps are defined at
+ *   [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRouteDetailed].
+ *   There is no progressive, block-by-block release in this facade.
  *
  * - **Switch position mapping:** [SwitchPosition] (PLUS/MINUS, route-spec layer) and
  *   [RailSwitch.Conf] (MAIN/BRANCH, domain object layer) are disjoint in the codebase;
@@ -129,11 +130,15 @@ class DefaultInterlockingFacade(
 	private sealed interface RouteLockOutcome {
 		/**
 		 * The locks one successful `lockRouteAtomic` acquired — exactly what a LATER failed
-		 * condition must undo.
+		 * condition must undo. [switches] holds only the switches this call newly registered, not
+		 * the ones the train already owned from an earlier route (Issue #1173). [promoted] holds
+		 * the switches this call promoted from the train's earlier plain claim to a flank claim
+		 * (Issue #1218): kept on rollback, but demoted back to plain.
 		 */
 		data class Locked(
 			val blocks: List<DynamicTrackBlock>,
-			val switches: List<DynamicRailSwitch>
+			val switches: List<DynamicRailSwitch>,
+			val promoted: List<DynamicRailSwitch>
 		) : RouteLockOutcome
 
 		data class Denied(
@@ -234,6 +239,12 @@ class DefaultInterlockingFacade(
 		)
 	}
 
+	/**
+	 * See [InterlockingFacade.releaseRoute]. After a release the kernel refused (Issue #1242: the
+	 * route cannot be cut after the blocks the train stands on), this facade still sets its own
+	 * tracked entry signal to STOP. That is safe: a refusal needs an occupying train, so the entry
+	 * signal is behind it and authorises nothing.
+	 */
 	override fun releaseRoute(
 		trainId: String,
 		exitSignal: SignalId
@@ -241,11 +252,11 @@ class DefaultInterlockingFacade(
 		logger.debug { "releaseRoute: trainId=$trainId, exitSignal=${exitSignal.name} (audit only)" }
 
 		// Whole-route release through the approach lock (Issue #974): the same release the port's
-		// releaseRouteDetailed performs. A block the train occupies (it stays OCCUPIED), a block that
-		// is approach-locked and a block inside the hold(1.0) deferral window (both stay RESERVED) stay
-		// registered and are reported as deferred; every other block and switch of the train is freed. Idempotent: an unknown
-		// trainId yields an empty result and touches nothing. Production releases through the port
-		// (NetworkActuatorPort.releaseRouteDetailed); this facade method has no production caller.
+		// releaseRouteDetailed performs; its KDoc defines the kept blocks, the deferral and the
+		// refused release (Issue #1050, #1242), which apply here unchanged.
+		// Idempotent: an unknown trainId yields an empty result and touches nothing. Production
+		// releases through the port (NetworkActuatorPort.releaseRouteDetailed); this facade method has
+		// no production caller.
 		val release = env.getRoutingServices().getPathReservationService().releasePathDetailed(trainId)
 		logger.info {
 			"Released ${release.released.size} blocks for trainId=$trainId; " +
@@ -390,12 +401,23 @@ class DefaultInterlockingFacade(
 			registerBlocks(trainId, blocks, fromSeparator)?.let { return RouteLockOutcome.Denied(it) }
 		}
 
+		// Issue #1173: lockSwitches admits a switch the train already owns from an earlier route;
+		// a later rollback of THIS call must leave that switch alone.
+		val priorSwitches = registry.getSwitches(trainId).toSet()
+		// Issue #1218: registering a pure flank switch over the train's own PLAIN claim promotes
+		// that claim to flank (the only promotion SwitchOwnershipTable makes), so a later rollback
+		// must demote it again. A running switch never promotes, and an earlier flank claim stays
+		// flank, so only these are snapshotted.
+		val promoted =
+			flankSwitches.filter { switch ->
+				registry.getSwitchClaim(switch)?.let { it.trainId == trainId && !it.isFlank } == true
+			}
 		lockSwitches(trainId, runningSwitches, flankSwitches)?.let { switchDenial ->
 			rollbackBlocks(trainId, registered = blocks)
 			return RouteLockOutcome.Denied(switchDenial)
 		}
 
-		return RouteLockOutcome.Locked(blocks, switches)
+		return RouteLockOutcome.Locked(blocks, switches.filterNot { it in priorSwitches }, promoted)
 	}
 
 	/**
@@ -471,22 +493,23 @@ class DefaultInterlockingFacade(
 	/**
 	 * Undoes a successful `lockRouteAtomic` when a LATER condition fails (an un-clearable signal),
 	 * and nothing else: unlocks and unregisters only this call's switches
-	 * ([PathReservationRegistry.unregisterSwitch]), then physically cancels and unregisters only
-	 * this call's blocks via [rollbackBlocks]. The train's other registry entries — earlier routes
-	 * it is standing on — and its `PathInfo` are left alone: the whole-train
-	 * `PathReservationService.releasePath` this arm used before would drop all of them while the
-	 * blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
-	 *
-	 * Known corner: a switch the train's EARLIER route flank-locked that a later failing route
-	 * lists again is admitted by `lockSwitches` (same owner) but released outright here — the
-	 * registry has no per-route count for switches, so this rollback can drop that earlier flank
-	 * lock. Not a regression: the old whole-train release dropped ALL of the train's switches.
+	 * ([PathReservationRegistry.unregisterSwitch]) and demotes the earlier plain claims this call
+	 * promoted to flank ([PathReservationRegistry.demoteFlankClaim], Issue #1218), then physically
+	 * cancels and unregisters only this call's blocks via [rollbackBlocks]. The demote runs first so
+	 * that a demoted claim bounding no block the train still holds can be reclaimed as stale by the
+	 * block rollback -- but only when one of THIS call's rolled-back blocks borders the switch
+	 * (`unregisterBlock` checks the released block's ends). Otherwise the stale plain claim survives
+	 * until the train's next release, the same state as if the failed route had never happened. The
+	 * train's other registry entries — earlier routes it is standing on — and its `PathInfo` are left
+	 * alone: the whole-train `PathReservationService.releasePath` this arm used before would drop all
+	 * of them while the blocks stay RESERVED (Issue #1051, same shape as Issue #1025).
 	 */
 	private fun rollbackRouteLocks(
 		trainId: String,
 		locks: RouteLockOutcome.Locked
 	) {
 		locks.switches.forEach { registry.unregisterSwitch(trainId, it) }
+		locks.promoted.forEach { registry.demoteFlankClaim(trainId, it) }
 		rollbackBlocks(trainId, registered = locks.blocks)
 	}
 

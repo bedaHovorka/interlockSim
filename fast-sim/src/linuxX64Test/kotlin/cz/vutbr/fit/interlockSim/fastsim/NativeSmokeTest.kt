@@ -8,7 +8,7 @@
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.fastsim
-
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
@@ -51,8 +51,18 @@ class NativeSmokeTest {
 	}
 
 	@Test
-	fun `NativeExampleRegistry lists shuntingLoop as available`() {
-		assertContains(NativeExampleRegistry.AVAILABLE, "shuntingLoop")
+	fun `EmbeddedResources CERVENY_UJEZD_XML parses to context with 4 InOuts`() {
+		val factory = NativeContextFactory()
+		factory.createFromXml(EmbeddedResources.CERVENY_UJEZD_XML).use { ctx ->
+			assertEquals(4, ctx.getInOutsList().size)
+		}
+	}
+
+	@Test
+	fun `NativeExampleRegistry lists cervenyUjezd next to shuntingLoop as available`() {
+		// The strings come from `ExampleNames` (`:core`) — both registries share the one home.
+		assertContains(NativeExampleRegistry.AVAILABLE, ExampleNames.CERVENY_UJEZD)
+		assertContains(NativeExampleRegistry.AVAILABLE, ExampleNames.SHUNTING_LOOP)
 	}
 
 	@Test
@@ -61,6 +71,15 @@ class NativeSmokeTest {
 			NetworkResources.VYHYBNA_XML,
 			EmbeddedResources.VYHYBNA_XML,
 			"EmbeddedResources.VYHYBNA_XML diverged from NetworkResources.VYHYBNA_XML"
+		)
+	}
+
+	@Test
+	fun `EmbeddedResources CERVENY_UJEZD_XML matches NetworkResources canonical definition`() {
+		assertEquals(
+			NetworkResources.CERVENY_UJEZD_XML,
+			EmbeddedResources.CERVENY_UJEZD_XML,
+			"EmbeddedResources.CERVENY_UJEZD_XML diverged from NetworkResources.CERVENY_UJEZD_XML"
 		)
 	}
 
@@ -82,7 +101,7 @@ class NativeSmokeTest {
 	@Test
 	fun `NativeExampleRegistry shuntingLoop runs to completion with short endTime`() {
 		val factory = NativeContextFactory()
-		NativeExampleRegistry.create("shuntingLoop", 5, factory).use { ctx ->
+		NativeExampleRegistry.create(ExampleNames.SHUNTING_LOOP, 5, factory).use { ctx ->
 			ctx.run()
 		}
 	}

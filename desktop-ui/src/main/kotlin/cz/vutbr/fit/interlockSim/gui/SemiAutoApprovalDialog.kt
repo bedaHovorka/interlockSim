@@ -296,7 +296,7 @@ class SemiAutoApprovalDialog(
 		private fun routeOf(decision: DispatchDecision): String? =
 			when (decision) {
 				is DispatchDecision.ReservePath ->
-					"${decision.fromSemaphoreName} → ${decision.toSeparatorName}"
+					"${decision.fromSemaphoreName} → ${decision.toTargetName}"
 				is DispatchDecision.RequestRoute ->
 					"${decision.fromEndpointName} → ${decision.toEndpointName}"
 				else -> null

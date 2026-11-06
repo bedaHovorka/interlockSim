@@ -218,7 +218,7 @@ class RuleBasedEmissionStrategy(
 						DispatchAction.RequestRoute(
 							trainId = decision.trainId,
 							fromEndpointName = decision.fromSemaphoreName,
-							toEndpointName = decision.toSeparatorName,
+							toEndpointName = decision.toTargetName,
 							// ReservePath is a hop-level (per-block-boundary) decision, not a request
 							// for the train's final destination — see RouteScope's KDoc for why
 							// ActionValidator needs this discriminant.

@@ -59,10 +59,14 @@ internal class SimulationController(
 	 * The currently active runner, or `null` when no simulation is running.
 	 *
 	 * `@Volatile` ensures the monitor thread reads a fresh value after [stop] nulls it.
+	 *
+	 * Internal setter as a test seam (Issue #1331): [Frame]'s warning tests install a paused
+	 * runner and pin which severity resumes it — same contract shape as the `#1335` flip of
+	 * `MultiTrainLoop.enableRealTimeSync` away from reflection.
 	 */
 	@Volatile
 	var runner: SimulationRunner? = null
-		private set
+		internal set
 
 	/**
 	 * `true` when the most recent [SimulationStatus.STOPPED] emission was caused by the

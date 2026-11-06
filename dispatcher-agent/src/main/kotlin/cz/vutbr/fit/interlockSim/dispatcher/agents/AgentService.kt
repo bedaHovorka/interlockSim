@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeFeed
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -58,6 +59,10 @@ interface AgentService {
 	 * @param outcomeFeed Optional source of previously-applied outcomes, rendered as the
 	 *   "OUTCOMES OF YOUR PREVIOUS ACTIONS" block on every subsequent cycle (Issue #893, phase
 	 *   beta, task B0). Defaults to `null`, which renders no block — the pre-task-B0 behaviour.
+	 * @param stationCapacity The station's admission cap, stated in every cycle message
+	 *   ("Active (approved) trains right now: n / cap"). [KoogAgentFactory] always passes the value
+	 *   of the station it runs on (Issue #1155); the default, vyhybna's 2, serves only agents built
+	 *   outside a run (tests, tooling), like the two defaults above.
 	 *
 	 * @return A configured Koog agent, ready for dispatch decisions
 	 *
@@ -70,7 +75,8 @@ interface AgentService {
 		tools: List<DomainTool>,
 		systemPrompt: String? = null,
 		cycleHistory: CycleHistory = CycleHistory(capacity = 0),
-		outcomeFeed: AppliedOutcomeFeed? = null
+		outcomeFeed: AppliedOutcomeFeed? = null,
+		stationCapacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 	): KoogDispatchAgent
 }
 

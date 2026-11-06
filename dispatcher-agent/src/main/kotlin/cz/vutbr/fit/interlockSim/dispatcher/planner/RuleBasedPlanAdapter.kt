@@ -40,12 +40,13 @@ import cz.vutbr.fit.interlockSim.sim.Dispatcher
  * )
  * ```
  *
- * @param dispatcher The synchronous rule-based dispatcher to delegate to.
+ * @param dispatcher The synchronous rule-based dispatcher to delegate to. Readable so wiring tests
+ *   can pin the admission cap it was built with (Issue #1303).
  *
  * @since Issue #574 (SP3.6 — Goal 10)
  */
 class RuleBasedPlanAdapter(
-	private val dispatcher: Dispatcher
+	val dispatcher: Dispatcher
 ) : DispatcherPlanner {
 	override val capabilities: PlannerCapabilities =
 		PlannerCapabilities(

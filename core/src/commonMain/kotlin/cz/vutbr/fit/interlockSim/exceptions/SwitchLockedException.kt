@@ -9,7 +9,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
  * while a train route runs through it.
  *
  * A distinct subclass of [PathSeparatorChangeException] (not that class itself), so a caller such
- * as [cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService.configureSwitchesInPath]
+ * as [cz.vutbr.fit.interlockSim.context.navigation.SwitchConfigurator.configureSwitchesInPath]
  * can catch it FIRST and tell it apart from the #742 case that same superclass already reports
  * (no [Conf] joins the route's segments -- a permanent, geometric impossibility). This condition is
  * the opposite: transient contention that resolves once the other route releases the switch

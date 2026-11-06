@@ -153,6 +153,7 @@ When modifying Train or path reservation logic:
 ## References
 
 - Plan document: `/home/beda/.claude/projects/.../86a58e52-ba5d-493d-88e0-437eb473b219.jsonl`
-- Implementation: `src/main/kotlin/cz/vutbr/fit/interlockSim/sim/Train.kt:116-128`
-- Test: `src/test/kotlin/cz/vutbr/fit/interlockSim/sim/TrainTest.kt:162-174`
+- Implementation: `Train` (`sim/Train.kt`), the "no reserved path" halt; today `waitForPathOrReportStall` and
+  `holdOrStopAfterNoUsablePath`
+- Test: `TrainTest.DistanceToSemaphoreTests.distanceToSemaphore_withNullPath_returnsZero` (`sim/TrainTest.kt`)
 - Architecture: `docs/PATH_DISCOVERY_ARCHITECTURE.md`

@@ -27,6 +27,13 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  *   [DefaultDispatcherRunRecorder] accumulates the non-`null` values across a run and derives
  *   [DispatcherRunSnapshot.latencyP50Ms], [DispatcherRunSnapshot.latencyP95Ms] and
  *   [DispatcherRunSnapshot.latencyMaxMs] from them.
+ * @param silentNonIdleCycleIndex The correlation tick index
+ *   ([cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap.currentCycle]) of this cycle when
+ *   it was a silent LLM cycle on a non-idle station — the LLM emitted no decision, so the decisions
+ *   posted for this cycle are the rule-based fallback's, computed on the kept cycle observation
+ *   (Issue #1365). `null` for every other cycle, and when the command queue has no correlation map.
+ *   [DefaultDispatcherRunRecorder] uses it to count
+ *   [DispatcherRunSnapshot.staleOriginRefusalsAfterSilentCycle].
  *
  * @see PlannerTickListener
  * @see TickOutcome
@@ -38,7 +45,8 @@ data class TickRecord(
 	val outcome: TickOutcome,
 	val simTime: Double,
 	val timeoutNoOpCause: TimeoutNoOpCause? = null,
-	val latencyMs: Long? = null
+	val latencyMs: Long? = null,
+	val silentNonIdleCycleIndex: Long? = null
 ) {
 	init {
 		val expectsCause = outcome == TickOutcome.TIMEOUT_NOOP
