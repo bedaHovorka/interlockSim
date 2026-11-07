@@ -35,6 +35,8 @@ import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
  *   drives the run.
  * @param maxConcurrentTrains scenario override of the station capacity, forwarded to [ShuntingLoop];
  *   `null` keeps the topology value (2 on `vyhybna.xml`), which the dispatcher then inherits
+ * @param maxTrains scenario override of how many trains the generator schedules, forwarded to
+ *   [ShuntingLoop]; `null` keeps the scenario default
  * @param beforeRun runs after the loop is wired and set as main process, but **before** `run()`.
  *   Use it for anything that must be live for the whole run — a property-change reporter, a
  *   conflict listener, a captured reference to the loop.
@@ -45,9 +47,10 @@ fun runShuntingLoop(
 	endTime: Long,
 	env: SimulationContext = context,
 	maxConcurrentTrains: Int? = null,
+	maxTrains: Int? = null,
 	beforeRun: (ShuntingLoop) -> Unit = {}
 ): ShuntingLoop {
-	val loop = prepareShuntingLoop(context, endTime, env, maxConcurrentTrains)
+	val loop = prepareShuntingLoop(context, endTime, env, maxConcurrentTrains, maxTrains)
 	beforeRun(loop)
 	context.run()
 	return loop
@@ -63,11 +66,13 @@ fun prepareShuntingLoop(
 	context: DefaultSimulationContext,
 	endTime: Long,
 	env: SimulationContext = context,
-	maxConcurrentTrains: Int? = null
+	maxConcurrentTrains: Int? = null,
+	maxTrains: Int? = null
 ): ShuntingLoop {
 	// Idempotent: initialises the dynamic wrapper map if the caller has not already done so.
 	context.getInOuts()
-	val loop = ShuntingLoop(env, endTime, maxConcurrentTrains = maxConcurrentTrains)
+	val loop =
+		ShuntingLoop(env, endTime, maxTrains = maxTrains, maxConcurrentTrains = maxConcurrentTrains)
 	wireSynchronousDispatcher(env, loop)
 	context.setMainProcess(loop)
 	return loop

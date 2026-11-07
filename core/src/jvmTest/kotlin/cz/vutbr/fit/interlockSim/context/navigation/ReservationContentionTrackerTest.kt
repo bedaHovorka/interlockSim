@@ -106,8 +106,8 @@ class ReservationContentionTrackerTest {
 
 		@Test
 		fun `the conflict event time equals the recorded contention start`() {
-			// The stored "since" value is not readable (no consumer yet, Issue #1221), so the single clock
-			// read is pinned through the event: a second read would stamp the event with 9.0, not 5.0.
+			// One clock read: a second read would stamp the event with 9.0, not the stored 5.0 (the
+			// "since" of the open-contention snapshot, Issue #1305).
 			mockkObject(Process.Companion)
 			try {
 				every { Process.time() } returnsMany listOf(5.0, 9.0)
@@ -115,6 +115,7 @@ class ReservationContentionTrackerTest {
 				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
 
 				assertThat(emitted.single().time).isEqualTo(5.0)
+				assertThat(tracker.openContentions { null }.single().since).isEqualTo(5.0)
 				verify(exactly = 1) { Process.time() }
 			} finally {
 				unmockkObject(Process.Companion)
@@ -230,6 +231,148 @@ class ReservationContentionTrackerTest {
 
 			assertThat(snapshot).containsExactlyInAnyOrder("me", "other")
 			assertThat(tracker.blockedTrainIds()).containsExactlyInAnyOrder("other")
+		}
+	}
+
+	/** Runs [body] with the simulation clock answering [times] in turn (Issue #1305). */
+	private fun withClock(
+		vararg times: Double,
+		body: () -> Unit
+	) {
+		mockkObject(Process.Companion)
+		try {
+			every { Process.time() } returnsMany times.toList()
+			body()
+		} finally {
+			unmockkObject(Process.Companion)
+		}
+	}
+
+	@Nested
+	inner class OpenContentions {
+		@Test
+		fun `lists every open contention in record order with the owner named now and its start`() {
+			withClock(3.0, 7.0) {
+				tracker.recordContentionAndEmitIfNew("me", busyA, "stale")
+				tracker.recordContentionAndEmitIfNew("other", busyB, "owner")
+			}
+
+			assertThat(tracker.openContentions { if (it == busyA) "now-owner" else null }).containsExactly(
+				OpenContention("me", busyA, "now-owner", 3.0),
+				OpenContention("other", busyB, null, 7.0)
+			)
+		}
+
+		@Test
+		fun `is empty with no contention and after the train is cleared`() {
+			assertThat(tracker.openContentions { null }).isEmpty()
+			tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+
+			tracker.clearBlockedTracking("me")
+
+			assertThat(tracker.openContentions { null }).isEmpty()
+		}
+
+		@Test
+		fun `is a copy that later tracking changes leave alone`() {
+			tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+			val snapshot = tracker.openContentions { null }
+
+			tracker.clearBlockedTracking("me")
+
+			assertThat(snapshot).hasSize(1)
+		}
+	}
+
+	@Nested
+	inner class BlockedSeconds {
+		@Test
+		fun `a cleared contention counts the time from its start to the clear`() {
+			withClock(10.0, 25.0) {
+				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+				tracker.clearBlockedTracking("me")
+			}
+
+			assertThat(tracker.blockedSeconds(now = 99.0)).isEqualTo(mapOf("me" to 15.0))
+		}
+
+		@Test
+		fun `overlapping contentions of one train count once, from the earliest start`() {
+			withClock(10.0, 14.0, 20.0) {
+				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+				tracker.recordContentionAndEmitIfNew("me", busyB, "owner")
+				tracker.clearBlockedTracking("me")
+			}
+
+			assertThat(tracker.blockedSeconds(now = 99.0)).isEqualTo(mapOf("me" to 10.0))
+		}
+
+		@Test
+		fun `episodes of one train add up and an open one counts up to now`() {
+			withClock(1.0, 3.0, 10.0) {
+				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+				tracker.clearBlockedTracking("me")
+				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+			}
+
+			assertThat(tracker.blockedSeconds(now = 14.0)).isEqualTo(mapOf("me" to 6.0))
+		}
+
+		@Test
+		fun `the end-of-run flush closes every open contention at the end time`() {
+			withClock(4.0, 6.0) {
+				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+				tracker.recordContentionAndEmitIfNew("other", block(TrackFacility.State.FREE, null), "gone")
+			}
+
+			tracker.flushUnresolvedConflicts(10.0)
+
+			// The ownerless one is dropped from the flushed events, but the train still waited until the end.
+			assertThat(tracker.blockedSeconds(now = 99.0)).isEqualTo(mapOf("me" to 6.0, "other" to 4.0))
+		}
+
+		@Test
+		fun `the end-of-run flush counts overlapping contentions of one train once, from the earliest start`() {
+			withClock(4.0, 6.0, 7.0) {
+				tracker.recordContentionAndEmitIfNew("me", busyA, "owner")
+				tracker.recordContentionAndEmitIfNew("me", busyB, "owner")
+				tracker.recordContentionAndEmitIfNew("other", busyA, "owner")
+			}
+
+			tracker.flushUnresolvedConflicts(10.0)
+
+			assertThat(tracker.blockedSeconds(now = 99.0)).isEqualTo(mapOf("me" to 6.0, "other" to 3.0))
+		}
+
+		@Test
+		fun `a clear with no running kernel leaves the episode to the flush to close at the end time`() {
+			withClock(10.0) { tracker.recordContentionAndEmitIfNew("me", busyA, "owner") }
+			mockkObject(Process.Companion)
+			try {
+				every { Process.time() } throws IllegalStateException("no running simulation")
+				tracker.clearBlockedTracking("me")
+			} finally {
+				unmockkObject(Process.Companion)
+			}
+
+			// Cleared, so no longer open; until the flush the episode counts up to now.
+			assertThat(tracker.openContentions { null }).isEmpty()
+			assertThat(tracker.blockedSeconds(now = 12.0)).isEqualTo(mapOf("me" to 2.0))
+			assertThat(tracker.flushUnresolvedConflicts(30.0)).isEmpty()
+			assertThat(tracker.blockedSeconds(now = 99.0)).isEqualTo(mapOf("me" to 20.0))
+		}
+
+		@Test
+		fun `clearing a train with no contention reads no clock and records nothing`() {
+			mockkObject(Process.Companion)
+			try {
+				tracker.clearBlockedTracking("nobody")
+
+				verify(exactly = 0) { Process.time() }
+			} finally {
+				unmockkObject(Process.Companion)
+			}
+			assertThat(tracker.blockedSeconds(now = 1.0)).isEmpty()
 		}
 	}
 }

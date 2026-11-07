@@ -30,6 +30,7 @@ import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -54,6 +55,8 @@ val sharedSimulationTestScopesModule: Module =
 		// Non-scope bindings both test module flavors carry identically (Issue #1029).
 		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
 		factory { TestContextBuilder() }
+		// Default metric groups (Issue #674); not a context, so a plain single.
+		single<MetricsConfig> { MetricsConfig.ALL }
 
 		// Define editingScope for per-context lifecycle management
 		scope<DefaultEditingContext> {
@@ -159,7 +162,7 @@ val sharedSimulationTestScopesModule: Module =
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultMetricsCollectionService(context)
+				DefaultMetricsCollectionService(context, config = getOrNull<MetricsConfig>() ?: MetricsConfig.ALL)
 			}
 
 			// SP3.5 (Issue #573): InterlockingFacade — same binding as production CoreModule.
