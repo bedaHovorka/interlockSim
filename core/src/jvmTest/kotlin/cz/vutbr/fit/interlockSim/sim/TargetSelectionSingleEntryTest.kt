@@ -11,7 +11,9 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.SourceScan
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -51,8 +53,9 @@ import java.util.concurrent.TimeUnit
  *   into any list.
  * - `:desktop-ui` is the composition root (it wires the service into `RegistryPartialRouteReleaser`)
  *   and the declaring package `context/navigation` implements the API itself, so both are out of
- *   scope. Only non-comment source lines are examined — KDoc may name the API and the vocabulary
- *   freely.
+ *   scope. Only code is examined (comments, trailing comments and string literals stripped by
+ *   [cz.vutbr.fit.interlockSim.testutil.SourceScan.codeLines]) — KDoc may name the API and the
+ *   vocabulary freely.
  * - The scans are line-based heuristics. A declaration split across lines, an alias import or a
  *   reflection-level circumvention can slip past a single line; the type-annotation, generic and
  *   getter patterns below cover the spellings this codebase actually uses, and every new one has
@@ -128,7 +131,7 @@ class TargetSelectionSingleEntryTest {
 
 		/**
 		 * Every in-scope production file as `label/…` → its code lines, scanned once for the whole
-		 * class; comment/KDoc lines are dropped here so the assertions just pattern-match.
+		 * class; comments are stripped here ([codeOf]) so the assertions just pattern-match.
 		 */
 		val SCANNED_SOURCES: Map<String, List<String>> by lazy {
 			SOURCE_ROOTS
@@ -140,10 +143,22 @@ class TargetSelectionSingleEntryTest {
 							file.relativeTo(root).invariantSeparatorsPath.contains(DECLARING_PACKAGE_PATH)
 						}.map { file ->
 							label + "/" + file.relativeTo(root).invariantSeparatorsPath to
-								file.readLines().filter { SourceScan.isCode(it) }
+								codeOf(file.readLines())
 						}.toList()
 				}.toMap()
 		}
+
+		/**
+		 * The code of one file's [lines], as the scans see it: [SourceScan.codeLines] strips comments,
+		 * KDoc, trailing comments and string literals (Issue #1379).
+		 */
+		fun codeOf(lines: List<String>): List<String> = SourceScan.codeLines(lines)
+
+		/** `true` when any line of [code] contains [pattern]. */
+		fun anyMatch(
+			pattern: Regex,
+			code: List<String>
+		): Boolean = code.any { line -> pattern.containsMatchIn(line) }
 	}
 
 	@Test
@@ -182,9 +197,42 @@ class TargetSelectionSingleEntryTest {
 			.isEqualTo(ALLOWED_CANDIDATE_TARGET_FILES)
 	}
 
+	@Test
+	@DisplayName("an API name in a trailing comment is not a call")
+	fun trailingCommentIsNotACall() {
+		val code = codeOf(listOf("\t\tval state = facade.state() // was facade.reservePath(a, b)"))
+
+		assertThat(anyMatch(TARGET_API_CALL, code), "trailing-comment match").isFalse()
+	}
+
+	@Test
+	@DisplayName("a call inside a block comment is not a call")
+	fun blockCommentIsNotACall() {
+		val code = codeOf(listOf("/* Former selection:", "\tval route = facade.reservePath(a, b)", "*/"))
+
+		assertThat(anyMatch(TARGET_API_CALL, code), "block-comment match").isFalse()
+	}
+
+	@Test
+	@DisplayName("a real call, a handle and a candidateTargets read are still seen")
+	fun realCodeIsStillSeen() {
+		val code =
+			codeOf(
+				listOf(
+					"\t\tval route = facade.reservePath(a, b) // the one entry",
+					"\tprivate val service: PathReservationService,",
+					"\t\tval first = input.candidateTargets.firstOrNull()"
+				)
+			)
+
+		assertThat(anyMatch(TARGET_API_CALL, code), "call").isTrue()
+		assertThat(anyMatch(SERVICE_HANDLE, code), "handle").isTrue()
+		assertThat(anyMatch(CANDIDATE_TARGET_READ, code), "read").isTrue()
+	}
+
 	/** Canonical in-scope paths whose code lines contain [pattern]. */
 	private fun matchingFiles(pattern: Regex): Set<String> =
 		SCANNED_SOURCES
-			.filterValues { lines -> lines.any { line -> pattern.containsMatchIn(line) } }
+			.filterValues { code -> anyMatch(pattern, code) }
 			.keys
 }
