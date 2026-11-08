@@ -49,4 +49,14 @@ object ExampleNames {
 	 * (both built with `wireSynchronousDispatcher`).
 	 */
 	const val CERVENY_UJEZD_SYNC = "cervenyUjezdSync"
+
+	/**
+	 * The rule-based control arm on the Praha hlavni nadrazi Station variant (Goal 1B SP10.2,
+	 * Issue #1366): the [CERVENY_UJEZD] wiring on `praha-hlavni-nadrazi-station.xml`, with low
+	 * traffic. JVM only.
+	 */
+	const val PRAHA_HLAVNI_NADRAZI = "prahaHlavniNadrazi"
+
+	/** The LLM arm on the Praha hlavni nadrazi Station variant (Issue #1366), twin of [PRAHA_HLAVNI_NADRAZI]; JVM only. */
+	const val PRAHA_HLAVNI_NADRAZI_AI = "prahaHlavniNadraziAI"
 }

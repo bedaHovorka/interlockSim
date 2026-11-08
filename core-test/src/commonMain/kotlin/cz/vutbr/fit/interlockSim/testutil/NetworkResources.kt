@@ -60,6 +60,12 @@ object NetworkResources {
 	/** Station-scale Praha hlavní nádraží network (117 blocks, 50 switches, 11 InOuts). */
 	val PRAHA_HLAVNI_NADRAZI_XML: String by lazy { fixture("praha-hlavni-nadrazi.xml") }
 
+	/**
+	 * The Praha Station variant ShuntingLoop can carry (Issue #1366) — delegates to
+	 * [BuiltinNetworks.PRAHA_HLAVNI_NADRAZI_STATION_XML] (production asset).
+	 */
+	val PRAHA_HLAVNI_NADRAZI_STATION_XML: String get() = BuiltinNetworks.PRAHA_HLAVNI_NADRAZI_STATION_XML
+
 	/** Červený Újezd station network — delegates to [BuiltinNetworks.CERVENY_UJEZD_XML] (production asset). */
 	val CERVENY_UJEZD_XML: String get() = BuiltinNetworks.CERVENY_UJEZD_XML
 
