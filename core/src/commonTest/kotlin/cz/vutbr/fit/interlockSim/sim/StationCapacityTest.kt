@@ -266,6 +266,18 @@ class StationCapacityTest : CommonKoinTestBase() {
 	}
 
 	@Test
+	fun prahaStationVariantNamesEverySwitchUniquely() {
+		// Issue #1376 / #1378: the five switches the variant left unnamed (SW23, SW26, SW29, SW61, SW65)
+		// got names, so every throat block has a distinct stableBlockId in the LLM prompt.
+		val station = Station.from(load(NetworkResources.PRAHA_HLAVNI_NADRAZI_STATION_XML))
+		val names = station.switches.map { it.name }
+
+		assertThat(names.size).isEqualTo(50)
+		assertThat(names.filter { it.isBlank() }, name = "unnamed switches").isEmpty()
+		assertThat(names.groupingBy { it }.eachCount().filterValues { it > 1 }, name = "duplicate switch names").isEmpty()
+	}
+
+	@Test
 	fun shuntingLoopRejectsAHomeSignalFacingItsInOut() {
 		// zA ends the entry/exit block kA but governs travel towards the InOut A, so a train entering from A has
 		// no home signal (signal direction, Issue #1272); the issue names zA instead of claiming
