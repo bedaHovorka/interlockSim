@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.testutil.FirstTrainOwnershipConflict
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -82,9 +83,6 @@ class Issue1244AwaitingExtensionSignalFlapTest : KoinTestBase() {
 
 		/** Distance to the signal ahead (m) at or under which a train counts as standing at it. */
 		const val STANDING_AT_SIGNAL_TOLERANCE = 1e-6
-
-		/** Distinctive fragment of the never-extended-route `errorStop` message (Issue #943). */
-		const val ROUTE_EXTENSION_FRAGMENT = "no route extension"
 	}
 
 	@Test
