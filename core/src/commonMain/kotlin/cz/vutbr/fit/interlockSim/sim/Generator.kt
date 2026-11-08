@@ -153,6 +153,7 @@ open class Generator(
  * [accept] this is exactly the historical rule: the first InOut and the first later one of the
  * other side, or the first two when there is no other side.
  *
+ * @throws IllegalArgumentException when [shuffled] holds fewer than two InOuts
  * @throws IllegalStateException when [accept] takes no pair: a network whose hook rejects every
  *   pair cannot be run, so it fails fast instead of falling back to a rejected pair
  */
@@ -160,6 +161,7 @@ internal fun selectPair(
 	shuffled: List<DynamicInOut>,
 	accept: (DynamicInOut, DynamicInOut) -> Boolean
 ): Pair<DynamicInOut, DynamicInOut> {
+	require(shuffled.size >= 2) { "A timetable needs at least two InOuts, got ${shuffled.size}" }
 	val crossSide = shuffled.any { it.getOrientation() != shuffled[0].getOrientation() }
 	for ((i, from) in shuffled.withIndex()) {
 		val partners =

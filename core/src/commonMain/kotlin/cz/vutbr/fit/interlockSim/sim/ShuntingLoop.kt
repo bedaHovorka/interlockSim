@@ -388,7 +388,8 @@ class ShuntingLoop(
 		seed: Long,
 		maxTrains: Int?
 	) : Generator(context, seed = seed, maxTrains = maxTrains) {
-		private val legalPairs = SwitchLegalPairs(context)
+		// Created only when the restriction is on, so a loop without it never touches SwitchLegalPairs.
+		private val legalPairs by lazy { SwitchLegalPairs(context) }
 
 		override fun isPairAcceptable(
 			from: DynamicInOut,
