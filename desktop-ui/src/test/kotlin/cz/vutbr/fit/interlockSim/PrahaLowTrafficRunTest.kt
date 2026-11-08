@@ -62,9 +62,11 @@ class PrahaLowTrafficRunTest : KoinTestBase() {
 		/**
 		 * `Train`'s tail reports this TRAIN_EVENTS text when the train leaves by another exit than its
 		 * timetable's. Counted and logged, not asserted: the 2026-11-08 run (Issue #1376) had 3 such
-		 * reports (trains 4, 6 and 7). Every generated pair has a switch-legal route now; why the
-		 * control arm still takes another exit of the right side is not analysed here, so the count
-		 * changes no verdict yet.
+		 * reports (trains 4, 6 and 7; 4 on the base before #1376). Every generated pair has a
+		 * switch-legal route now, yet a train can still leave by another exit of the right side, both
+		 * through `ReservationTargetPolicy.pick`'s fallback: its own exit is not among the exits one
+		 * section ahead of the platform track it was routed to (trains 4 and 7), or it is busy past
+		 * the own-exit wait bound (train 6). The count therefore changes no verdict yet.
 		 */
 		const val WRONG_OUT_SUFFIX: String = " ends in wrong out"
 	}
