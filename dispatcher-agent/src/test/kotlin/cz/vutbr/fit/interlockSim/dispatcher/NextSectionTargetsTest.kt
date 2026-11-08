@@ -119,6 +119,30 @@ class NextSectionTargetsTest {
 		assertThat(message).contains("No section ahead of 'S9' can be reserved right now")
 		assertThat(message).contains("Make no route request for this train this tick.")
 		assertThat(message).doesNotContain("NEXT SECTION is")
+		for (word in listOf("occupied", "blocked", "option", "choose", "select")) {
+			assertThat(message.lowercase()).doesNotContain(word)
+		}
+	}
+
+	/**
+	 * Issue #1244 in this rule's pick (review of #1378): a train awaiting a route extension whose
+	 * policy pick is the end of the route it already holds is not eligible for a NEXT SECTION — the
+	 * prompt shows NoSectionReservable and the rule-based dispatcher skips it. Naming that end in the
+	 * rejection would re-grant the held route, the no-op that fights the reservation expiry.
+	 */
+	@Test
+	@DisplayName("an awaiting train whose pick is its held route end gets no pick (Issue #1244)")
+	fun awaitingPickEqualToHeldRouteEndIsNoPick() {
+		val awaiting =
+			input(candidates = listOf(inOut("N-Vys-1", true))).copy(
+				pathAlreadyExtendedBeyond = true,
+				awaitingRouteExtension = true,
+				heldRouteEndName = "N-Vys-1"
+			)
+
+		val mismatch = NextSectionTargets.mismatch(listOf(awaiting), train, "S9", "S15")
+
+		assertThat(mismatch).isEqualTo(NextSectionTargets.Mismatch(from = "S9", pick = null, ahead = listOf("N-Vys-1")))
 	}
 
 	@Test
@@ -132,6 +156,8 @@ class NextSectionTargetsTest {
 			)
 
 		assertThat(message).contains("'S15' is not the next section ahead of the train at 'S9'")
+		// Covers behind, sideways and too far alike — no claim about which of them it is.
+		assertThat(message).doesNotContain("more than one section away")
 		assertThat(message).contains("Its NEXT SECTION is from 'S9' to 'N-Vys-1'")
 		assertThat(message).contains("fromEndpointName='S9', toEndpointName='N-Vys-1'")
 		assertThat(message).contains("Do not retry 'S15'.")

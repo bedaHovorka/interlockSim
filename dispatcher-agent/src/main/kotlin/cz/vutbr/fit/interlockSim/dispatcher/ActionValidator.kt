@@ -401,14 +401,16 @@ class ActionValidator(
 	 * call the same rule, [NextSectionTargets], over the observation's inner and outer block inputs,
 	 * and return the same text.
 	 *
-	 * Gated on [RouteScope.Section] and a non-InOut target: an [RouteScope.EndToEnd] request is the
-	 * destination rule's business. Inert when the observation carries no candidate list for the
+	 * Gated exactly like the tool: inert when [inOutNames] is empty (every target would look like a
+	 * Signal), and applied only to a [RouteScope.Section] request with a non-InOut target — an
+	 * [RouteScope.EndToEnd] request is the destination rule's business. Inert when the observation carries no candidate list for the
 	 * train's input facing the origin (see [NextSectionTargets]).
 	 */
 	private fun validateRequestRouteNextSection(
 		action: DispatchAction.RequestRoute,
 		observation: DispatcherObservation
 	): ValidationVerdict.Rejected? {
+		if (inOutNames.isEmpty()) return null
 		if (action.scope != RouteScope.Section || action.toEndpointName in inOutNames) return null
 		val mismatch =
 			NextSectionTargets.mismatch(

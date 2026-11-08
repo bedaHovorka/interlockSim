@@ -132,6 +132,17 @@ class ActionValidatorRouteScopeTest {
 	@Nested
 	@DisplayName("next-section rule: Section scope is checked, EndToEnd is skipped (#1378)")
 	inner class NextSectionRule {
+		/**
+		 * The rule needs the InOut names to tell a Signal target from an InOut one, exactly like the
+		 * live tool; here B is the InOut and A/C are signals.
+		 */
+		private val validatorWithInOuts =
+			ActionValidator(
+				validEndpointNames = setOf("A", "B", "C"),
+				blockIds = setOf("kA", "kB"),
+				inOutNames = setOf("B")
+			)
+
 		/** T1's input facing A lists only B one section ahead. */
 		private fun observationWithInputAheadOfA(): DispatcherObservation =
 			observation().copy(
@@ -155,7 +166,7 @@ class ActionValidatorRouteScopeTest {
 		fun sectionScopeIsChecked() {
 			val action = DispatchAction.RequestRoute("T1", "A", "C", RouteScope.Section)
 
-			val verdict = validator.validate(action, observationWithInputAheadOfA())
+			val verdict = validatorWithInOuts.validate(action, observationWithInputAheadOfA())
 
 			assertThat(verdict).isInstanceOf(ValidationVerdict.Rejected::class)
 			assertThat((verdict as ValidationVerdict.Rejected).code).isEqualTo(RejectionCode.TARGET_NOT_NEXT_SECTION)
@@ -166,6 +177,15 @@ class ActionValidatorRouteScopeTest {
 		@DisplayName("a section-scoped request to the listed target is Valid")
 		fun sectionScopeListedTargetIsValid() {
 			val action = DispatchAction.RequestRoute("T1", "A", "B", RouteScope.Section)
+
+			assertThat(validatorWithInOuts.validate(action, observationWithInputAheadOfA())).isEqualTo(ValidationVerdict.Valid)
+		}
+
+		/** Without InOut names the rule is inert, as in the live tool: every target would look like a Signal. */
+		@Test
+		@DisplayName("without InOut names the next-section rule is inert")
+		fun inertWithoutInOutNames() {
+			val action = DispatchAction.RequestRoute("T1", "A", "C", RouteScope.Section)
 
 			assertThat(validator.validate(action, observationWithInputAheadOfA())).isEqualTo(ValidationVerdict.Valid)
 		}
@@ -181,7 +201,7 @@ class ActionValidatorRouteScopeTest {
 				}
 			val action = DispatchAction.RequestRoute("T1", "A", "C", RouteScope.EndToEnd)
 
-			assertThat(validator.validate(action, observation)).isEqualTo(ValidationVerdict.Valid)
+			assertThat(validatorWithInOuts.validate(action, observation)).isEqualTo(ValidationVerdict.Valid)
 		}
 	}
 

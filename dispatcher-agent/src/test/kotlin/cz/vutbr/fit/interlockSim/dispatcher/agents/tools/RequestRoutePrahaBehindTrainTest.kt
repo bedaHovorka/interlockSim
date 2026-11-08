@@ -163,7 +163,7 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 		}
 
 	@Test
-	@DisplayName("S9 -> S15 is TARGET_NOT_NEXT_SECTION, emits nothing, and the reply names N-Vys-1; S9 -> N-Vys-1 passes")
+	@DisplayName("S9 -> S15 is TARGET_NOT_NEXT_SECTION and names N-Vys-1; a real Signal ahead of S9 passes")
 	fun behindTheTrainIsRefusedAndTheExitIsNamed() {
 		val facts = prahaFacts()
 		val aheadNames = facts.candidatesAheadOfS9.map { it.name }
@@ -193,11 +193,25 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 		assertThat(error.message, "reply").contains("NEXT SECTION is from '$AT_SIGNAL' to '$EXIT'")
 		assertThat(emitted, "emitted after the refusal").isEmpty()
 
+		// A Signal the real query lists one section ahead of S9 passes the guard: the rule refuses
+		// what is not ahead, not every Signal target.
+		val signalAhead =
+			facts.candidatesAheadOfS9.first { it.kind == SeparatorKind.SEMAPHORE }.name
+		val signalHop =
+			runBlocking {
+				tool.execute(mapOf("trainName" to TRAIN, "fromEndpointName" to AT_SIGNAL, "toEndpointName" to signalAhead))
+			}
+		assertThat(signalHop, "S9 -> $signalAhead").isInstanceOf(ToolResult.Success::class)
+
+		// Sanity check only: an InOut target is not subject to the next-section guard at all.
 		val granted =
 			runBlocking {
 				tool.execute(mapOf("trainName" to TRAIN, "fromEndpointName" to AT_SIGNAL, "toEndpointName" to EXIT))
 			}
 		assertThat(granted).isInstanceOf(ToolResult.Success::class)
-		assertThat(emitted).containsExactly(DispatchAction.RequestRoute(TRAIN, AT_SIGNAL, EXIT, RouteScope.EndToEnd))
+		assertThat(emitted).containsExactly(
+			DispatchAction.RequestRoute(TRAIN, AT_SIGNAL, signalAhead, RouteScope.Section),
+			DispatchAction.RequestRoute(TRAIN, AT_SIGNAL, EXIT, RouteScope.EndToEnd)
+		)
 	}
 }
