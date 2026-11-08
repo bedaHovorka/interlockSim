@@ -20,7 +20,7 @@ SP11, the native seed-1 pin, the #895 numbers and the JVM/native parity pin do n
 | `Generator.startAction` | `dtMax = DT_MAX`, the one production statement |
 | `LowTrafficExitScenario.DT_MAX` (`core` `commonTest`) | `= Generator.DT_MAX`, the exit parameter |
 | `DtMaxSingleSiteTripwireTest` (`core` `jvmTest`, untagged) | greps every module: in production source sets the only `dtMax = …` statement is `dtMax = DT_MAX` in `Generator.kt`; in test source sets only `EngineStandaloneTest`, `SimpleTestProcess`, `TrainHoldAtStationIntegrationTest` and the SP13 reproducer may set their own step, and each of them must still do so |
-| `DtMaxTenthStallReproducerTest` (`core` `jvmTest`, untagged) | the 1e-1 reproducer (below), and a check that `MultiTrainLoop` and `ShuntingLoop` run at `Generator.DT_MAX` |
+| `DtMaxTenthStallReproducerTest` (`core` `jvmTest`, untagged) | the 1e-1 reproducer (below), and a check that `MultiTrainLoop` and `ShuntingLoop` run at `Generator.DT_MAX` — `MultiTrainLoop` records its own tick, `ShuntingLoop` through the wrapper process at t = 0.5 s, so its value is the context's `dtMax` (kDisco's default 1.0 would surface if the generator had not set it) |
 
 Why 1e-3 and no raise:
 
@@ -60,7 +60,7 @@ held train is freed at `zB` to its first query at `vB`. The 1e-1 and 1e-2 steps 
 | `4683bee7` (parent of PR #1146) | 1e-3 | 71.68 | 78.96 | 7.28 | held train, 258.96 s |
 | `4683bee7` | 1e-2 | 71.70 | 79.62 | 7.92 | held train, 259.63 s |
 | `4683bee7` | 1e-1 | 71.88 | 108.40 | 36.52 | held train, 288.40 s |
-| `813e6442` (this branch's base) | 1e-3 | 71.68 | 78.90 | 7.22 | held train, 258.90 s |
+| `813e6442` (the branch base when recorded) | 1e-3 | 71.68 | 78.90 | 7.22 | held train, 258.90 s |
 | `813e6442` | 1e-2 | 71.69 | 79.05 | 7.36 | held train, 259.05 s |
 | `813e6442` | 1e-1 | 71.70 | 79.36 | 7.66 | held train, 259.40 s |
 
@@ -79,7 +79,7 @@ crawl at 1e-1 on `4683bee7` was 19.5 s instead of 36.5 s). It shows the shape of
 
 `DtMaxTenthStallReproducerTest` runs the scenario twice: once with `dtMax` set to 1e-1 by its own main process
 (in that process's `startAction`, after the generator's start), once at the global step. It asserts that the crawls
-differ by at most 1.0 s, that the 1e-1 run stops on the held train's `errorStop`, and that the second run (a fresh
+differ by at most 1.0 s, that each run stops on the held train's `errorStop`, and that the second run (a fresh
 context) sees `Generator.DT_MAX` again: kDisco keeps `dtMax` per simulation context, so the 1e-1 value cannot leak.
 Each run is bounded by its simulated `endTime` (400 s); the `@Timeout` is only a safety ceiling.
 
@@ -99,13 +99,13 @@ the largest acceleration times the step, `|a|max × dtMax`, with `|a|max` = 4 m/
 | Integration step | at most 1 ms of simulated time; events and root-finding cut it further | 100 ms |
 | E1 speed error of one step | 4 m/s² × 1e-3 s = 0.004 m/s | 0.4 m/s |
 | Distance covered in one step | `v × dtMax`, 0.02 m at 20 m/s | 2 m at 20 m/s |
-| Polled waits (`waitUntil`, e.g. the ownership-conflict horizon and the path-available condition) | resolve at a step boundary only, at most one step (≤ 1 ms) after the condition turned true. Polled waits follow discrete events while continuous integration is inactive, so this is no absolute ≤ 1 ms guarantee against event times | ≤ 100 ms |
-| Root-found waits (block boundaries, tail entry, every Engine wait) | located inside the step by kDisco; no step error — except an Engine guard evaluated with the stage's own acceleration, which can resolve up to one step early when `accelerate` is cleared during a stage (E1-affected) | same |
+| Polled waits (`waitUntil`, e.g. the ownership-conflict horizon and the path-available condition) | resolve at a boundary only (a step end or an event), at most one step (≤ 1 ms) after the condition turned true. Polled waits follow discrete events while continuous integration is inactive, so this is no absolute ≤ 1 ms guarantee against event times | ≤ 100 ms |
+| Root-found waits (block boundaries, tail entry, every Engine wait) | located inside the step by kDisco; no step error — except a guard read through `legMargin`, which returns the cancel value `-1.0` as soon as the Engine clears `accelerate` mid-stage: that flip inside a stage can date the guard's resolution up to one step early (E1-affected) | same |
 | Stand exit | at most half a step late: ≤ 0.5 ms | ≤ 50 ms |
 | Stand residual at the clearance gate (Issue #1057 ramp case, after PR #1146) | 0.015 m/s (one 5 ms sample at the bound) | not measured on this code |
 
 Demand for Goal 9B: a planner may treat kDisco's discrete event times as exact, and a wait's resolution as at most
-one step late (≤ 1 ms) — and only at a step boundary, as the table above qualifies. Its speed guarantee is the E1
+one step late (≤ 1 ms) — and only at a step end or event boundary, as the table above qualifies. Its speed guarantee is the E1
 bound and nothing more: 0.004 m/s is the LOCAL, per-step bound — how much one step can change a speed, per the E1
 definition above — not a global accuracy guarantee over a whole manoeuvre; a plan must absorb the bound once per
 step it lets pass between two reads. That is far below any headway or dwell a dispatcher plans with, so a plan

@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.prepareShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -92,6 +93,7 @@ class DtMaxTenthStallReproducerTest : KoinTestBase() {
 		assertThat(abs(tenth.crawlSeconds!! - global.crawlSeconds!!), name = "crawl difference (s)")
 			.isLessThanOrEqualTo(CRAWL_TOLERANCE_SECONDS)
 		assertThat(tenth.firstErrorStopNamesTheHeldTrain, name = "1e-1 run stopped on the held train").isTrue()
+		assertThat(global.firstErrorStopNamesTheHeldTrain, name = "global-step run stopped on the held train").isTrue()
 	}
 
 	/**
@@ -101,12 +103,12 @@ class DtMaxTenthStallReproducerTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `MultiTrainLoop and ShuntingLoop run at the global dtMax`() {
-		val multiContext = loadVyhybnaContext()
+		val multiContext = loadVyhybnaContext().tracked()
 		val multi = DtMaxRecordingMultiTrainLoop(multiContext)
 		multiContext.setMainProcess(multi)
 		multiContext.run()
 
-		val shuntingContext = loadVyhybnaContext()
+		val shuntingContext = loadVyhybnaContext().tracked()
 		val shuntingLoop = prepareShuntingLoop(shuntingContext, SHORT_END_TIME)
 		val shunting = StepOverride(shuntingLoop, null)
 		shuntingContext.setMainProcess(shunting)
@@ -142,7 +144,7 @@ class DtMaxTenthStallReproducerTest : KoinTestBase() {
 	 * `dtMax` set to [stepOverride] or, when `null`, left at the generator's global value.
 	 */
 	private fun runResolveAndRestall(stepOverride: Double?): Outcome {
-		val context = loadVyhybnaContext()
+		val context = loadVyhybnaContext().tracked()
 		val hold = ResolveAndRestall(context.getRoutingServices().getTrainNavigationService())
 		val errorStops = CopyOnWriteArrayList<Throwable>()
 		val env = NavigationDecoratingContext(context, hold.navigation) { errorStops.add(it) }
@@ -246,8 +248,5 @@ class DtMaxTenthStallReproducerTest : KoinTestBase() {
 
 		/** Crawl at 1e-1 vs the global step: 0.44 s measured; before PR #1146 about 29 s. */
 		const val CRAWL_TOLERANCE_SECONDS = 1.0
-
-		/** Distinctive fragment of the mid-journey stall `errorStop` message. */
-		const val ROUTE_EXTENSION_FRAGMENT = "no route extension"
 	}
 }
