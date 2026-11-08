@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.hasMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.messageContains
@@ -116,6 +117,15 @@ class GeneratorPairSelectionTest : CommonKoinTestBase() {
 		// The only later entry of west_entry_1 is rejected; west_entry_2 has no later entry.
 		assertFailure { selectPair(westOnly) { from, _ -> from.name != WEST_ENTRY_1 } }
 			.isInstanceOf<IllegalStateException>()
+	}
+
+	@Test
+	fun fewerThanTwoInOutsIsRejectedAsSuch() {
+		val byName = inOuts()
+
+		assertFailure { selectPair(listOf(byName.getValue(WEST_ENTRY_1)), ACCEPT_ALL) }
+			.isInstanceOf<IllegalArgumentException>()
+			.hasMessage("A timetable needs at least two InOuts, got 1")
 	}
 
 	@Test
