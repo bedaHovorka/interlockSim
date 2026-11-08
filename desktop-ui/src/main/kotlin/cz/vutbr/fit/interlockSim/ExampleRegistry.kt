@@ -104,12 +104,15 @@ class ExampleRegistry {
 
 	/**
 	 * The arrival settings a shunting-loop example hands to its [ShuntingLoop]; [DEFAULT] keeps the
-	 * loop's own defaults (topology capacity, historical seed 0, unlimited trains).
+	 * loop's own defaults (topology capacity, historical seed 0, unlimited trains, every
+	 * opposite-side endpoint pair). [switchLegalPairsOnly] restricts the generated pairs to those
+	 * with a switch-legal route ([ShuntingLoop.switchLegalPairsOnly], Issue #1376).
 	 */
 	internal data class LoopTraffic(
 		val maxConcurrentTrains: Int?,
 		val seed: Long,
-		val maxTrains: Int?
+		val maxTrains: Int?,
+		val switchLegalPairsOnly: Boolean = false
 	) {
 		companion object {
 			val DEFAULT = LoopTraffic(maxConcurrentTrains = null, seed = 0L, maxTrains = null)
@@ -125,12 +128,17 @@ class ExampleRegistry {
 	 * The generator seed is the optional `args[3]` (default 0, the historical seed). It depends on
 	 * nothing else, so run i of the LLM arm and run i of the rule-based arm, given the same seed,
 	 * get the same arrival stream (paired runs).
+	 *
+	 * Both arms draw only endpoint pairs with a switch-legal route (Issue #1376): some cross-side
+	 * pairs of the Station variant have none, and a train generated for one could never reach its
+	 * destination, which would confound the arm comparison.
 	 */
 	internal fun prahaTraffic(args: Array<String>): LoopTraffic =
 		LoopTraffic(
 			maxConcurrentTrains = PRAHA_MAX_CONCURRENT_TRAINS,
 			seed = args.getOrNull(3)?.toLong() ?: 0L,
-			maxTrains = PRAHA_MAX_TRAINS
+			maxTrains = PRAHA_MAX_TRAINS,
+			switchLegalPairsOnly = true
 		)
 
 	/**
@@ -294,7 +302,8 @@ class ExampleRegistry {
 					endTime,
 					maxConcurrentTrains = traffic.maxConcurrentTrains,
 					seed = traffic.seed,
-					maxTrains = traffic.maxTrains
+					maxTrains = traffic.maxTrains,
+					switchLegalPairsOnly = traffic.switchLegalPairsOnly
 				)
 			wireDispatcherAgent(this, loop, NoOpSimulationController, barrierControlStep = true)
 			setMainProcess(loop)
@@ -340,7 +349,8 @@ class ExampleRegistry {
 					initialSpeedMultiplier = 1.0,
 					maxConcurrentTrains = traffic.maxConcurrentTrains,
 					seed = traffic.seed,
-					maxTrains = traffic.maxTrains
+					maxTrains = traffic.maxTrains,
+					switchLegalPairsOnly = traffic.switchLegalPairsOnly
 				)
 			// SP4.2 (Issue #564): pace the agent loop with the GUI's real-time sync.
 			// The scoped DelegatingSimulationController is handed to the driver here;
@@ -657,7 +667,8 @@ class ExampleRegistry {
 					endTime,
 					maxConcurrentTrains = traffic.maxConcurrentTrains,
 					seed = traffic.seed,
-					maxTrains = traffic.maxTrains
+					maxTrains = traffic.maxTrains,
+					switchLegalPairsOnly = traffic.switchLegalPairsOnly
 				)
 			// Issue #873 (R8 resolution): KoogAgentPlanAdapter is async (isAsynchronous=true);
 			// ThrottlingSimulationController provides the required pacing for
@@ -774,7 +785,8 @@ class ExampleRegistry {
 					initialSpeedMultiplier = 1.0,
 					maxConcurrentTrains = traffic.maxConcurrentTrains,
 					seed = traffic.seed,
-					maxTrains = traffic.maxTrains
+					maxTrains = traffic.maxTrains,
+					switchLegalPairsOnly = traffic.switchLegalPairsOnly
 				)
 			// SP2b.9 (Issue #566): KoogAgentPlanAdapter is async (isAsynchronous=true);
 			// DelegatingSimulationController provides the required pacing for
