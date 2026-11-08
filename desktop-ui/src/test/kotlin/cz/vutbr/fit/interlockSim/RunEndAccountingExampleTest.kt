@@ -129,9 +129,9 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 	@Test
 	@Tag("integration-test")
 	@Timeout(value = 300, unit = TimeUnit.SECONDS)
-	@DisplayName("cervenyUjezd 600 s: the same figures are available and the run is a cutoff")
+	@DisplayName("cervenyUjezd 300 s: the same figures are available and the run is a cutoff")
 	fun cervenyUjezdIsACutoffWithTheLoopFigures() {
-		val context = build("createCervenyUjezdExample", ExampleNames.CERVENY_UJEZD)
+		val context = build("createCervenyUjezdExample", ExampleNames.CERVENY_UJEZD, CUTOFF_END_TIME)
 		val loop = context.mainProcess as ShuntingLoop
 
 		context.run()
@@ -194,18 +194,18 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 	 * unchanged and run headless. The only difference from the GUI is the pacing: where the GUI's
 	 * `SimulationController` attaches its `SimulationRunner` as the delegate and runs at the chosen
 	 * speed, this test attaches a [ThrottlingSimulationController] at the maximum speed and raises
-	 * the loop's speed multiplier to the same value, so 600 simulated seconds take seconds of wall
+	 * the loop's speed multiplier to the same value, so 300 simulated seconds take seconds of wall
 	 * time. The planner is the rule-based one; no Ollama is involved.
 	 */
 	@Test
 	@Tag("integration-test")
 	@Timeout(value = 300, unit = TimeUnit.SECONDS)
-	@DisplayName("cervenyUjezd GUI wiring 600 s headless: a cutoff with every admitted train accounted for")
+	@DisplayName("cervenyUjezd GUI wiring 300 s headless: a cutoff with every admitted train accounted for")
 	fun cervenyUjezdGuiWiringIsACutoff() {
 		val registry = get<ExampleRegistry>()
 		val factory = checkNotNull(registry.guiExamples[ExampleNames.CERVENY_UJEZD])
 		val context =
-			(factory(get(), arrayOf("exampleGui", ExampleNames.CERVENY_UJEZD, END_TIME)) as DefaultSimulationContext)
+			(factory(get(), arrayOf("exampleGui", ExampleNames.CERVENY_UJEZD, CUTOFF_END_TIME)) as DefaultSimulationContext)
 				.tracked()
 		val loop = context.mainProcess as ShuntingLoop
 		val pacing = ThrottlingSimulationController(ThrottlingSimulationController.MAX_SPEED)
@@ -227,6 +227,10 @@ class RunEndAccountingExampleTest : KoinTestBase() {
 
 	private companion object {
 		const val END_TIME = "600"
+
+		// On the current routing all 19 Cerveny Ujezd trains leave before 600 s and the run
+		// completes naturally, so a cutoff with a train still on the network needs a shorter horizon.
+		const val CUTOFF_END_TIME = "300"
 		const val CERVENY_UJEZD_CAPACITY = 4
 	}
 }
