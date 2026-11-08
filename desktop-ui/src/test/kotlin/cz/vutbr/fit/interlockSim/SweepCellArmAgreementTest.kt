@@ -48,6 +48,8 @@ class SweepCellArmAgreementTest : KoinTestBase() {
 			ExampleNames.CERVENY_UJEZD,
 			ExampleNames.CERVENY_UJEZD_AI,
 			ExampleNames.CERVENY_UJEZD_SYNC,
+			ExampleNames.PRAHA_HLAVNI_NADRAZI,
+			ExampleNames.PRAHA_HLAVNI_NADRAZI_AI,
 			ExampleNames.MULTI_TRAIN_LOOP,
 			ExampleNames.THREE_TRAIN_LOOP
 		]
@@ -79,6 +81,8 @@ class SweepCellArmAgreementTest : KoinTestBase() {
 				ExampleNames.CERVENY_UJEZD,
 				ExampleNames.CERVENY_UJEZD_AI,
 				ExampleNames.CERVENY_UJEZD_SYNC,
+				ExampleNames.PRAHA_HLAVNI_NADRAZI,
+				ExampleNames.PRAHA_HLAVNI_NADRAZI_AI,
 				ExampleNames.MULTI_TRAIN_LOOP,
 				ExampleNames.THREE_TRAIN_LOOP
 			)
