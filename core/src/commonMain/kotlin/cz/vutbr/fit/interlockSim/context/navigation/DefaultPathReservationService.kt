@@ -134,7 +134,7 @@ class DefaultPathReservationService(
 	private val switchConfigurator = SwitchConfigurator(environment, registry)
 
 	/** Reservation target discovery (Issue #1171): what a route can be set to, and in which order. */
-	private val targetDiscovery = ReservationTargetDiscovery(navigator, environment)
+	private val targetDiscovery = ReservationTargetDiscovery(navigator, environment, registry::getSwitchOwner)
 
 	/**
 	 * Read-only candidate geometry screening: origin guards, rear-facing and divergent candidates (Issue #1210).

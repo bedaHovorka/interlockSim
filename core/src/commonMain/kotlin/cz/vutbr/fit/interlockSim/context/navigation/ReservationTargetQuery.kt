@@ -19,8 +19,9 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
  * @property separator The reachable separator: a forward-facing semaphore, or an InOut (always a
  *   valid terminal target — see `findNextSemaphoresVia`).
  * @property available `true` when a physically legal route to [separator] exists whose blocks are
- *   all FREE, or owned by the train the query was made for (Issue #1060). Always the result of a
- *   real check: no candidate is reported unavailable without the check having run.
+ *   all FREE, or owned by the train the query was made for (Issue #1060), and whose every switch is
+ *   unlocked, locked in the position that route needs, or locked by that train (Issue #1359). Always
+ *   the result of a real check: no candidate is reported unavailable without the check having run.
  * @since Issue #970
  */
 data class ReservationTargetCandidate(
@@ -50,7 +51,9 @@ fun interface ReservationTargetQuery {
 	 * Selection mirrors [PathReservationService.reservePathToAnyNextSemaphore]: determine the forward
 	 * track section from [start]'s orientation, enumerate reachable separators via that section
 	 * (InOuts prioritized over semaphores), and evaluate each one's availability
-	 * ([PathReservationService.isPathAvailable], owner-aware when [ownerTrainId] is given). The list
+	 * ([PathReservationService.isPathAvailable], owner-aware when [ownerTrainId] is given; a target
+	 * whose every block-free route needs a switch another train's live route holds locked the other
+	 * way is unavailable, Issue #1359). The list
 	 * keeps the enumeration order, so the first available element is exactly what
 	 * [PathReservationService.findNextReservationTarget] returns.
 	 *
