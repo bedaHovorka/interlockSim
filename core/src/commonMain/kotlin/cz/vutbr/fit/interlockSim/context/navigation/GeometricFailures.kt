@@ -32,7 +32,15 @@ package cz.vutbr.fit.interlockSim.context.navigation
 internal data class GeometricFailures(
 	val reason: String? = null,
 	val count: Int = 0
-)
+) {
+	/**
+	 * Folds the failures of a later screen into these: this side's reason stays first (Issue #903),
+	 * the counts add up (Issue #937). Used to fold the Step 1.4 START screen and the Step 1.5 END
+	 * screen into one record (Issue #1378).
+	 */
+	operator fun plus(later: GeometricFailures): GeometricFailures =
+		GeometricFailures(reason ?: later.reason, count + later.count)
+}
 
 /**
  * Records one geometric candidate failure: keeps the first [reason], increments the count

@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -34,9 +35,10 @@ private val logger = KotlinLogging.logger {}
  * Two kinds of check live here:
  * - **Endpoint guards** (Step 0), applied once per request: [rejectNonOrientedStart],
  *   its END-side twin [rejectNonOrientedEnd], and [rejectNonContiguousStart].
- * - **Candidate screens** (Steps 1.5 and 1.6), applied to the enumerated candidate paths:
+ * - **Candidate screens** (Steps 1.4, 1.5 and 1.6), applied to the enumerated candidate paths:
+ *   [screenRearFacingStarts] (the semaphore START must face the train, Issue #1378),
  *   [screenRearFacingEnds] (G8, the END must face the train) and [screenDivergentCandidates]
- *   (the candidate must continue the route the train already holds). Both report the screened-out
+ *   (the candidate must continue the route the train already holds). All three report the screened-out
  *   candidates as [GeometricFailures], with the survivors keeping their original index.
  *
  * [forwardOnlyPathInfo] is the shared PathInfo trimming rule: the divergence screen uses it to
@@ -242,9 +244,76 @@ internal class RouteCandidateScreen(
 	}
 
 	/**
-	 * G8 screening of [candidatePaths] (Issue #1064): splits off every candidate whose end faces away
+	 * Step 1.4 screening of [candidatePaths] (Issue #1378, traffic-simulation-expert ruling): splits off
+	 * every candidate whose first block lies behind its semaphore START ([rearFacingStartReason]) and
+	 * records each one as a geometric failure. Nothing is mutated, so a screened-out candidate leaves
+	 * nothing to roll back; it runs before the candidate loop, so it also covers the already-owned
+	 * early return, which used to grant a switch-free reversal onto the train's own block.
+	 *
+	 * @return the geometric failures of the screened-out candidates, and the remaining candidates
+	 *   with their original index, which later screens and denial reasons use to name a candidate
+	 */
+	internal fun screenRearFacingStarts(
+		start: DynamicPathSeparator,
+		candidatePaths: List<List<TrackSection>>
+	): Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>> {
+		var failures = GeometricFailures()
+		val usable = mutableListOf<IndexedValue<List<TrackSection>>>()
+		for (candidate in candidatePaths.withIndex()) {
+			val reason = rearFacingStartReason(start, candidate.value, candidate.index)
+			if (reason == null) {
+				usable += candidate
+			} else {
+				logger.debug { "reservePath: skipping candidate ${candidate.index} before any mutation: $reason" }
+				failures = recordGeometricFailureOnce(failures, reason)
+			}
+		}
+		return failures to usable
+	}
+
+	/**
+	 * The START-side rule of Step 1.4 (Issue #1378): the G4 rule of
+	 * [RouteSignalConfigurator.configureStartSignal], applied before anything is reserved. A route
+	 * whose semaphore START faces away from the candidate's first block asks the train to leave
+	 * against the signal it stands at -- the switch-free reversal `S9 -> S15` onto the platform track
+	 * the train already occupies (Praha), which no switch check would ever catch.
+	 *
+	 * The facing test is [semaphoreFacesNextBlockOrOpen], the one [RouteSignalConfigurator] uses, so
+	 * an unresolvable pair fails open here as it does there. Not screened: an InOut START (its
+	 * embedded signal is configured per direction) and an empty [path]. The G4 checks in
+	 * [CandidateCommitter] / [RouteSignalConfigurator.configureStartSignal] and the already-owned SKIP
+	 * arm stay as defence in depth.
+	 *
+	 * @return the English denial reason, naming the signals that do face the train from [start];
+	 *   `null` when [start] is not a semaphore, [path] is empty, or the START faces the first block
+	 */
+	internal fun rearFacingStartReason(
+		start: DynamicPathSeparator,
+		path: List<TrackSection>,
+		candidateIndex: Int
+	): String? {
+		if (start !is DynamicRailSemaphore || path.isEmpty()) return null
+		val firstBlock = path.first().getTrackBlock() as DynamicTrackBlock
+		if (semaphoreFacesNextBlockOrOpen(environment, start, firstBlock)) return null
+		val facingStarts =
+			runCatching {
+				val location = environment.getRailWayNetGrid().getLocation(start)
+				val facingSection = location?.let { environment.getGraph().assignedEdges(it)[start.direction()] }
+				facingSection?.let { targetDiscovery.findNextSemaphoresVia(start, it) } ?: emptyList()
+			}.getOrDefault(emptyList())
+				.joinToString(", ") { separatorLabel(it) }
+		return "Route origin '${separatorLabel(start)}' faces away from the direction of travel on candidate " +
+			"$candidateIndex; a route must start at a signal facing the train. The next signals facing the " +
+			"train from '${separatorLabel(start)}' are: $facingStarts."
+	}
+
+	/**
+	 * G8 screening of [candidates] (Issue #1064): splits off every candidate whose end faces away
 	 * from the train ([rearFacingEndReason]) and records each one as a geometric failure. Extracted so
 	 * the screening adds no branch to [DefaultPathReservationService.reservePath]'s own cyclomatic complexity.
+	 *
+	 * [candidates] are the Step 1.4 survivors with their original index (Issue #1378), so a denial
+	 * reason still names a candidate by its position in the enumerated list.
 	 *
 	 * @return the geometric failures of the screened-out candidates, and the remaining candidates
 	 *   with their original index, which later denial reasons use to name a candidate
@@ -252,11 +321,11 @@ internal class RouteCandidateScreen(
 	internal fun screenRearFacingEnds(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
-		candidatePaths: List<List<TrackSection>>
+		candidates: List<IndexedValue<List<TrackSection>>>
 	): Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>> {
 		var failures = GeometricFailures()
 		val usable = mutableListOf<IndexedValue<List<TrackSection>>>()
-		for (candidate in candidatePaths.withIndex()) {
+		for (candidate in candidates) {
 			val reason = rearFacingEndReason(start, target, candidate.value, candidate.index)
 			if (reason == null) {
 				usable += candidate
