@@ -119,8 +119,7 @@ class DispatcherObservationProjectorLiveRunTest : DispatcherKoinTestBase() {
 			// The composite hook #824 describes for wireDispatcherAgent: keep the perception-port
 			// snapshot fresh, then let the projector capture on the same (sim) thread.
 			loop.snapshotCaptureHook = {
-				perceptionPort.captureSnapshot()
-				projector.captureOnSimThread()
+				perceptionPort.captureSnapshot().also { projector.captureOnSimThread() }
 			}
 			loop.controlStepListener =
 				ControlStepListener {

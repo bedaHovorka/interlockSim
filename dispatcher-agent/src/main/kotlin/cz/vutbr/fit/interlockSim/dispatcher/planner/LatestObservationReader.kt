@@ -11,9 +11,30 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
-import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
+
+/**
+ * Projects a published tick-stamped record into the [DispatchObservation] a planning cycle
+ * consumes: the record's snapshot, queued trains and both block-input lists pair 1:1 — the
+ * record is the observation's only source, so every field comes from the same sim tick
+ * (Issue #1354).
+ *
+ * [DispatchLoopSnapshot.tick] is deliberately not carried over: it is bookkeeping only, and no
+ * decision logic may branch on it (ruling #1354-b). The observation keeps its freshness
+ * semantics through its [DispatchObservation.snapshot] simTime.
+ *
+ * This is a pure field pairing. Calling it on a record whose [DispatchLoopSnapshot.snapshot] is
+ * [SimulationSnapshot.EMPTY] produces an observation of the same uselessness — publication
+ * guards (ruling #1354-a) stay at the call sites that need them.
+ */
+fun DispatchLoopSnapshot.toDispatchObservation(): DispatchObservation =
+	DispatchObservation(
+		snapshot = snapshot,
+		unapprovedTrains = queuedTrains,
+		innerBlockInputs = innerBlockInputs,
+		outerBlockInputs = outerBlockInputs
+	)
 
 /**
  * Reads the dispatch state the simulation thread published most recently, for the rule-based
@@ -33,53 +54,30 @@ fun interface LatestObservationReader {
 
 	companion object {
 		/**
-		 * The production reader: the same two published references `AgentLoopDriver` builds every
-		 * cycle's observation from, read through the same ports.
+		 * The production reader: the same published record `AgentLoopDriver` builds every cycle's
+		 * observation from, read through the same port.
 		 *
-		 * - [dispatchLoopSensorPort]'s [DispatchLoopSensorPort.snapshot] — the queued trains and
-		 *   both block-input lists, one atomic read of `ShuntingLoop`'s per-tick observation;
-		 * - [perceptionPort]'s [NetworkPerceptionPort.snapshot] — the `@Volatile` reference to the
-		 *   last sim-thread capture, the only off-thread-safe member of that port (the pattern
-		 *   `RequestRouteTool` uses). [NetworkPerceptionPort.captureSnapshot] is never called.
-		 *
-		 * ## Read order
-		 *
-		 * The simulation publishes the two references one after the other in each iteration —
-		 * the snapshot first (`snapshotCaptureHook`), the dispatch-loop observation second — and
-		 * neither carries a tick stamp, so no read can prove they come from the same tick. The
-		 * dispatch-loop observation is read **first**: whatever tick it comes from, that tick's
-		 * snapshot was published before it, so the snapshot read afterwards is from the same
-		 * tick or a later one, never an earlier one. The snapshot feeds only
-		 * [DispatchObservation.approvedTrainCount] into the rule-based admission decision, so at
-		 * worst the fallback sees a train already approved while the queue still lists it: the
-		 * free-slot count is then the lower, current one, and re-approving an active train is a
-		 * no-op downstream (`ShuntingLoop.approveQueuedTrain`). The opposite order could pair an
-		 * older approved-train count with a newer queue and overcount free slots.
+		 * [dispatchLoopSensorPort]'s [DispatchLoopSensorPort.snapshot] is read once. It returns
+		 * one tick-stamped record — the queued trains, both block-input lists and the perception
+		 * snapshot `ShuntingLoop` published together in one `@Volatile` write (Issue #1354) — so
+		 * every field of the returned observation comes from the same tick.
+		 * [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort.captureSnapshot] is never called.
 		 *
 		 * ## Nothing published yet
 		 *
-		 * Returns `null` while either port still returns its sentinel —
-		 * [SimulationSnapshot.EMPTY] before the first capture, or [DispatchLoopSnapshot.EMPTY]
-		 * when there is no dispatch loop to read — so a caller keeps its own whole observation
-		 * instead of combining it with an empty one. Both are checked by reference, as
-		 * [KoogAgentPlanAdapter] checks [SimulationSnapshot.EMPTY].
+		 * Returns `null` while the record still carries [SimulationSnapshot.EMPTY] — before the
+		 * first capture, or [DispatchLoopSnapshot.EMPTY] when there is no dispatch loop to read —
+		 * so a caller keeps its own whole observation instead of combining it with an empty one
+		 * (ruling #1354-a). Checked by reference, as [KoogAgentPlanAdapter] checks
+		 * [SimulationSnapshot.EMPTY].
 		 */
-		fun fromPorts(
-			perceptionPort: NetworkPerceptionPort,
-			dispatchLoopSensorPort: DispatchLoopSensorPort
-		): LatestObservationReader =
+		fun fromPorts(dispatchLoopSensorPort: DispatchLoopSensorPort): LatestObservationReader =
 			LatestObservationReader {
-				val tick = dispatchLoopSensorPort.snapshot()
-				val snapshot = perceptionPort.snapshot()
-				if (snapshot === SimulationSnapshot.EMPTY || tick === DispatchLoopSnapshot.EMPTY) {
+				val record = dispatchLoopSensorPort.snapshot()
+				if (record.snapshot === SimulationSnapshot.EMPTY) {
 					null
 				} else {
-					DispatchObservation(
-						snapshot = snapshot,
-						unapprovedTrains = tick.queuedTrains,
-						innerBlockInputs = tick.innerBlockInputs,
-						outerBlockInputs = tick.outerBlockInputs
-					)
+					record.toDispatchObservation()
 				}
 			}
 	}

@@ -33,9 +33,7 @@ import cz.vutbr.fit.interlockSim.testutil.inOutCandidate
 import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import io.mockk.coEvery
 import io.mockk.confirmVerified
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
@@ -43,13 +41,15 @@ import org.junit.jupiter.api.Test
 import java.time.Duration
 
 /**
- * Issue #1343 wiring: [AgentLoopDriver] installs a reader over its own two ports as its
+ * Issue #1343 wiring: [AgentLoopDriver] installs a reader over its own sensor port as its
  * `plannerTickSource`'s [KoogAgentPlanAdapter.latestObservationReader], so in production the
- * post-failure fallback decides on the latest state published through the very ports the
+ * post-failure fallback decides on the latest record published through the very port the
  * driver senses from.
  *
- * The [NetworkPerceptionPort] is a strict mock answering only `snapshot()`: a sim-thread capture
- * request would throw, and [confirmVerified] proves none was made on the whole cycle (C3).
+ * Since Issue #1354 the record carries the perception snapshot of its own tick. The
+ * [NetworkPerceptionPort] is a strict mock with no answers at all: any read or sim-thread
+ * capture request would throw, and [confirmVerified] proves none was made on the whole cycle
+ * (C3).
  */
 @DisplayName("AgentLoopDriver wires the latest published state into the LLM fallback (#1343)")
 class AgentLoopDriverLatestStateFallbackTest {
@@ -89,14 +89,10 @@ class AgentLoopDriverLatestStateFallbackTest {
 		)
 
 	@Volatile
-	private var publishedSnapshot: SimulationSnapshot = snapshotAt(100.0)
-
-	@Volatile
 	private var publishedTick: ShuntingLoop.TickObservation =
-		ShuntingLoop.TickObservation(emptyList(), emptyList(), listOf(trainOnKb))
+		ShuntingLoop.TickObservation(emptyList(), emptyList(), listOf(trainOnKb), tick = 1L, snapshot = snapshotAt(100.0))
 
-	private val perceptionPort =
-		mockk<NetworkPerceptionPort>().also { port -> every { port.snapshot() } answers { publishedSnapshot } }
+	private val perceptionPort = mockk<NetworkPerceptionPort>()
 
 	private fun adapter(koogAgent: KoogDispatchAgent): KoogAgentPlanAdapter {
 		val agentFactory = mockk<KoogAgentFactory>()
@@ -125,7 +121,7 @@ class AgentLoopDriverLatestStateFallbackTest {
 		)
 
 	@Test
-	@DisplayName("the driver installs a reader over its own two ports on its plannerTickSource")
+	@DisplayName("the driver installs a reader over its own sensor port on its plannerTickSource")
 	fun driverInstallsReaderOverItsPorts() {
 		val koogAdapter = adapter(mockk())
 
@@ -133,7 +129,7 @@ class AgentLoopDriverLatestStateFallbackTest {
 
 		assertThat(koogAdapter.latestObservationReader?.read()).isNotNull().isEqualTo(
 			DispatchObservation(
-				snapshot = publishedSnapshot,
+				snapshot = publishedTick.snapshot,
 				unapprovedTrains = emptyList(),
 				innerBlockInputs = emptyList(),
 				outerBlockInputs = listOf(trainOnKb)
@@ -147,8 +143,14 @@ class AgentLoopDriverLatestStateFallbackTest {
 		val koogAgent = mockk<KoogDispatchAgent>()
 		coEvery { koogAgent.decideAsync(any()) } coAnswers {
 			// The simulation keeps running during the inference: Train #4 moves from kB onto k1.
-			publishedSnapshot = snapshotAt(130.0)
-			publishedTick = ShuntingLoop.TickObservation(emptyList(), listOf(trainOnK1), listOf(kbFree))
+			publishedTick =
+				ShuntingLoop.TickObservation(
+					emptyList(),
+					listOf(trainOnK1),
+					listOf(kbFree),
+					tick = 16L,
+					snapshot = snapshotAt(130.0)
+				)
 			delay(500)
 			emptyList()
 		}
@@ -157,7 +159,6 @@ class AgentLoopDriverLatestStateFallbackTest {
 		runBlocking { driver(adapter(koogAgent), commandQueue).runCycle() }
 
 		assertThat(commandQueue.drain()).containsExactly(DispatchDecision.ReservePath(train, "doA1", "A"))
-		verify(exactly = 2) { perceptionPort.snapshot() }
 		confirmVerified(perceptionPort)
 	}
 }

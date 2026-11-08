@@ -29,8 +29,10 @@ import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
  * ## One observation per tick (SP0.11)
  * The shell ([ShuntingLoop]) publishes a single [DispatchObservation] per iteration
  * carrying ALL fields populated at once: the queued trains and both block-input
- * lists are snapshotted together (see [ShuntingLoop.getLatestObservation]). Admission
- * and path-advancement are decided in the same [Dispatcher.decide] call. The
+ * lists are snapshotted together (see [ShuntingLoop.getLatestObservation]). Since
+ * Issue #1354 an off-kernel cycle's observation is further the projection of one
+ * tick-stamped record, whose [snapshot] belongs to the same tick as those lists.
+ * Admission and path-advancement are decided in the same [Dispatcher.decide] call. The
  * historical two-observation pre/post-hold split (Issue #540) was removed by the
  * SP0.11 thin-shell refactor (Issue #733); the `innerBlockInputs`/`outerBlockInputs`
  * defaults remain `emptyList()` only so bare/early callers stay valid.

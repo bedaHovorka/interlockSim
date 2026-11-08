@@ -192,8 +192,7 @@ class RuleBasedDispatcherDeterminismRunner {
 			// The composite hook: keep the perception-port snapshot fresh first, then let
 			// the projector capture on the same sim thread (same pattern as wireDispatcherAgent).
 			loop.snapshotCaptureHook = {
-				perceptionPort.captureSnapshot()
-				projector.captureOnSimThread()
+				perceptionPort.captureSnapshot().also { projector.captureOnSimThread() }
 			}
 			// driverSignal.signal() fires from controlStepListener, NOT snapshotCaptureHook:
 			// ShuntingLoop.iteration() calls snapshotCaptureHook() BEFORE it publishes the

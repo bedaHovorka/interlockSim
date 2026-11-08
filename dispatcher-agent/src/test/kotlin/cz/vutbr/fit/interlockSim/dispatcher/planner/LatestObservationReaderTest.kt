@@ -16,7 +16,6 @@ import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
-import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -25,18 +24,17 @@ import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import io.mockk.verifyOrder
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
- * Unit tests for [LatestObservationReader.fromPorts] (Issue #1343).
+ * Unit tests for [LatestObservationReader.fromPorts] (Issues #1343, #1354).
  *
- * Both ports are strict mocks answering only their `snapshot()`: a sim-thread capture request
- * ([NetworkPerceptionPort.captureSnapshot]) or a per-field accessor read would throw, and
- * [confirmVerified] proves none was made.
+ * The sensor port is a strict mock answering only its `snapshot()`: a per-field accessor read
+ * would throw, and [confirmVerified] proves none was made. The reader takes no perception port,
+ * so it cannot request a sim-thread capture (C3).
  */
-@DisplayName("LatestObservationReader.fromPorts reads the published state without a capture (#1343)")
+@DisplayName("LatestObservationReader.fromPorts reads one published tick-stamped record (#1343, #1354)")
 class LatestObservationReaderTest {
 	private val snapshot = SimulationSnapshot.EMPTY.copy(simTime = 42.0)
 
@@ -51,80 +49,76 @@ class LatestObservationReaderTest {
 			pathAlreadyExtendedBeyond = false
 		)
 
-	private val tick =
+	private val record =
 		DispatchLoopSnapshot(
 			queuedTrains = listOf(QueuedTrainObservation("Train #5", "A")),
 			innerBlockInputs = listOf(input.copy(blockId = "k1", towardSemaphoreName = "doA1")),
-			outerBlockInputs = listOf(input)
+			outerBlockInputs = listOf(input),
+			tick = 7L,
+			snapshot = snapshot
 		)
 
-	private val perceptionPort = mockk<NetworkPerceptionPort>()
 	private val sensorPort = mockk<DispatchLoopSensorPort>()
 
-	private fun publish(
-		snapshot: SimulationSnapshot,
-		tick: DispatchLoopSnapshot
-	) {
-		every { perceptionPort.snapshot() } returns snapshot
-		every { sensorPort.snapshot() } returns tick
+	private fun publish(record: DispatchLoopSnapshot) {
+		every { sensorPort.snapshot() } returns record
 	}
 
 	@Test
-	@DisplayName("builds the whole observation from one tick read and one snapshot read")
-	fun buildsTheObservationFromOneReadOfEach() {
-		publish(snapshot, tick)
+	@DisplayName("builds the whole observation from one record read")
+	fun buildsTheObservationFromOneRecordRead() {
+		publish(record)
 
-		val observation = LatestObservationReader.fromPorts(perceptionPort, sensorPort).read()
+		val observation = LatestObservationReader.fromPorts(sensorPort).read()
 
 		assertThat(observation).isEqualTo(
 			DispatchObservation(
 				snapshot = snapshot,
-				unapprovedTrains = tick.queuedTrains,
-				innerBlockInputs = tick.innerBlockInputs,
-				outerBlockInputs = tick.outerBlockInputs
+				unapprovedTrains = record.queuedTrains,
+				innerBlockInputs = record.innerBlockInputs,
+				outerBlockInputs = record.outerBlockInputs
 			)
 		)
 		assertThat(observation?.snapshot).isSameInstanceAs(snapshot)
 	}
 
 	@Test
-	@DisplayName("reads the tick before the snapshot, so the snapshot is never older than the tick")
-	fun readsTheTickBeforeTheSnapshot() {
-		publish(snapshot, tick)
+	@DisplayName("reads the sensor port exactly once and no per-field accessor")
+	fun readsTheSensorPortOnce() {
+		publish(record)
 
-		LatestObservationReader.fromPorts(perceptionPort, sensorPort).read()
+		LatestObservationReader.fromPorts(sensorPort).read()
 
-		verifyOrder {
-			sensorPort.snapshot()
-			perceptionPort.snapshot()
-		}
-	}
-
-	@Test
-	@DisplayName("requests no sim-thread capture and no per-field accessor (C3)")
-	fun requestsNoCapture() {
-		publish(snapshot, tick)
-
-		LatestObservationReader.fromPorts(perceptionPort, sensorPort).read()
-
-		verify(exactly = 1) { perceptionPort.snapshot() }
 		verify(exactly = 1) { sensorPort.snapshot() }
-		confirmVerified(perceptionPort, sensorPort)
+		confirmVerified(sensorPort)
 	}
 
 	@Test
-	@DisplayName("returns null while the perception snapshot is still the pre-first-capture sentinel")
-	fun nullOnEmptySnapshot() {
-		publish(SimulationSnapshot.EMPTY, tick)
+	@DisplayName("returns the snapshot and the queue of one tick-stamped record (#1354)")
+	fun readsOneTickStampedRecord() {
+		val snapshot5 = SimulationSnapshot.EMPTY.copy(simTime = 10.0)
+		val record5 = record.copy(tick = 5L, snapshot = snapshot5)
+		publish(record5)
 
-		assertThat(LatestObservationReader.fromPorts(perceptionPort, sensorPort).read()).isNull()
+		val observation = LatestObservationReader.fromPorts(sensorPort).read()
+
+		assertThat(observation?.snapshot).isSameInstanceAs(snapshot5)
+		assertThat(observation?.unapprovedTrains).isSameInstanceAs(record5.queuedTrains)
+	}
+
+	@Test
+	@DisplayName("returns null while the record still carries the pre-first-capture sentinel")
+	fun nullOnEmptySnapshot() {
+		publish(record.copy(snapshot = SimulationSnapshot.EMPTY))
+
+		assertThat(LatestObservationReader.fromPorts(sensorPort).read()).isNull()
 	}
 
 	@Test
 	@DisplayName("returns null while the dispatch-loop port has nothing published")
-	fun nullOnEmptyTick() {
-		publish(snapshot, DispatchLoopSnapshot.EMPTY)
+	fun nullOnEmptyRecord() {
+		publish(DispatchLoopSnapshot.EMPTY)
 
-		assertThat(LatestObservationReader.fromPorts(perceptionPort, sensorPort).read()).isNull()
+		assertThat(LatestObservationReader.fromPorts(sensorPort).read()).isNull()
 	}
 }
