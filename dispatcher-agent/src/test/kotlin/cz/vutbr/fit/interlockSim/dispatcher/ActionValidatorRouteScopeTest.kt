@@ -10,11 +10,16 @@
 package cz.vutbr.fit.interlockSim.dispatcher
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
+import cz.vutbr.fit.interlockSim.sim.CandidateTarget
+import cz.vutbr.fit.interlockSim.sim.SeparatorKind
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -116,6 +121,67 @@ class ActionValidatorRouteScopeTest {
 			val verdict = validator.validate(action, observation())
 
 			assertThat(verdict).isEqualTo(ValidationVerdict.Valid)
+		}
+	}
+
+	/**
+	 * The next-section rule (Issue #1378) is a section-hop rule: it checks a [RouteScope.Section]
+	 * request against the separators listed one section ahead of its origin, and leaves an
+	 * [RouteScope.EndToEnd] request to the destination rule.
+	 */
+	@Nested
+	@DisplayName("next-section rule: Section scope is checked, EndToEnd is skipped (#1378)")
+	inner class NextSectionRule {
+		/** T1's input facing A lists only B one section ahead. */
+		private fun observationWithInputAheadOfA(): DispatcherObservation =
+			observation().copy(
+				innerBlockInputs =
+					listOf(
+						BlockInputObservation(
+							blockId = "kA",
+							towardSemaphoreName = "A",
+							state = TrackFacility.State.OCCUPIED,
+							ownerTrainId = "T1",
+							isApproachingThisInput = true,
+							pathSetUpTowardThisInput = false,
+							pathAlreadyExtendedBeyond = false,
+							candidateTargets = listOf(CandidateTarget("B", SeparatorKind.IN_OUT, available = true))
+						)
+					)
+			)
+
+		@Test
+		@DisplayName("a section-scoped request to a target not listed ahead is TARGET_NOT_NEXT_SECTION")
+		fun sectionScopeIsChecked() {
+			val action = DispatchAction.RequestRoute("T1", "A", "C", RouteScope.Section)
+
+			val verdict = validator.validate(action, observationWithInputAheadOfA())
+
+			assertThat(verdict).isInstanceOf(ValidationVerdict.Rejected::class)
+			assertThat((verdict as ValidationVerdict.Rejected).code).isEqualTo(RejectionCode.TARGET_NOT_NEXT_SECTION)
+			assertThat(verdict.detail).contains("NEXT SECTION is from 'A' to 'B'")
+		}
+
+		@Test
+		@DisplayName("a section-scoped request to the listed target is Valid")
+		fun sectionScopeListedTargetIsValid() {
+			val action = DispatchAction.RequestRoute("T1", "A", "B", RouteScope.Section)
+
+			assertThat(validator.validate(action, observationWithInputAheadOfA())).isEqualTo(ValidationVerdict.Valid)
+		}
+
+		@Test
+		@DisplayName("an end-to-end request is not checked by the next-section rule")
+		fun endToEndIsSkipped() {
+			// C is not listed ahead of A, but an EndToEnd request to the declared destination B is the
+			// destination rule's business; give the train destination C so that rule passes.
+			val observation =
+				observationWithInputAheadOfA().let { obs ->
+					obs.copy(trains = obs.trains.map { it.copy(destinationInOutName = "C") })
+				}
+			val action = DispatchAction.RequestRoute("T1", "A", "C", RouteScope.EndToEnd)
+
+			assertThat(validator.validate(action, observation)).isEqualTo(ValidationVerdict.Valid)
 		}
 	}
 

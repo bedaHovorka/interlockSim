@@ -11,23 +11,33 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
+import cz.vutbr.fit.interlockSim.dispatcher.RouteScope
+import cz.vutbr.fit.interlockSim.dispatcher.agents.EmittedActionSink
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
+import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.sim.SeparatorKind
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
@@ -273,5 +283,150 @@ class RequestRouteToolTest {
 			}
 
 		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
+
+	/**
+	 * The next-section guard (Issue #1378): a Signal target must be one of the separators the
+	 * interlocking lists one section ahead of `from` for this train — the list the NEXT SECTION line
+	 * is rendered from. The Praha LLM arm asked for the signal at the far end of the train's own
+	 * platform track (behind it) five times in a row; the engine granted a one-block "route" onto the
+	 * block the train stood on, and the train never moved again.
+	 *
+	 * Train #1 here stands still at `doB1`, bound for `A`; its input facing `doB1` lists what lies one
+	 * section ahead of it.
+	 */
+	@Nested
+	@DisplayName("next-section guard for Signal targets (Issue #1378)")
+	inner class NextSectionGuard {
+		private val emitted = mutableListOf<DispatchAction>()
+
+		private fun ownedInput(
+			toward: String = "doB1",
+			candidates: List<CandidateTarget>,
+			extendedBeyond: Boolean = false
+		) = BlockInputObservation(
+			blockId = "k1",
+			towardSemaphoreName = toward,
+			state = TrackFacility.State.OCCUPIED,
+			ownerTrainId = "Train #1",
+			isApproachingThisInput = true,
+			pathSetUpTowardThisInput = false,
+			pathAlreadyExtendedBeyond = extendedBeyond,
+			candidateTargets = candidates
+		)
+
+		private fun snapshotPort(inputs: List<BlockInputObservation>): DispatchLoopSensorPort =
+			mockk<DispatchLoopSensorPort>(relaxed = true).also { port ->
+				every { port.getQueuedTrains() } returns emptyList()
+				every { port.snapshot() } returns
+					DispatchLoopSnapshot(queuedTrains = emptyList(), innerBlockInputs = inputs, outerBlockInputs = emptyList())
+			}
+
+		private fun tool(
+			inputs: List<BlockInputObservation>,
+			velocity: Double = 0.0,
+			withSensorPort: Boolean = true
+		) = RequestRouteTool(
+			SinkHolder(EmittedActionSink { emitted += it }),
+			endpoints,
+			perceptionPort(
+				listOf("Train #1"),
+				activeDestination = "A",
+				activeSignalAhead = "doB1",
+				activeVelocity = velocity
+			),
+			if (withSensorPort) snapshotPort(inputs) else null,
+			inOutNames = inOuts
+		)
+
+		private fun request(
+			tool: RequestRouteTool,
+			from: String,
+			to: String
+		): ToolResult =
+			runBlocking {
+				tool.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to from, "toEndpointName" to to))
+			}
+
+		private fun inOut(
+			name: String,
+			available: Boolean = true
+		) = CandidateTarget(name, SeparatorKind.IN_OUT, available)
+
+		private fun signal(
+			name: String,
+			available: Boolean = true
+		) = CandidateTarget(name, SeparatorKind.SEMAPHORE, available)
+
+		@Test
+		@DisplayName("a Signal target not listed one section ahead is refused, emits nothing, and names the pick")
+		fun signalNotAheadIsRefused() {
+			val error = errorOf(request(tool(listOf(ownedInput(candidates = listOf(inOut("A"))))), "doB1", "doA1"))
+
+			assertThat(error.rejection, "rejection code").isEqualTo(RejectionCode.TARGET_NOT_NEXT_SECTION)
+			assertThat(emitted, "emitted actions").isEmpty()
+			assertThat(error.message, "message").contains("NEXT SECTION is from 'doB1' to 'A'")
+			assertThat(error.message, "message").contains("toEndpointName='A'")
+		}
+
+		@Test
+		@DisplayName("a listed but unavailable Signal target is emitted — the engine answers it")
+		fun unavailableCandidateIsEmitted() {
+			val inputs = listOf(ownedInput(candidates = listOf(inOut("A"), signal("doA1", false))))
+			val result = request(tool(inputs), "doB1", "doA1")
+
+			assertThat(result).isInstanceOf(ToolResult.Success::class)
+			assertThat(emitted).containsExactly(DispatchAction.RequestRoute("Train #1", "doB1", "doA1", RouteScope.Section))
+		}
+
+		@Test
+		@DisplayName("a look-ahead request from a signal the train owns no input toward is emitted")
+		fun lookAheadWithoutOwnedInputIsEmitted() {
+			// Moving, so the standing-at-signal origin rule does not apply to the doA1 origin.
+			val inputs = listOf(ownedInput(candidates = listOf(inOut("A"))))
+			val result = request(tool(inputs, velocity = 5.0), "doA1", "doB1")
+
+			assertThat(result).isInstanceOf(ToolResult.Success::class)
+			assertThat(emitted).containsExactly(DispatchAction.RequestRoute("Train #1", "doA1", "doB1", RouteScope.Section))
+		}
+
+		@Test
+		@DisplayName("an input whose path is already extended beyond it (no candidates) leaves the guard inert")
+		fun extendedBeyondIsEmitted() {
+			val inputs = listOf(ownedInput(candidates = emptyList(), extendedBeyond = true))
+			val result = request(tool(inputs), "doB1", "doA1")
+
+			assertThat(result).isInstanceOf(ToolResult.Success::class)
+			assertThat(emitted).containsExactly(DispatchAction.RequestRoute("Train #1", "doB1", "doA1", RouteScope.Section))
+		}
+
+		@Test
+		@DisplayName("an InOut target (the destination) is not subject to the next-section guard")
+		fun inOutDestinationIsUnaffected() {
+			val result = request(tool(listOf(ownedInput(candidates = listOf(signal("doA1"))))), "doB1", "A")
+
+			assertThat(result).isInstanceOf(ToolResult.Success::class)
+			assertThat(emitted).containsExactly(DispatchAction.RequestRoute("Train #1", "doB1", "A", RouteScope.EndToEnd))
+		}
+
+		@Test
+		@DisplayName("without a sensor port the guard is inert")
+		fun noSensorPortIsInert() {
+			val result = request(tool(emptyList(), withSensorPort = false), "doB1", "doA1")
+
+			assertThat(result).isInstanceOf(ToolResult.Success::class)
+			assertThat(emitted).containsExactly(DispatchAction.RequestRoute("Train #1", "doB1", "doA1", RouteScope.Section))
+		}
+
+		@Test
+		@DisplayName("with nothing reservable ahead the refusal tells the model to make no route request")
+		fun noPickMessage() {
+			val error = errorOf(request(tool(listOf(ownedInput(candidates = listOf(inOut("A", false))))), "doB1", "doA1"))
+
+			assertThat(error.rejection, "rejection code").isEqualTo(RejectionCode.TARGET_NOT_NEXT_SECTION)
+			assertThat(emitted, "emitted actions").isEmpty()
+			assertThat(error.message, "message").contains("No section ahead of 'doB1' can be reserved right now")
+			assertThat(error.message, "message").contains("Make no route request for this train this tick.")
+		}
 	}
 }
