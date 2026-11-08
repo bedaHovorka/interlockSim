@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.toDispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
@@ -306,9 +307,9 @@ class ShuntingLoop(
 	 * all of them from tick N or all of them from tick N-1 — never a mix (Issue #1354).
 	 *
 	 * Public so off-kernel callers (e.g. [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver])
-	 * can read all three fields with a single [getLatestObservation] call instead of three
-	 * separate accessor calls, which would defeat the single-tick atomicity this type exists
-	 * to guarantee.
+	 * can read the whole record — the three lists plus the tick stamp and perception snapshot —
+	 * with a single [getLatestObservation] call instead of separate accessor calls, which would
+	 * defeat the single-tick atomicity this type exists to guarantee.
 	 *
 	 * @property tick Iteration counter of the publishing tick, starting at 1 and rising by one
 	 *   per control step; 0 means nothing has been published. Not simulation time.
@@ -656,14 +657,13 @@ class ShuntingLoop(
 
 	/**
 	 * Returns the full per-tick observation bundle (queued trains plus inner/outer block
-	 * inputs) as published at the start of the most recent [iteration], in a single
-	 * @Volatile read. Safe to call from off-kernel threads.
+	 * inputs, tick stamp and perception snapshot) as published at the start of the most recent
+	 * [iteration], in a single @Volatile read. Safe to call from off-kernel threads.
 	 *
 	 * Prefer this over calling [getQueuedTrains]/[getInnerBlockInputs]/[getOuterBlockInputs]
-	 * separately when a caller needs more than one of the three fields together — three
-	 * independent calls can observe different sim ticks if the sim thread republishes
-	 * [latestObservation] in between, tearing the single-tick guarantee [TickObservation]
-	 * exists to provide.
+	 * separately when a caller needs more than one field together — three independent calls
+	 * can observe different sim ticks if the sim thread republishes [latestObservation] in
+	 * between, tearing the single-tick guarantee [TickObservation] exists to provide.
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10); added by the tearing-fix follow-up
 	 */
@@ -677,10 +677,7 @@ class ShuntingLoop(
 	 * Goal 10 dispatcher-cannot-approve-trains fix). Single @Volatile read, same atomicity as
 	 * [getLatestObservation].
 	 */
-	override fun latestDispatchLoopSnapshot(): DispatchLoopSnapshot =
-		latestObservation.let {
-			DispatchLoopSnapshot(it.queuedTrains, it.innerBlockInputs, it.outerBlockInputs, it.tick, it.snapshot)
-		}
+	override fun latestDispatchLoopSnapshot(): DispatchLoopSnapshot = latestObservation.toDispatchLoopSnapshot()
 
 	/**
 	 * Returns a snapshot of the currently approved (active) trains. Used by the external

@@ -64,14 +64,27 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 class DefaultDispatchLoopSensorPort(
 	private val observationProvider: () -> ShuntingLoop.TickObservation
 ) : DispatchLoopSensorPort {
-	override fun snapshot(): DispatchLoopSnapshot {
-		val o = observationProvider()
-		return DispatchLoopSnapshot(o.queuedTrains, o.innerBlockInputs, o.outerBlockInputs, o.tick, o.snapshot)
-	}
+	override fun snapshot(): DispatchLoopSnapshot = observationProvider().toDispatchLoopSnapshot()
 
 	override fun getQueuedTrains(): List<QueuedTrainObservation> = observationProvider().queuedTrains
 
 	override fun getInnerBlockInputs(): List<BlockInputObservation> = observationProvider().innerBlockInputs
 
 	override fun getOuterBlockInputs(): List<BlockInputObservation> = observationProvider().outerBlockInputs
+
+	companion object {
+		/**
+		 * Perception-only wiring: a sensor port whose record pairs an empty dispatch bundle with
+		 * [perceptionPort]'s published snapshot — for runs whose main process publishes no
+		 * dispatch-loop inputs (no `ShuntingLoop`). Reads only [NetworkPerceptionPort.snapshot],
+		 * the published reference; a sim-thread capture
+		 * ([NetworkPerceptionPort.captureSnapshot]) is never requested (constraint C3 of the F1
+		 * paused-clock ruling). The record's tick stays 0 and the dispatch lists stay empty, so
+		 * readers that guard on publication semantics still treat this record correctly.
+		 */
+		fun perceptionOnly(perceptionPort: NetworkPerceptionPort): DefaultDispatchLoopSensorPort =
+			DefaultDispatchLoopSensorPort {
+				ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList(), snapshot = perceptionPort.snapshot())
+			}
+	}
 }

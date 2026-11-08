@@ -6,6 +6,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -153,7 +154,7 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 		val shuntingLoop = ShuntingLoop(context, endTime = 20L)
 		shuntingLoop.snapshotCaptureHook = {
 			hookCalls++
-			SimulationSnapshot.EMPTY.copy(simTime = hookCalls.toDouble()).also { lastHookResult = it }
+			emptySnapshot(hookCalls.toDouble()).also { lastHookResult = it }
 		}
 		shuntingLoop.controlStepListener =
 			ControlStepListener {
@@ -170,4 +171,58 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 		assertThat(shuntingLoop.getLatestObservation().snapshot).isSameInstanceAs(lastHookResult)
 		assertThat(hookCalls).isEqualTo(11)
 	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `latestDispatchLoopSnapshot mirrors the published tick-stamped record`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		// Issue #1354: with endTime = 0L exactly one control step runs. Whatever the
+		// ShuntingLoop's own latestDispatchLoopSnapshot() reports must be the published record
+		// itself: the same list references and the same tick stamp and snapshot instance,
+		// not a second read. (That the record carries the hook's own instance per tick is
+		// pinned by the sibling test above.)
+		val shuntingLoop = ShuntingLoop(context, endTime = 0L)
+		shuntingLoop.snapshotCaptureHook = { emptySnapshot(7.0) }
+		context.setMainProcess(shuntingLoop)
+		context.run()
+
+		val record = shuntingLoop.getLatestObservation()
+		val mirrored = shuntingLoop.latestDispatchLoopSnapshot()
+		assertThat(mirrored.tick).isEqualTo(1L)
+		assertThat(mirrored.snapshot).isSameInstanceAs(record.snapshot)
+		assertThat(mirrored.queuedTrains).isSameInstanceAs(record.queuedTrains)
+		assertThat(mirrored.innerBlockInputs).isSameInstanceAs(record.innerBlockInputs)
+		assertThat(mirrored.outerBlockInputs).isSameInstanceAs(record.outerBlockInputs)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `a hook-less loop publishes a tick-1 record whose snapshot is the EMPTY sentinel`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		// Issue #1354, ruling #1354-a: without a hook the record still publishes each control
+		// step, its snapshot being the EMPTY sentinel. A reader (LatestObservationReader) treats
+		// an EMPTY record snapshot as nothing-published and keeps the cycle's own observation.
+		val shuntingLoop = ShuntingLoop(context, endTime = 0L)
+
+		// Nothing published yet: the initial record's stamp is 0.
+		assertThat(shuntingLoop.getLatestObservation().tick).isEqualTo(0L)
+		assertThat(shuntingLoop.getLatestObservation().snapshot).isSameInstanceAs(SimulationSnapshot.EMPTY)
+
+		context.setMainProcess(shuntingLoop)
+		context.run()
+
+		val record = shuntingLoop.getLatestObservation()
+		assertThat(record.tick).isEqualTo(1L)
+		assertThat(record.snapshot).isSameInstanceAs(SimulationSnapshot.EMPTY)
+		assertThat(shuntingLoop.latestDispatchLoopSnapshot().tick).isEqualTo(1L)
+	}
+
+	// Note: no test drives a THROWING snapshotCaptureHook — kDisco has no handler for a raw
+	// main-process exception, so a live run wedges instead of surfacing the throw (observed
+	// 2026-11-08). The "a throw aborts before the publish, previous record stays intact"
+	// property stays structural (ruling #1354-c, record write strictly after the hook call).
 }

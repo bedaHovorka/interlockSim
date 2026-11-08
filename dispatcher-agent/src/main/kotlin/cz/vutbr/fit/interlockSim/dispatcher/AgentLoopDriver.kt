@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerTickListener
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
 import cz.vutbr.fit.interlockSim.dispatcher.planner.toActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.planner.toDispatchObservation
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
@@ -114,18 +115,17 @@ class AgentLoopDriver(
 	 * Its [DispatchLoopSensorPort.snapshot] is invoked ONCE per [runCycle] on the driver
 	 * thread during SENSE; in production it reads the single
 	 * [ShuntingLoop.getLatestObservation] @Volatile reference published atomically by the sim
-	 * thread. Defaults to a port over an empty bundle carrying [perceptionPort]'s published
-	 * snapshot, for wirings with no dispatch loop.
+	 * thread. Defaults to [DefaultDispatchLoopSensorPort.perceptionOnly]: an empty dispatch
+	 * bundle paired with [perceptionPort]'s published snapshot, for wirings with no dispatch
+	 * loop.
 	 *
-	 * [DispatchLoopSensorPort.snapshot] must be called at most once per cycle: it
-	 * bundles all three fields specifically so a reader never mixes fields from two
-	 * different sim ticks — reading the three fields via the per-field accessors
-	 * would defeat that guarantee.
+	 * [DispatchLoopSensorPort.snapshot] must be called at most once per cycle: it bundles the
+	 * whole record — the three lists, the tick stamp and the perception snapshot — specifically
+	 * so a reader never mixes fields from two different sim ticks. Reading the lists via the
+	 * per-field accessors would defeat that guarantee.
 	 */
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort =
-		DefaultDispatchLoopSensorPort {
-			ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList(), snapshot = perceptionPort.snapshot())
-		},
+		DefaultDispatchLoopSensorPort.perceptionOnly(perceptionPort),
 	private val snapshotSignal: SnapshotSignal? = null,
 	/**
 	 * The [KoogAgentPlanAdapter] driving [planner], when [planner] is (possibly wrapped)
@@ -373,16 +373,10 @@ class AgentLoopDriver(
 		val snapshot = record.snapshot
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
-		// The snapshot, unapprovedTrains and block-input lists all come from the one record
-		// sensed above — published as one @Volatile reference by ShuntingLoop.iteration() on
-		// the sim thread, so every field is from the same sim tick (Issue #1354).
-		val observation =
-			DispatchObservation(
-				snapshot = snapshot,
-				unapprovedTrains = record.queuedTrains,
-				innerBlockInputs = record.innerBlockInputs,
-				outerBlockInputs = record.outerBlockInputs
-			)
+		// The observation is the projection of the one record sensed above — published as one
+		// @Volatile reference by ShuntingLoop.iteration() on the sim thread, so every field is
+		// from the same sim tick (Issue #1354).
+		val observation = record.toDispatchObservation()
 		val planStart = TimeSource.Monotonic.markNow()
 		val decisions = planner.plan(observation)
 		val planWallElapsed = planStart.elapsedNow()

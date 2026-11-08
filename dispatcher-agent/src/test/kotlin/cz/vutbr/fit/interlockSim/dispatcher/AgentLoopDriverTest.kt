@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -371,7 +372,10 @@ class AgentLoopDriverTest {
 			val sensorPort =
 				DefaultDispatchLoopSensorPort {
 					callCount++
-					ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
+					// A publishable record (non-EMPTY snapshot), like its sibling test — a record
+					// whose snapshot is the EMPTY sentinel would short-circuit before DECIDE and
+					// silently re-pin this test to the short-circuit path instead of a full cycle.
+					ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList(), tick = 1L, snapshot = emptySnapshot(0.0))
 				}
 			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, sensorPort)
 
@@ -460,7 +464,6 @@ class AgentLoopDriverTest {
 				)
 			val strictPerceptionPort = mockk<NetworkPerceptionPort>()
 			every { strictPerceptionPort.snapshot() } returns emptySnapshot(12.0)
-			every { strictPerceptionPort.captureSnapshot() } throws IllegalStateException("no capture on a reader path")
 			val driver =
 				AgentLoopDriver(
 					strictPerceptionPort,
@@ -477,6 +480,47 @@ class AgentLoopDriverTest {
 			assertThat(capturedObs.captured.snapshot).isSameInstanceAs(snapshot5)
 			assertThat(capturedObs.captured.unapprovedTrains).isSameInstanceAs(queue5)
 			confirmVerified(strictPerceptionPort)
+		}
+
+		/**
+		 * Issue #1354, perception-only wiring: a driver built without an explicit sensor port
+		 * senses the default port, whose provider pairs an empty dispatch bundle with
+		 * [perceptionPort]'s published snapshot — the planner still gets the perception state of
+		 * a run with no dispatch loop, and the port is read through the record, not alongside it.
+		 */
+		@Test
+		@DisplayName("the default sensor port pairs the perception snapshot with empty dispatch inputs")
+		fun defaultSensorPortPairsPerceptionSnapshotWithEmptyInputs() {
+			val wired = emptySnapshot(3.0)
+			every { perceptionPort.snapshot() } returns wired
+			val driver = makeDriver()
+			val capturedObs = slot<DispatchObservation>()
+			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+
+			val ran = runBlocking { driver.runCycle() }
+
+			assertThat(ran).isTrue()
+			assertThat(capturedObs.captured.snapshot).isSameInstanceAs(wired)
+			assertThat(capturedObs.captured.unapprovedTrains).isEmpty()
+			assertThat(capturedObs.captured.innerBlockInputs).isEmpty()
+			assertThat(capturedObs.captured.outerBlockInputs).isEmpty()
+			verify(exactly = 1) { perceptionPort.snapshot() }
+			confirmVerified(perceptionPort)
+		}
+
+		/** The EMPTY short-circuit is decided by the record's snapshot field, not a second read. */
+		@Test
+		@DisplayName("the default sensor port's EMPTY snapshot still short-circuits the cycle")
+		fun defaultSensorPortEmptySnapshotShortCircuits() {
+			every { perceptionPort.snapshot() } returns SimulationSnapshot.EMPTY
+			val driver = makeDriver()
+
+			val ran = runBlocking { driver.runCycle() }
+
+			assertThat(ran).isFalse()
+			coVerify(exactly = 0) { planner.plan(any()) }
+			verify(exactly = 1) { perceptionPort.snapshot() }
+			confirmVerified(perceptionPort)
 		}
 	}
 

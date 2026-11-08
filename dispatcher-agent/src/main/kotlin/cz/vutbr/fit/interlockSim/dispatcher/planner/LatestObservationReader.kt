@@ -15,6 +15,28 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 
 /**
+ * Projects a published tick-stamped record into the [DispatchObservation] a planning cycle
+ * consumes: the record's snapshot, queued trains and both block-input lists pair 1:1 — the
+ * record is the observation's only source, so every field comes from the same sim tick
+ * (Issue #1354).
+ *
+ * [DispatchLoopSnapshot.tick] is deliberately not carried over: it is bookkeeping only, and no
+ * decision logic may branch on it (ruling #1354-b). The observation keeps its freshness
+ * semantics through its [DispatchObservation.snapshot] simTime.
+ *
+ * This is a pure field pairing. Calling it on a record whose [DispatchLoopSnapshot.snapshot] is
+ * [SimulationSnapshot.EMPTY] produces an observation of the same uselessness — publication
+ * guards (ruling #1354-a) stay at the call sites that need them.
+ */
+fun DispatchLoopSnapshot.toDispatchObservation(): DispatchObservation =
+	DispatchObservation(
+		snapshot = snapshot,
+		unapprovedTrains = queuedTrains,
+		innerBlockInputs = innerBlockInputs,
+		outerBlockInputs = outerBlockInputs
+	)
+
+/**
  * Reads the dispatch state the simulation thread published most recently, for the rule-based
  * fallback that runs after a failed LLM cycle (Issue #1343, see
  * [KoogAgentPlanAdapter.latestObservationReader]).
@@ -45,8 +67,9 @@ fun interface LatestObservationReader {
 		 *
 		 * Returns `null` while the record still carries [SimulationSnapshot.EMPTY] — before the
 		 * first capture, or [DispatchLoopSnapshot.EMPTY] when there is no dispatch loop to read —
-		 * so a caller keeps its own whole observation instead of combining it with an empty one.
-		 * Checked by reference, as [KoogAgentPlanAdapter] checks [SimulationSnapshot.EMPTY].
+		 * so a caller keeps its own whole observation instead of combining it with an empty one
+		 * (ruling #1354-a). Checked by reference, as [KoogAgentPlanAdapter] checks
+		 * [SimulationSnapshot.EMPTY].
 		 */
 		fun fromPorts(dispatchLoopSensorPort: DispatchLoopSensorPort): LatestObservationReader =
 			LatestObservationReader {
@@ -54,12 +77,7 @@ fun interface LatestObservationReader {
 				if (record.snapshot === SimulationSnapshot.EMPTY) {
 					null
 				} else {
-					DispatchObservation(
-						snapshot = record.snapshot,
-						unapprovedTrains = record.queuedTrains,
-						innerBlockInputs = record.innerBlockInputs,
-						outerBlockInputs = record.outerBlockInputs
-					)
+					record.toDispatchObservation()
 				}
 			}
 	}
