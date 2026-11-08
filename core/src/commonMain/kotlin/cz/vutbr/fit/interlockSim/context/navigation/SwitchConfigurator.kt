@@ -330,7 +330,7 @@ internal class SwitchConfigurator(
 			// here reserved untraversable routes and permanently stalled trains.
 			// Issue #1378: DEBUG, not WARN -- a reversal request enumerates thousands of candidates
 			// and each one logged this line (20 572 WARN lines in a 215 s Praha run). reservePath logs
-			// one summary per refused request instead (DefaultPathReservationService.logRefusalSummary).
+			// one summary per refused call instead (DefaultPathReservationService.logRefusalSummary).
 			logger.debug {
 				"configureSwitchesInPath: Switch ${element.staticRef.getName()} cannot join " +
 					"the route's segments for train $trainId - rejecting candidate route " +

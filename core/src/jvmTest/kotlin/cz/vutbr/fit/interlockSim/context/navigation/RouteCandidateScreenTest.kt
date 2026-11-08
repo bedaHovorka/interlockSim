@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.containsExactlyInAnyOrder
+import assertk.assertions.endsWith
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -27,7 +28,10 @@ import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -412,5 +416,36 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val blocks = environment.getGraph().values().filterIsInstance<DynamicTrackBlock>()
 		blocks.forEach { assertThat(registry.getOwner(it), "owner of $it").isNull() }
 		assertThat(registry.getBlocks("t1")).isEmpty()
+	}
+
+	@Test
+	fun `a candidate leaving a semaphore start from behind is refused with the facing signals or exits`() {
+		val doA1 = findSemaphoreByName("doA1")
+		val towardB = candidatePaths(doA1, inOutB()).first()
+
+		assertThat(screen.rearFacingStartReason(doA1, towardB, 0)).isEqualTo(
+			"Route origin 'doA1' faces away from the direction of travel on candidate 0; a route must start at " +
+				"a signal facing the train. The next signals or exits facing the train from 'doA1' are: A, doA2."
+		)
+	}
+
+	@Test
+	fun `a start refusal with no facing signal or exit says none`() {
+		val discovery = mockk<ReservationTargetDiscovery>()
+		every { discovery.findNextSemaphoresVia(any(), any()) } returns emptyList()
+		val emptyScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
+		val doA1 = findSemaphoreByName("doA1")
+
+		assertThat(emptyScreen.rearFacingStartReason(doA1, candidatePaths(doA1, inOutB()).first(), 0))
+			.isNotNull()
+			.endsWith("The next signals or exits facing the train from 'doA1' are: none.")
+	}
+
+	@Test
+	fun `a start whose first section has no dynamic block fails open`() {
+		val staticSection = mockk<TrackSection>()
+		every { staticSection.getTrackBlock() } returns mockk<TrackBlock>()
+
+		assertThat(screen.rearFacingStartReason(findSemaphoreByName("doA1"), listOf(staticSection), 0)).isNull()
 	}
 }

@@ -10,11 +10,13 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
@@ -170,5 +172,29 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 		assertThat(doA1.signal)
 			.withMessage("a semaphore the route passes from behind must stay at STOP")
 			.isEqualTo(Signal.STOP)
+	}
+
+	/**
+	 * Issue #1378: `doA1 -> zB` has two candidates. Candidate 0 leaves doA1 eastwards, from behind
+	 * (Step 1.4); candidate 1 loops round the sibling track and reaches zB from behind (Step 1.5, G8).
+	 * Both are permanent, and the reported reason is candidate 0's, the first in priority order.
+	 */
+	@Test
+	fun `a start refusal on candidate 0 and an end refusal on candidate 1 report candidate 0`() {
+		var summary = ""
+		lateinit var result: PathReservationService.ReservationResult
+		withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
+			result = service.reservePath("t1", findSemaphoreByName("doA1"), findSemaphoreByName("zB"))
+			summary =
+				serviceLog.list
+					.single { it.formattedMessage.startsWith("reservePath: refused 't1'") }
+					.formattedMessage
+		}
+
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		val reason = (result as PathReservationService.ReservationResult.GeometricallyImpossible).reason
+		assertThat(reason).startsWith("Route origin 'doA1' faces away from the direction of travel on candidate 0;")
+		assertThat(summary).contains(": 2 geometric (first: Route origin 'doA1'")
+		assertThat(registry.getBlocks("t1")).isEmpty()
 	}
 }
