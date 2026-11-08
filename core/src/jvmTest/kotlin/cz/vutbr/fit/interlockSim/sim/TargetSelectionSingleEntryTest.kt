@@ -127,7 +127,10 @@ class TargetSelectionSingleEntryTest {
 			setOf(
 				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/DispatchObservation.kt",
 				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/ReservationTargetPolicy.kt",
-				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/ShuntingLoop.kt"
+				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/ShuntingLoop.kt",
+				// Membership check only (#1378): refuses a request_route Signal target that is not in the
+				// list; it never selects a target — the suggested one comes from chosenTargetName().
+				"dispatcher-agent/src/main/kotlin/cz/vutbr/fit/interlockSim/dispatcher/NextSectionTargets.kt"
 			)
 
 		/**

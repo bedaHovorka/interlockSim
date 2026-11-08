@@ -21,11 +21,15 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
+import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.sim.SeparatorKind
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -221,6 +225,53 @@ class ToolRejectionCodeTest {
 
 		assertThat(errorOf(result).rejection, "rejection code")
 			.isEqualTo(RejectionCode.TARGET_NOT_TRAIN_DESTINATION)
+	}
+
+	/**
+	 * The Signal-target twin of the check above (Issue #1378): a train standing at `doB1` whose
+	 * input facing `doB1` lists only `A` one section ahead is refused a route to `doA1` — a signal
+	 * that is not its next section — with its own countable code.
+	 */
+	@Test
+	@DisplayName("a Signal target that is not the next section is TARGET_NOT_NEXT_SECTION")
+	fun signalTargetNotNextSectionIsCoded() {
+		val sensor =
+			mockk<DispatchLoopSensorPort>(relaxed = true).also { port ->
+				every { port.getQueuedTrains() } returns emptyList()
+				every { port.snapshot() } returns
+					DispatchLoopSnapshot(
+						queuedTrains = emptyList(),
+						innerBlockInputs =
+							listOf(
+								BlockInputObservation(
+									blockId = "k1",
+									towardSemaphoreName = "doB1",
+									state = TrackFacility.State.OCCUPIED,
+									ownerTrainId = "Train #1",
+									isApproachingThisInput = true,
+									pathSetUpTowardThisInput = false,
+									pathAlreadyExtendedBeyond = false,
+									candidateTargets = listOf(CandidateTarget("A", SeparatorKind.IN_OUT, available = true))
+								)
+							),
+						outerBlockInputs = emptyList()
+					)
+			}
+		val tool =
+			RequestRouteTool(
+				SinkHolder(),
+				endpoints,
+				perceptionPort(listOf("Train #1"), activeDestination = "A", activeSignalAhead = "doB1"),
+				sensor,
+				inOutNames = inOuts
+			)
+
+		val result =
+			runBlocking {
+				tool.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "doA1"))
+			}
+
+		assertThat(errorOf(result).rejection, "rejection code").isEqualTo(RejectionCode.TARGET_NOT_NEXT_SECTION)
 	}
 
 	/**

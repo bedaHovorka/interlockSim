@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.NextSectionTargets
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.RouteScope
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
@@ -69,7 +70,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param perceptionPort Optional off-thread-safe perception port supplying currently active
  *   trains for the [trainName] pre-check; `null` skips the pre-check.
  * @param sensorPort Optional dispatch-loop sensor port supplying trains queued for admission for
- *   the [trainName] pre-check; `null` skips the pre-check.
+ *   the [trainName] pre-check and the block inputs for the next-section check below; `null` skips
+ *   both.
  * ## Direction validation (the backwards-route defect)
  *
  * A live `exampleGui shuntingLoopAI 333` run had the model request the **reverse** of every
@@ -84,8 +86,20 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * [RejectionCode.TARGET_NOT_TRAIN_DESTINATION], but it is reached only from
  * `DispatchTickLoop`, which is never constructed in production. [execute] therefore applies the
  * check here, on the live path: a [toEndpointName] that names an **InOut** other than the train's
- * declared destination is rejected. Signal targets are left alone — those are section hops, which
- * this tool's own description recommends, and they say nothing about where the train finishes.
+ * declared destination is rejected.
+ *
+ * ## Next-section validation for Signal targets (Issue #1378)
+ *
+ * A Signal target is a section hop, which this tool's own description recommends, and it says
+ * nothing about where the train finishes — so the destination rule above does not apply to it. It
+ * must, however, lie **one section ahead** of the train: on the Praha station the model asked for
+ * the signal at the far end of the train's own platform track (behind it), the engine granted a
+ * one-block "route" onto the block the train stood on, and the train never moved again. [execute]
+ * therefore refuses a Signal target that the interlocking does not list one section ahead of
+ * [fromEndpointName] for this train, with [RejectionCode.TARGET_NOT_NEXT_SECTION] and a reply naming
+ * the train's NEXT SECTION. The rule is [NextSectionTargets], shared with
+ * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator]; it reads the block inputs of [sensorPort]
+ * and is inert whenever they carry no candidate list for that train and signal.
  *
  * @param blockIds Static Block IDs of this network, used only to classify a rejected endpoint as
  *   [RejectionCode.ENDPOINT_IS_BLOCK_ID] rather than [RejectionCode.UNKNOWN_ENDPOINT]. Static
@@ -283,6 +297,8 @@ class RequestRouteTool(
 			}
 		}
 
+		nextSectionError(resolvedTrainName, fromEndpointName, toEndpointName)?.let { return it }
+
 		// A Signal target (not an InOut) is a section hop toward the destination, not the
 		// end-to-end route -- mirror RuleBasedEmissionStrategy's scope so ActionValidator, if ever
 		// wired onto the live path, does not reject these as TARGET_NOT_TRAIN_DESTINATION.
@@ -321,6 +337,36 @@ class RequestRouteTool(
 				?.firstOrNull { it.trainId == trainId }
 				?.destinationInOutName
 		return (queued ?: activePerceptionOf(trainId)?.destinationInOutName)?.takeIf { it.isNotBlank() }
+	}
+
+	/**
+	 * Refuses a Signal target that is not one section ahead of the train (Issue #1378) — see
+	 * [NextSectionTargets] for the rule and the Praha stall it closes, and
+	 * [RejectionCode.TARGET_NOT_NEXT_SECTION] for the code.
+	 *
+	 * Reads the block inputs from one [DispatchLoopSensorPort.snapshot] call, so all inputs come from
+	 * the same tick. Inert when [inOutNames] is empty (every target would look like a Signal), when
+	 * [toEndpointName] is an InOut (the #944 destination rule above governs those), and when no
+	 * [sensorPort] is wired.
+	 */
+	private fun nextSectionError(
+		trainId: String,
+		fromEndpointName: String,
+		toEndpointName: String
+	): ToolResult.Error? {
+		if (inOutNames.isEmpty() || toEndpointName in inOutNames) return null
+		val snapshot = sensorPort?.snapshot() ?: return null
+		val mismatch =
+			NextSectionTargets.mismatch(
+				snapshot.innerBlockInputs + snapshot.outerBlockInputs,
+				trainId,
+				fromEndpointName,
+				toEndpointName
+			) ?: return null
+		return ToolResult.Error(
+			NextSectionTargets.rejectionMessage(trainId, toEndpointName, mismatch),
+			rejection = RejectionCode.TARGET_NOT_NEXT_SECTION
+		)
 	}
 
 	/**
