@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -103,7 +104,15 @@ class ShuntingLoop(
 	/** Seed of the train generator's random stream; 0 is the historical value (Issue #1163). */
 	seed: Long = 0L,
 	/** Generate only this many trains; `null` generates until the end of the run (Issue #1163). */
-	maxTrains: Int? = null
+	maxTrains: Int? = null,
+	/**
+	 * Whether the train generator draws only endpoint pairs with a switch-legal route
+	 * ([SwitchLegalPairs], Issue #1376). The Praha arms set it: some of their cross-side pairs have a
+	 * topological path but no switch-legal route, so such a train could never reach its destination.
+	 * `false` (the default) keeps every opposite-side pair, as before; read-only, so a caller can
+	 * verify an example's wiring.
+	 */
+	val switchLegalPairsOnly: Boolean = false
 ) : Interlocking(context),
 	SpeedControllable,
 	KoinComponent,
@@ -379,6 +388,13 @@ class ShuntingLoop(
 		seed: Long,
 		maxTrains: Int?
 	) : Generator(context, seed = seed, maxTrains = maxTrains) {
+		private val legalPairs = SwitchLegalPairs(context)
+
+		override fun isPairAcceptable(
+			from: DynamicInOut,
+			to: DynamicInOut
+		): Boolean = !switchLegalPairsOnly || legalPairs.accepts(from, to)
+
 		override fun placeTrain(train: Train) {
 			unapprowedTrains.addLast(train)
 			trainsEnteredCount++

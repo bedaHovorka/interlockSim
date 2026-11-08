@@ -41,7 +41,7 @@ import org.koin.core.module.Module
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 
-@DisplayName("ExampleRegistry - Praha hlavni nadrazi Station arms (#1366)")
+@DisplayName("ExampleRegistry - Praha hlavni nadrazi Station arms (#1366, #1376)")
 @Timeout(value = 20, unit = TimeUnit.SECONDS)
 class ExampleRegistryPrahaTest : KoinTestBase() {
 	private companion object {
@@ -59,11 +59,15 @@ class ExampleRegistryPrahaTest : KoinTestBase() {
 		return createExampleContextFromMap(map, get(), name).tracked()
 	}
 
-	/** The loop of [ctx]: a ShuntingLoop admitting at most the low-traffic cap, not the 9 tracks. */
+	/**
+	 * The loop of [ctx]: a ShuntingLoop admitting at most the low-traffic cap, not the 9 tracks, and
+	 * generating only switch-legal endpoint pairs (Issue #1376).
+	 */
 	private fun lowTrafficLoop(ctx: DefaultSimulationContext): ShuntingLoop {
 		val loop = ctx.mainProcess
 		assertThat(loop).isNotNull().isInstanceOf<ShuntingLoop>()
 		assertThat((loop as ShuntingLoop).stationCapacity, "effective admission cap").isEqualTo(LOW_TRAFFIC_CAP)
+		assertThat(loop.switchLegalPairsOnly, "switch-legal pairs only").isTrue()
 		return loop
 	}
 
@@ -127,9 +131,37 @@ class ExampleRegistryPrahaTest : KoinTestBase() {
 
 		assertThat(llm).isEqualTo(rule)
 		assertThat(rule).isEqualTo(
-			ExampleRegistry.LoopTraffic(maxConcurrentTrains = LOW_TRAFFIC_CAP, seed = 7L, maxTrains = 8)
+			ExampleRegistry.LoopTraffic(
+				maxConcurrentTrains = LOW_TRAFFIC_CAP,
+				seed = 7L,
+				maxTrains = 8,
+				switchLegalPairsOnly = true
+			)
 		)
 		assertThat(registry.prahaTraffic(arrayOf("example", ExampleNames.PRAHA_HLAVNI_NADRAZI, "600")).seed)
 			.isEqualTo(0L)
+	}
+
+	/**
+	 * The switch-legal pair restriction is Praha's only (Issue #1376): the vyhybna and Červený Újezd
+	 * loops keep the generator's accept-all pairing, so their runs and the #895 bracket stay unchanged.
+	 */
+	@Test
+	fun `vyhybna and Cerveny Ujezd loops keep the unrestricted pairing`() {
+		val registry = get<ExampleRegistry>()
+
+		for (name in listOf(
+			ExampleNames.SHUNTING_LOOP,
+			ExampleNames.SHUNTING_LOOP_AI,
+			ExampleNames.SHUNTING_LOOP_SYNC,
+			ExampleNames.CERVENY_UJEZD,
+			ExampleNames.CERVENY_UJEZD_AI,
+			ExampleNames.CERVENY_UJEZD_SYNC
+		)) {
+			val loop = build(registry.examples, name).mainProcess
+			assertThat(loop, name).isNotNull().isInstanceOf<ShuntingLoop>()
+			assertThat((loop as ShuntingLoop).switchLegalPairsOnly, "switch-legal pairs only in $name").isFalse()
+		}
+		assertThat(ExampleRegistry.LoopTraffic.DEFAULT.switchLegalPairsOnly, "default traffic").isFalse()
 	}
 }
