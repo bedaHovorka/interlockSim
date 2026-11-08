@@ -209,10 +209,12 @@ interface PathReservationService :
 		 * - **Request level**, refused before any candidate is discovered: a non-oriented route origin
 		 *   (Issue #1188) or a non-oriented route end (Issue #1200) -- the endpoint is not an
 		 *   [OrientedPathSeparator], i.e. it is a switch.
-		 * - **Candidate level**: a rear-facing START semaphore (G4, Issue #903), a rear-facing END
-		 *   semaphore (G8, Issue #1064) -- the semaphore faces away from the requested direction of
-		 *   travel -- or an unconfigurable switch, one that cannot be set to the position the route
-		 *   requires.
+		 * - **Candidate level**: a rear-facing START semaphore (G4, Issue #903; screened before
+		 *   anything is reserved since Issue #1378, so it also refuses a switch-free reversal onto
+		 *   the train's own block and an already-owned sub-route re-requested from behind), a
+		 *   rear-facing END semaphore (G8, Issue #1064) -- the semaphore faces away from the requested
+		 *   direction of travel -- or an unconfigurable switch, one that cannot be set to the position
+		 *   the route requires.
 		 *
 		 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention (a block
 		 * occupied/reserved by another train) and clears on its own, so a caller should simply

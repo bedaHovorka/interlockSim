@@ -194,7 +194,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val candidates = candidatePaths(zA, doA1, maxDepth = 3)
 		assertThat(candidates).hasSize(1)
 
-		val (failures, usable) = screen.screenRearFacingEnds(zA, doA1, candidates)
+		val (failures, usable) = screen.screenRearFacingEnds(zA, doA1, candidates.withIndex().toList())
 
 		assertThat(usable).isEmpty()
 		assertThat(failures.count).isEqualTo(1)
@@ -211,7 +211,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val candidates = candidatePaths(zA, doB1)
 		assertThat(candidates).hasSize(2)
 
-		val (failures, usable) = screen.screenRearFacingEnds(zA, doB1, candidates)
+		val (failures, usable) = screen.screenRearFacingEnds(zA, doB1, candidates.withIndex().toList())
 
 		// Candidate 0 is the main leg and ends at doB1 facing the train. Candidate 1 loops through the
 		// branch and reaches doB1 from the east, so doB1 faces away from that arrival: it is screened
@@ -227,7 +227,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val zA = findSemaphoreByName("zA")
 		val candidates = candidatePaths(zA, inOutB())
 
-		val (failures, usable) = screen.screenRearFacingEnds(zA, inOutB(), candidates)
+		val (failures, usable) = screen.screenRearFacingEnds(zA, inOutB(), candidates.withIndex().toList())
 
 		assertThat(failures).isEqualTo(GeometricFailures())
 		assertThat(usable.map { it.index }).isEqualTo(candidates.indices.toList())
@@ -240,7 +240,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val candidates = candidatePaths(zA, doA1)
 		assertThat(candidates.size).isGreaterThan(1)
 
-		val (failures, usable) = screen.screenRearFacingEnds(zA, doA1, candidates)
+		val (failures, usable) = screen.screenRearFacingEnds(zA, doA1, candidates.withIndex().toList())
 
 		// The direct candidate arrives from the west and is screened; the loop-around candidate
 		// arrives from the east, so doA1 faces it and it is kept under its original index.
@@ -406,7 +406,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		screen.rejectNonOrientedStart("t1", findSwitchByName("vA"), "reservePath")
 		screen.rejectNonOrientedEnd("t1", findSwitchByName("vB"), "reservePath")
 		screen.rejectNonContiguousStart("t1", zA)
-		screen.screenRearFacingEnds(zA, doA1, candidates)
+		screen.screenRearFacingEnds(zA, doA1, candidates.withIndex().toList())
 		screen.screenDivergentCandidates("t1", zA, doA1, candidates.withIndex().toList())
 
 		val blocks = environment.getGraph().values().filterIsInstance<DynamicTrackBlock>()
