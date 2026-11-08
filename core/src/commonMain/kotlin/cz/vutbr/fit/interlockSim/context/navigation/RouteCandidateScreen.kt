@@ -284,8 +284,9 @@ internal class RouteCandidateScreen(
 	 * [CandidateCommitter] / [RouteSignalConfigurator.configureStartSignal] and the already-owned SKIP
 	 * arm stay as defence in depth.
 	 *
-	 * @return the English denial reason, naming the signals that do face the train from [start];
-	 *   `null` when [start] is not a semaphore, [path] is empty, or the START faces the first block
+	 * @return the English denial reason, naming the signals or exits that do face the train from [start]
+	 *   (`none` when there are none); `null` when [start] is not a semaphore, [path] is empty, its first
+	 *   section has no dynamic block, or the START faces the first block
 	 */
 	internal fun rearFacingStartReason(
 		start: DynamicPathSeparator,
@@ -293,7 +294,8 @@ internal class RouteCandidateScreen(
 		candidateIndex: Int
 	): String? {
 		if (start !is DynamicRailSemaphore || path.isEmpty()) return null
-		val firstBlock = path.first().getTrackBlock() as DynamicTrackBlock
+		// Fails open, like the G4 check: a first section with no dynamic block cannot be judged.
+		val firstBlock = path.first().getTrackBlock() as? DynamicTrackBlock ?: return null
 		if (semaphoreFacesNextBlockOrOpen(environment, start, firstBlock)) return null
 		val facingStarts =
 			runCatching {
@@ -302,9 +304,10 @@ internal class RouteCandidateScreen(
 				facingSection?.let { targetDiscovery.findNextSemaphoresVia(start, it) } ?: emptyList()
 			}.getOrDefault(emptyList())
 				.joinToString(", ") { separatorLabel(it) }
+				.ifEmpty { "none" }
 		return "Route origin '${separatorLabel(start)}' faces away from the direction of travel on candidate " +
-			"$candidateIndex; a route must start at a signal facing the train. The next signals facing the " +
-			"train from '${separatorLabel(start)}' are: $facingStarts."
+			"$candidateIndex; a route must start at a signal facing the train. The next signals or exits " +
+			"facing the train from '${separatorLabel(start)}' are: $facingStarts."
 	}
 
 	/**

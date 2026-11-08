@@ -247,7 +247,7 @@ class DefaultPathReservationService(
 	 * - Start not contiguous with the train's footprint → return NonContiguousStart
 	 * - Start or target is not an OrientedPathSeparator (a switch) → return GeometricallyImpossible
 	 * - Every candidate leaves a semaphore start from behind or is otherwise geometrically impossible →
-	 *   return GeometricallyImpossible (one summary WARN per refusal, Issue #1378)
+	 *   return GeometricallyImpossible (one summary WARN per refused call, Issue #1378)
 	 * - RouteFinder returns empty list → return NoPathExists (clear failure, no crash)
 	 * - TrackOperationException during setUpPath() → rollback and try next path
 	 * - Registry conflict → roll back only the forward blocks THIS call reserved (never the
@@ -543,7 +543,7 @@ class DefaultPathReservationService(
 	 * false-positive-pause problem that led to the Goal 3 restriction) -- but only the FIRST time a
 	 * given (trainId, block) contention is observed; see [ReservationContentionTracker.recordContentionAndEmitIfNew].
 	 *
-	 * Issue #1378: logs one summary line per refused request ([logRefusalSummary]); the start-direction
+	 * Issue #1378: logs one summary line per refused `reservePath` call ([logRefusalSummary]); the start-direction
 	 * failures of Step 1.4 arrive folded into [geometricFailures], like G8's.
 	 */
 	private fun classifyExhaustedAttempt(
@@ -568,7 +568,9 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * The one summary line per refused request (Issue #1378), replacing the per-candidate WARN storm:
+	 * The one summary line per refused `reservePath` call (Issue #1378), replacing the per-candidate WARN
+	 * storm. Per call, not per outer request: `reservePathToAny` and `reservePathToAnyNextSemaphore` call
+	 * `reservePath` once per target, so a refused multi-target request logs one line per target tried.
 	 * the per-candidate detail (`SwitchConfigurator`'s Issue #742 line, the screens' skip lines) is at
 	 * DEBUG. WARN only for a permanent refusal (`GeometricallyImpossible`, `DivergesFromHeldRoute`),
 	 * which the caller must not retry; DEBUG for `AllPathsBlocked`, routine contention polled every tick.

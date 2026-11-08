@@ -13,9 +13,10 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
-import assertk.assertions.isNotInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import assertk.assertions.startsWith
 import ch.qos.logback.classic.Level
@@ -101,7 +102,9 @@ class PathReservationStartDirectionPrahaTest : CommonKoinTestBase() {
 			withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
 				val result = service.reservePath(TRAIN, semaphore(S2), semaphore(S11))
 
-				assertThat(result).isNotInstanceOf<PathReservationService.ReservationResult.Success>()
+				// Every candidate is permanent: eastward ones leave S2 from behind (Step 1.4), westward
+				// ones end at S11 from behind (G8) or need a reversal no switch joins (Issue #742).
+				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 				assertThat(warnCount(switchLog), name = "SwitchConfigurator WARN lines").isEqualTo(0)
 				assertThat(warnCount(serviceLog), name = "service WARN lines").isLessThanOrEqualTo(1)
 			}
@@ -120,13 +123,25 @@ class PathReservationStartDirectionPrahaTest : CommonKoinTestBase() {
 	}
 
 	@Test
-	fun `backward candidates mixed with a blocked forward one stay ordinary contention`() {
+	fun `start-screened candidates mixed with a blocked forward one stay ordinary contention`() {
 		occupy(blockBetween(S9, S15), TRAIN)
 		occupy(blockBetween(SW24, S9), OTHER_TRAIN)
 
-		val result = service.reservePath(TRAIN, semaphore(S9), inOut(N_VYS_1))
+		var summary = ""
+		lateinit var result: PathReservationService.ReservationResult
+		withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
+			result = service.reservePath(TRAIN, semaphore(S9), inOut(N_VYS_1))
+			summary = serviceLog.list.single { it.formattedMessage.startsWith(SUMMARY_PREFIX) }.formattedMessage
+		}
 
+		// S9 -> N-Vys-1 has candidates leaving S9 eastwards onto k6 (Step 1.4) and westwards over
+		// SW24, which the other train blocks: a mix, so the request stays retryable contention.
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		val counts = SUMMARY_COUNTS.find(summary)
+		assertThat(counts, name = "summary counts in: $summary").isNotNull()
+		assertThat(counts!!.groupValues[1].toInt(), name = "geometric candidates").isGreaterThan(0)
+		assertThat(counts.groupValues[2].toInt(), name = "blocked candidates").isGreaterThan(0)
+		assertThat(summary, name = "first geometric reason").contains("(first: Route origin '$S9' faces away")
 	}
 
 	private fun semaphore(name: String): DynamicRailSemaphore =
@@ -192,5 +207,7 @@ class PathReservationStartDirectionPrahaTest : CommonKoinTestBase() {
 		const val S15 = "S15"
 		const val SW24 = "SW24"
 		const val N_VYS_1 = "N-Vys-1"
+		const val SUMMARY_PREFIX = "reservePath: refused '$TRAIN' $S9 -> $N_VYS_1: "
+		val SUMMARY_COUNTS = Regex("""(\d+) geometric \(first: .*\), \d+ divergent, (\d+) blocked of""")
 	}
 }
