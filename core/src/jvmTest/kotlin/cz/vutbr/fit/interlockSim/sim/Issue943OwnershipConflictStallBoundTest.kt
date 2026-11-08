@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.FirstTrainOwnershipConflict
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ORIGIN_ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
@@ -204,8 +205,5 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		 * without the bound burns the whole span, which is what the RED state looks like.
 		 */
 		const val END_TIME: Long = 200L
-
-		/** Distinctive fragment of the never-admitted-origin `errorStop` message (distinct from mid-journey). */
-		const val ORIGIN_ROUTE_EXTENSION_FRAGMENT = "no entry route reserved"
 	}
 }

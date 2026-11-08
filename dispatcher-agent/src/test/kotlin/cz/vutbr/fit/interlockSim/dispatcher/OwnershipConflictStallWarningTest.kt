@@ -28,6 +28,8 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ORIGIN_ROUTE_EXTENSION_FRAGMENT
+import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
@@ -151,7 +153,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 			NavigationDecoratingContext(context, stallingNav) { error ->
 				val trainId = stalledTrainId.get()
 				val message = error.message.orEmpty()
-				if (trainId != null && message.contains(ERROR_STOP_FRAGMENT) && message.contains(trainId)) {
+				if (trainId != null && message.contains(ROUTE_EXTENSION_FRAGMENT) && message.contains(trainId)) {
 					warningsAtErrorStop.compareAndSet(-1, warningsNaming(trainId).size)
 				}
 				capturedErrors.add(error)
@@ -169,7 +171,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 		// The run was then stopped for that train, and its WARN was already in the log by then.
 		assertThat(
 			capturedErrors.firstOrNull {
-				it.message?.contains(ERROR_STOP_FRAGMENT) == true && it.message?.contains(trainId) == true
+				it.message?.contains(ROUTE_EXTENSION_FRAGMENT) == true && it.message?.contains(trainId) == true
 			},
 			name = "captured stall errorStop for $trainId"
 		).isNotNull()
@@ -228,7 +230,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 			NavigationDecoratingContext(context, stallingNav) { error ->
 				val trainId = stalledTrainId.get()
 				val message = error.message.orEmpty()
-				if (trainId != null && message.contains(ORIGIN_ERROR_STOP_FRAGMENT) && message.contains(trainId)) {
+				if (trainId != null && message.contains(ORIGIN_ROUTE_EXTENSION_FRAGMENT) && message.contains(trainId)) {
 					warningsAtErrorStop.compareAndSet(-1, warningsNamingOrigin(trainId).size)
 				}
 				capturedErrors.add(error)
@@ -246,7 +248,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 		// The run was stopped for that train with the origin errorStop, and its WARN preceded the stop.
 		val originStop =
 			capturedErrors.firstOrNull {
-				it.message?.contains(ORIGIN_ERROR_STOP_FRAGMENT) == true && it.message?.contains(trainId) == true
+				it.message?.contains(ORIGIN_ROUTE_EXTENSION_FRAGMENT) == true && it.message?.contains(trainId) == true
 			}
 		assertThat(originStop, name = "captured origin errorStop for $trainId").isNotNull()
 		assertThat(warningsAtErrorStop.get(), name = "origin WARNs naming $trainId logged before its errorStop")
@@ -327,7 +329,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 			NavigationDecoratingContext(context, stallingNav) { error ->
 				val trainId = stalledTrainId.get()
 				val message = error.message.orEmpty()
-				if (trainId != null && message.contains(ERROR_STOP_FRAGMENT) && message.contains(trainId)) {
+				if (trainId != null && message.contains(ROUTE_EXTENSION_FRAGMENT) && message.contains(trainId)) {
 					warningsAtErrorStop.compareAndSet(-1, warningsNaming(trainId).size)
 				}
 				capturedErrors.add(error)
@@ -367,7 +369,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 		// The run was stopped for that train, and both WARNs were already logged by then.
 		val stop =
 			capturedErrors.firstOrNull {
-				it.message?.contains(ERROR_STOP_FRAGMENT) == true && it.message?.contains(trainId) == true
+				it.message?.contains(ROUTE_EXTENSION_FRAGMENT) == true && it.message?.contains(trainId) == true
 			}
 		assertThat(stop, name = "captured stall errorStop for $trainId").isNotNull()
 		assertThat(warningsAtErrorStop.get(), name = "stall WARNs naming $trainId logged before its errorStop")
@@ -423,12 +425,6 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 
 		/** Distinctive fragment of the origin stall WARN. */
 		const val ORIGIN_STALL_WARN_FRAGMENT = "for the dispatcher to reserve its entry route"
-
-		/** Distinctive fragment of the mid-journey stall `errorStop` message. */
-		const val ERROR_STOP_FRAGMENT = "no route extension"
-
-		/** Distinctive fragment of the origin stall `errorStop` message (distinct from mid-journey). */
-		const val ORIGIN_ERROR_STOP_FRAGMENT = "no entry route reserved"
 
 		/**
 		 * Extracts the `after N s` horizon value from a stall WARN, to check each episode's own clock.
