@@ -35,6 +35,7 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.SeparatorKind
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -367,6 +368,24 @@ class RequestRouteToolTest {
 			assertThat(emitted, "emitted actions").isEmpty()
 			assertThat(error.message, "message").contains("NEXT SECTION is from 'doB1' to 'A'")
 			assertThat(error.message, "message").contains("toEndpointName='A'")
+		}
+
+		@Test
+		@DisplayName("the guard reads the block inputs from exactly one atomic snapshot")
+		fun readsOneSnapshot() {
+			val port = snapshotPort(listOf(ownedInput(candidates = listOf(inOut("A")))))
+			val tool =
+				RequestRouteTool(
+					SinkHolder(EmittedActionSink { emitted += it }),
+					endpoints,
+					perceptionPort(listOf("Train #1"), activeDestination = "A", activeSignalAhead = "doB1"),
+					port,
+					inOutNames = inOuts
+				)
+
+			errorOf(request(tool, "doB1", "doA1"))
+
+			verify(exactly = 1) { port.snapshot() }
 		}
 
 		@Test

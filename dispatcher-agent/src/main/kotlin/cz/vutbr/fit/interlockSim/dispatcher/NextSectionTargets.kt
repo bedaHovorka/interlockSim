@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopResolver
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.chosenTargetName
 
@@ -40,6 +41,13 @@ import cz.vutbr.fit.interlockSim.sim.chosenTargetName
  * beyond it, a queued train, an empty snapshot before the first capture), never *every target is
  * wrong*.
  *
+ * ## The suggested pick
+ *
+ * The pick follows the NEXT SECTION eligibility rule ([NextHopResolver.isEligible]) but not
+ * [NextHopResolver.resolveAll]'s same-tick dedup, so it may name a hop the prompt shows as
+ * ClaimedByAnotherTrain this tick. That costs one turn, not a stall: the engine answers the
+ * follow-up request, and the refusal comes back as an outcome the model can act on.
+ *
  * One shared helper so the live tool (`RequestRouteTool`) and the reference validator
  * ([ActionValidator]) cannot drift apart.
  *
@@ -51,8 +59,11 @@ object NextSectionTargets {
 	 * A refused next-section target.
 	 *
 	 * @property from The signal the request starts at.
-	 * @property pick The target the dispatch policy picks one section ahead of [from]
-	 *   ([chosenTargetName]); `null` when none can be reserved right now.
+	 * @property pick The NEXT SECTION target for [from]: [chosenTargetName] of the first input that
+	 *   is eligible by [NextHopResolver.isEligible] — the same predicate the prompt's NEXT SECTION
+	 *   line uses. `null` when no input is eligible, including the Issue #1244 case of a train
+	 *   awaiting a route extension whose pick is the end of the route it already holds (naming that
+	 *   end would re-grant the held route).
 	 * @property ahead Every separator listed one section ahead of [from], sorted.
 	 */
 	data class Mismatch(
@@ -82,7 +93,7 @@ object NextSectionTargets {
 		if (to in allowed) return null
 		return Mismatch(
 			from = from,
-			pick = matching.firstNotNullOfOrNull { it.chosenTargetName() },
+			pick = matching.firstOrNull { NextHopResolver.isEligible(it) }?.chosenTargetName(),
 			ahead = allowed.sorted()
 		)
 	}
@@ -96,7 +107,7 @@ object NextSectionTargets {
 		val from = mismatch.from
 		val head =
 			"Train '$trainId' cannot go from '$from' to '$to': '$to' is not the next section ahead of the " +
-				"train at '$from' — it is behind the train or more than one section away."
+				"train at '$from'."
 		val pick = mismatch.pick
 		return if (pick != null) {
 			"$head Its NEXT SECTION is from '$from' to '$pick'. Request exactly fromEndpointName='$from', " +
