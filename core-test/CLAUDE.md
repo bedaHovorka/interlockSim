@@ -29,7 +29,8 @@ tripwire of Issue #1011 (see Contents).
   (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
   `NavigationDecoratingContext`, `FirstTrainOwnershipConflict` (holds one train in an
-  ownership-conflict wait, Issues #943/#1244), `ShuntingLoopLookups`,
+  ownership-conflict wait, Issues #943/#1244), `TrainErrorStopMessages` (the `Train`
+  `errorStop` wording fragments, Issues #1375/#1380), `ShuntingLoopLookups`,
   `TrainKinematicSampler`/`TrainKinematicSample` and `AspectFlipOnce`
   (Issue #989 sampling/aspect-flip helpers; cadence pinned by
   `:core` jvmTest `TrainKinematicSamplerContractTest`), and `RepeatedTestCapExtension`

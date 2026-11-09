@@ -200,9 +200,10 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	 * A train the dispatcher never admits gets an **origin-worded** WARN that names it, before the
 	 * run is stopped. The mid-journey test stalls a train that has already left its entry `InOut`
 	 * (`current != null`); this one stalls a train **at** its entry `InOut` (`current == null`), so
-	 * it drives the `atOrigin == true` branch of the stall message (Train.kt:290–297 / 303–308) the
-	 * other test never reaches. The origin wording ("reserve its entry route" / "no entry route
-	 * reserved") is thus pinned, not left untested — the Issue #943 origin-vs-under-way distinction.
+	 * it drives the `atOrigin == true` arms of `waitForPathOrReportStall` (WARN and errorStop) that
+	 * the other test never reaches. The origin wording is thus pinned via [ORIGIN_STALL_WARN_FRAGMENT]
+	 * and [ORIGIN_ROUTE_EXTENSION_FRAGMENT] — the Issue #943 origin-vs-under-way distinction (only the
+	 * errorStop fragment's tie to Train's text is tripwired; #1391 extends that to the WARN fragments).
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
@@ -258,7 +259,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	/**
 	 * A train that stalls, is then given its path (resolving the stall), and stalls again is named
 	 * in **two** WARNs — one per stall episode — because a successful navigation resets the wait
-	 * bookkeeping (Train.kt:517 `resetOwnershipConflictWait()`). This pins Issue #943 requirement 3:
+	 * bookkeeping (`resetOwnershipConflictWait`). This pins Issue #943 requirement 3:
 	 * any navigation outcome other than a further OwnershipConflict restarts the horizon clock, so a
 	 * re-stall measures from its own beginning and can WARN again. Without the reset the WARN latch
 	 * stays set and the second stall goes straight to `errorStop` with no second WARN.
@@ -266,7 +267,8 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	 * Mechanism: the decorator forces `OwnershipConflict` at one mid-journey separator until the
 	 * first WARN lands, then stops forcing it *only while the train is still at that separator* — so
 	 * the dispatcher can reserve the next section, the event-driven wait wakes on its own
-	 * path-available condition (Train.kt:281/517 resets the clock), and the train moves on. The
+	 * path-available condition (the wait's reset restarts the clock — `resetOwnershipConflictWait`),
+	 * and the train moves on. The
 	 * instant the train reaches a different separator, the decorator forces `OwnershipConflict`
 	 * again, so the train re-stalls and must WARN a second time from its own new clock.
 	 */
@@ -312,7 +314,7 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 
 				// Phase 2: still at the stall separator — stop forcing, so the dispatcher can
 				// reserve the next section and the wait wakes on its own path-available condition
-				// (Train.kt:281/517 resets the clock and the train moves on).
+				// (the wait's reset — see the KDoc above — restarts the clock and the train moves on).
 				// Phase 3: the train has reached a different separator — force a fresh stall that
 				// must WARN anew from its own new clock.
 				val stallSep = stalledSeparator.get()
