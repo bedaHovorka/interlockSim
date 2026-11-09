@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.FirstTrainOwnershipConflict
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ORIGIN_ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
@@ -145,8 +146,8 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 	 *
 	 * ## Why a second :core test (coverage anchor)
 	 *
-	 * The `atOrigin == true` branches of `waitForPathOrReportStall` (the WARN at `Train.kt:290-292`
-	 * and the `errorStop` at `303-304`) are exercised at runtime by `:dispatcher-agent`'s
+	 * The `atOrigin == true` branches of `waitForPathOrReportStall` (its WARN arm and its errorStop
+	 * arm) are exercised at runtime by `:dispatcher-agent`'s
 	 * `OwnershipConflictStallWarningTest.originStallWarningNamesTheTrainOnce`, but that coverage is
 	 * attributed to `:dispatcher-agent`'s JaCoCo report, whose `classDirectories` are scoped to its
 	 * own classes. `Train.kt` lives in `:core`, and Sonar reads only `:core`'s JaCoCo report for it,
@@ -155,14 +156,14 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 	 * where Sonar looks — the same reason [MidJourneyNoPathErrorStopRegressionTest] anchors the
 	 * mid-journey `NoTopologicalPath` bound alongside its dispatcher-agent twin.
 	 *
-	 * The WARN code (`290-292`) executes for coverage even though this test does not assert the log
+	 * The WARN arm executes for coverage even though this test does not assert the log
 	 * line: `:core`'s test source set has logback as `runtimeOnly` only, which is why the WARN
 	 * wording itself is pinned in `:dispatcher-agent`.
 	 *
 	 * Asserts:
 	 * 1. A train was admitted (so the stall is genuinely at the entry InOut, not a no-admission no-op).
-	 * 2. `env.errorStop` fired with the **origin** wording (`"no entry route reserved"`), distinct
-	 *    from the mid-journey `"no route extension"` wording the test above asserts.
+	 * 2. `env.errorStop` fired with the **origin** wording ([ORIGIN_ROUTE_EXTENSION_FRAGMENT]),
+	 *    distinct from the mid-journey [ROUTE_EXTENSION_FRAGMENT] wording the test above asserts.
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
@@ -204,8 +205,5 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		 * without the bound burns the whole span, which is what the RED state looks like.
 		 */
 		const val END_TIME: Long = 200L
-
-		/** Distinctive fragment of the never-admitted-origin `errorStop` message (distinct from mid-journey). */
-		const val ORIGIN_ROUTE_EXTENSION_FRAGMENT = "no entry route reserved"
 	}
 }

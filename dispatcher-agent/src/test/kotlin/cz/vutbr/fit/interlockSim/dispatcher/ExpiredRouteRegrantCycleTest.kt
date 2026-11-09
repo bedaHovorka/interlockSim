@@ -43,6 +43,7 @@ import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.UncaughtSimulationExceptions
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
@@ -224,7 +225,7 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 		val diagnosis = assertThat(run.errorStops, "errorStops").single()
 		diagnosis.isInstanceOf<SimulationException>()
 		diagnosis.transform { it.message.orEmpty() }.all {
-			startsWith("${standing.trainId}: no route extension at")
+			startsWith("${standing.trainId}: $ROUTE_EXTENSION_FRAGMENT at")
 			contains("after 180 s of waiting")
 		}
 		assertThat(run.lastControlStepAt, "last control step")
