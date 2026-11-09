@@ -19,6 +19,8 @@ import org.junit.jupiter.api.Test
  * [SourceScan.codeLines] is the one comment-aware scanner every line-based source tripwire reads
  * through (Issue #1379): string literals blanked first, then `//` to end of line and block-comment
  * spans removed, with the block-comment state carried across the lines.
+ * [SourceScan.codeLinesKeepingStrings] removes the same comment spans but keeps each literal's text
+ * (Issue #1380).
  */
 @DisplayName("SourceScan.codeLines keeps code and drops comments")
 class SourceScanTest {
@@ -69,5 +71,24 @@ class SourceScanTest {
 	fun `a string literal with an escaped quote is blanked to its end`() {
 		assertThat(SourceScan.codeLines(listOf("f(\"a \\\" b\") // tail")))
 			.containsExactly("f() ")
+	}
+
+	@Test
+	fun `the string-keeping scan keeps a literal and drops the trailing comment`() {
+		assertThat(SourceScan.codeLinesKeepingStrings(listOf("errorStop(\"no route at \$where\") // old wording")))
+			.containsExactly("errorStop(\"no route at \$where\") ")
+	}
+
+	@Test
+	fun `the string-keeping scan drops block comments and carries their state across lines`() {
+		val lines = listOf("val a = \"x\" /* note", "\"y\" inside */ + \"z\"", "/** KDoc \"w\" */")
+
+		assertThat(SourceScan.codeLinesKeepingStrings(lines)).containsExactly("val a = \"x\" ", " + \"z\"", "")
+	}
+
+	@Test
+	fun `the string-keeping scan lets no comment marker inside a literal act`() {
+		assertThat(SourceScan.codeLinesKeepingStrings(listOf("val url = \"http://host\" + \"/*\"; val y = 1")))
+			.containsExactly("val url = \"http://host\" + \"/*\"; val y = 1")
 	}
 }

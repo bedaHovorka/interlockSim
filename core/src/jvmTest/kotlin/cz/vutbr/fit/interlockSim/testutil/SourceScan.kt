@@ -15,7 +15,8 @@ import java.io.File
  * Shared machinery of the line-based source scans (the wall-clock tripwire over
  * `context/navigation`, Issue #1174, the allow-list tripwire over target selection, Issue #1152,
  * and the kDisco `dtMax` single-site tripwire, Issue #1160): the first-existing-wins directory
- * resolution, the `.kt` walk and the comment-aware code-line scanner [codeLines] (Issue #1379).
+ * resolution, the `.kt` walk and the comment-aware code-line scanners [codeLines] (Issue #1379) and
+ * [codeLinesKeepingStrings] (Issue #1380).
  * A scan keeps its own spellings list and its own forbidden pattern; without this object each
  * tripwire copies the mechanics — and a blind-spot fix then lands in one copy only.
  */
@@ -51,49 +52,80 @@ object SourceScan {
 	 * blanked with it, which can move a block comment's close; nested block comments close at the
 	 * first close pair, so the code-looking rest of the outer comment reads as code.
 	 */
-	fun codeLines(lines: List<String>): List<String> {
+	fun codeLines(lines: List<String>): List<String> = scan(lines, keepStrings = false)
+
+	/**
+	 * [codeLines] with the string literals kept: the same comment spans are removed, but each
+	 * literal's text stays in the output. For a scan that pins message wording, which lives inside
+	 * string literals (the `Train` errorStop fragment tripwire, Issue #1380). A `//` or a comment
+	 * opener inside a literal still does not act on the comment state, and the same deliberate holes
+	 * as [codeLines] apply.
+	 */
+	fun codeLinesKeepingStrings(lines: List<String>): List<String> = scan(lines, keepStrings = true)
+
+	/**
+	 * Both scanners in one: each literal is masked with [LITERAL_MASK] characters of the same length,
+	 * so the comment spans found on the masked line have the raw line's indices. [keepStrings] picks
+	 * the raw text of the kept spans; otherwise the masked text with the mask dropped, which blanks
+	 * the literals.
+	 */
+	private fun scan(
+		lines: List<String>,
+		keepStrings: Boolean
+	): List<String> {
 		var inBlock = false
 		return lines.map { raw ->
-			val (code, state) = commentFree(raw, inBlock)
+			val masked = raw.replace(STRING_LITERAL) { LITERAL_MASK.toString().repeat(it.value.length) }
+			val (spans, state) = codeSpans(masked, inBlock)
 			inBlock = state
-			code
+			val source = if (keepStrings) raw else masked
+			spans.joinToString("") { source.substring(it) }.let { code ->
+				if (keepStrings) code else code.replace(LITERAL_MASK.toString(), "")
+			}
 		}
 	}
 
-	private fun commentFree(
-		raw: String,
+	/** A character no Kotlin source holds and no comment marker is: the literal mask. */
+	private const val LITERAL_MASK = '\u0000'
+
+	/**
+	 * The code spans of one [masked] line: `//` to end of line and block-comment spans removed,
+	 * starting inside a block comment when [inBlockComment]. Returns the spans and the state at the
+	 * line's end.
+	 */
+	private fun codeSpans(
+		masked: String,
 		inBlockComment: Boolean
-	): Pair<String, Boolean> {
-		val blanked = raw.replace(STRING_LITERAL, "")
-		val code = StringBuilder()
+	): Pair<List<IntRange>, Boolean> {
+		val spans = mutableListOf<IntRange>()
 		var inBlock = inBlockComment
 		var i = 0
-		while (i < blanked.length) {
+		while (i < masked.length) {
 			if (inBlock) {
-				val close = blanked.indexOf("*/", i)
-				if (close < 0) return code.toString() to true
+				val close = masked.indexOf("*/", i)
+				if (close < 0) return spans to true
 				i = close + 2
 				inBlock = false
 			} else {
-				val lineComment = blanked.indexOf("//", i)
-				val blockStart = blanked.indexOf("/*", i)
+				val lineComment = masked.indexOf("//", i)
+				val blockStart = masked.indexOf("/*", i)
 				when {
 					lineComment >= 0 && (blockStart < 0 || lineComment < blockStart) -> {
-						code.append(blanked.substring(i, lineComment))
-						return code.toString() to false
+						spans += i until lineComment
+						return spans to false
 					}
 					blockStart >= 0 -> {
-						code.append(blanked.substring(i, blockStart))
+						spans += i until blockStart
 						i = blockStart + 2
 						inBlock = true
 					}
 					else -> {
-						code.append(blanked.substring(i))
-						return code.toString() to false
+						spans += i until masked.length
+						return spans to false
 					}
 				}
 			}
 		}
-		return code.toString() to inBlock
+		return spans to inBlock
 	}
 }

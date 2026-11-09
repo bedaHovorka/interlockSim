@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import cz.vutbr.fit.interlockSim.testutil.ORIGIN_ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
@@ -30,15 +31,13 @@ import java.util.concurrent.TimeUnit
  *
  * Each needle is a constant extended to its message shape ([MID_JOURNEY_NEEDLE], [ORIGIN_NEEDLE]),
  * built from the constant itself: a reword cannot sneak past by keeping the bare fragment somewhere
- * else, and the constant cannot drift while this test passes. Only code lines count
- * ([SourceScan.isCode]), so the scan reads only `sim/Train.kt`: KDoc and comment text cannot trip
- * the pins by design, and consumer-file wording echoes are outside its surface altogether. A wording
- * surviving only in a trailing `//` comment on an otherwise-code line of `Train.kt` can still pass —
- * both blind spots close when issue #1382's comment-aware scanner lands in [SourceScan]. A reword
- * may also push the worded part across a line-concatenation boundary (the origin stall-WARN arm
- * already is one, which keeps the WARN fragments private): the pin then fails as a false alarm until
- * that same scanner handles it, and issue #1391 extends the pins to the stall-WARN and no-path
- * wordings there.
+ * else, and the constant cannot drift while this test passes. Only code counts
+ * ([SourceScan.codeLinesKeepingStrings]: comment spans removed, string literals kept), so the scan
+ * reads only `sim/Train.kt`: KDoc, block-comment and trailing `//` comment text cannot trip the pins,
+ * and consumer-file wording echoes are outside its surface altogether. A reword may push the worded
+ * part across a line-concatenation boundary (the origin stall-WARN arm already is one, which keeps
+ * the WARN fragments private): the per-line scanner does not join lines, so the pin then fails as a
+ * false alarm, and issue #1391 extends the pins to the stall-WARN and no-path wordings there.
  *
  * @since Issue #1380 (SP13 — Goal 1B)
  */
@@ -51,13 +50,13 @@ class TrainErrorStopFragmentTripwireTest {
 		/** The origin pin: the fragment as its message renders it, before ` at InOut '<where>'`. */
 		const val ORIGIN_NEEDLE = ORIGIN_ROUTE_EXTENSION_FRAGMENT + " at InOut"
 
-		/** `Train.kt`'s code lines, read once from the first source-root spelling that resolves. */
+		/** `Train.kt`'s comment-free lines, read once from the first source-root spelling that resolves. */
 		val TRAIN_CODE_LINES: List<String> =
 			SourceScan
 				.directory("core/src/commonMain/kotlin", "src/commonMain/kotlin")
 				.resolve("cz/vutbr/fit/interlockSim/sim/Train.kt")
 				.takeIf { it.isFile }
-				?.let { it.readLines().filter(SourceScan::isCode) }
+				?.let { SourceScan.codeLinesKeepingStrings(it.readLines()) }
 				?: error("sim/Train.kt not found under the scanned commonMain sources")
 	}
 
@@ -83,5 +82,25 @@ class TrainErrorStopFragmentTripwireTest {
 	@DisplayName("the origin errorStop message still names its shared fragment before ' at InOut'")
 	fun originErrorStopMessageStillNamesItsFragment() {
 		assertPinned(ORIGIN_NEEDLE)
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("a wording kept only in a comment does not count as pinned")
+	fun wordingOnlyInACommentDoesNotCount() {
+		val commentOnly =
+			listOf(
+				"\terrorStop(reworded) // \"$MID_JOURNEY_NEEDLE\"",
+				"\t/* $ORIGIN_NEEDLE */ errorStop(reworded)",
+				"\t/**",
+				"\t * $MID_JOURNEY_NEEDLE",
+				"\t */"
+			)
+
+		assertThat(
+			SourceScan.codeLinesKeepingStrings(commentOnly).count {
+				MID_JOURNEY_NEEDLE in it || ORIGIN_NEEDLE in it
+			}
+		).isEqualTo(0)
 	}
 }
