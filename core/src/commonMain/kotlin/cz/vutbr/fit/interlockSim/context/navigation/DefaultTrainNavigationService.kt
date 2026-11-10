@@ -42,19 +42,23 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * 2. Use PathInfo.reservedPath.getNext() to follow RESERVED blocks only
  * 3. Extract all DynamicTrackBlocks from the built path
  * 4. For each block, validate ownership via registry
- * 5. If ANY block is not owned by trainId, return null (train must wait)
- * 6. If ALL blocks are owned by trainId, return complete path
+ * 5. If ANY block is not owned by trainId, return [PathResult.OwnershipConflict] (train must wait)
+ * 6. If ALL blocks are owned by trainId, return [PathResult.Available] with the complete path
  *
  * **Key Change:** No topology exploration! Trains follow reservedPath faithfully,
  * eliminating wrong turns at switches (fixes Issue #291 root cause).
  *
  * ## Error Handling
  *
- * This service is **read-only** and does NOT modify state. It simply returns:
- * - **Path object**: All blocks are reserved for this train (success)
- * - **null**: Path doesn't exist, or blocks are reserved for different train (wait)
+ * This service is **read-only** and does NOT modify state. It returns a [PathResult]:
+ * - **Available**: All blocks are reserved for this train (success)
+ * - **OwnershipConflict**: Blocks are reserved for a different train, or the reservation does not
+ *   yet lead anywhere (no PathInfo, separator not on it, no forward-facing separator reached): wait
+ *   and retry
+ * - **NoTopologicalPath**: The train has no PathInfo and the topology has no continuation from the
+ *   separator (`hasTopologicalContinuation`)
  *
- * No exceptions are thrown for ownership mismatches - null indicates "wait and retry".
+ * No exceptions are thrown for ownership mismatches - `OwnershipConflict` indicates "wait and retry".
  *
  * ## Thread Safety
  *
@@ -243,11 +247,6 @@ class DefaultTrainNavigationService(
 	 * Determine the next track section from PathInfo based on current separator position.
 	 *
 	 * ## Algorithm (Issue #295/#296 Phase 5)
-	 *
-	 * Based on working `pathToNextSemaphore()` (commit 18108fa), which uses:
-	 * ```kotlin
-	 * var next: TrackSection? = initialNext  // THIS IS THE CRITICAL PARAMETER!
-	 * ```
 	 *
 	 * The PathInfo.reservedPath contains the complete path with track sections in order.
 	 * We need to:
@@ -482,7 +481,7 @@ class DefaultTrainNavigationService(
 				val staticResult = current.getSecondEnd(separator)
 				separator = context.toDynamic(staticResult)
 				previous = current
-				// NEW: Use PathInfo.reservedPath instead of topology exploration
+				// Issue #297: use PathInfo.reservedPath instead of topology exploration
 				current = reservedPath.getNext(current)
 			} else {
 				break

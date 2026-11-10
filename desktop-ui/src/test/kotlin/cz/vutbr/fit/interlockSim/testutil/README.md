@@ -43,9 +43,15 @@ The `testutil` package provides:
   and leaves the source to the caller, and a round trip fails at the save step when the
   source cannot be saved (Issue #1035; happy-path close and double close are pinned by
   KoinTestBaseCleanupContractTest — removed here by the Issue #1046 dedupe)
-- **RudyUjezdStructure** - `assertRudyUjezdStationInOuts`: asserts the four station
-  InOuts of the `rudyUjezd.xml` fixture exist and returns them (f1, f2, s1, s2); shared by
-  the parse test and the stream round trip of the XML factory tests
+- **CervenyUjezdStructure** - `assertCervenyUjezdStationInOuts`: asserts the four station
+  InOuts of the `cerveny_ujezd.xml` fixture exist and returns them (f1, f2, s1, s2); shared by
+  the parse test and the stream round trip of the XML factory tests. Also
+  `CERVENY_UJEZD_STATION_CAPACITY` (4): the shared loop-capacity pin of the ExampleRegistry
+  Cerveny Ujezd tests — one copy replacing the two private companions (PR #1282 review round)
+- **ExampleRegistryTestFactory** - how a test builds an ExampleRegistry context without running
+  it: `createExampleContext` reaches a private factory by method name (Issue #955), and
+  `createExampleContextFromMap` resolves the name through `registry.examples` / `guiExamples`
+  (PR #1282 review round); hand the result to `tracked()`
 - **EdtFlush** - `flushEDT(times = 2)`: drains the Swing event queue with
   `invokeAndWait` flushes; the default two cover a pending `invokeLater` task and the
   nested EDT work it queues. Must not be called on the EDT itself. One shared copy
@@ -79,7 +85,7 @@ fun myTest() {
 - `loadLinearTrackXml()` - Simple A→B
 - `loadSwitchBasicXml()` - Basic switch
 - `loadSemaphoreBasicXml()` - Basic semaphore
-- ...and 12 more (see TestFixtures.kt)
+- ...and 18 more (22 XML loaders in `TestFixtures`, `:core-test` jvmMain)
 
 ### 2. Using Pre-built Topologies
 
@@ -301,7 +307,7 @@ context.getTrainNavigationService()  // ERROR - not available!
 
 ## See Also
 
-- **Full Guide**: `docs/KOTLIN_STYLE_GUIDE.md` (Test Fixtures section)
+- **Style guide**: `docs/KOTLIN_STYLE_GUIDE.md` (points here for test fixtures; this README is canonical)
 - **API Documentation**: `TestFixtures.kt` and `TestTopologies.kt` (inline KDoc)
 - **Examples**: See any test in `context/navigation/` package
 
@@ -309,10 +315,10 @@ context.getTrainNavigationService()  // ERROR - not available!
 
 When adding new test fixtures:
 
-1. **XML files** → Add to `src/test/resources/.../fixtures/`
-2. **Add loader** → Add `loadXxxXml()` function to `TestFixtures`
+1. **XML files** → Add to `core-test/src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/`
+2. **Add loader** → Add `loadXxxXml()` function to `TestFixtures` (`core-test/src/jvmMain/.../testutil/`)
 3. **Common topologies** → Consider adding to `TestTopologies`
-4. **Update docs** → Update this README and KOTLIN_STYLE_GUIDE.md
+4. **Update docs** → Update this README
 
 ## New Topologies (Issue #253 Post-Implementation)
 
@@ -358,4 +364,4 @@ TestTopologies.linearPathWithSemaphoreSequence(
 
 ---
 
-**Last Updated**: 2026-09-11 (PR #1021 round: `:core-test` jvmMain sampling helpers `TrainKinematicSampler`/`AspectFlipOnce` listed; earlier: PR #1043 review round — shared PathExistence BFS helper, Issue #1035 round-trip helpers, shared network builder and grid scan, rudyUjezd structure check, cleanup contract; PR #1047 review round — cleanup contract narrowed to the non-duplicated cases)
+**Last Updated**: 2026-10-29 (fixture loader count and fixture path corrected; earlier 2026-09-11: PR #1021 round: `:core-test` jvmMain sampling helpers `TrainKinematicSampler`/`AspectFlipOnce` listed; earlier: PR #1043 review round — shared PathExistence BFS helper, Issue #1035 round-trip helpers, shared network builder and grid scan, cerveny_ujezd structure check, cleanup contract; PR #1047 review round — cleanup contract narrowed to the non-duplicated cases)

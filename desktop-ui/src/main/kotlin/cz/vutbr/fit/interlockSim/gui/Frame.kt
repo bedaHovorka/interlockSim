@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
@@ -26,6 +27,7 @@ import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
@@ -250,7 +252,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							controlPanel.setStopEnabled(true)
 							// Capture now so the STOPPED transition logs metrics for the run that just
 							// ended, not whatever context happens to be current when STOPPED fires.
-							wiredMeasuringAdapter = currentSimulationContext?.scope?.getOrNull<MeasuringPlanAdapter>()
+							wiredMeasuringAdapter = currentSimulationContext?.scope?.publishedOrNull<MeasuringPlanAdapter>()
 							// SP2c.22 (#845): capture DispatcherRunRecorder at RUNNING so the STOPPED
 							// transition can call finish() and logFinalSummary() for this specific run.
 							wiredRunRecorder = currentSimulationContext?.scope?.getOrNull<DispatcherRunRecorder>()
@@ -398,9 +400,15 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Warning panel (Issue #616, Goal 3 SP6) – initially hidden; shown in simulation mode
 		warningPanel.isVisible = false
-		// Selection highlights the involved block on the canvas when known.
+		// Selection highlights the involved block on the canvas when known (Issue #1331: only
+		// a CRITICAL warning gets the collision highlight; an advisory clears it instead -- the
+		// rationale lives on RailwayNetGridCanvas.clearWarningHighlights).
 		warningPanel.onWarningSelected = { warning ->
-			railwayNetGridCanvas.highlightWarningBlock(warning)
+			if (warning.severity == CollisionWarning.Severity.CRITICAL) {
+				railwayNetGridCanvas.highlightWarningBlock(warning)
+			} else {
+				railwayNetGridCanvas.clearWarningHighlights()
+			}
 		}
 		// Clearing the log also silences the status-bar warning indicator (Issue #616 follow-up).
 		warningPanel.onClear = {
@@ -750,6 +758,32 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	}
 
 	/**
+	 * Show one collision warning; **must be called from EDT**.
+	 *
+	 * Every warning is listed in [warningPanel]. Only a [CollisionWarning.Severity.CRITICAL] warning
+	 * lights the status-bar indicator, beeps when [sound] is on, and resumes the run the collision
+	 * service paused when [autoPause] is off. An advisory [CollisionWarning.Severity.WARNING] (a train
+	 * still queued when the run stopped, Issue #1331) neither paused the run nor is an alarm, so it
+	 * leaves the indicator, the sound and the pause state alone.
+	 */
+	internal fun showCollisionWarning(
+		warning: CollisionWarning,
+		autoPause: Boolean,
+		sound: Boolean
+	) {
+		warningPanel.addWarning(warning)
+		if (warning.severity != CollisionWarning.Severity.CRITICAL) return
+		statusBar.setWarningIndicator(true)
+		if (sound) {
+			Toolkit.getDefaultToolkit().beep()
+		}
+		// If auto-pause is OFF, resume the simulation immediately.
+		if (!autoPause) {
+			simulationController.runner?.isPaused = false
+		}
+	}
+
+	/**
 	 * Launch the simulation on a background thread via [SimulationController] (Issue #189).
 	 *
 	 * Delegates to [SimulationController.start]. Idempotent: if a simulation is already
@@ -784,17 +818,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			// Capture settings atomically from the volatile fields before dispatch.
 			val autoPause = autoPauseOnCriticalWarning
 			val sound = soundOnCriticalWarning
-			SwingUtilities.invokeLater {
-				warningPanel.addWarning(warning)
-				statusBar.setWarningIndicator(true)
-				if (sound) {
-					Toolkit.getDefaultToolkit().beep()
-				}
-				// If auto-pause is OFF, resume the simulation immediately.
-				if (!autoPause) {
-					simulationController.runner?.isPaused = false
-				}
-			}
+			SwingUtilities.invokeLater { showCollisionWarning(warning, autoPause, sound) }
 		}
 
 		// Apply the current auto-halt setting to the newly created service (Goal 3 SP6).

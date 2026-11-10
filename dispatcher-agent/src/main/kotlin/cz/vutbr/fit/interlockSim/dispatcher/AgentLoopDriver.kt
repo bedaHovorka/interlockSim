@@ -13,12 +13,15 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
+import cz.vutbr.fit.interlockSim.dispatcher.planner.LatestObservationReader
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerTickListener
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
 import cz.vutbr.fit.interlockSim.dispatcher.planner.toActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.planner.toDispatchObservation
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -34,9 +37,10 @@ import kotlin.time.TimeSource
  * paced by [SimulationController.awaitIfPaused] / [SimulationController.throttle].
  *
  * Each call to [runCycle] executes one complete iteration:
- * 1. **SENSE**: reads a [SimulationSnapshot] from [perceptionPort]
+ * 1. **SENSE**: reads one tick-stamped record from [dispatchLoopSensorPort] — the
+ *    [SimulationSnapshot] together with the queue and block inputs of the same tick
  * 2. **DECIDE**: calls [DispatcherPlanner.plan] with a [DispatchObservation] built from
- *    the snapshot
+ *    that record
  * 3. **ACT**: posts the returned [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s to
  *    [commandQueue] — a thread-safe handoff; the sim-thread
  *    [DispatchDecisionApplier] drains and applies them on the kDisco thread
@@ -50,7 +54,7 @@ import kotlin.time.TimeSource
  *
  * The driver runs on its own thread or coroutine; the kDisco kernel never blocks
  * on it (A6-safe from the SP0.5 design spec). The driver thread reads
- * [perceptionPort] (read-only, safe for off-thread access) and posts to
+ * [dispatchLoopSensorPort] (read-only, safe for off-thread access) and posts to
  * [commandQueue] (thread-safe). It never touches live simulation state.
  *
  * ## SimulationController invariant
@@ -64,15 +68,20 @@ import kotlin.time.TimeSource
  *
  * The observation combines the general-purpose [SimulationSnapshot] (signals, block
  * occupancy, train positions, timetables) with the ShuntingLoop-specific dispatch
- * inputs read from [dispatchLoopSensorPort]: the [DispatchObservation.unapprovedTrains]
- * list and the block-input lists all come from one atomic [DispatchLoopSensorPort.snapshot]
- * read. With the default (empty) sensor port, [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]
+ * inputs: the snapshot, the [DispatchObservation.unapprovedTrains] list and the block-input
+ * lists all come from one atomic [DispatchLoopSensorPort.snapshot] read of the record the
+ * simulation published for one tick (Issue #1354) — never a second read that could pair a
+ * queue with another tick's snapshot. With the default sensor port (the perception port's
+ * published snapshot and empty dispatch inputs), [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]
  * (via [cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter]) handles
  * this case gracefully (it returns [cz.vutbr.fit.interlockSim.sim.DispatchDecision.NoAction]).
  *
- * @param perceptionPort Read-only sense port for the railway network state
+ * @param perceptionPort Read-only sense port for the railway network state; read only by the
+ *   default [dispatchLoopSensorPort] (its published [NetworkPerceptionPort.snapshot], never a
+ *   capture), so a driver wired with a real sensor port never touches it
  * @param planner        Pluggable planning function; must not retain the
- *   observation beyond the call or mutate simulation state
+ *   observation beyond the call or mutate simulation state. Readable so wiring tests can pin
+ *   which planner a context was given (Issue #1303)
  * @param commandQueue   Thread-safe queue to which decisions are posted;
  *   drained and applied by the sim-thread applier
  * @param controller     Pacing controller; injected into the driver **only** —
@@ -95,28 +104,28 @@ import kotlin.time.TimeSource
  *   [perceptionPort] with no real sim thread to signal from).
  */
 class AgentLoopDriver(
-	private val perceptionPort: NetworkPerceptionPort,
-	private val planner: DispatcherPlanner,
+	perceptionPort: NetworkPerceptionPort,
+	val planner: DispatcherPlanner,
 	private val commandQueue: ActuatorCommandQueue,
 	private val controller: SimulationController,
 	/**
 	 * Sensor port for the current per-tick dispatch-loop observation bundle
 	 * (unapproved-train queue plus inner/outer block inputs) — the "sense" seam onto
-	 * ShuntingLoop-specific inputs. Its [DispatchLoopSensorPort.snapshot] is invoked
-	 * ONCE per [runCycle] on the driver thread during SENSE; the default
-	 * implementation reads the single [ShuntingLoop.getLatestObservation] @Volatile
-	 * reference published atomically by the sim thread. Defaults to a port over an
-	 * empty bundle.
+	 * ShuntingLoop-specific inputs, together with the perception snapshot of the same tick.
+	 * Its [DispatchLoopSensorPort.snapshot] is invoked ONCE per [runCycle] on the driver
+	 * thread during SENSE; in production it reads the single
+	 * [ShuntingLoop.getLatestObservation] @Volatile reference published atomically by the sim
+	 * thread. Defaults to [DefaultDispatchLoopSensorPort.perceptionOnly]: an empty dispatch
+	 * bundle paired with [perceptionPort]'s published snapshot, for wirings with no dispatch
+	 * loop.
 	 *
-	 * [DispatchLoopSensorPort.snapshot] must be called at most once per cycle: it
-	 * bundles all three fields specifically so a reader never mixes fields from two
-	 * different sim ticks — reading the three fields via the per-field accessors
-	 * would defeat that guarantee.
+	 * [DispatchLoopSensorPort.snapshot] must be called at most once per cycle: it bundles the
+	 * whole record — the three lists, the tick stamp and the perception snapshot — specifically
+	 * so a reader never mixes fields from two different sim ticks. Reading the lists via the
+	 * per-field accessors would defeat that guarantee.
 	 */
 	private val dispatchLoopSensorPort: DispatchLoopSensorPort =
-		DefaultDispatchLoopSensorPort {
-			ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
-		},
+		DefaultDispatchLoopSensorPort.perceptionOnly(perceptionPort),
 	private val snapshotSignal: SnapshotSignal? = null,
 	/**
 	 * The [KoogAgentPlanAdapter] driving [planner], when [planner] is (possibly wrapped)
@@ -129,6 +138,11 @@ class AgentLoopDriver(
 	 * planner such as [RuleBasedPlanAdapter]), every cycle is attributed
 	 * [ActionAuthor.RULE_BASED] — safe because a synchronous rule-based planner has no
 	 * internal LLM/fallback blend to distinguish.
+	 *
+	 * When non-null, this driver also installs a reader over its own [dispatchLoopSensorPort]
+	 * as [KoogAgentPlanAdapter.latestObservationReader] (Issue #1343), so the adapter's
+	 * fallback after a failed cycle decides on the latest record published through exactly
+	 * the port [runCycle] senses from.
 	 */
 	private val plannerTickSource: KoogAgentPlanAdapter? = null,
 	/**
@@ -217,6 +231,11 @@ class AgentLoopDriver(
 				onTickRecord?.invoke(record)
 			}
 		)
+		// Issue #1343: after a failed cycle (timeout, exception, agent-creation failure) the
+		// adapter's rule-based fallback decides on the latest record published through this
+		// driver's own sensor port, not on the cycle's stale observation. Reads only, never a
+		// capture (constraint C3 of the F1 paused-clock ruling).
+		plannerTickSource?.latestObservationReader = LatestObservationReader.fromPorts(dispatchLoopSensorPort)
 	}
 
 	private fun pauseUntilNextSnapshot() {
@@ -245,22 +264,26 @@ class AgentLoopDriver(
 	 * In both modes, a short-circuit still calls [SimulationController.awaitIfPaused] so
 	 * pause/step requests are honoured even on a no-op cycle.
 	 *
-	 * @return the fresh [SimulationSnapshot] to process this cycle, or `null` if this call
+	 * Both modes read [dispatchLoopSensorPort] exactly once; the guards test the record's
+	 * [DispatchLoopSnapshot.snapshot] (Issue #1354).
+	 *
+	 * @return the fresh tick-stamped record to process this cycle, or `null` if this call
 	 *   should short-circuit (see [runCycle]'s return-value contract).
 	 */
-	private suspend fun awaitFreshSnapshot(): SimulationSnapshot? {
+	private suspend fun awaitFreshSnapshot(): DispatchLoopSnapshot? {
 		if (snapshotSignal != null) {
 			if (!snapshotSignal.await()) {
 				controller.awaitIfPaused()
 				return null
 			}
-			val snapshot = perceptionPort.snapshot()
-			logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
-			return snapshot
+			val record = dispatchLoopSensorPort.snapshot()
+			logger.debug { "AgentLoopDriver: sensed tick ${record.tick} at simTime=${record.snapshot.simTime}" }
+			return record
 		}
 
-		val snapshot = perceptionPort.snapshot()
-		logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
+		val record = dispatchLoopSensorPort.snapshot()
+		val snapshot = record.snapshot
+		logger.debug { "AgentLoopDriver: sensed tick ${record.tick} at simTime=${snapshot.simTime}" }
 		if (snapshot === SimulationSnapshot.EMPTY) {
 			controller.awaitIfPaused()
 			pauseUntilNextSnapshot()
@@ -278,7 +301,7 @@ class AgentLoopDriver(
 			pauseUntilNextSnapshot()
 			return null
 		}
-		return snapshot
+		return record
 	}
 
 	/**
@@ -292,11 +315,11 @@ class AgentLoopDriver(
 	 * 0. **WAIT** (signal-based pacing only, [snapshotSignal] non-null) — blocks on
 	 *    [SnapshotSignal.await] until the sim thread has published a fresh snapshot for
 	 *    this tick. Skipped entirely in polling mode ([snapshotSignal] `null`).
-	 * 1. **SENSE** — [NetworkPerceptionPort.snapshot] captures a consistent, frozen
-	 *    picture of the current network state.
-	 * 2. **DECIDE** — the [planner] is called with an observation built from the
-	 *    snapshot; [DispatchObservation.unapprovedTrains] and block-input lists come
-	 *    from one atomic [DispatchLoopSensorPort.snapshot] read (SP4.1/SP4.2). Immediately
+	 * 1. **SENSE** — one [DispatchLoopSensorPort.snapshot] read returns the tick-stamped
+	 *    record: a consistent, frozen picture of the network state together with the queue
+	 *    and block inputs of the same tick (SP4.1/SP4.2, Issue #1354).
+	 * 2. **DECIDE** — the [planner] is called with an observation built from that one
+	 *    record; nothing is read a second time. Immediately
 	 *    after this suspending call returns, [isSimActive] is re-checked (Issue #1032): if the
 	 *    simulation stopped while `plan()` was in flight, the decision is discarded and the
 	 *    cycle short-circuits here, skipping ACT and PACE entirely — see [isSimActive]'s KDoc.
@@ -346,21 +369,14 @@ class AgentLoopDriver(
 	suspend fun runCycle(): Boolean {
 		// 0. WAIT + 1. SENSE — see awaitFreshSnapshot's KDoc for the polling-vs-signal-based
 		// pacing contract (this is the single seam where that branch is decided).
-		val snapshot = awaitFreshSnapshot() ?: return false
+		val record = awaitFreshSnapshot() ?: return false
+		val snapshot = record.snapshot
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
-		// unapprovedTrains and block-input lists are populated via a single
-		// DispatchLoopSensorPort.snapshot() read — one atomic port call, so all three
-		// fields come from the same sim tick (published as one @Volatile reference by
-		// ShuntingLoop.iteration() on the sim thread).
-		val tick = dispatchLoopSensorPort.snapshot()
-		val observation =
-			DispatchObservation(
-				snapshot = snapshot,
-				unapprovedTrains = tick.queuedTrains,
-				innerBlockInputs = tick.innerBlockInputs,
-				outerBlockInputs = tick.outerBlockInputs
-			)
+		// The observation is the projection of the one record sensed above — published as one
+		// @Volatile reference by ShuntingLoop.iteration() on the sim thread, so every field is
+		// from the same sim tick (Issue #1354).
+		val observation = record.toDispatchObservation()
 		val planStart = TimeSource.Monotonic.markNow()
 		val decisions = planner.plan(observation)
 		val planWallElapsed = planStart.elapsedNow()

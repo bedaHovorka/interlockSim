@@ -157,9 +157,9 @@ enum class ApplyFailureCode {
 	DROPPED_INVALID,
 
 	/**
-	 * The candidate that came closest was **permanently** impossible, not merely busy: a
-	 * candidate's START semaphore faced away from the requested direction of travel (G4), or a
-	 * switch along a candidate could not be set to the position the route required.
+	 * The request was **permanently** impossible, not merely busy; the impossibility classes are
+	 * listed on
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible].
 	 *
 	 * Maps to `RouteRequestResult.GeometricallyImpossible` (`:core`, read-only).
 	 *

@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
+import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoopHolder
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.AppliedOutcomeChannel
 import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
@@ -31,6 +32,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.RegistryPartialRouteReleaser
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
 import cz.vutbr.fit.interlockSim.dispatcher.planner.CompositeActionOutcomeSink
@@ -44,6 +46,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
+import cz.vutbr.fit.interlockSim.dispatcher.publish
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
@@ -52,6 +55,7 @@ import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
+import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
@@ -62,6 +66,7 @@ import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
+import org.koin.core.parameter.parametersOf
 import org.koin.core.scope.Scope
 import java.time.Duration
 import java.util.UUID
@@ -86,7 +91,47 @@ import java.util.concurrent.Semaphore
 class ExampleRegistry {
 	companion object {
 		private const val END_TIME_NOT_SPECIFIED = "End time of simulation not specified"
+
+		/**
+		 * Praha low traffic (Goal 1B SP10.2, Issue #1366; traffic-simulation-expert ruling): at most
+		 * this many trains admitted at once, of the Station variant's capacity 9.
+		 */
+		internal const val PRAHA_MAX_CONCURRENT_TRAINS = 4
+
+		/** Praha low traffic: the generator stops after this many trains (Issue #1366 ruling). */
+		internal const val PRAHA_MAX_TRAINS = 8
 	}
+
+	/**
+	 * The arrival settings a shunting-loop example hands to its [ShuntingLoop]; [DEFAULT] keeps the
+	 * loop's own defaults (topology capacity, historical seed 0, unlimited trains).
+	 */
+	internal data class LoopTraffic(
+		val maxConcurrentTrains: Int?,
+		val seed: Long,
+		val maxTrains: Int?
+	) {
+		companion object {
+			val DEFAULT = LoopTraffic(maxConcurrentTrains = null, seed = 0L, maxTrains = null)
+		}
+	}
+
+	/**
+	 * The traffic of both Praha arms (Issue #1366). "Low traffic" means: at most
+	 * [PRAHA_MAX_CONCURRENT_TRAINS] concurrent of capacity 9, [PRAHA_MAX_TRAINS] trains, 43 s mean
+	 * exponential arrivals (the `Generator` default). Reason: SP10 low traffic; high traffic is
+	 * Goal 9B, and so is any arrival-process parameter (mean gap, minimum gaps).
+	 *
+	 * The generator seed is the optional `args[3]` (default 0, the historical seed). It depends on
+	 * nothing else, so run i of the LLM arm and run i of the rule-based arm, given the same seed,
+	 * get the same arrival stream (paired runs).
+	 */
+	internal fun prahaTraffic(args: Array<String>): LoopTraffic =
+		LoopTraffic(
+			maxConcurrentTrains = PRAHA_MAX_CONCURRENT_TRAINS,
+			seed = args.getOrNull(3)?.toLong() ?: 0L,
+			maxTrains = PRAHA_MAX_TRAINS
+		)
 
 	/**
 	 * Reads and parses the mandatory end-time argument (`args[2]`) shared by the
@@ -126,15 +171,17 @@ class ExampleRegistry {
 	 * step every example needs before it can build its simulation process.
 	 *
 	 * @param factory The simulation context factory to parse the XML with
+	 * @param xmlPath Classpath location of the network XML; vyhybna by default
 	 * @param block Wiring applied to the fresh context; its receiver is the context
 	 * @return The wired context, ready to run
 	 * @throws ContextCreationException if the resource or the XML is invalid
 	 */
 	private inline fun withExampleContext(
 		factory: SimulationContextFactory,
+		xmlPath: String = BuiltinNetworks.VYHYBNA_XML_PATH,
 		block: DefaultSimulationContext.() -> Unit
 	): SimulationContext =
-		readExampleXml()
+		readExampleXml(xmlPath)
 			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
@@ -155,11 +202,16 @@ class ExampleRegistry {
 	 */
 	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopExample,
-			"shuntingLoopAI" to ::createShuntingLoopAIExample,
-			"shuntingLoopSync" to ::createShuntingLoopSyncExample,
-			"multiTrainLoop" to ::createMultiTrainLoopExample,
-			"threeTrainLoop" to ::createThreeTrainLoopExample
+			ExampleNames.SHUNTING_LOOP to ::createShuntingLoopExample,
+			ExampleNames.SHUNTING_LOOP_AI to ::createShuntingLoopAIExample,
+			ExampleNames.SHUNTING_LOOP_SYNC to ::createShuntingLoopSyncExample,
+			ExampleNames.CERVENY_UJEZD to ::createCervenyUjezdExample,
+			ExampleNames.CERVENY_UJEZD_AI to ::createCervenyUjezdAIExample,
+			ExampleNames.CERVENY_UJEZD_SYNC to ::createCervenyUjezdSyncExample,
+			ExampleNames.PRAHA_HLAVNI_NADRAZI to ::createPrahaHlavniNadraziExample,
+			ExampleNames.PRAHA_HLAVNI_NADRAZI_AI to ::createPrahaHlavniNadraziAIExample,
+			ExampleNames.MULTI_TRAIN_LOOP to ::createMultiTrainLoopExample,
+			ExampleNames.THREE_TRAIN_LOOP to ::createThreeTrainLoopExample
 		)
 
 	/**
@@ -170,10 +222,14 @@ class ExampleRegistry {
 	 */
 	val guiExamples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopGuiExample,
-			"shuntingLoopAI" to ::createShuntingLoopAIGuiExample,
-			"multiTrainLoop" to ::createMultiTrainLoopGuiExample,
-			"threeTrainLoop" to ::createThreeTrainLoopGuiExample
+			ExampleNames.SHUNTING_LOOP to ::createShuntingLoopGuiExample,
+			ExampleNames.SHUNTING_LOOP_AI to ::createShuntingLoopAIGuiExample,
+			ExampleNames.CERVENY_UJEZD to ::createCervenyUjezdGuiExample,
+			ExampleNames.CERVENY_UJEZD_AI to ::createCervenyUjezdAIGuiExample,
+			ExampleNames.PRAHA_HLAVNI_NADRAZI to ::createPrahaHlavniNadraziGuiExample,
+			ExampleNames.PRAHA_HLAVNI_NADRAZI_AI to ::createPrahaHlavniNadraziAIGuiExample,
+			ExampleNames.MULTI_TRAIN_LOOP to ::createMultiTrainLoopGuiExample,
+			ExampleNames.THREE_TRAIN_LOOP to ::createThreeTrainLoopGuiExample
 		)
 
 	/**
@@ -182,7 +238,8 @@ class ExampleRegistry {
 	 * The registry owns this fact because it is the registry that wires the LLM planner.
 	 * Callers must not re-derive it from the name (Issue #839).
 	 */
-	private val llmExamples: Set<String> = setOf("shuntingLoopAI")
+	private val llmExamples: Set<String> =
+		setOf(ExampleNames.SHUNTING_LOOP_AI, ExampleNames.CERVENY_UJEZD_AI, ExampleNames.PRAHA_HLAVNI_NADRAZI_AI)
 
 	/**
 	 * Returns `true` if the example named [name] is driven by the LLM dispatcher.
@@ -215,11 +272,81 @@ class ExampleRegistry {
 	private fun createShuntingLoopExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
+	): SimulationContext = ruleBasedAgentShuntingLoopExample(factory, args, BuiltinNetworks.VYHYBNA_XML_PATH)
+
+	/**
+	 * Shared body of the console rule-based examples on the dispatcher-agent stack — the A4 control
+	 * arm `shuntingLoop` and its Cerveny Ujezd twin `cervenyUjezd` (Issue #1276); they differ only
+	 * in the network XML. Unlike [syncShuntingLoopExample] this wiring declares an
+	 * [AgentDriverLoop], so the run writes the per-run JSON an `aiSweep` control arm needs.
+	 */
+	private fun ruleBasedAgentShuntingLoopExample(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		xmlPath: String,
+		traffic: LoopTraffic = LoopTraffic.DEFAULT
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		return withExampleContext(factory) {
-			val loop = ShuntingLoop(this, endTime)
+		return withExampleContext(factory, xmlPath) {
+			val loop =
+				ShuntingLoop(
+					this,
+					endTime,
+					maxConcurrentTrains = traffic.maxConcurrentTrains,
+					seed = traffic.seed,
+					maxTrains = traffic.maxTrains
+				)
 			wireDispatcherAgent(this, loop, NoOpSimulationController, barrierControlStep = true)
+			setMainProcess(loop)
+		}
+	}
+
+	/**
+	 * Shared body of the console synchronous shunting-loop examples; they differ only in the
+	 * network XML (the same shape the native registry solved with one `createShuntingLoop`).
+	 * The named factories below keep their own 2-arg signatures — the tests pin them by
+	 * reflection (`ExampleLoadingTest`).
+	 */
+	private fun syncShuntingLoopExample(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		xmlPath: String
+	): SimulationContext {
+		val endTime = requireEndTimeArg(args)
+		return withExampleContext(factory, xmlPath) {
+			val loop = ShuntingLoop(this, endTime)
+			wireSynchronousDispatcher(this, loop)
+			setMainProcess(loop)
+		}
+	}
+
+	/**
+	 * Shared body of the GUI shunting-loop examples; they differ only in the network XML.
+	 */
+	private fun guiShuntingLoopExample(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		xmlPath: String,
+		traffic: LoopTraffic = LoopTraffic.DEFAULT
+	): SimulationContext {
+		val endTime = requireEndTimeArg(args)
+		return withExampleContext(factory, xmlPath) {
+			// Enable real-time synchronization for GUI mode with 1x speed multiplier
+			val loop =
+				ShuntingLoop(
+					this,
+					endTime,
+					enableRealTimeSync = true,
+					initialSpeedMultiplier = 1.0,
+					maxConcurrentTrains = traffic.maxConcurrentTrains,
+					seed = traffic.seed,
+					maxTrains = traffic.maxTrains
+				)
+			// SP4.2 (Issue #564): pace the agent loop with the GUI's real-time sync.
+			// The scoped DelegatingSimulationController is handed to the driver here;
+			// gui.SimulationController attaches the live SimulationRunner as its
+			// delegate when the run starts (and detaches it on stop).
+			wireDispatcherAgent(this, loop, scope.get<DelegatingSimulationController>())
 			setMainProcess(loop)
 		}
 	}
@@ -244,14 +371,162 @@ class ExampleRegistry {
 	private fun createShuntingLoopSyncExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val endTime = requireEndTimeArg(args)
-		return withExampleContext(factory) {
-			val loop = ShuntingLoop(this, endTime)
-			wireSynchronousDispatcher(this, loop)
-			setMainProcess(loop)
-		}
-	}
+	): SimulationContext = syncShuntingLoopExample(factory, args, BuiltinNetworks.VYHYBNA_XML_PATH)
+
+	/**
+	 * Creates the Cerveny Ujezd station example for console mode (Goal 1B SP3.2, Issue #1164).
+	 *
+	 * Since Issue #1276 (SP10.1, PR #1282 review) this is the station's rule-based **control arm**
+	 * on the dispatcher-agent `aiSweep` grid: the [createShuntingLoopExample] wiring on
+	 * `cerveny_ujezd.xml` — dispatcher-agent stack, rule-based planner, [NoOpSimulationController],
+	 * per-tick barrier — so the run writes the per-run JSON the grid needs. It keeps exactly the
+	 * `shuntingLoop` to `shuntingLoopAI` shape; the recorder binding is the Koin-bound RULE_BASED
+	 * arm, so no example-level override is needed.
+	 *
+	 * The synchronous, native-parity build stays reachable as [createCervenyUjezdSyncExample] on the
+	 * JVM and as the native `fast-sim` CLI's `cervenyUjezd`.
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createCervenyUjezdExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext = ruleBasedAgentShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
+
+	/**
+	 * Creates the synchronous parity twin of [createCervenyUjezdExample] (Issue #1276, PR #1282
+	 * review): the [createShuntingLoopSyncExample] wiring on `cerveny_ujezd.xml`, exactly what the
+	 * native `fast-sim` CLI's `cervenyUjezd` builds. The console `cervenyUjezd` example runs the
+	 * dispatcher-agent stack (Issue #1276), whose wiring does not exist on the native target, so
+	 * `CrossPlatformParityTest` compares this twin's JVM output against the native run —
+	 * `shuntingLoopSync` plays the same role on vyhybna.
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createCervenyUjezdSyncExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext = syncShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
+
+	/**
+	 * Creates the Cerveny Ujezd station example for the animated GUI (Issue #1164): the rule-based
+	 * dispatcher-agent stack on `cerveny_ujezd.xml` with real-time synchronization, paced by the
+	 * GUI like [createShuntingLoopGuiExample].
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run in GUI
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createCervenyUjezdGuiExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext = guiShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
+
+	/**
+	 * Creates the Cerveny Ujezd station example with the LLM dispatcher for console mode
+	 * (Goal 1B SP10.1, Issue #1276): the [createShuntingLoopAIExample] wiring on `cerveny_ujezd.xml`.
+	 *
+	 * The prompts and tools are the shipped vyhybna-shaped ones, and the planner's rule-based
+	 * fallback keeps the vyhybna admission cap; SP10.1 measures that baseline before SP8 (#1155)
+	 * changes either.
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run in console mode
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createCervenyUjezdAIExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext = llmShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
+
+	/**
+	 * Creates the Cerveny Ujezd station example with the LLM dispatcher for the animated GUI
+	 * (Issue #1276): the [createShuntingLoopAIGuiExample] wiring on `cerveny_ujezd.xml`.
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run in GUI
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createCervenyUjezdAIGuiExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext = llmGuiShuntingLoopExample(factory, args, BuiltinNetworks.CERVENY_UJEZD_XML_PATH)
+
+	/**
+	 * Creates the Praha hlavni nadrazi rule-based control arm for console mode (Goal 1B SP10.2,
+	 * Issue #1366): the [createCervenyUjezdExample] wiring on the Praha Station variant
+	 * (`praha-hlavni-nadrazi-station.xml`), with the low traffic of [prahaTraffic].
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (endTime as args[2], optional generator seed as args[3])
+	 * @return Configured simulation context ready to run
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createPrahaHlavniNadraziExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext =
+		ruleBasedAgentShuntingLoopExample(
+			factory,
+			args,
+			BuiltinNetworks.PRAHA_HLAVNI_NADRAZI_STATION_XML_PATH,
+			prahaTraffic(args)
+		)
+
+	/**
+	 * Creates the Praha hlavni nadrazi LLM arm for console mode (Issue #1366): the
+	 * [createCervenyUjezdAIExample] wiring on the Praha Station variant, with the same traffic as
+	 * its control twin [createPrahaHlavniNadraziExample] ([prahaTraffic]).
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (endTime as args[2], optional generator seed as args[3])
+	 * @return Configured simulation context ready to run in console mode
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createPrahaHlavniNadraziAIExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext =
+		llmShuntingLoopExample(factory, args, BuiltinNetworks.PRAHA_HLAVNI_NADRAZI_STATION_XML_PATH, prahaTraffic(args))
+
+	/**
+	 * Creates the Praha hlavni nadrazi rule-based arm for the animated GUI (Issue #1366), with the
+	 * low traffic of [prahaTraffic].
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (endTime as args[2], optional generator seed as args[3])
+	 * @return Configured simulation context ready to run in GUI
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createPrahaHlavniNadraziGuiExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext =
+		guiShuntingLoopExample(factory, args, BuiltinNetworks.PRAHA_HLAVNI_NADRAZI_STATION_XML_PATH, prahaTraffic(args))
+
+	/**
+	 * Creates the Praha hlavni nadrazi LLM arm for the animated GUI (Issue #1366), with the low
+	 * traffic of [prahaTraffic].
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (endTime as args[2], optional generator seed as args[3])
+	 * @return Configured simulation context ready to run in GUI
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createPrahaHlavniNadraziAIGuiExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext =
+		llmGuiShuntingLoopExample(factory, args, BuiltinNetworks.PRAHA_HLAVNI_NADRAZI_STATION_XML_PATH, prahaTraffic(args))
 
 	/**
 	 * Builds the [RunParameters] recorded for an LLM-arm run from the settings that run actually
@@ -310,8 +585,8 @@ class ExampleRegistry {
 	/**
 	 * Overrides the Koin-scoped [DispatcherRunRecorder] (bound `DispatcherAgentModule`-wide with
 	 * arm = RULE_BASED / empty model) with the LLM_TOOL_CALLING arm and the run's actual
-	 * [RunParameters], so the per-run JSON identifies its own arm. Used by both
-	 * [createShuntingLoopAIExample] (console) and [createShuntingLoopAIGuiExample] (GUI).
+	 * [RunParameters], so the per-run JSON identifies its own arm. Used by both shared helpers,
+	 * [llmShuntingLoopExample] (console) and [llmGuiShuntingLoopExample] (GUI).
 	 * Issue #847 round 4 (R4-5) / #928.
 	 */
 	private fun declareLlmToolCallingRecorder(
@@ -357,26 +632,43 @@ class ExampleRegistry {
 	 *
 	 * @since Issue #873 (SP2c.26 follow-up I2 — headless pacing controller)
 	 */
-
 	private fun createShuntingLoopAIExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
+	): SimulationContext = llmShuntingLoopExample(factory, args, BuiltinNetworks.VYHYBNA_XML_PATH)
+
+	/**
+	 * Shared body of the console LLM examples (`shuntingLoopAI`, and `cervenyUjezdAI` since
+	 * Issue #1276); they differ only in the network XML. See [createShuntingLoopAIExample].
+	 */
+	private fun llmShuntingLoopExample(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		xmlPath: String,
+		traffic: LoopTraffic = LoopTraffic.DEFAULT
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		return withExampleContext(factory) {
+		return withExampleContext(factory, xmlPath) {
 			// Headless: no real-time sync for the ShuntingLoop itself — the simulation
 			// runs at full speed. Pacing only applies to the agent-driver loop below.
-			val loop = ShuntingLoop(this, endTime)
+			val loop =
+				ShuntingLoop(
+					this,
+					endTime,
+					maxConcurrentTrains = traffic.maxConcurrentTrains,
+					seed = traffic.seed,
+					maxTrains = traffic.maxTrains
+				)
 			// Issue #873 (R8 resolution): KoogAgentPlanAdapter is async (isAsynchronous=true);
 			// ThrottlingSimulationController provides the required pacing for
 			// assertPlannerPacingCompatible without `:desktop-ui`.
 			// Capped at AGENT_MAX_SPEED_MULTIPLIER so the agent driver has sufficient wall-clock
 			// time to produce decisions before the simulation advances past the relevant state.
-			val koogAdapter = createLlmPlanner(this)
+			val koogAdapter = createLlmPlanner(this, loop)
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory can retrieve it after the run
 			// ends and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
-			scope.declare(aiPlanner)
+			scope.publish(aiPlanner)
 			// Issue #847 round 4 (R4-5): DispatcherAgentModule binds the recorder with
 			// arm = RULE_BASED and model = "" for EVERY context, with a comment saying LLM arms
 			// would override it — nothing ever did. Left as-is, every LLM run would be written to
@@ -402,7 +694,7 @@ class ExampleRegistry {
 			// built to be paced against. assertPlannerPacingCompatible checks that the
 			// controller TYPE can pace; nothing previously checked that the SAME INSTANCE
 			// reaches the simulation kernel.
-			scope.declare<SimulationController>(pacingController)
+			scope.publish<SimulationController>(pacingController)
 			setMainProcess(loop)
 		}
 	}
@@ -429,19 +721,7 @@ class ExampleRegistry {
 	private fun createShuntingLoopGuiExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
-	): SimulationContext {
-		val endTime = requireEndTimeArg(args)
-		return withExampleContext(factory) {
-			// Enable real-time synchronization for GUI mode with 1x speed multiplier
-			val loop = ShuntingLoop(this, endTime, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
-			// SP4.2 (Issue #564): pace the agent loop with the GUI's real-time sync.
-			// The scoped DelegatingSimulationController is handed to the driver here;
-			// gui.SimulationController attaches the live SimulationRunner as its
-			// delegate when the run starts (and detaches it on stop).
-			wireDispatcherAgent(this, loop, scope.get<DelegatingSimulationController>())
-			setMainProcess(loop)
-		}
-	}
+	): SimulationContext = guiShuntingLoopExample(factory, args, BuiltinNetworks.VYHYBNA_XML_PATH)
 
 	/**
 	 * Creates a shunting loop AI simulation example for GUI mode (SP2b.9, Issue #566).
@@ -471,21 +751,41 @@ class ExampleRegistry {
 	private fun createShuntingLoopAIGuiExample(
 		factory: SimulationContextFactory,
 		args: Array<String>
+	): SimulationContext = llmGuiShuntingLoopExample(factory, args, BuiltinNetworks.VYHYBNA_XML_PATH)
+
+	/**
+	 * Shared body of the GUI LLM examples (`shuntingLoopAI`, and `cervenyUjezdAI` since
+	 * Issue #1276); they differ only in the network XML. See [createShuntingLoopAIGuiExample].
+	 */
+	private fun llmGuiShuntingLoopExample(
+		factory: SimulationContextFactory,
+		args: Array<String>,
+		xmlPath: String,
+		traffic: LoopTraffic = LoopTraffic.DEFAULT
 	): SimulationContext {
 		val endTime = requireEndTimeArg(args)
-		return withExampleContext(factory) {
+		return withExampleContext(factory, xmlPath) {
 			// Enable real-time synchronization for GUI mode with 1x speed multiplier
-			val loop = ShuntingLoop(this, endTime, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
+			val loop =
+				ShuntingLoop(
+					this,
+					endTime,
+					enableRealTimeSync = true,
+					initialSpeedMultiplier = 1.0,
+					maxConcurrentTrains = traffic.maxConcurrentTrains,
+					seed = traffic.seed,
+					maxTrains = traffic.maxTrains
+				)
 			// SP2b.9 (Issue #566): KoogAgentPlanAdapter is async (isAsynchronous=true);
 			// DelegatingSimulationController provides the required pacing for
 			// assertPlannerPacingCompatible.
 			// Issue #817: wrap with MeasuringPlanAdapter to log and measure fallback vs LLM success rate.
-			val koogAdapter = createLlmPlanner(this)
+			val koogAdapter = createLlmPlanner(this, loop)
 			val aiPlanner = MeasuringPlanAdapter(koogAdapter)
 			// Register in scope so callers outside this factory (e.g. Frame's
 			// SimulationController.STOPPED handler) can retrieve it after the run ends
 			// and log a final summary — see MeasuringPlanAdapter.logFinalSummary().
-			scope.declare(aiPlanner)
+			scope.publish(aiPlanner)
 			// Issue #928: DispatcherAgentModule binds the recorder with arm = RULE_BASED and
 			// model = "" for EVERY context. createShuntingLoopAIExample (the console variant)
 			// overrides this since #847 round 4, but this GUI variant never did — so every GUI
@@ -518,16 +818,22 @@ class ExampleRegistry {
 	 * inference timeout and both circuit-breaker knobs, so the usual
 	 * system-property > committed-file > code-constant precedence applies to all of them alike.
 	 *
+	 * The fallback admits up to [loop]'s own capacity ([ShuntingLoop.stationCapacity], Issue #1303),
+	 * the cap the applier enforces and the prompt states, instead of the vyhybna default 2.
+	 *
 	 * @return a fresh [KoogAgentPlanAdapter] with a [RuleBasedDispatcher] fallback and an
 	 *   [LlmCircuitBreaker] (Issue #1058) built from the context's configuration
 	 */
-	private fun createLlmPlanner(context: DefaultSimulationContext): KoogAgentPlanAdapter {
+	private fun createLlmPlanner(
+		context: DefaultSimulationContext,
+		loop: ShuntingLoop
+	): KoogAgentPlanAdapter {
 		val scope = context.scope
 		val runConfig = scope.get<DispatcherRunConfig>()
 		return KoogAgentPlanAdapter(
 			agentFactory = scope.get<KoogAgentFactory>(),
 			context = context,
-			fallbackDispatcher = RuleBasedDispatcher(),
+			fallbackDispatcher = scope.get<Dispatcher> { parametersOf(StationCapacity(loop.stationCapacity)) },
 			inferenceTimeout = Duration.ofSeconds(runConfig.inferenceTimeoutSeconds),
 			commandQueue = scope.get<ActuatorCommandQueue>(),
 			sinkHolder = scope.get<SinkHolder>(),
@@ -551,7 +857,8 @@ class ExampleRegistry {
 	 *   (Goal 10 dispatcher-cannot-approve-trains fix: must be the same instances
 	 *   [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory] injects into its tools —
 	 *   constructing separate ones here left the tools' perception port permanently unrefreshed)
-	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [DispatcherPlanner] (singleton)
+	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [DispatcherPlanner] (a factory
+	 *   given the loop's [StationCapacity], Issue #1303)
 	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [DispatcherPlanner] binding
 	 *   in [dispatcherAgentModule][cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule]
 	 *   (e.g. to an LLM-backed planner, SP3.6) takes effect here too (Goal 10 seam)
@@ -574,10 +881,10 @@ class ExampleRegistry {
 	 * sync (speed multiplier, pause).
 	 *
 	 * [plannerOverride] allows callers to supply a specific [DispatcherPlanner] instance
-	 * instead of resolving the global singleton from the Koin scope.  Pass a
+	 * instead of resolving the Koin binding.  Pass a
 	 * [cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter] here for the
 	 * AI-dispatcher examples (SP2b.9, Issue #566); leave `null` for all rule-based examples
-	 * (falls back to the Koin-scoped singleton).
+	 * (falls back to the Koin [DispatcherPlanner] factory, given [loop]'s capacity — Issue #1303).
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10); SimulationRunner pacing wired in SP4.2 (Issue #564);
 	 *   [DispatcherModeState] + [SemiAutoApprovalGateway] passed to applier in Issue #806 (SP2b.6 follow-up);
@@ -616,9 +923,14 @@ class ExampleRegistry {
 		val actuatorPort = context.scope.get<NetworkActuatorPort>()
 
 		val queue = context.scope.get<ActuatorCommandQueue>()
+		// Issue #1155: the loop's own admission cap (4 on Červený Újezd, 2 on vyhybna). The applier,
+		// the agent's prompt and — since Issue #1303 — the rule-based planner all take this value.
+		val stationCapacity = StationCapacity(loop.stationCapacity)
 		// SP2b.9 (Issue #566): plannerOverride allows callers to supply a specific planner
-		// (e.g. KoogAgentPlanAdapter for AI examples) instead of the global Koin singleton.
-		val planner = plannerOverride ?: context.scope.get<DispatcherPlanner>()
+		// (e.g. KoogAgentPlanAdapter for AI examples) instead of the Koin binding. Issue #1303: the
+		// binding is a factory that takes the capacity explicitly, so each context plans with its
+		// own station's cap and never reads another context's declared StationCapacity.
+		val planner = plannerOverride ?: context.scope.get<DispatcherPlanner> { parametersOf(stationCapacity) }
 		// SP2b.6 (Issue #561): scoped sink that forwards each applied decision to the GUI
 		// DispatcherControlPanel (the "Why this route?" button). Null-tolerant: console runs
 		// resolve the hub but never attach a sink, so onDecisionApplied is a no-op there.
@@ -672,6 +984,9 @@ class ExampleRegistry {
 				// .size on it on the sim thread (inside onControlStep) is safe and gives the live
 				// count after any earlier approvals in the same drained batch.
 				activeTrainCountProvider = { loop.getApprovedTrains().size },
+				// Issue #1155: the station's own cap (4 on Červený Újezd), not vyhybna's default 2;
+				// declared below for the agent's prompt too.
+				maxConcurrentTrains = loop.stationCapacity,
 				onBlockTransition = loop::incrementBlockTransition,
 				onFailedReservation = loop::incrementFailedReservation,
 				onDecisionApplied = decisionListener,
@@ -702,7 +1017,10 @@ class ExampleRegistry {
 		// control ticks were coalesced away while the driver was busy inside an inference. That
 		// number is the whole of round 3's unreconciled "301 control ticks vs 20-29 planner cycles".
 		val driverSignal = DefaultSnapshotSignal()
-		context.scope.declare(driverSignal)
+		context.scope.publish(driverSignal)
+		// Issue #1155: KoogAgentFactory reads this when it builds the agent, so the prompt and the
+		// cycle message state the cap this loop enforces (the applier above uses the same value).
+		context.scope.publish(stationCapacity)
 
 		val driver =
 			AgentLoopDriver(
@@ -731,7 +1049,7 @@ class ExampleRegistry {
 		// wiring above — drop `isSimActive = loop::isSimActive` and the driver reverts to its
 		// `{ true }` default, which flips that test red instead of silently disabling the
 		// discard guard in production.
-		context.scope.declare(driver)
+		context.scope.publish(driver)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
 		// The signal fires from controlStepListener — NOT from snapshotCaptureHook — because
@@ -763,7 +1081,7 @@ class ExampleRegistry {
 						pathReservationService = context.getRoutingServices().getPathReservationService()
 					)
 			)
-		context.scope.declare(orphanSweeper)
+		context.scope.publish(orphanSweeper)
 
 		// Issue #907: per-tick semaphore used when barrierControlStep = true to lock-step the
 		// sim thread with the driver thread. One permit is released by the driver after each
@@ -790,7 +1108,8 @@ class ExampleRegistry {
 		// about this thread — ticked on to the requested end time and the run still exited 0. Round
 		// 3's run 1 went quiet after simTime=216s for exactly this reason. AgentDriverLoop counts and
 		// logs each failure, survives transient ones, and gives up loudly on a persistent one.
-		// Declared in scope so the end-of-run summary reports its counters.
+		// Installed in the context's own AgentDriverLoopHolder so the end-of-run summary reports its
+		// counters. Never Scope.declare it: a declared instance leaks to later contexts (Issue #1317).
 		val driverLoop =
 			AgentDriverLoop(
 				isActive = loop::isSimActive,
@@ -828,7 +1147,7 @@ class ExampleRegistry {
 						driver::runCycle
 					}
 			)
-		context.scope.declare(driverLoop)
+		context.scope.get<AgentDriverLoopHolder>().install(driverLoop)
 		loop.agentDriverAction = { driverLoop.run() }
 	}
 

@@ -25,8 +25,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * `PathReservationRegistry` releases a reservation in exactly three ways: a train's `Tail`
  * physically leaving a block it entered (`unregisterBlock`), the train's journey completing
  * (`releaseTrainReservations`), or an explicit `releasePath`. Every one of them requires the train
- * to *consume* the route. A route that is granted and never travelled is therefore permanent — there
- * is no sweeper, timeout or TTL anywhere in the registry.
+ * to *consume* the route. A route that is granted and never travelled was therefore permanent until
+ * Issue #1174 (below): the registry itself has no sweeper, timeout or TTL.
  *
  * ## Registration timestamps are a fact, not this sweeper's rule (Issue #975)
  *
@@ -40,6 +40,36 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * signals in front of it thrown to STOP, while it is making progress. The held-set-unchanged rule
  * below is the progress signal — it restarts on every block the train enters — and it also keeps
  * the Issue #1025 approach-lock postponement, where a booked tail block restarts the clock.
+ *
+ * ## The kernel now expires the un-travelled whole-route case too (Issue #1174)
+ *
+ * Since Issue #1174 `:core` releases a holding whose blocks are all RESERVED and un-entered once the
+ * train's newest block registration is `DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS`
+ * (the same 60 simulated seconds as [DEFAULT_STALE_AFTER_SIM_SECONDS]) old, through the same
+ * `releasePathDetailed` this sweeper reaches via [NetworkActuatorPort.releaseRouteDetailed]. Its age
+ * judges only trains that occupy nothing, so the progress argument above does not apply to it. It
+ * runs at the top of every `reservePath` and once per loop tick, before the control step that calls
+ * [sweep], and its clock starts at the registration rather than at the first sweep that saw the
+ * holding, so it fires no later than this sweeper would. [staleReleaseCount] therefore falls toward
+ * zero in AI runs; phantom owners stay this sweeper's. A sweep that finds a holding the kernel has
+ * half-released (approach lock deferral) releases the remainder through the same idempotent call, so
+ * the two never conflict -- they only share the work.
+ *
+ * Since Issue #1220 the kernel also frees the RESERVED tail of a train that stands on part of its
+ * route, once the train has made no physical progress for the same TTL: its stall clock restarts on
+ * any change of the occupied blocks, the RESERVED blocks or the occupant's `distanceToSemaphore()`
+ * reading (by more than 1 cm), so a train moving slowly inside one long block keeps its tail. Its
+ * clock restarts on everything that restarts this sweeper's tail clock (a changed RESERVED tail) and
+ * on more, so it never starts earlier: the kernel acts **no earlier** than this sweeper. It acts on
+ * the same tick only when the train stood still, on the same blocks, from the moment its tail last
+ * changed -- and then first, because its loop tick runs before the control step that calls [sweep].
+ * A real train brakes to a stand after its last block entry, so its reading keeps changing after
+ * this sweeper's clock has started, and with this sweeper wired the sweeper usually still reclaims a
+ * stopped train's tail first; [partialReleaseCount] does not fall in general. Phase 2 is the
+ * guarantee for the runs without this sweeper (`:fast-sim`, `multiTrainLoop`, the rule-based loops).
+ * This sweeper alone also reclaims the tail of a train whose held set is unchanged but which is still
+ * moving (it has no progress reading); the kernel does not. A tail whose PathInfo cannot be trimmed
+ * after the occupied head (a switch right after it) is kept by both.
  *
  * `MultiTrainLoop` runs `BlockResourceRegistry.releaseFreeResources()` once per iteration as its
  * safety net. `ShuntingLoop` — the loop `shuntingLoopAI` runs — has none, and could not use that
@@ -64,28 +94,21 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## The occupied-block rule is a safety constraint, not conservatism
  *
- * [NetworkActuatorPort.releaseRoute] delegates to `DefaultPathReservationService.releasePath`,
- * which ends in a `finally` calling `registry.unregister(trainId)` — that clears **every** block
- * registered to the train, including one it is physically standing on. Releasing a train that
- * occupies a block would therefore tell the registry that block is free while a train sits on it,
- * and the next `request_route` could route another train straight into it. The occupied-block check
- * is what prevents that, and it must not be relaxed to catch more cases.
+ * [NetworkActuatorPort.releaseRouteDetailed] goes through `RouteReleaser.releasePathDetailed`
+ * (approach locking on), which itself keeps blocks the train occupies. The whole-route release
+ * below is still reserved for a holding with no occupied block, so a train standing on a block is
+ * never treated as an abandoned route: the registry must not call a block free while a train sits
+ * on it, or the next `request_route` could route another train straight into it. The
+ * occupied-block check must not be relaxed to catch more cases.
  *
- * ## Known gap: a stopped train holding the next block reserved
+ * ## A stopped train holding the next block reserved (closed)
  *
- * The case this sweeper does **not** reclaim, measured live in round 3: a train stopped on a block
- * it occupies while holding the next block RESERVED and unoccupied ahead of it — run 1 ended with
- * `Train #1` occupying `kB` and holding `kA` reserved, and 301 sweeps reclaimed nothing. That
- * holding is un-travelled and is blocking other trains, but the train is also legitimately on the
- * network, so the all-or-nothing `releaseRoute` above cannot be used.
- *
- * Reclaiming it needs a **partial** release: dropping only the un-travelled blocks while leaving
- * the occupied one registered. `PathReservationService.unregisterBlock` is public and refuses
- * occupied blocks by its own precondition, so the block-level half is safe — but it skips
- * `cancelPathSetup` and switch unlocking, so the signals and switches of the cancelled portion
- * would stay set. Whether that is an acceptable interlocking state is a railway-domain question,
- * not a coding one, and per TEAM.md it belongs to the traffic-simulation-expert. Deliberately left
- * open rather than guessed at.
+ * Measured live in round 3: a train stopped on a block it occupies while holding the next block
+ * RESERVED and unoccupied ahead of it (run 1 ended with `Train #1` occupying `kB` and holding `kA`
+ * reserved, and 301 sweeps reclaimed nothing). The [partialReleaser] (R4-3), when wired, drops only
+ * the un-travelled tail and leaves the occupied block registered, driving the signals that governed
+ * the released blocks to STOP; Issue #1220 adds the same tail expiry to the kernel. See
+ * `evaluateOccupyingTrain`.
  *
  * Queued trains are swept on the same threshold as active ones. The system prompt tells the model a
  * queued train "stays parked, holding its reservation indefinitely, until you separately call

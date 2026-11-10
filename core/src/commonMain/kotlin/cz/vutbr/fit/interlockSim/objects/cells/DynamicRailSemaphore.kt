@@ -223,7 +223,7 @@ sealed class DynamicRailSemaphore(
 	 * granted, block/switch-reserved route through such a boundary could never actually be
 	 * traversed -- `PathReservationService.reservePath` would report `Success` while the
 	 * train stalled forever at that one semaphore (see
-	 * `PathReservationServiceTest.SignalConfigurationTests`, "reservePath configures every
+	 * `PathReservationSignalConfigurationTest`, "reservePath configures every
 	 * semaphore along a full InOut-to-InOut path, not just START"). Both segment orderings
 	 * are therefore accepted here; only a genuinely wrong (non-adjacent) segment pairing is
 	 * rejected.

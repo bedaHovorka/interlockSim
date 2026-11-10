@@ -45,9 +45,10 @@ import java.time.format.DateTimeFormatter
  * | Section | Content |
  * |---|---|
  * | Arm Comparison | one row per arm, headline metrics |
+ * | Logged FATAL Simulation Exceptions | FATAL runs per arm, then each run that logged one |
  * | Per-Run Detail | one row per run, outcome histogram |
  * | Failure Modes | [RejectionCode] × arm — most actionable for prompt iteration |
- * | Apply Failures | [ApplyFailureCode] × arm |
+ * | Apply Failures | [ApplyFailureCode] × arm, then stale-origin refusals after a silent cycle per arm |
  * | Author Attribution | [ActionAuthor] × arm |
  * | Latency | arm × tick period, p50/p95/max and deadline-miss count |
  * | Parameter Sweep | one row per [RunParameters] cell |
@@ -117,7 +118,7 @@ class RunReportAggregator(
 		private const val HYGIENE_TABLE_COLUMNS = 24
 
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
-		private const val OUTCOMES_TABLE_COLUMNS = 19
+		private const val OUTCOMES_TABLE_COLUMNS = 20
 
 		/**
 		 * Column headers of the "Arm Comparison" table — the single source for both its header row
@@ -399,6 +400,11 @@ class RunReportAggregator(
 	 * [DispatcherRunSnapshot.loggedFatalSimExceptionCount] — this section exists so a human
 	 * deciding whether to keep or discard a run's data has the fact in front of them, not buried
 	 * in a per-run log file nobody re-opens.
+	 *
+	 * Opens with one row per arm (Issue #1296) — runs with at least one FATAL, runs whose log was
+	 * scanned, and runs whose log was not — so an arm's FATAL count is read next to its A4 verdict
+	 * without adding up the per-run rows. "Not scanned" is kept apart from "scanned clean": absent
+	 * is not zero (see [DispatcherRunSnapshot.loggedFatalSimExceptionCount]).
 	 */
 	private fun appendFatalExceptions(
 		sb: StringBuilder,
@@ -407,6 +413,16 @@ class RunReportAggregator(
 		val flagged = reports.flatMap { it.snapshots }.filter { (it.loggedFatalSimExceptionCount ?: 0L) > 0L }
 
 		sb.appendLine("## Logged FATAL Simulation Exceptions")
+		sb.appendLine()
+		sb.appendLine("| Arm | Runs | Runs with FATAL | Runs scanned | Runs not scanned |")
+		sb.appendLine("|---|---|---|---|---|")
+		for (r in reports) {
+			val scanned = r.snapshots.mapNotNull { it.loggedFatalSimExceptionCount }
+			sb.appendLine(
+				"| ${r.arm} | ${r.runCount} | ${scanned.count { it > 0L }} | ${scanned.size} | " +
+					"${r.runCount - scanned.size} |"
+			)
+		}
 		sb.appendLine()
 		if (flagged.isEmpty()) {
 			sb.appendLine(
@@ -485,6 +501,35 @@ class RunReportAggregator(
 						"${r.applyFailureCounts[code] ?: 0L}"
 					} + " |"
 			sb.appendLine(row)
+		}
+		sb.appendLine()
+		appendStaleOriginRefusals(sb, reports)
+	}
+
+	/**
+	 * One row per arm counting the [ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS] refusals of decisions a
+	 * silent non-idle LLM cycle emitted (Issue #1365, part 1 of #1355) — see
+	 * [DispatcherRunSnapshot.staleOriginRefusalsAfterSilentCycle] for what is counted. Refusals and
+	 * runs with a refusal are summed over the runs that measured the count; "Runs not measured" (a
+	 * run JSON written before the field existed, or an aborted run) is kept apart, and an arm
+	 * without any measured run shows `n/a`, not `0`: absent is not zero.
+	 */
+	private fun appendStaleOriginRefusals(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
+		sb.appendLine("### Stale-Origin Refusals After a Silent Non-Idle LLM Cycle")
+		sb.appendLine()
+		sb.appendLine("| Arm | Runs | Refusals | Runs with a refusal | Runs measured | Runs not measured |")
+		sb.appendLine("|---|---|---|---|---|---|")
+		for (r in reports) {
+			val measured = r.snapshots.mapNotNull { it.staleOriginRefusalsAfterSilentCycle }
+			val refusals = if (measured.isEmpty()) "n/a" else measured.sum().toString()
+			val runsWithRefusal = if (measured.isEmpty()) "n/a" else measured.count { it > 0L }.toString()
+			sb.appendLine(
+				"| ${r.arm} | ${r.runCount} | $refusals | $runsWithRefusal | ${measured.size} | " +
+					"${r.runCount - measured.size} |"
+			)
 		}
 		sb.appendLine()
 	}
@@ -676,7 +721,7 @@ class RunReportAggregator(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
 				"Breaker Threshold | Breaker Cooldown s | " +
 				"Runs | Journeys completed | Trains entered | Trains exited (authoritative) | Max concurrent | " +
-				"Block transitions | Conflicts | Failed reservations |"
+				"Block transitions | Conflicts | Failed reservations | Unresolved at run end |"
 		)
 		sb.appendLine("|" + "---|".repeat(OUTCOMES_TABLE_COLUMNS))
 
@@ -690,7 +735,8 @@ class RunReportAggregator(
 					"| ${fmtNullableLong(outcome.maxConcurrentTrains)} " +
 					"| ${fmtNullableLong(outcome.blockTransitions)} " +
 					"| ${fmtNullableLong(outcome.conflicts)} " +
-					"| ${fmtNullableLong(outcome.failedReservations)} |"
+					"| ${fmtNullableLong(outcome.failedReservations)} " +
+					"| ${fmtNullableLong(outcome.unresolvedAtRunEnd)} |"
 			)
 		}
 		sb.appendLine()
@@ -743,10 +789,18 @@ class RunReportAggregator(
 		)
 		sb.appendLine(
 			"- **Journeys completed / Trains entered / Trains exited / Max concurrent / Block transitions / " +
-				"Conflicts / Failed reservations** — RailwayOutcome fields, summed across the cell's runs " +
+				"Conflicts / Failed reservations / Unresolved at run end** — RailwayOutcome fields, summed " +
+				"across the cell's runs " +
 				"(max, for \"max concurrent\"), skipping any run where the figure was not measured. `n/a` " +
 				"when no run in the cell measured it — never rendered as `0`, which would misrepresent " +
 				"\"not measured\" as \"measured as none\"."
+		)
+		sb.appendLine(
+			"- **Conflicts / Unresolved at run end (issue #1280)** — **Conflicts** counts only double-bookings " +
+				"the reservation registry caught while the run was live. **Unresolved at run end** counts trains " +
+				"still waiting for a block another train held when the run stopped: a deadlock or starvation " +
+				"sign, or queueing an end-time cutoff interrupted, never a double-booking. Runs written before " +
+				"schema version 10 counted both in Conflicts and show `n/a` for Unresolved at run end."
 		)
 		sb.appendLine(
 			"- **Ranking (issue #906)** — both tables are ranked by **Trains exited**, descending, cells " +
@@ -776,7 +830,8 @@ class RunReportAggregator(
 			maxConcurrentTrains = reduceOrNull(outcomes.map { it.maxConcurrentTrains }) { it.max() },
 			blockTransitions = reduceOrNull(outcomes.map { it.blockTransitions }) { it.sum() },
 			conflicts = reduceOrNull(outcomes.map { it.conflicts }) { it.sum() },
-			failedReservations = reduceOrNull(outcomes.map { it.failedReservations }) { it.sum() }
+			failedReservations = reduceOrNull(outcomes.map { it.failedReservations }) { it.sum() },
+			unresolvedAtRunEnd = reduceOrNull(outcomes.map { it.unresolvedAtRunEnd }) { it.sum() }
 		)
 	}
 

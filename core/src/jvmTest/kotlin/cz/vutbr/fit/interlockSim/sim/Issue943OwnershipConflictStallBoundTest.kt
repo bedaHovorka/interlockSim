@@ -15,10 +15,12 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.testutil.FirstTrainOwnershipConflict
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ORIGIN_ROUTE_EXTENSION_FRAGMENT
+import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
-import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
@@ -27,7 +29,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 
 private val logger = KotlinLogging.logger {}
 
@@ -54,7 +55,7 @@ private val logger = KotlinLogging.logger {}
  *
  * ## How the scenario is produced
  *
- * The stalling `TrainNavigationService` decorator picks the first train to query from a
+ * [FirstTrainOwnershipConflict] picks the first train to query from a
  * non-`DynamicInOut` separator — i.e. the first train that is under way and holding track — and
  * returns [PathResult.OwnershipConflict] for that one train from then on. Every other train, and
  * that train's own queries at its entry `InOut`, get the real service, so the layout keeps
@@ -118,24 +119,12 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		// the rest of the layout goes on working and simulated time keeps advancing around the
 		// stalled one. That is the faithful shape of #943: one train's route terminus is
 		// rear-facing and never extended, while the dispatcher serves everyone else normally.
-		val stalledTrainId = AtomicReference<String?>(null)
-		val stallingNav =
-			decoratingTrainNavigationService(realNav) { trainId, separator ->
-
-				if (separator !is DynamicInOut) {
-					stalledTrainId.compareAndSet(null, trainId)
-				}
-				return@decoratingTrainNavigationService if (trainId == stalledTrainId.get() && separator !is DynamicInOut) {
-					PathResult.OwnershipConflict
-				} else {
-					realNav.findReservedPathForTrain(trainId, separator)
-				}
-			}
+		val stall = FirstTrainOwnershipConflict(realNav)
 
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
-		val stallingContext = NavigationDecoratingContext(context, stallingNav) { capturedErrors.add(it) }
+		val conflictEnv = NavigationDecoratingContext(context, stall.navigation) { capturedErrors.add(it) }
 
-		val loop = runShuntingLoop(context, END_TIME, env = stallingContext)
+		val loop = runShuntingLoop(context, END_TIME, env = conflictEnv)
 
 		logger.info {
 			"Issue943 bound test complete: trainsEntered=${loop.getTrainsEntered()}, " +
@@ -157,8 +146,8 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 	 *
 	 * ## Why a second :core test (coverage anchor)
 	 *
-	 * The `atOrigin == true` branches of `waitForPathOrReportStall` (the WARN at `Train.kt:290-292`
-	 * and the `errorStop` at `303-304`) are exercised at runtime by `:dispatcher-agent`'s
+	 * The `atOrigin == true` branches of `waitForPathOrReportStall` (its WARN arm and its errorStop
+	 * arm) are exercised at runtime by `:dispatcher-agent`'s
 	 * `OwnershipConflictStallWarningTest.originStallWarningNamesTheTrainOnce`, but that coverage is
 	 * attributed to `:dispatcher-agent`'s JaCoCo report, whose `classDirectories` are scoped to its
 	 * own classes. `Train.kt` lives in `:core`, and Sonar reads only `:core`'s JaCoCo report for it,
@@ -167,14 +156,14 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 	 * where Sonar looks — the same reason [MidJourneyNoPathErrorStopRegressionTest] anchors the
 	 * mid-journey `NoTopologicalPath` bound alongside its dispatcher-agent twin.
 	 *
-	 * The WARN code (`290-292`) executes for coverage even though this test does not assert the log
+	 * The WARN arm executes for coverage even though this test does not assert the log
 	 * line: `:core`'s test source set has logback as `runtimeOnly` only, which is why the WARN
 	 * wording itself is pinned in `:dispatcher-agent`.
 	 *
 	 * Asserts:
 	 * 1. A train was admitted (so the stall is genuinely at the entry InOut, not a no-admission no-op).
-	 * 2. `env.errorStop` fired with the **origin** wording (`"no entry route reserved"`), distinct
-	 *    from the mid-journey `"no route extension"` wording the test above asserts.
+	 * 2. `env.errorStop` fired with the **origin** wording ([ORIGIN_ROUTE_EXTENSION_FRAGMENT]),
+	 *    distinct from the mid-journey [ROUTE_EXTENSION_FRAGMENT] wording the test above asserts.
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
@@ -188,24 +177,12 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		// DynamicInOut` — so it never leaves origin (`current` stays null, the `atOrigin` branch).
 		// isPathReservedForTrain still delegates to the real service, so the train IS admitted; its
 		// Front then sees OwnershipConflict at the entry InOut and parks in waitForPathOrReportStall.
-		val stalledTrainId = AtomicReference<String?>(null)
-		val stallingNav =
-			decoratingTrainNavigationService(realNav) { trainId, separator ->
-
-				if (separator is DynamicInOut) {
-					stalledTrainId.compareAndSet(null, trainId)
-				}
-				return@decoratingTrainNavigationService if (trainId == stalledTrainId.get() && separator is DynamicInOut) {
-					PathResult.OwnershipConflict
-				} else {
-					realNav.findReservedPathForTrain(trainId, separator)
-				}
-			}
+		val stall = FirstTrainOwnershipConflict(realNav, heldAt = { it is DynamicInOut })
 
 		val capturedErrors = CopyOnWriteArrayList<Throwable>()
-		val stallingContext = NavigationDecoratingContext(context, stallingNav) { capturedErrors.add(it) }
+		val conflictEnv = NavigationDecoratingContext(context, stall.navigation) { capturedErrors.add(it) }
 
-		val loop = runShuntingLoop(context, END_TIME, env = stallingContext)
+		val loop = runShuntingLoop(context, END_TIME, env = conflictEnv)
 
 		logger.info {
 			"Issue943 origin bound test complete: trainsEntered=${loop.getTrainsEntered()}, " +
@@ -228,11 +205,5 @@ class Issue943OwnershipConflictStallBoundTest : KoinTestBase() {
 		 * without the bound burns the whole span, which is what the RED state looks like.
 		 */
 		const val END_TIME: Long = 200L
-
-		/** Distinctive fragment of the never-extended-route `errorStop` message. */
-		const val ROUTE_EXTENSION_FRAGMENT = "no route extension"
-
-		/** Distinctive fragment of the never-admitted-origin `errorStop` message (distinct from mid-journey). */
-		const val ORIGIN_ROUTE_EXTENSION_FRAGMENT = "no entry route reserved"
 	}
 }

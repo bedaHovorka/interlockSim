@@ -28,8 +28,9 @@ import java.util.concurrent.atomic.AtomicLong
  *    ([cz.vutbr.fit.interlockSim.ExampleRegistry.wireDispatcherAgent]) and the
  *    determinism-test wiring fire from `controlStepListener` for exactly this reason.
  * 2. Driver thread (inside [AgentLoopDriver.runCycle]): [await] (blocks until step 1
- *    above runs, or until the bounded timeout — see below) → `perceptionPort.snapshot()`
- *    → decide → post
+ *    above runs, or until the bounded timeout — see below) → one
+ *    [cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort.snapshot] read of the
+ *    tick-stamped record (Issue #1354) → decide → post
  *
  * [signal] uses "at-most-one-pending" semantics: if the driver has not yet consumed a
  * previous signal by the time a new one arrives, the stale, unconsumed permit is

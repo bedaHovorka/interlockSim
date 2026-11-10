@@ -57,6 +57,7 @@ val coroutinesVersion: String by project
 val koogVersion: String by project
 val serializationVersion: String by project
 val mockwebserverVersion: String by project
+val ktorVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -103,6 +104,16 @@ dependencies {
     // and CancellationException. Available transitively via koog-agents, but listed
     // explicitly here for compile-time clarity and stable versioning.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
+
+    // compileOnly: the Ktor CIO engine pin for the Ollama client (Issue #1341). The full
+    // rationale — why CIO, why compile-only, what the ServiceLoader order means — lives in
+    // CancellableOllamaHttpClientFactory's KDoc. Keep $ktorVersion in step with the Ktor version
+    // koog's Ollama client ships (no new library reaches the runtime; koog's transitive copy runs).
+    // The tests need no CIO symbol at compile time (the pin test reads the engine's runtime class
+    // name over reflection); if one ever does, add a testCompileOnly twin of this line — never a
+    // test dependency, which would reorder Ktor's ServiceLoader on the test classpath and blind
+    // the un-pinned mutants of the pin tests.
+    compileOnly("io.ktor:ktor-client-cio:$ktorVersion")
 
     // Test dependencies
     testImplementation(project(":core-test"))

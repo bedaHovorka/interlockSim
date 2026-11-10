@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.context.ThrottlingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
 import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -77,7 +78,7 @@ class ExampleLoadingTest : KoinTestBase() {
 			val registry = get<ExampleRegistry>()
 
 			// Act
-			val hasShuntingLoop = registry.examples.containsKey("shuntingLoop")
+			val hasShuntingLoop = registry.examples.containsKey(ExampleNames.SHUNTING_LOOP)
 
 			// Assert
 			assertThat(hasShuntingLoop).isTrue()
@@ -95,12 +96,17 @@ class ExampleLoadingTest : KoinTestBase() {
 			val exampleNames = registry.getAvailableExamples()
 
 			// Assert
-			assertThat(exampleNames).hasSize(5)
-			assertThat(exampleNames.contains("shuntingLoop")).isTrue()
-			assertThat(exampleNames.contains("shuntingLoopAI")).isTrue()
-			assertThat(exampleNames.contains("shuntingLoopSync")).isTrue()
-			assertThat(exampleNames.contains("multiTrainLoop")).isTrue()
-			assertThat(exampleNames.contains("threeTrainLoop")).isTrue()
+			assertThat(exampleNames).hasSize(10)
+			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP_AI)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.SHUNTING_LOOP_SYNC)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.MULTI_TRAIN_LOOP)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.THREE_TRAIN_LOOP)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_AI)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.CERVENY_UJEZD_SYNC)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.PRAHA_HLAVNI_NADRAZI)).isTrue()
+			assertThat(exampleNames.contains(ExampleNames.PRAHA_HLAVNI_NADRAZI_AI)).isTrue()
 		}
 	}
 
@@ -144,7 +150,7 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `runExample with insufficient arguments catches exception`() {
 			// Arrange
 			val main = get<Main>()
-			val args = arrayOf("example", "shuntingLoop") // Missing endTime
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP) // Missing endTime
 
 			// Act - should catch ContextCreationException and log it
 			main.runExample(args)
@@ -159,7 +165,7 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `runExample with non-numeric endTime catches exception`() {
 			// Arrange
 			val main = get<Main>()
-			val args = arrayOf("example", "shuntingLoop", "notANumber")
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP, "notANumber")
 
 			// Act - should catch NumberFormatException and log it
 			main.runExample(args)
@@ -178,7 +184,7 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `shuntingLoop factory can be invoked via registry`() {
 			// Arrange
 			val registry = get<ExampleRegistry>()
-			val factory = registry.examples["shuntingLoop"]
+			val factory = registry.examples[ExampleNames.SHUNTING_LOOP]
 
 			// Act & Assert
 			assertThat(factory).isNotNull()
@@ -199,7 +205,7 @@ class ExampleLoadingTest : KoinTestBase() {
 				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
-			val args = arrayOf("example", "shuntingLoop") // Missing endTime
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP) // Missing endTime
 
 			// Act & Assert
 			assertFailure {
@@ -214,7 +220,7 @@ class ExampleLoadingTest : KoinTestBase() {
 		}
 
 		/**
-		 * All five shunting-loop factories share [ExampleRegistry.requireEndTimeArg]; each must
+		 * All ten shunting-loop factories share [ExampleRegistry.requireEndTimeArg]; each must
 		 * throw [ContextCreationException] with the exact shared message when `endTime` is missing
 		 * (PR #983 follow-up: the S1192 literal fix made the message a single constant, so every
 		 * throw site must agree on it byte-for-byte).
@@ -226,7 +232,12 @@ class ExampleLoadingTest : KoinTestBase() {
 				"createShuntingLoopSyncExample",
 				"createShuntingLoopAIExample",
 				"createShuntingLoopGuiExample",
-				"createShuntingLoopAIGuiExample"
+				"createShuntingLoopAIGuiExample",
+				"createCervenyUjezdExample",
+				"createCervenyUjezdGuiExample",
+				"createCervenyUjezdAIExample",
+				"createCervenyUjezdAIGuiExample",
+				"createCervenyUjezdSyncExample"
 			]
 		)
 		fun `all shunting-loop factories require endTime with the exact shared message`(methodName: String) {
@@ -240,7 +251,7 @@ class ExampleLoadingTest : KoinTestBase() {
 				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
-			val args = arrayOf("example", "shuntingLoop") // Missing endTime
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP) // Missing endTime
 
 			// Act & Assert
 			assertFailure {
@@ -269,7 +280,7 @@ class ExampleLoadingTest : KoinTestBase() {
 				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
-			val args = arrayOf("example", "shuntingLoop", "notANumber")
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP, "notANumber")
 
 			// Act & Assert
 			assertFailure {
@@ -295,7 +306,7 @@ class ExampleLoadingTest : KoinTestBase() {
 				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
-			val args = arrayOf("example", "shuntingLoop", "100")
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP, "100")
 
 			// Act & Assert
 			try {
@@ -332,13 +343,13 @@ class ExampleLoadingTest : KoinTestBase() {
 				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
-			val args = arrayOf("exampleGui", "shuntingLoopAI", "100")
+			val args = arrayOf("exampleGui", ExampleNames.SHUNTING_LOOP_AI, "100")
 
 			try {
 				val result = createMethod.invoke(registry, factory, args)
 				val context = result as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 				assertThat(
-					context.scope.getOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
+					context.scope.publishedOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
 				).isNotNull()
 			} catch (e: java.lang.reflect.InvocationTargetException) {
 				val cause = e.cause
@@ -372,13 +383,13 @@ class ExampleLoadingTest : KoinTestBase() {
 				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
-			val args = arrayOf("example", "shuntingLoopAI", "100")
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP_AI, "100")
 
 			try {
 				val result = createMethod.invoke(registry, factory, args)
 				val context = result as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 				assertThat(
-					context.scope.getOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
+					context.scope.publishedOrNull<cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter>()
 				).isNotNull()
 			} catch (e: java.lang.reflect.InvocationTargetException) {
 				val cause = e.cause
@@ -460,7 +471,18 @@ class ExampleLoadingTest : KoinTestBase() {
 			// Assert
 			assertThat(sortedNames.size > 0).isTrue()
 			assertThat(sortedNames).isEqualTo(
-				listOf("multiTrainLoop", "shuntingLoop", "shuntingLoopAI", "shuntingLoopSync", "threeTrainLoop")
+				listOf(
+					ExampleNames.CERVENY_UJEZD,
+					ExampleNames.CERVENY_UJEZD_AI,
+					ExampleNames.CERVENY_UJEZD_SYNC,
+					ExampleNames.MULTI_TRAIN_LOOP,
+					ExampleNames.PRAHA_HLAVNI_NADRAZI,
+					ExampleNames.PRAHA_HLAVNI_NADRAZI_AI,
+					ExampleNames.SHUNTING_LOOP,
+					ExampleNames.SHUNTING_LOOP_AI,
+					ExampleNames.SHUNTING_LOOP_SYNC,
+					ExampleNames.THREE_TRAIN_LOOP
+				)
 			)
 		}
 
@@ -473,7 +495,7 @@ class ExampleLoadingTest : KoinTestBase() {
 			val registry = get<ExampleRegistry>()
 
 			// Act
-			val hasShuntingLoopAI = registry.guiExamples.containsKey("shuntingLoopAI")
+			val hasShuntingLoopAI = registry.guiExamples.containsKey(ExampleNames.SHUNTING_LOOP_AI)
 
 			// Assert
 			assertThat(hasShuntingLoopAI).isTrue()
@@ -498,9 +520,9 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `shuntingLoopAI is in both console and GUI examples`() {
 			val registry = get<ExampleRegistry>()
 			// shuntingLoopAI is now also registered as a console example (Issue #873, R8 resolution)
-			assertThat(registry.examples.containsKey("shuntingLoopAI")).isTrue()
+			assertThat(registry.examples.containsKey(ExampleNames.SHUNTING_LOOP_AI)).isTrue()
 			// shuntingLoopAI remains in GUI examples as before
-			assertThat(registry.guiExamples.containsKey("shuntingLoopAI")).isTrue()
+			assertThat(registry.guiExamples.containsKey(ExampleNames.SHUNTING_LOOP_AI)).isTrue()
 		}
 
 		/**
@@ -510,7 +532,7 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `GUI example names include shuntingLoopAI`() {
 			val registry = get<ExampleRegistry>()
 			val guiNames = registry.getAvailableGuiExamples()
-			assertThat(guiNames).contains("shuntingLoopAI")
+			assertThat(guiNames).contains(ExampleNames.SHUNTING_LOOP_AI)
 		}
 	}
 }

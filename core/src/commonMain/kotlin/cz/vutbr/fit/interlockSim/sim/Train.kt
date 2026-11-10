@@ -309,6 +309,35 @@ class Train :
 			"Train $trainNumber at semaphore $semaphoreName: the pre-existing path is null while " +
 				"starting from near-zero velocity. This indicates a logic error - signal should only " +
 				"allow when path is reserved before starting."
+
+		/**
+		 * The name the `semaphoreAction` log lines print for [semaphore], reached at [separator]
+		 * (Issue #1339).
+		 *
+		 * An InOut's embedded in- and out-semaphores are no grid cells, so neither the XML reader nor
+		 * the #1273 auto-naming names them, and a train's entry logged `detected at semaphore , ...`.
+		 * At that entry the separator is the InOut itself, so the line names it: `B (entry)` for its
+		 * in-semaphore, `B (exit)` for its out-semaphore. No call site logs a crossing at an
+		 * out-semaphore — an exit passes the traversal's `else` branch, which emits no SENSOR line —
+		 * so only the `(entry)` label is logged today; `TrainSemaphoreLogNameTest` pins both labels
+		 * for a future exit-SENSOR line. Any other blank name prints
+		 * [Station.UNNAMED], the label the station diagnostics already use. Log text only: the
+		 * semaphore keeps its blank name, and the XML file and the dispatcher's endpoint names do not
+		 * change.
+		 */
+		internal fun semaphoreLogName(
+			semaphore: DynamicRailSemaphore,
+			separator: DynamicPathSeparator
+		): String {
+			val inOut = separator as? DynamicInOut
+			return when {
+				semaphore.name.isNotBlank() -> semaphore.name
+				inOut == null || inOut.name.isBlank() -> Station.UNNAMED
+				semaphore === inOut.inSemaphore -> "${inOut.name} (entry)"
+				semaphore === inOut.outSemaphore -> "${inOut.name} (exit)"
+				else -> Station.UNNAMED
+			}
+		}
 	}
 
 	// GitHub #62: Support bidirectional train operation (reverse direction)
@@ -948,9 +977,10 @@ class Train :
 				"Separator must be in direction, semaphore: $semaphore"
 			}
 			requireSimulationNotNull(semaphore.signal) { "Semaphore signal must not be null" }
+			val semaphoreName = semaphoreLogName(semaphore, separator)
 			logger.info {
 				"${Process.time()} SENSOR: Train $number detected at semaphore " +
-					"${semaphore.name}, " +
+					"$semaphoreName, " +
 					"signal=${semaphore.signal}, velocity=${getVelocity()} m/s"
 			}
 
@@ -982,14 +1012,14 @@ class Train :
 					is PathResult.Available -> pathResult.path
 					is PathResult.NoTopologicalPath -> {
 						logger.error {
-							"Train $number at semaphore ${semaphore.name}: No topological path exists. " +
+							"Train $number at semaphore $semaphoreName: No topological path exists. " +
 								"Network may be misconfigured."
 						}
 						null
 					}
 					is PathResult.OwnershipConflict -> {
 						logger.debug {
-							"Train $number at semaphore ${semaphore.name}: Path blocked by ownership conflict"
+							"Train $number at semaphore $semaphoreName: Path blocked by ownership conflict"
 						}
 						null
 					}
@@ -1003,7 +1033,7 @@ class Train :
 				fireStop()
 				env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 
-				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+				// freePath(separator, next); // (the train sets up the path to the next semaphore itself on stopping)
 				waitUntil(allowingSignal(semaphore, separator))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
 				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
@@ -1038,23 +1068,23 @@ class Train :
 					when (resumeResult) {
 						is PathResult.Available -> resumeResult.path
 						is PathResult.NoTopologicalPath -> {
-							logger.error { formatNoTopologicalPathWhileResumingMessage(number, semaphore.name) }
+							logger.error { formatNoTopologicalPathWhileResumingMessage(number, semaphoreName) }
 							null
 						}
 						is PathResult.OwnershipConflict -> {
-							logger.error { formatOwnershipConflictWhileResumingMessage(number, semaphore.name) }
+							logger.error { formatOwnershipConflictWhileResumingMessage(number, semaphoreName) }
 							null
 						}
 					}
 				requireSimulationNotNull(resumePath) {
-					formatResumePathNullMessage(number, semaphore.name)
+					formatResumePathNullMessage(number, semaphoreName)
 				}
 				fireStart(semaphore, resumePath)
 			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
 				logger.debug { "Train $number starting movement with allowing signal" }
 				// Validate path exists before starting
 				requireSimulationNotNull(path) {
-					formatPreExistingPathNullMessage(number, semaphore.name)
+					formatPreExistingPathNullMessage(number, semaphoreName)
 				}
 				fireStart(semaphore, path)
 			} else {
@@ -1062,7 +1092,7 @@ class Train :
 				logger.debug { "Train $number accelerating toward next semaphore" }
 				// Validate path exists before accelerating
 				requireSimulationNotNull(path) {
-					"Train $number at semaphore ${semaphore.name}: Cannot accelerate without reserved path."
+					"Train $number at semaphore $semaphoreName: Cannot accelerate without reserved path."
 				}
 				accelerateToSignal(semaphore, path)
 			}
@@ -1070,7 +1100,7 @@ class Train :
 			semaphore.signal = Signal.STOP
 		}
 
-		// pro ucely ladeni - moznost ze si vlak sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+		// For debugging: lets a train set up the path to the next semaphore itself when it stops at one.
 // 		private Unit freePath(final PathSeparator separator, final TrackSection next) {
 // 			if (separator instanceof InOut) return;
 // 			try {
@@ -1666,8 +1696,8 @@ class Train :
 	 * - Prevents runtime simulation errors from track being too short
 	 *
 	 * **Implementation:**
-	 * - Uses TopologyNavigator to find all possible paths
-	 * - Calculates total track distance for each path
+	 * - Uses [cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator.findShortestTopologicalDistance]
+	 *   for the shortest route length (a shortest-path search, not a listing of every path)
 	 * - Validates train length against shortest available path
 	 * - Gracefully handles test mocks by catching exceptions
 	 *
@@ -1695,24 +1725,18 @@ class Train :
 		try {
 			val topologyNavigator = env.getRoutingServices().getTopologyNavigator()
 
-			// Find all topologically possible paths between InOuts
-			val paths =
-				topologyNavigator.findAllTopologicalPaths(
-					start = inOut,
-					target = outOut,
-					maxDepth = 100
-				)
-
-			requireSimulation(paths.isNotEmpty()) {
-				"Train length validation failed: No route exists between " +
-					"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
-					"Railway network must provide at least one path between entry and exit points."
-			}
-
-			// Calculate distance for each path and find the shortest using idiomatic Kotlin
+			// Shortest topological route length between the InOuts (a shortest-path search, Issue #1148).
 			val shortestPathDistance =
-				paths.minOf { path ->
-					path.sumOf { section -> section.length() }
+				requireSimulationNotNull(
+					topologyNavigator.findShortestTopologicalDistance(
+						start = inOut,
+						target = outOut,
+						maxDepth = 100
+					)
+				) {
+					"Train length validation failed: No route exists between " +
+						"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+						"Railway network must provide at least one path between entry and exit points."
 				}
 
 			// Validate train length against shortest path

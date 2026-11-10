@@ -18,9 +18,10 @@ Implemented GUI validation to prevent saving railway networks with 0 InOut eleme
 
 ## Other Issues
 
+- [`issue_280_analysis_plan.md`](issue_280_analysis_plan.md) — Analysis plan for the zero-acceleration train deadlock (executed by `b6814546`, #286)
 - [`issue_291_investigation_report.md`](issue_291_investigation_report.md) — Train passivation fix
 - [`issue_311_round_robin_load_balancing.md`](issue_311_round_robin_load_balancing.md) — Round-robin load balancing
 
 ---
 
-**Last Updated:** 2026-03-13
+**Last Updated:** 2026-10-25

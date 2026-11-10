@@ -15,13 +15,17 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.ExampleNames
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.stream.Stream
 
 /**
  * ProcessBuilder-based cross-platform parity test that launches both the JVM shadow JAR
@@ -78,6 +82,14 @@ class CrossPlatformParityTest {
 		 */
 		private val timestampRegex = Regex("""^\s*t=([\d.]+)\s+""")
 		private val summaryTrainCountRegex = Regex("""Simulation complete: (\d+) trains""")
+
+		/** The two (JVM twin, native example) rows — see the parity test's KDoc for the pairing. */
+		@JvmStatic
+		fun parityPairs(): Stream<Arguments> =
+			Stream.of(
+				Arguments.of(ExampleNames.SHUNTING_LOOP_SYNC, ExampleNames.SHUNTING_LOOP),
+				Arguments.of(ExampleNames.CERVENY_UJEZD_SYNC, ExampleNames.CERVENY_UJEZD)
+			)
 	}
 
 	data class ProcessResult(
@@ -149,9 +161,8 @@ class CrossPlatformParityTest {
 			if (nativeResult.stderr.isNotBlank()) appendLine("STDERR:\n${nativeResult.stderr}")
 		}
 
-	@Test
-	@Timeout(value = 300, unit = TimeUnit.SECONDS)
-	fun `JVM and native produce structurally equivalent output`() {
+	/** Skips the test (assumeTrue) when the parity artifacts — JVM JAR and native binary — are absent. */
+	private fun assumeParityArtifacts() {
 		assumeTrue(JAR_PATH.exists()) {
 			"JVM JAR not found at ${JAR_PATH.absolutePath} — run ./gradlew :desktop-ui:shadowJar first"
 		}
@@ -159,23 +170,53 @@ class CrossPlatformParityTest {
 			"Native binary not found at ${NATIVE_PATH.absolutePath} — " +
 				"run ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 first"
 		}
+	}
 
-		// JVM runs the `shuntingLoopSync` variant: the default JVM `shuntingLoop` example
-		// wires the Goal 10 dispatcher-agent stack (Issue #733), which does not exist on
-		// the native target. `shuntingLoopSync` mirrors the native `shuntingLoop`
-		// construction (wireSynchronousDispatcher) exactly, making exact-count
-		// comparison meaningful.
+	/**
+	 * One parity pair per station, both rows driven by this one test (PR #1282 review round).
+	 *
+	 * Each pair's JVM side is the synchronous `*Sync` twin and the native side the plain example
+	 * name, because the JVM console `shuntingLoop` (Issue #733) and `cervenyUjezd` (Issue #1276)
+	 * examples run the dispatcher-agent stack, whose wiring does not exist on the native target;
+	 * the pairs compare the SAME `wireSynchronousDispatcher` construction on both sides, which is
+	 * what makes the exact-equality invariants below meaningful.
+	 *
+	 * The station row keeps the SP3 exact-equality claim alive on the bigger topology after the
+	 * rewire (Issues #1163/#1164 + PR #1267 review): 32 blocks, a switch-driven throat, generated
+	 * trains — not vyhybna's tiny graph alone.
+	 */
+	@ParameterizedTest(name = "JVM and native produce structurally equivalent {0} output")
+	@MethodSource("cz.vutbr.fit.interlockSim.sim.CrossPlatformParityTest#parityPairs")
+	@Timeout(value = 300, unit = TimeUnit.SECONDS)
+	fun `JVM and native produce structurally equivalent output`(
+		jvmExampleName: String,
+		nativeExampleName: String
+	) {
+		assumeParityArtifacts()
+
+		// seed 0, no maxTrains: the constructions are identical on both sides of the pair.
 		val jvmResult =
 			runProcess(
-				listOf("java", "-jar", JAR_PATH.absolutePath, "example", "shuntingLoopSync", "60")
+				listOf("java", "-jar", JAR_PATH.absolutePath, "example", jvmExampleName, "60")
 			)
 		val nativeResult =
 			runProcess(
-				listOf(NATIVE_PATH.absolutePath, "example", "shuntingLoop", "60")
+				listOf(NATIVE_PATH.absolutePath, "example", nativeExampleName, "60")
 			)
 
-		val diag = diagnostics(jvmResult, nativeResult)
+		assertStructuralParity(jvmResult, nativeResult)
+	}
 
+	/**
+	 * The structural invariants compared for every parity-run pair (class KDoc, invariants 1-6):
+	 * exit code 0, non-empty event lines, a summary line, chronological timestamps, a train count
+	 * in the summary, and exact cross-platform event-count + summary-train-count equality.
+	 */
+	private fun assertStructuralParity(
+		jvmResult: ProcessResult,
+		nativeResult: ProcessResult
+	) {
+		val diag = diagnostics(jvmResult, nativeResult)
 		// Invariant 1: Both should exit 0
 		assertThat(jvmResult.exitCode, name = "JVM exit code\n$diag").isEqualTo(0)
 		assertThat(nativeResult.exitCode, name = "Native exit code\n$diag").isEqualTo(0)

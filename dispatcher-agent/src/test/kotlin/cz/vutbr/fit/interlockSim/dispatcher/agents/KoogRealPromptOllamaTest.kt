@@ -261,14 +261,16 @@ class KoogRealPromptOllamaTest : DispatcherKoinTestBase() {
 			tools: List<DomainTool>,
 			systemPrompt: String?,
 			cycleHistory: CycleHistory,
-			outcomeFeed: AppliedOutcomeFeed?
+			outcomeFeed: AppliedOutcomeFeed?,
+			stationCapacity: Int
 		): KoogDispatchAgent =
 			delegate.createDispatchAgent(
 				modelName = modelName,
 				tools = tools.map { RecordingTool(it, recorder) },
 				systemPrompt = systemPrompt,
 				cycleHistory = cycleHistory,
-				outcomeFeed = outcomeFeed
+				outcomeFeed = outcomeFeed,
+				stationCapacity = stationCapacity
 			)
 	}
 

@@ -14,19 +14,13 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Issue #834 (SP2c.11): `reservePath` must survive an aborted PathInfo merge at **both** of its
@@ -92,14 +86,7 @@ import org.koin.test.inject
  */
 @DisplayName("reservePath survives an aborted PathInfo merge at both registerPathInfo call sites")
 @Tag("integration-test")
-class MergeAbortNeverThrowsTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var service: PathReservationService
-
+class MergeAbortNeverThrowsTest : PathReservationServiceTestBase() {
 	private lateinit var zA: DynamicPathSeparator
 	private lateinit var doB1: DynamicPathSeparator
 	private lateinit var inOutA: DynamicPathSeparator
@@ -108,13 +95,7 @@ class MergeAbortNeverThrowsTest : KoinTestBase() {
 	private val trainId = "Train #1"
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-
-		registry = simulationContext.scope.get()
-		service = simulationContext.getRoutingServices().getPathReservationService()
-
+	fun setUpFixtures() {
 		zA = simulationContext.separatorAt(14, 8)
 		doB1 = simulationContext.separatorAt(25, 8)
 		inOutA = simulationContext.separatorAt(11, 8)

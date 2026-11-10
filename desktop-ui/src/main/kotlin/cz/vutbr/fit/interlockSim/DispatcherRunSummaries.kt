@@ -10,9 +10,9 @@
 package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.dispatcher.AgentDriverLoop
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
+import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DecisionRateReport
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayProgress
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.progress
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -89,10 +90,10 @@ object DispatcherRunSummaries {
 	 * @return which summaries were emitted.
 	 */
 	fun log(scope: Scope): Reported {
-		val planner = scope.getOrNull<MeasuringPlanAdapter>()
-		val sweeper = scope.getOrNull<OrphanReservationSweeper>()
-		val driverLoop = scope.getOrNull<AgentDriverLoop>()
-		val signal = scope.getOrNull<DefaultSnapshotSignal>()
+		val planner = scope.publishedOrNull<MeasuringPlanAdapter>()
+		val sweeper = scope.publishedOrNull<OrphanReservationSweeper>()
+		val driverLoop = scope.agentDriverLoopOrNull()
+		val signal = scope.publishedOrNull<DefaultSnapshotSignal>()
 
 		planner?.logFinalSummary()
 		sweeper?.logSummary()
@@ -163,9 +164,9 @@ object DispatcherRunSummaries {
 		// zero-tick files into the sweep directory that are indistinguishable from a real run whose
 		// dispatcher did nothing — while counting towards #846's `runCount >= 10` gate.
 		//
-		// AgentDriverLoop is declared only by wireDispatcherAgent, so its presence is the precise
-		// signal that this context ran a dispatcher.
-		if (scope.getOrNull<AgentDriverLoop>() == null) return Persisted(null, effectiveCause, outcome)
+		// AgentDriverLoop is installed only by wireDispatcherAgent, into this context's own holder
+		// (Issue #1317), so its presence is the precise signal that this context ran a dispatcher.
+		if (scope.agentDriverLoopOrNull() == null) return Persisted(null, effectiveCause, outcome)
 		val store =
 			scope.getOrNull<RunSnapshotStore>()
 				?: return Persisted(null, effectiveCause, outcome)
@@ -282,7 +283,10 @@ object DispatcherRunSummaries {
 			// #847 sweep had to scrape from logs to tell a working railway from a busy dispatcher.
 			blockTransitions = loop?.getAllBlockTransitions()?.values?.sumOf { it.toLong() },
 			conflicts = metrics?.conflictCount?.toLong(),
-			failedReservations = loop?.getFailedReservations()?.toLong()
+			failedReservations = loop?.getFailedReservations()?.toLong(),
+			// Issue #1280: contentions still open at run end, kept out of `conflicts` — an end-time
+			// cutoff with trains still queued is not a double-booking.
+			unresolvedAtRunEnd = metrics?.unresolvedAtRunEndCount?.toLong()
 		)
 	}
 

@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -33,6 +34,7 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -370,7 +372,10 @@ class AgentLoopDriverTest {
 			val sensorPort =
 				DefaultDispatchLoopSensorPort {
 					callCount++
-					ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
+					// A publishable record (non-EMPTY snapshot), like its sibling test — a record
+					// whose snapshot is the EMPTY sentinel would short-circuit before DECIDE and
+					// silently re-pin this test to the short-circuit path instead of a full cycle.
+					ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList(), tick = 1L, snapshot = emptySnapshot(0.0))
 				}
 			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, sensorPort)
 
@@ -408,7 +413,9 @@ class AgentLoopDriverTest {
 								pathSetUpTowardThisInput = false,
 								pathAlreadyExtendedBeyond = false
 							)
-						)
+						),
+					tick = 1L,
+					snapshot = emptySnapshot(0.0)
 				)
 			// A second, distinguishable tick — if the driver ever split its reads across two
 			// provider calls, some fields would come from tickB instead of tickA.
@@ -434,6 +441,86 @@ class AgentLoopDriverTest {
 			assertThat(capturedObs.captured.unapprovedTrains).isSameInstanceAs(tickA.queuedTrains)
 			assertThat(capturedObs.captured.innerBlockInputs).isSameInstanceAs(tickA.innerBlockInputs)
 			assertThat(capturedObs.captured.outerBlockInputs).isSameInstanceAs(tickA.outerBlockInputs)
+		}
+
+		/**
+		 * Issue #1354: the snapshot and the queue come from one tick-stamped record. The perception
+		 * port already holds a newer snapshot (tick 6) than the record (tick 5) — the torn state a
+		 * second read could pair with tick 5's queue. The planner must get tick 5's snapshot with
+		 * tick 5's queue, and the perception port must not be touched at all.
+		 */
+		@Test
+		@DisplayName("the planner gets the snapshot and the queue of one tick-stamped record")
+		fun snapshotAndQueueComeFromOneRecord() {
+			val snapshot5 = emptySnapshot(10.0)
+			val queue5 = listOf(QueuedTrainObservation("T5", "OUT5"))
+			val record5 =
+				ShuntingLoop.TickObservation(
+					queuedTrains = queue5,
+					innerBlockInputs = emptyList(),
+					outerBlockInputs = emptyList(),
+					tick = 5L,
+					snapshot = snapshot5
+				)
+			val strictPerceptionPort = mockk<NetworkPerceptionPort>()
+			every { strictPerceptionPort.snapshot() } returns emptySnapshot(12.0)
+			val driver =
+				AgentLoopDriver(
+					strictPerceptionPort,
+					planner,
+					commandQueue,
+					controller,
+					DefaultDispatchLoopSensorPort { record5 }
+				)
+			val capturedObs = slot<DispatchObservation>()
+			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+
+			runBlocking { driver.runCycle() }
+
+			assertThat(capturedObs.captured.snapshot).isSameInstanceAs(snapshot5)
+			assertThat(capturedObs.captured.unapprovedTrains).isSameInstanceAs(queue5)
+			confirmVerified(strictPerceptionPort)
+		}
+
+		/**
+		 * Issue #1354, perception-only wiring: a driver built without an explicit sensor port
+		 * senses the default port, whose provider pairs an empty dispatch bundle with
+		 * [perceptionPort]'s published snapshot — the planner still gets the perception state of
+		 * a run with no dispatch loop, and the port is read through the record, not alongside it.
+		 */
+		@Test
+		@DisplayName("the default sensor port pairs the perception snapshot with empty dispatch inputs")
+		fun defaultSensorPortPairsPerceptionSnapshotWithEmptyInputs() {
+			val wired = emptySnapshot(3.0)
+			every { perceptionPort.snapshot() } returns wired
+			val driver = makeDriver()
+			val capturedObs = slot<DispatchObservation>()
+			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+
+			val ran = runBlocking { driver.runCycle() }
+
+			assertThat(ran).isTrue()
+			assertThat(capturedObs.captured.snapshot).isSameInstanceAs(wired)
+			assertThat(capturedObs.captured.unapprovedTrains).isEmpty()
+			assertThat(capturedObs.captured.innerBlockInputs).isEmpty()
+			assertThat(capturedObs.captured.outerBlockInputs).isEmpty()
+			verify(exactly = 1) { perceptionPort.snapshot() }
+			confirmVerified(perceptionPort)
+		}
+
+		/** The EMPTY short-circuit is decided by the record's snapshot field, not a second read. */
+		@Test
+		@DisplayName("the default sensor port's EMPTY snapshot still short-circuits the cycle")
+		fun defaultSensorPortEmptySnapshotShortCircuits() {
+			every { perceptionPort.snapshot() } returns SimulationSnapshot.EMPTY
+			val driver = makeDriver()
+
+			val ran = runBlocking { driver.runCycle() }
+
+			assertThat(ran).isFalse()
+			coVerify(exactly = 0) { planner.plan(any()) }
+			verify(exactly = 1) { perceptionPort.snapshot() }
+			confirmVerified(perceptionPort)
 		}
 	}
 

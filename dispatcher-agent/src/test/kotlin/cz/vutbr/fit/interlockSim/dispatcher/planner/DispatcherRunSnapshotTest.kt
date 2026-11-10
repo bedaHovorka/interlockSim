@@ -21,6 +21,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Test
 
 /**
@@ -173,8 +176,31 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 9`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME)
+	fun `current schema version is 11`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS)
+	}
+
+	/** Issue #1365 (schema version 11): the stale-origin refusal count survives the JSON round-trip. */
+	@Test
+	fun `serialization round-trips the stale-origin refusals after a silent cycle`() {
+		val snap = snapshotWith().copy(staleOriginRefusalsAfterSilentCycle = 4L)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"staleOriginRefusalsAfterSilentCycle\": 4")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded).isEqualTo(snap)
+	}
+
+	/**
+	 * Issue #1365: a run JSON written before the field existed still loads, with the count absent
+	 * (not measured), never zero.
+	 */
+	@Test
+	fun `a version-8 fixture without the stale-origin count loads it as absent`() {
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), SCHEMA_V8_JSON)
+
+		assertThat(decoded.staleOriginRefusalsAfterSilentCycle).isNull()
 	}
 
 	/**
@@ -286,7 +312,8 @@ class DispatcherRunSnapshotTest {
 						maxConcurrentTrains = 2L,
 						blockTransitions = 173L,
 						conflicts = 1L,
-						failedReservations = 8L
+						failedReservations = 8L,
+						unresolvedAtRunEnd = 2L
 					)
 			)
 
@@ -296,6 +323,38 @@ class DispatcherRunSnapshotTest {
 		assertThat(decoded).isEqualTo(snap)
 		assertThat(decoded.schemaVersion).isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
 		assertThat(decoded.railwayOutcome.blockTransitions).isEqualTo(173L)
+		assertThat(decoded.railwayOutcome.unresolvedAtRunEnd).isEqualTo(2L)
+	}
+
+	/**
+	 * Issue #1280 (schema version 10) added [RailwayOutcome.unresolvedAtRunEnd] with a `null`
+	 * default. A file written before it has no such key and must still load, with the figure
+	 * absent — not zero — and its `conflicts` (which then still included the end-of-run flush)
+	 * kept as stored.
+	 */
+	@Test
+	fun `a pre-1280 file without unresolvedAtRunEnd loads with the figure absent`() {
+		val current =
+			json
+				.parseToJsonElement(
+					json.encodeToString(
+						DispatcherRunSnapshot.serializer(),
+						snapshotWith(railwayOutcome = RailwayOutcome(conflicts = 2L, unresolvedAtRunEnd = 5L))
+					)
+				).jsonObject
+		val legacyOutcome = JsonObject(current.getValue("railwayOutcome").jsonObject - "unresolvedAtRunEnd")
+		val legacy =
+			JsonObject(
+				current +
+					("schemaVersion" to JsonPrimitive(SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME)) +
+					("railwayOutcome" to legacyOutcome)
+			)
+
+		val decoded = json.decodeFromJsonElement(DispatcherRunSnapshot.serializer(), legacy)
+
+		assertThat(decoded.schemaVersion).isEqualTo(SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME)
+		assertThat(decoded.railwayOutcome.conflicts).isEqualTo(2L)
+		assertThat(decoded.railwayOutcome.unresolvedAtRunEnd).isNull()
 	}
 
 	@Test
@@ -379,6 +438,9 @@ class DispatcherRunSnapshotTest {
 
 		/** Issue #988 added the [TickOutcome.LLM_SILENT_ALL_MOVING] tick outcome. */
 		private const val SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME: Int = 9
+
+		/** Issue #1365 added the stale-origin refusal count after silent non-idle LLM cycles. */
+		private const val SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS: Int = 11
 
 		private val json =
 			Json {

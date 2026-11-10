@@ -79,4 +79,22 @@ class UniqueBlocksTest {
 		assertThat(warnings).hasSize(1)
 		assertThat(warnings.single().formattedMessage).contains("SimpleTrackBlock from section kStatic")
 	}
+
+	@Test
+	fun `excludingOwnedBy drops own block, keeps other train and free blocks, and keeps order`() {
+		val own = DynamicTrackBlock(SimpleTrackBlock(end1, end2, 300.0, 30.0, 30.0), dynEnd1, dynEnd2)
+		val other = DynamicTrackBlock(SimpleTrackBlock(end1, end2, 400.0, 30.0, 30.0), dynEnd1, dynEnd2)
+		own.setUpPath(dynEnd1, "train-A")
+		other.setUpPath(dynEnd1, "train-B")
+
+		val forward = listOf(block1, own, other, block2).excludingOwnedBy("train-A")
+
+		assertThat(forward).containsExactly(block1, other, block2)
+	}
+
+	@Test
+	fun `excludingOwnedBy on an empty list or with no owned block is the identity`() {
+		assertThat(emptyList<DynamicTrackBlock>().excludingOwnedBy("train-A")).isEmpty()
+		assertThat(listOf(block2, block1).excludingOwnedBy("train-A")).containsExactly(block2, block1)
+	}
 }

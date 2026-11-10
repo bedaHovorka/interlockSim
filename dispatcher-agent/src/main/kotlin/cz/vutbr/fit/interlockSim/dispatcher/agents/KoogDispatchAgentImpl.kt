@@ -45,11 +45,17 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   ACTIONS" block. `null` (the default) renders no block at all. Before this feed existed, the
  *   channel it wraps had no production drainer at all: 173 `ALL_PATHS_BLOCKED` apply failures
  *   were invisible to the model, which kept re-emitting the same refused route.
+ * @param stationCapacity Admission cap of the station this agent dispatches, stated on the
+ *   "Active (approved) trains right now: n / cap" line of every cycle message. Issue #1155: it was
+ *   vyhybna's [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] on every station; production now
+ *   passes the station's own value through [AgentService.createDispatchAgent], and the default
+ *   remains only for agents built outside a run.
  */
 class KoogDispatchAgentImpl(
 	private val aiAgent: AIAgent<String, String>,
 	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0),
-	private val outcomeFeed: AppliedOutcomeFeed? = null
+	private val outcomeFeed: AppliedOutcomeFeed? = null,
+	private val stationCapacity: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS
 ) : KoogDispatchAgent {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -163,7 +169,7 @@ class KoogDispatchAgentImpl(
 	 * `applyFailuresByCode` in proportion to how many trains were concurrently active, contaminating
 	 * exactly the measurement #834's sweep exists to take. [NextHopResolver.resolveAll] applies the
 	 * same same-tick `claimedSeparators` dedup
-	 * [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkAllInputs] applies, so this prompt and
+	 * `RuleBasedDispatcher.checkAllInputs` applies, so this prompt and
 	 * the rule-based arm agree about which train gets a given separator this tick on real data
 	 * (where a train owns at most one eligible input per tick — see [NextHopResolver]'s KDoc for
 	 * that domain invariant and the accepted synthetic-data divergence).
@@ -184,8 +190,7 @@ class KoogDispatchAgentImpl(
 			// State the active count/cap directly so the admission precondition can be evaluated
 			// in one shot — this stateless cycle has no memory of the same check from last time.
 			appendLine(
-				"Active (approved) trains right now: ${observation.approvedTrainCount} / " +
-					"${RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS}"
+				"Active (approved) trains right now: ${observation.approvedTrainCount} / $stationCapacity"
 			)
 			// Resolved once for every active train together so the same-tick same-target dedup
 			// applies across the whole cycle message — see this method's "NEXT SECTION facts" KDoc.
@@ -242,23 +247,23 @@ class KoogDispatchAgentImpl(
 	 *
 	 * ## Field style, quoted names, never a block id
 	 *
-	 * [NextHopOutcome.Hop.fromSignalName]/[NextHopOutcome.Hop.toSeparatorName] come from
-	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName]/
-	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName] (the latter is the
-	 * `ReservationTargetPolicy` pick over `candidateTargets`, carried by the compatibility
-	 * projection — Issue #970) — signal or InOut names, both legal `request_route` endpoints — never
+	 * [NextHopOutcome.Hop.fromSignalName]/[NextHopOutcome.Hop.toTargetName] come from
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName] and the
+	 * target `NextHopResolver` takes from `chosenTargetName()` (the `ReservationTargetPolicy` pick over
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets], Issue #970) —
+	 * signal or InOut names, both legal `request_route` endpoints — never
 	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.blockId]. See this class's
 	 * [buildUserPrompt] KDoc ("Never render a name the model cannot use as an argument") for why
 	 * that distinction matters.
 	 *
-	 * ## `toSeparatorName == null` is never "blocked" or "occupied"
+	 * ## "No next target" is never "blocked" or "occupied"
 	 *
-	 * Per [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.toSeparatorName]'s own contract, a
-	 * `null` next separator means "no forward-reservation target applies", not "the track ahead is
-	 * occupied" — [NextHopOutcome.NoSectionReservable]'s rendered wording must never claim
-	 * otherwise, and must never invite a route request the kernel has no target for. The same rule
-	 * applies to [NextHopOutcome.ClaimedByAnotherTrain]: the section is not occupied or blocked, it
-	 * is simply going to a different train this cycle.
+	 * Per [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets]'s own contract, a
+	 * candidate list with no available entry means "no forward-reservation target applies", not
+	 * "the track ahead is occupied" — [NextHopOutcome.NoSectionReservable]'s rendered wording must
+	 * never claim otherwise, and must never invite a route request the kernel has no target for.
+	 * The same rule applies to [NextHopOutcome.ClaimedByAnotherTrain]: the section is not occupied
+	 * or blocked, it is simply going to a different train this cycle.
 	 *
 	 * ## Standing at a signal reads the same perception field the tool guard reads
 	 *
@@ -293,7 +298,7 @@ class KoogDispatchAgentImpl(
 	private fun renderNextHopClause(outcome: NextHopOutcome): String =
 		when (outcome) {
 			is NextHopOutcome.Hop ->
-				"NEXT SECTION to reserve: from \"${outcome.fromSignalName}\" to \"${outcome.toSeparatorName}\" " +
+				"NEXT SECTION to reserve: from \"${outcome.fromSignalName}\" to \"${outcome.toTargetName}\" " +
 					"— the one route request that helps this train now."
 
 			NextHopOutcome.RouteAlreadySet -> "route already set — needs nothing this cycle."
@@ -302,7 +307,7 @@ class KoogDispatchAgentImpl(
 				"no section ahead is reservable this cycle — make no route request for this train; it waits."
 
 			is NextHopOutcome.ClaimedByAnotherTrain ->
-				"section to \"${outcome.toSeparatorName}\" is going to another train this cycle — make no route " +
+				"section to \"${outcome.toTargetName}\" is going to another train this cycle — make no route " +
 					"request for this train; it is re-evaluated next cycle."
 		}
 
@@ -388,8 +393,8 @@ class KoogDispatchAgentImpl(
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — ${outcome.reason}"
 
-			// Issue #903: a permanent impossibility (rear-facing START or unconfigurable switch),
-			// not ordinary contention. The kernel's reason is carried through verbatim.
+			// Issue #903: a permanent impossibility, not ordinary contention (classes: see
+			// ReservationResult.GeometricallyImpossible). The kernel's reason is carried through verbatim.
 			is AppliedOutcome.GeometricallyImpossible ->
 				requestRouteHeader(outcome.trainId, outcome.fromEndpointName, outcome.toEndpointName) +
 					"REFUSED — geometrically impossible, this origin can never reach that target: ${outcome.reason}"
@@ -411,9 +416,11 @@ class KoogDispatchAgentImpl(
 
 			is AppliedOutcome.Released ->
 				if (outcome.deferredBlockIds.isNotEmpty()) {
-					"cancel_route for \"${outcome.trainId}\": partly applied — a train may be committed to " +
-						"${outcome.deferredBlockIds.joinToString(", ")}, so those blocks stay reserved; " +
-						"repeat cancel_route to release them."
+					"cancel_route for \"${outcome.trainId}\": not fully applied — every other block was freed; " +
+						"these stay reserved (${outcome.deferredBlockIds.joinToString(", ")}): the train stands " +
+						"on or may still enter some of them, or the release cannot yet cut the route past them. " +
+						"Repeating cancel_route frees nothing more until the train has moved on or the kept " +
+						"blocks' booking windows (1 s) have closed; to move the train on, extend its route instead."
 				} else if (outcome.anyReleased) {
 					"cancel_route for \"${outcome.trainId}\": applied."
 				} else {

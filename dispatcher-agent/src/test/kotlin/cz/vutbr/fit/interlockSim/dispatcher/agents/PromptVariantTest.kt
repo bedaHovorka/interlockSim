@@ -59,7 +59,7 @@ class PromptVariantTest {
 	private fun promptFor(
 		variant: PromptVariant,
 		maxActions: Int = 3
-	): String = KoogAgentFactory.buildSystemPrompt(maxActions, variant)
+	): String = KoogAgentFactory.buildSystemPrompt(maxActions, variant, cap)
 
 	@Nested
 	@DisplayName("PromptVariant.parse")

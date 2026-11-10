@@ -87,9 +87,9 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		context = TestFixtures.newShuntingSimulationContext().tracked()
 		service = context.getRoutingServices().getPathReservationService()
 		registry = context.scope.get<PathReservationRegistry>()
-		inA = context.separatorAt(ShuntingLoop.COORD_IN_A_X, ShuntingLoop.COORD_IN_A_Y)
-		doB1 = context.separatorAt(ShuntingLoop.COORD_SEM_DOB1_X, ShuntingLoop.COORD_SEM_DOB1_Y)
-		inB = context.separatorAt(ShuntingLoop.COORD_IN_B_X, ShuntingLoop.COORD_IN_B_Y)
+		inA = context.separatorAt(11, 8) // vyhybna InOut A
+		doB1 = context.separatorAt(25, 8) // vyhybna signal doB1
+		inB = context.separatorAt(30, 8) // vyhybna InOut B
 	}
 
 	@Test
@@ -297,6 +297,204 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		assertPathInfoUnchanged(train, heldPathInfo)
 	}
 
+	/**
+	 * Issue #1173: `lockSwitches` admits a switch the train already owns, so the failed call's
+	 * rollback must release only the switches this call newly locked. It used to release every
+	 * switch the failed route listed, which dropped an EARLIER route's flank lock on a switch the
+	 * failed route listed again -- the registry keeps no per-route count for switches.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("an un-clearable route that re-lists an earlier route's flank switch keeps that flank lock")
+	fun unClearableRouteKeepsAnEarlierRoutesFlankLock() {
+		val train = "Train #1173"
+		val held = namedHeldRouteBlocks()
+		val (next, route) = secondRoute(excluding = held)
+		val switch = switchVB()
+		val facade = DefaultInterlockingFacade(context, registry)
+
+		// Given: route 1 (A -> doB1) is granted with vB as its flank switch.
+		val grant = facade.requestRoute(train, SignalId("zA"), heldRoute(held).copy(flank = listOf(VB_PLUS)), Aspect.Volno)
+		assertThat(grant)
+			.withMessage("the held route must be granted")
+			.isInstanceOf<InterlockingFacade.RouteResponse.Granted>()
+		assertThat(registry.isFlankProtected(switch)).withMessage("route 1 flank-locks vB").isTrue()
+
+		// When: route 2 lists vB again (as a running switch) and fails AFTER locking (PosunDovolen).
+		val response = facade.requestRoute(train, SignalId("zA"), route, Aspect.PosunDovolen)
+
+		// Then: only route 2's own block is rolled back; vB stays route 1's flank lock.
+		assertDeniedWithReason(response, "Signal zA cannot be cleared (unknown signal or invalid signal aspect)")
+		assertReleased(next)
+		assertThat(registry.getSwitchOwner(switch)).withMessage("owner of route 1's flank switch").isEqualTo(train)
+		assertThat(switch.locked).withMessage("route 1's flank switch must stay locked").isTrue()
+		assertThat(registry.isFlankProtected(switch)).withMessage("route 1's flank claim").isTrue()
+		assertHeld(held, train)
+	}
+
+	/**
+	 * Issue #1218 (flips the Issue #1173 open point (c) pin): a plain (running) claim that a failed
+	 * route lists again as FLANK is promoted to a flank claim by `registerFlankSwitches`; the
+	 * rollback keeps the switch (it is not this call's new lock) and demotes the claim back to a
+	 * plain claim, so the failed route leaves route 1's claim exactly as it was. Route 1 still holds
+	 * a block next to vB, so the demoted claim is live and the block rollback does not reclaim it.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("a running claim re-listed as flank by an un-clearable route stays held and is demoted to running")
+	fun unClearableRouteDemotesAPromotedRunningClaim() {
+		val train = "Train #1173"
+		// The failing route's block is doB1 -> vB, the first A -> B block after the A -> doB1 route.
+		val (next, failingRunningRoute) = secondRoute(excluding = context.routeBlocksOf(inA, doB1))
+		val switch = switchVB()
+		val heldBlock = blockNextTo(switch, excluding = listOf(next))
+		heldBlock.name = "route1-block"
+		val facade = DefaultInterlockingFacade(context, registry)
+
+		// Given: route 1 holds a block next to vB and runs over vB: a plain, live claim.
+		val heldRoute =
+			TrainRoute(
+				from = SignalId("zA"),
+				to = SignalId("zB"),
+				running = listOf(VB_PLUS),
+				blocks = listOf(BlockId("route1-block"))
+			)
+		val grant = facade.requestRoute(train, SignalId("zA"), heldRoute, Aspect.Volno)
+		assertThat(grant)
+			.withMessage("the held route must be granted")
+			.isInstanceOf<InterlockingFacade.RouteResponse.Granted>()
+		assertThat(registry.isFlankProtected(switch)).withMessage("route 1's claim is a running claim").isFalse()
+
+		// When: route 2 lists vB as FLANK and fails after locking.
+		val route = failingRunningRoute.copy(running = emptyList(), flank = listOf(VB_PLUS))
+		val response = facade.requestRoute(train, SignalId("zA"), route, Aspect.PosunDovolen)
+
+		// Then: vB stays held by the train, as the running claim route 1 made.
+		assertDeniedWithReason(response, "Signal zA cannot be cleared (unknown signal or invalid signal aspect)")
+		assertReleased(next)
+		assertThat(registry.getSwitchOwner(switch)).withMessage("owner of route 1's running switch").isEqualTo(train)
+		assertThat(switch.locked).withMessage("route 1's running switch must stay locked").isTrue()
+		assertThat(registry.isFlankProtected(switch))
+			.withMessage("promoted by the failed route, demoted again by its rollback (#1218)")
+			.isFalse()
+		assertHeld(listOf(heldBlock), train)
+	}
+
+	/**
+	 * Issue #1218: the demote runs with the switch rollback, BEFORE the block rollback, so a demoted
+	 * claim that protects nothing is then reclaimed by the block rollback like any other stale claim.
+	 * Route 1 lists vB as a running switch but holds no block next to it (`TrainRoute` does not
+	 * require its blocks to bound its running switches), so its plain claim is stale as soon as
+	 * route 2's block next to vB is rolled back. Left promoted, the flank claim would be immune to
+	 * that reclaim and vB would stay locked until the train's whole-route release. A well-formed
+	 * dispatcher route always bounds its running switches with a held block, so this input is a
+	 * facade-boundary construction that makes the demote-before-`rollbackBlocks` order observable; it
+	 * does not model a route `PathReservationService` produces. The test pins that order: do not
+	 * "fix" route 1 into a live claim.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("a demoted claim that bounds no held block is reclaimed by the rollback and frees the switch")
+	fun demotedStaleClaimIsReclaimedByTheBlockRollback() {
+		val train = "Train #1218"
+		val held = namedHeldRouteBlocks()
+		val (next, failingRunningRoute) = secondRoute(excluding = held)
+		val switch = switchVB()
+		assertThat(held.none { switch in it.ends() })
+			.withMessage("route 1 must hold no block next to vB, or its claim is live and nothing is reclaimed")
+			.isTrue()
+		assertThat(switch in next.ends())
+			.withMessage("the rolled-back block must border vB, or the reclaim is not exercised")
+			.isTrue()
+		// The other train's block, on vB's far side; named before the facade indexes the blocks.
+		val otherBlock = blockNextTo(switch, excluding = held + next)
+		otherBlock.name = "other-block"
+		val facade = DefaultInterlockingFacade(context, registry)
+
+		// Given: route 1 (A -> doB1) runs over vB without holding a block next to it: a plain claim.
+		val grant =
+			facade.requestRoute(train, SignalId("zA"), heldRoute(held).copy(running = listOf(VB_PLUS)), Aspect.Volno)
+		assertThat(grant)
+			.withMessage("the held route must be granted")
+			.isInstanceOf<InterlockingFacade.RouteResponse.Granted>()
+		assertThat(registry.isFlankProtected(switch)).withMessage("route 1's claim is a running claim").isFalse()
+
+		// When: route 2 lists vB as FLANK and fails after locking.
+		val route = failingRunningRoute.copy(running = emptyList(), flank = listOf(VB_PLUS))
+		val response = facade.requestRoute(train, SignalId("zA"), route, Aspect.PosunDovolen)
+
+		// Then: the demoted claim bounds no held block, so the block rollback reclaims it.
+		assertDeniedWithReason(response, "Signal zA cannot be cleared (unknown signal or invalid signal aspect)")
+		assertReleased(next)
+		assertThat(registry.getSwitchOwner(switch)).withMessage("owner of the stale demoted claim").isNull()
+		assertThat(switch.locked).withMessage("the stale demoted claim must be released").isFalse()
+		// And: only the stale switch claim went; route 1's blocks are untouched.
+		assertHeld(held, train)
+		assertThat(registry.getBlocks(train).toSet()).isEqualTo(held.toSet())
+
+		// When: another train asks for a route over vB from the B side.
+		val otherRoute =
+			TrainRoute(
+				from = SignalId("zB"),
+				to = SignalId("zA"),
+				running = listOf(VB_PLUS),
+				blocks = listOf(BlockId("other-block"))
+			)
+		val other = facade.requestRoute("Train #other", SignalId("zB"), otherRoute, Aspect.Volno)
+
+		// Then: it is granted and locks vB; the first train keeps exactly route 1's blocks.
+		assertThat((other as? InterlockingFacade.RouteResponse.Denied)?.reason)
+			.withMessage("denial reason of the other train's route")
+			.isNull()
+		assertThat(other)
+			.withMessage("the freed switch must be lockable by another train")
+			.isInstanceOf<InterlockingFacade.RouteResponse.Granted>()
+		assertThat(registry.getSwitchOwner(switch)).isEqualTo("Train #other")
+		assertThat(switch.locked).isTrue()
+		assertThat(registry.getBlocks("Train #other")).isEqualTo(listOf(otherBlock))
+		assertHeld(held, train)
+		assertThat(registry.getSwitches(train)).isEmpty()
+	}
+
+	/**
+	 * Issue #1218 ruling: the only promotion is a plain claim becoming a flank claim. A claim that was
+	 * ALREADY a flank claim before the failed route stays a flank claim through any later
+	 * registration, so the failed route did not promote it and its rollback must not demote it.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("an un-clearable route that re-lists an earlier flank switch as flank leaves it flank")
+	fun unClearableRouteDoesNotDemoteAnEarlierFlankClaim() {
+		val train = "Train #1218"
+		val held = namedHeldRouteBlocks()
+		val (next, failingRunningRoute) = secondRoute(excluding = held)
+		val switch = switchVB()
+		val facade = DefaultInterlockingFacade(context, registry)
+
+		// Given: route 1 (A -> doB1) is granted with vB as its flank switch.
+		val grant = facade.requestRoute(train, SignalId("zA"), heldRoute(held).copy(flank = listOf(VB_PLUS)), Aspect.Volno)
+		assertThat(grant)
+			.withMessage("the held route must be granted")
+			.isInstanceOf<InterlockingFacade.RouteResponse.Granted>()
+		assertThat(registry.isFlankProtected(switch)).withMessage("route 1 flank-locks vB").isTrue()
+
+		// When: route 2 lists vB as FLANK as well and fails after locking.
+		val route = failingRunningRoute.copy(running = emptyList(), flank = listOf(VB_PLUS))
+		val response = facade.requestRoute(train, SignalId("zA"), route, Aspect.PosunDovolen)
+
+		// Then: vB stays route 1's flank lock -- not demoted, and so not reclaimed by the block rollback.
+		assertDeniedWithReason(response, "Signal zA cannot be cleared (unknown signal or invalid signal aspect)")
+		assertReleased(next)
+		assertThat(registry.getSwitchOwner(switch)).withMessage("owner of route 1's flank switch").isEqualTo(train)
+		assertThat(switch.locked).withMessage("route 1's flank switch must stay locked").isTrue()
+		assertThat(registry.isFlankProtected(switch)).withMessage("route 1's flank claim").isTrue()
+		assertHeld(held, train)
+	}
+
+	/** The vyhybna switch vB, which every second route in this class runs over. */
+	private fun switchVB(): DynamicRailSwitch =
+		context.getRailWayNetGrid().cellsOfType<DynamicRailSwitch>().first { it.name == "vB" }
+
 	/** Holds A -> doB1 for [train] through the real [PathReservationService]; returns the reserved blocks. */
 	private fun holdRouteViaService(train: String): List<DynamicTrackBlock> {
 		val held = assertReservationSuccess(service.reservePath(train, inA, doB1)).reservedBlocks
@@ -413,4 +611,9 @@ class InterlockingFacadeRollbackScopeTest : KoinTestBase() {
 		target: DynamicPathSeparator,
 		excluding: List<DynamicTrackBlock>
 	): DynamicTrackBlock = context.routeBlocksOf(start, target).first { it !in excluding }
+
+	private companion object {
+		/** vB in the position every route in this class needs it. */
+		val VB_PLUS = SwitchSetting(SwitchId("vB"), SwitchPosition.PLUS)
+	}
 }

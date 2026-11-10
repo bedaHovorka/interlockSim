@@ -27,7 +27,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
  * ## Design Principles
  *
  * - **Ownership validation**: Only return paths through blocks reserved for THIS train
- * - **Graceful waiting**: Return null when no valid path exists (train waits)
+ * - **Graceful waiting**: Return a non-`Available` [PathResult] when no valid path exists (train waits)
  * - **Registry integration**: Use PathReservationRegistry to check block ownership
  * - **Separation of concerns**: Path finding delegated to existing infrastructure
  *
@@ -44,7 +44,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
  * | **Purpose** | Reserve paths BEFORE train enters | Navigate paths AFTER reservation |
  * | **Ownership** | Creates ownership mappings | Validates existing ownership |
  * | **State changes** | Modifies block state (RESERVED) | Read-only (no state changes) |
- * | **Error handling** | Try alternative paths on conflict | Return null on ownership mismatch |
+ * | **Error handling** | Try alternative paths on conflict | Return `OwnershipConflict` on ownership mismatch |
  * | **Used by** | Dispatcher/Generator (pre-entry) | Train (during travel) |
  *
  * ## Architecture Context
@@ -79,7 +79,8 @@ interface TrainNavigationService {
 	 *
 	 * ## Algorithm
 	 *
-	 * 1. Build path from separator through next section to next semaphore (existing pathToNextSemaphore logic)
+	 * 1. Build path from separator through next section to next semaphore, following the train's
+	 *    `PathInfo.reservedPath` (Issue #297)
 	 * 2. Extract all track blocks from path
 	 * 3. For each block, validate it is RESERVED for trainId (via PathReservationRegistry)
 	 * 4. If no topological path exists, return NoTopologicalPath (permanent condition)
@@ -131,21 +132,6 @@ interface TrainNavigationService {
 	 * }
 	 * ```
 	 *
-	 * ## Relationship to pathToNextSemaphore
-	 *
-	 * This method wraps the existing `pathToNextSemaphore` logic with ownership validation:
-	 *
-	 * ```kotlin
-	 * // Old approach (no ownership validation):
-	 * val path = env.pathToNextSemaphore(separator, next)
-	 *
-	 * // New approach (with ownership validation):
-	 * val result = trainNavService.findReservedPathForTrain(trainId, separator)
-	 * ```
-	 *
-	 * The core path-finding logic remains unchanged; this method adds train-specific filtering
-	 * and better error reporting.
-	 *
 	 * @param trainId Unique identifier for the train (typically Train.toString())
 	 * @param separator Starting point (semaphore, InOut)
 	 * @return PathResult indicating success (Available) or reason for failure
@@ -160,13 +146,11 @@ interface TrainNavigationService {
 	 *
 	 * This is a read-only check that validates ownership without modifying state.
 	 *
-	 * ## Performance
+	 * ## Implementation note
 	 *
-	 * This method is optimized for repeated polling scenarios:
-	 * - Validates block ownership without returning the full Path object
-	 * - Early exit on first ownership conflict (avoids checking remaining blocks)
-	 * - Lower memory footprint than findReservedPathForTrain
-	 * - Uses same validation logic to ensure consistency
+	 * `DefaultTrainNavigationService` delegates to [findReservedPathForTrain] and keeps only the
+	 * verdict, so a poll builds the full path and checks every block: it costs as much as the path
+	 * request, and using the same code guarantees both agree.
 	 *
 	 * ## Use Cases
 	 *

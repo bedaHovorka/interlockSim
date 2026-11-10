@@ -16,6 +16,7 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
+import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createExampleContext
@@ -56,7 +57,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 			registry,
 			get<SimulationContextFactory>(),
 			"createShuntingLoopAIExample",
-			"shuntingLoopAI",
+			ExampleNames.SHUNTING_LOOP_AI,
 			"60"
 		)
 	}
@@ -67,7 +68,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	fun sweeperIsReachableFromTheScope() {
 		val context = createShuntingLoopAIContext()
 
-		assertThat(context.scope.getOrNull<OrphanReservationSweeper>()).isNotNull()
+		assertThat(context.scope.publishedOrNull<OrphanReservationSweeper>()).isNotNull()
 	}
 
 	@Test
@@ -76,7 +77,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	fun controlStepDrivesASweep() {
 		val context = createShuntingLoopAIContext()
 		val loop = context.mainProcess as ShuntingLoop
-		val sweeper = checkNotNull(context.scope.getOrNull<OrphanReservationSweeper>())
+		val sweeper = checkNotNull(context.scope.publishedOrNull<OrphanReservationSweeper>())
 		val before = sweeper.sweepCount
 
 		// Exactly what ShuntingLoop.iteration() calls once per control step — every 2.0 simulated
@@ -92,7 +93,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	fun freshNetworkReleasesNothing() {
 		val context = createShuntingLoopAIContext()
 		val loop = context.mainProcess as ShuntingLoop
-		val sweeper = checkNotNull(context.scope.getOrNull<OrphanReservationSweeper>())
+		val sweeper = checkNotNull(context.scope.publishedOrNull<OrphanReservationSweeper>())
 
 		checkNotNull(loop.controlStepListener).onControlStep()
 
@@ -116,7 +117,7 @@ class ExampleRegistryOrphanSweeperWiringTest : KoinTestBase() {
 	@DisplayName("the sweeper is built with a partial releaser so un-travelled tails can be reclaimed")
 	fun sweeperHasAPartialReleaser() {
 		val context = createShuntingLoopAIContext()
-		val sweeper = checkNotNull(context.scope.getOrNull<OrphanReservationSweeper>())
+		val sweeper = checkNotNull(context.scope.publishedOrNull<OrphanReservationSweeper>())
 
 		val releaserField = OrphanReservationSweeper::class.java.getDeclaredField("partialReleaser")
 		releaserField.isAccessible = true

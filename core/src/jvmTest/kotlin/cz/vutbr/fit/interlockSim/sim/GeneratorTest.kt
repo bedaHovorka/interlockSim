@@ -10,9 +10,12 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.hasMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -133,6 +136,24 @@ class GeneratorTest : KoinTestBase() {
 			// Assert
 			assertThat(generator).isNotNull()
 			assertThat(generator.trains.size).isEqualTo(0)
+		}
+
+		/**
+		 * Test: Generator rejects a non-positive maxTrains limit.
+		 *
+		 * `LoopProcess.actions()` runs `iteration()` before `interLoopSleep()` checks the cap, so an
+		 * accepted-but-nonpositive limit would still create and place one train before stopping
+		 * (PR #1267 review round, Copilot thread). The constructor therefore rejects it.
+		 */
+		@Test
+		fun `generator rejects a non-positive maxTrains limit`() {
+			// Arrange & Act & Assert
+			assertFailure { Generator(mockContext, shuffleInOuts = false, maxTrains = 0) }
+				.isInstanceOf<IllegalArgumentException>()
+				.hasMessage("maxTrains must be positive, got: 0")
+			assertFailure { Generator(mockContext, shuffleInOuts = false, maxTrains = -1) }
+				.isInstanceOf<IllegalArgumentException>()
+				.hasMessage("maxTrains must be positive, got: -1")
 		}
 
 		/**

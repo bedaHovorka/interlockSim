@@ -38,6 +38,9 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
+/** vyhybna.xml's topology capacity (2 platform tracks), the station every test here loads. */
+private const val VYHYBNA_CAPACITY = 2
+
 /**
  * Unit tests for [KoogAgentFactory] (Goal 10 dispatcher-cannot-approve-trains fix; tool surface
  * updated for SP2c.6, Issue #829).
@@ -105,14 +108,18 @@ class KoogAgentFactoryTest : DispatcherKoinTestBase() {
 			private set
 		var capturedCycleHistory: CycleHistory? = null
 			private set
+		var capturedStationCapacity: Int? = null
+			private set
 
 		override suspend fun createDispatchAgent(
 			modelName: String,
 			tools: List<DomainTool>,
 			systemPrompt: String?,
 			cycleHistory: CycleHistory,
-			outcomeFeed: AppliedOutcomeFeed?
+			outcomeFeed: AppliedOutcomeFeed?,
+			stationCapacity: Int
 		): KoogDispatchAgent {
+			capturedStationCapacity = stationCapacity
 			capturedTools = tools
 			capturedSystemPrompt = systemPrompt
 			capturedCycleHistory = cycleHistory
@@ -574,7 +581,8 @@ class KoogAgentFactoryTest : DispatcherKoinTestBase() {
 				prompt.startsWith(
 					KoogAgentFactory.buildSystemPrompt(
 						SinkHolder().maxActionsPerTick,
-						PromptVariant.BASELINE
+						PromptVariant.BASELINE,
+						VYHYBNA_CAPACITY
 					)
 				)
 			).isEqualTo(true)
@@ -589,7 +597,8 @@ class KoogAgentFactoryTest : DispatcherKoinTestBase() {
 				prompt.startsWith(
 					KoogAgentFactory.buildSystemPrompt(
 						SinkHolder().maxActionsPerTick,
-						PromptVariant.REVISED
+						PromptVariant.REVISED,
+						VYHYBNA_CAPACITY
 					)
 				)
 			).isEqualTo(true)
@@ -609,10 +618,10 @@ class KoogAgentFactoryTest : DispatcherKoinTestBase() {
 			val maxActions = SinkHolder().maxActionsPerTick
 			val baselineTopology =
 				assembledPromptFor(PromptVariant.BASELINE)
-					.removePrefix(KoogAgentFactory.buildSystemPrompt(maxActions, PromptVariant.BASELINE))
+					.removePrefix(KoogAgentFactory.buildSystemPrompt(maxActions, PromptVariant.BASELINE, VYHYBNA_CAPACITY))
 			val revisedTopology =
 				assembledPromptFor(PromptVariant.REVISED)
-					.removePrefix(KoogAgentFactory.buildSystemPrompt(maxActions, PromptVariant.REVISED))
+					.removePrefix(KoogAgentFactory.buildSystemPrompt(maxActions, PromptVariant.REVISED, VYHYBNA_CAPACITY))
 
 			assertThat(baselineTopology).contains("STATION TOPOLOGY")
 			assertThat(revisedTopology).isEqualTo(baselineTopology)

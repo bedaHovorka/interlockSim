@@ -20,13 +20,43 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Testing Generator
+ *
+ * Each train runs from a random InOut to another one. When the network has InOuts on both sides
+ * (both orientations), the pair is always one InOut from each side: trains travel through the
+ * station, never between two exits of the same side (Cerveny Ujezd has four InOuts, two per side;
+ * Goal 1B SP3.1, Issue #1163). With two InOuts, or InOuts of one orientation only, the pair is
+ * the first two of the shuffled list as before, so vyhybna output is unchanged.
+ *
+ * @param seed seed of the kDisco random stream; the default 0 is the historical value
+ * @param maxTrains stop generating after this many trains; `null` (default) generates until
+ *   stopped; must be positive when given
  */
 open class Generator(
 	protected val env: SimulationEnvironment,
-	protected val shuffleInOuts: Boolean = true
+	protected val shuffleInOuts: Boolean = true,
+	seed: Long = 0L,
+	private val maxTrains: Int? = null
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/**
+		 * The one global integration step cap, in simulated seconds: kDisco's `dtMax` for every
+		 * scenario run. [startAction] is its only production use, and every loop that starts a
+		 * generator (`MultiTrainLoop`, `ShuntingLoop`, …) runs with it; there is no per-scenario
+		 * override (Goal 1B SP13, Issue #1160; `DtMaxSingleSiteTripwireTest` pins this). The value
+		 * and its accuracy bound are recorded in `docs/goal9b-demands/SP13-dtmax.md`.
+		 */
+		const val DT_MAX: Double = 1e-3
+	}
+
+	init {
+		// `LoopProcess.actions()` runs `iteration()` before the cap check in `interLoopSleep()`,
+		// so an accepted-but-nonpositive limit would still create and place one train
+		// (PR #1267 review round, Copilot thread); reject it here instead. null = unlimited.
+		require(maxTrains == null || maxTrains > 0) {
+			"maxTrains must be positive, got: $maxTrains"
+		}
 	}
 
 	override suspend fun startAction() {
@@ -35,15 +65,14 @@ open class Generator(
 		// the approach, Issue #760 for the rest) are located by kDisco root-finding
 		// (`Process.waitCrossing` / `waitUntilCrossing`), so no Engine wait resolves to a whole
 		// step, and Engine runs ahead of the velocity integration (Issue #1126), so each RK stage
-		// integrates the velocity with the acceleration of that stage. `dtMax` stays at 1 ms: the
-		// Issue #760 ladder (1e-3, 1e-2, 1e-1, 1.0; table in PR #1133) was walked before #1126,
-		// and a raise is a separate decision with its own re-run of that ladder.
-		dtMax = 1e-3
+		// integrates the velocity with the acceleration of that stage. `dtMax` is the global
+		// [DT_MAX] (1 ms; decided in Goal 1B SP13, Issue #1160).
+		dtMax = DT_MAX
 		maxRelError = 1e-2
 		maxAbsError = 1e-2
 	}
 
-	protected var random = Random(0L)
+	protected var random = Random(seed)
 		set(value) {
 			field = value
 			shuffleRandom = value.asKotlinRandom()
@@ -59,12 +88,16 @@ open class Generator(
 		}
 		val timeIn = time() + random.normal(15.0, 5.0)
 		val timeOut = timeIn + random.normal(15.0, 5.0)
+		val from = inOutsList[0]
+		// The first InOut of the other side; the plain second entry when there is none, so two
+		// InOuts (vyhybna) pair exactly as before.
+		val to = inOutsList.drop(1).firstOrNull { it.getOrientation() != from.getOrientation() } ?: inOutsList[1]
 		logger.debug {
-			"Generating random timetable: from ${inOutsList[0].name} to ${inOutsList[1].name}, " +
+			"Generating random timetable: from ${from.name} to ${to.name}, " +
 				"arrival at $timeIn, departure at $timeOut"
 		}
 
-		return Timetable(inOutsList[0], inOutsList[1], Time(timeIn), Time(timeOut), 40.0)
+		return Timetable(from, to, Time(timeIn), Time(timeOut), 40.0)
 	}
 
 	override suspend fun iteration() {
@@ -82,6 +115,10 @@ open class Generator(
 	}
 
 	override suspend fun interLoopSleep() {
+		if (maxTrains != null && trains.size >= maxTrains) {
+			passivate() // wakes only through terminate()
+			return
+		}
 		hold(random.exp(43.0))
 		i++
 	}

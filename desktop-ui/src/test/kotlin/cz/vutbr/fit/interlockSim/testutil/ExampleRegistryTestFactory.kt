@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 
 /**
@@ -51,4 +52,32 @@ fun createExampleContext(
 		contextFactory,
 		arrayOf("example", exampleName, endTime)
 	) as DefaultSimulationContext
+}
+
+/**
+ * Builds the [DefaultSimulationContext] an example would run on by resolving [exampleName] through
+ * [map] — the same lookup the `example <name>` mode does — and invoking the registered factory.
+ *
+ * [createExampleContext] reaches a private factory by method name and bypasses the registry maps;
+ * this twin exercises the map itself, which is exactly what a "map resolves name to arm X" test
+ * pins. Added in the PR #1282 review round (Issue #955's one-shared-copy rule): the two map-driven
+ * Cerveny Ujezd test classes had identical private copies.
+ *
+ * The context is fully wired but **not run**, and the caller owns it: close it, or hand it to
+ * `KoinTestBase.tracked()`.
+ *
+ * @param map the registry map the example name must resolve through
+ * @param contextFactory the factory the example should build its context with
+ * @param exampleName the example name, normally an `ExampleNames` constant
+ * @param endTime the end-time argument, as the string form `main` would have parsed
+ * @throws IllegalStateException if the example name is not registered in [map]
+ */
+fun createExampleContextFromMap(
+	map: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext>,
+	contextFactory: SimulationContextFactory,
+	exampleName: String,
+	endTime: String = "60"
+): DefaultSimulationContext {
+	val factory = checkNotNull(map[exampleName]) { "$exampleName is not registered" }
+	return factory(contextFactory, arrayOf("example", exampleName, endTime)) as DefaultSimulationContext
 }

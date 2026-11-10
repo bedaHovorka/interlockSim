@@ -18,22 +18,15 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -65,14 +58,7 @@ import java.util.concurrent.TimeUnit
  * paths plus wait-then-extend are the correct railway semantics.
  */
 @DisplayName("Issue #742 Regression: impossible sibling-branch diversion must not reserve")
-class Issue742RegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var service: PathReservationService
-
+class Issue742RegressionTest : PathReservationServiceTestBase() {
 	// Elements from vyhybna.xml (parallel branches k1 at row 8, k2 at row 9)
 	private lateinit var inOutB: DynamicPathSeparator // InOut B at (30,8)
 	private lateinit var semaphoreZA: DynamicPathSeparator // zA at (14,8)
@@ -84,12 +70,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	private lateinit var switchVB: DynamicRailSwitch // vB at (26,8)
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-
-		registry = simulationContext.scope.get()
-		service = simulationContext.getRoutingServices().getPathReservationService()
-
+	fun setUpFixtures() {
 		val grid = simulationContext.getRailWayNetGrid()
 		val inOuts = simulationContext.getInOuts().toList()
 
@@ -108,11 +89,6 @@ class Issue742RegressionTest : KoinTestBase() {
 
 	/** Collect every [DynamicRailSwitch] present in the loaded vyhybna grid. */
 	private fun collectSwitches(): List<DynamicRailSwitch> = simulationContext.cellsOfType<DynamicRailSwitch>()
-
-	@AfterEach
-	fun tearDown() {
-		simulationContext.close()
-	}
 
 	@Test
 	@Timeout(10, unit = TimeUnit.SECONDS)

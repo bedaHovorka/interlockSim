@@ -611,7 +611,8 @@ class RunReportAggregatorTest {
 						maxConcurrentTrains = 3L,
 						blockTransitions = 20L,
 						conflicts = 1L,
-						failedReservations = 2L
+						failedReservations = 2L,
+						unresolvedAtRunEnd = 3L
 					)
 			)
 		val report = aggregator.aggregate(listOf(snap))
@@ -640,6 +641,8 @@ class RunReportAggregatorTest {
 		assertThat(outcomeCells[16]).isEqualTo("20")
 		assertThat(outcomeCells[17]).isEqualTo("1")
 		assertThat(outcomeCells[18]).isEqualTo("2")
+		// Issue #1280: the run-end contentions are appended as the last column, so no existing column moves.
+		assertThat(outcomeCells[19]).isEqualTo("3")
 	}
 
 	@Test
@@ -793,6 +796,121 @@ class RunReportAggregatorTest {
 			.transform("includes the first message") { it.contains("pathToSemaphore null at time 12.5") }
 			.isTrue()
 		assertThat(section).transform("omits the clean run") { !it.contains("ok2") }.isTrue()
+	}
+
+	/** The "Logged FATAL Simulation Exceptions" section of [md], up to the next section. */
+	private fun fatalSection(md: String): String =
+		md.substringAfter("## Logged FATAL Simulation Exceptions").substringBefore("## Per-Run Detail")
+
+	/**
+	 * Issue #1296: the section counts FATAL runs per arm, and keeps the three states apart — a run
+	 * with a FATAL, a run scanned clean, a run whose log was never scanned (absent, not zero).
+	 */
+	@Test
+	fun `the FATAL section counts runs with a FATAL, runs scanned and runs not scanned per arm`() {
+		val llm =
+			aggregator.aggregate(
+				listOf(
+					runSnapshot(
+						runId = "stalled1",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						loggedFatalSimExceptionCount = 1L,
+						loggedFatalSimExceptionFirstMessage = "SimulationException[FATAL]: path setup at time 202.0"
+					),
+					runSnapshot(
+						runId = "stalled2",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						loggedFatalSimExceptionCount = 3L,
+						loggedFatalSimExceptionFirstMessage = "SimulationException[FATAL]: path setup at time 300.0"
+					),
+					runSnapshot(runId = "fine", arm = DispatcherArm.LLM_TOOL_CALLING, loggedFatalSimExceptionCount = 0L),
+					runSnapshot(runId = "unscanned", arm = DispatcherArm.LLM_TOOL_CALLING)
+				)
+			)
+		val control = aggregator.aggregate(listOf(runSnapshot(runId = "ctl", loggedFatalSimExceptionCount = 0L)))
+
+		val section = fatalSection(aggregator.renderMarkdown(listOf(control, llm)))
+
+		assertThat(section)
+			.transform("has the per-arm header") {
+				it.contains("| Arm | Runs | Runs with FATAL | Runs scanned | Runs not scanned |")
+			}.isTrue()
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "4", "2", "3", "1"))
+		assertThat(tableRowCells(section, DispatcherArm.RULE_BASED.name))
+			.isEqualTo(listOf(DispatcherArm.RULE_BASED.name, "1", "0", "1", "0"))
+	}
+
+	@Test
+	fun `the per-arm FATAL count is rendered even when no run recorded a FATAL`() {
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "ok1", loggedFatalSimExceptionCount = 0L)))
+		val section = fatalSection(aggregator.renderMarkdown(listOf(report)))
+
+		assertThat(tableRowCells(section, DispatcherArm.RULE_BASED.name))
+			.isEqualTo(listOf(DispatcherArm.RULE_BASED.name, "1", "0", "1", "0"))
+	}
+
+	@Test
+	fun `an arm with no runs shows zero runs in the FATAL count, not a missing row`() {
+		val empty = aggregator.aggregate(emptyList()).copy(arm = DispatcherArm.LLM_TOOL_CALLING)
+		val section = fatalSection(aggregator.renderMarkdown(listOf(empty)))
+
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "0", "0", "0", "0"))
+	}
+
+	/** The stale-origin sub-section of the "Apply Failures" section of [md], up to the next section. */
+	private fun staleOriginSection(md: String): String =
+		md
+			.substringAfter("### Stale-Origin Refusals After a Silent Non-Idle LLM Cycle")
+			.substringBefore("## Author Attribution")
+
+	/**
+	 * Issue #1365: the stale-origin refusals that follow a silent non-idle LLM cycle are summed per
+	 * arm, next to how many runs had one, how many runs measured the count and how many did not
+	 * (a run JSON written before the field existed: absent, not zero).
+	 */
+	@Test
+	fun `the stale-origin refusals after a silent cycle are counted per arm`() {
+		val llm =
+			aggregator.aggregate(
+				listOf(
+					runSnapshot(
+						runId = "refused2",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						staleOriginRefusalsAfterSilentCycle = 2L
+					),
+					runSnapshot(
+						runId = "refused3",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						staleOriginRefusalsAfterSilentCycle = 3L
+					),
+					runSnapshot(runId = "clean", arm = DispatcherArm.LLM_TOOL_CALLING, staleOriginRefusalsAfterSilentCycle = 0L),
+					runSnapshot(runId = "old", arm = DispatcherArm.LLM_TOOL_CALLING)
+				)
+			)
+		val control = aggregator.aggregate(listOf(runSnapshot(runId = "ctl", staleOriginRefusalsAfterSilentCycle = 0L)))
+
+		val section = staleOriginSection(aggregator.renderMarkdown(listOf(control, llm)))
+
+		assertThat(section)
+			.transform("has the per-arm header") {
+				it.contains("| Arm | Runs | Refusals | Runs with a refusal | Runs measured | Runs not measured |")
+			}.isTrue()
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "4", "5", "2", "3", "1"))
+		assertThat(tableRowCells(section, DispatcherArm.RULE_BASED.name))
+			.isEqualTo(listOf(DispatcherArm.RULE_BASED.name, "1", "0", "0", "1", "0"))
+	}
+
+	@Test
+	fun `an arm whose runs never measured stale-origin refusals shows n-a, not zero`() {
+		val report =
+			aggregator.aggregate(listOf(runSnapshot(runId = "old", arm = DispatcherArm.LLM_TOOL_CALLING)))
+		val section = staleOriginSection(aggregator.renderMarkdown(listOf(report)))
+
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "1", "n/a", "n/a", "0", "1"))
 	}
 
 	@Test

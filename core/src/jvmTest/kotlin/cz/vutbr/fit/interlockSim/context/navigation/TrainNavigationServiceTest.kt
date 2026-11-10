@@ -59,7 +59,7 @@ import org.koin.core.component.inject
  * - Integration testing with actual dynamic wrappers
  * - Verification of real component interactions
  * - No mock setup complexity or stateful call counting
- * - Follows proven patterns from TopologyNavigatorTest and PathReservationServiceTest
+ * - Follows proven patterns from TopologyNavigatorTest and PathReservationServiceTestBase
  *
  * ## Network Topologies
  *
