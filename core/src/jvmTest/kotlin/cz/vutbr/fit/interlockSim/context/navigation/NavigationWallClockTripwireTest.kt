@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
@@ -27,7 +28,10 @@ import java.io.File
  *
  * detekt's `ForbiddenMethodCall` is off and the commonMain purity gate only catches `System.*`, so
  * neither sees `currentTimeMillisKMP`, `Clock.System`, `TimeSource` or `measureTime`; this line-based
- * scan does. Comment and KDoc lines are skipped, so documentation may still name them.
+ * scan does. It reads code through [SourceScan.codeLines] (Issue #1379): comments, KDoc, trailing
+ * comments and string literals are stripped, so documentation may still name them — and so does a
+ * string constant that only names one of these APIs, because a name inside a quoted string
+ * produces no read.
  */
 class NavigationWallClockTripwireTest {
 	private companion object {
@@ -40,6 +44,17 @@ class NavigationWallClockTripwireTest {
 
 		val WALL_CLOCK_READ =
 			Regex("""currentTimeMillisKMP|System\.currentTimeMillis|Clock\.System|\bTimeSource\b|\bmeasureTime""")
+
+		/**
+		 * The 0-based indices of the [lines] (one file) whose code reads wall-clock time; comments are
+		 * stripped by [SourceScan.codeLines], so a trailing comment or a block comment never counts.
+		 */
+		fun wallClockReads(lines: List<String>): List<Int> =
+			SourceScan
+				.codeLines(lines)
+				.withIndex()
+				.filter { (_, code) -> WALL_CLOCK_READ.containsMatchIn(code) }
+				.map { it.index }
 	}
 
 	private val navigationSources: List<File> by lazy {
@@ -50,11 +65,8 @@ class NavigationWallClockTripwireTest {
 	fun `no navigation source reads wall-clock time`() {
 		val hits =
 			navigationSources.flatMap { file ->
-				file
-					.readLines()
-					.withIndex()
-					.filter { (_, line) -> SourceScan.isCode(line) && WALL_CLOCK_READ.containsMatchIn(line) }
-					.map { (index, line) -> "${file.name}:${index + 1}: ${line.trim()}" }
+				val lines = file.readLines()
+				wallClockReads(lines).map { index -> "${file.name}:${index + 1}: ${lines[index].trim()}" }
 			}
 
 		assertThat(hits).isEmpty()
@@ -78,5 +90,29 @@ class NavigationWallClockTripwireTest {
 			"val d = measureTimeMillis { work() }"
 		).forEach { assertThat(WALL_CLOCK_READ.containsMatchIn(it)).isTrue() }
 		assertThat(WALL_CLOCK_READ.containsMatchIn("private val simTimeSource: () -> Double")).isFalse()
+	}
+
+	@Test
+	fun `a wall-clock name in a trailing comment does not count as a read`() {
+		assertThat(wallClockReads(listOf("val t = simTime() // not System.currentTimeMillis"))).isEmpty()
+	}
+
+	@Test
+	fun `a wall-clock read inside a block comment does not count`() {
+		val lines = listOf("/* Former code:", "\tval t = System.currentTimeMillis()", "*/", "val t = simTime()")
+
+		assertThat(wallClockReads(lines)).isEmpty()
+	}
+
+	@Test
+	fun `a real wall-clock read is still caught, with or without a trailing comment`() {
+		val lines =
+			listOf(
+				"/** KDoc may name Clock.System. */",
+				"val t = System.currentTimeMillis() // why",
+				"val mark = TimeSource.Monotonic.markNow()"
+			)
+
+		assertThat(wallClockReads(lines)).containsExactly(1, 2)
 	}
 }

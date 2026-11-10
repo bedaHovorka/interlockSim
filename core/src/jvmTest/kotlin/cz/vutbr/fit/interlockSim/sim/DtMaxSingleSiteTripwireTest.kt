@@ -32,16 +32,18 @@ import java.io.File
  *   Each of them must still set it, so the list cannot go stale.
  *
  * A named argument (`dtMax = x,` in a constructor call) is not a statement and is not matched, and
- * neither is a `dtMax` inside a comment or a string literal: [statementOf] strips string literals
- * and comment spans (whole block comments, the state carried across the lines of one file) before
- * it looks for the statement. A statement after a `when` branch arrow (`->`) IS a statement.
+ * neither is a `dtMax` inside a comment or a string literal: the shared scanner
+ * [SourceScan.codeLines] strips string literals and comment spans (whole block comments, the state
+ * carried across the lines of one file) before [statementOf] looks for the statement. A statement
+ * after a `when` branch arrow (`->`) IS a statement.
  *
  * Deliberate holes (a per-line grep is not a parser): a statement split as `dtMax` on one line and
  * `= value` on the next is not matched; a named argument behind `(` on its line is not matched,
  * with or without the trailing comma, while one that starts its line is matched unless it ends
- * with the comma. A raw triple-quoted string can raise a false alarm; a close pair inside a
- * string literal can move a block comment's close; nested block comments close at the first close
- * pair, so a nested opener is a false alarm. Pathological cases, accepted. The walk up to `settings.gradle.kts` must always succeed under Gradle and CI; when it
+ * with the comma. The scanner's own holes apply too: a raw triple-quoted string can raise a false
+ * alarm; a close pair inside a string literal can move a block comment's close; nested block
+ * comments close at the first close pair, so a nested opener is a false alarm. Pathological cases,
+ * accepted. The walk up to `settings.gradle.kts` must always succeed under Gradle and CI; when it
  * cannot, the tests fail loudly — never a silent skip.
  *
  * The grep reads files outside `:core`, which Gradle does not track as inputs of this test task,
@@ -101,7 +103,7 @@ class DtMaxSingleSiteTripwireTest {
 	}
 
 	@Test
-	fun `the matcher skips block comments across lines and still sees code after the close`() {
+	fun `the matcher on the shared scanner skips block comments across lines and sees code after the close`() {
 		val kdoc =
 			listOf(
 				"/** Example prose:",
@@ -109,7 +111,7 @@ class DtMaxSingleSiteTripwireTest {
 				"\t */",
 				"\tval pinned = 1"
 			)
-		assertThat(codeLinesOf(kdoc).mapNotNull { statementIn(it) }).isEmpty()
+		assertThat(SourceScan.codeLines(kdoc).mapNotNull { statementIn(it) }).isEmpty()
 
 		val unclosed =
 			listOf(
@@ -117,14 +119,14 @@ class DtMaxSingleSiteTripwireTest {
 				"\t * (fast) dtMax = 1e-2 still prose",
 				"\tval real code after the close" + " dtMax = 1e-3"
 			)
-		assertThat(codeLinesOf(unclosed).mapNotNull { statementIn(it) }).isEmpty()
+		assertThat(SourceScan.codeLines(unclosed).mapNotNull { statementIn(it) }).isEmpty()
 
 		val reopened =
 			listOf(
 				"/* header",
 				"more prose */" + " dtMax = 1e-3"
 			)
-		assertThat(codeLinesOf(reopened).mapNotNull { statementIn(it) }).containsExactly("dtMax = 1e-3")
+		assertThat(SourceScan.codeLines(reopened).mapNotNull { statementIn(it) }).containsExactly("dtMax = 1e-3")
 	}
 
 	/** One `dtMax = …` statement: the file relative to the repository root, and the statement. */
@@ -143,7 +145,7 @@ class DtMaxSingleSiteTripwireTest {
 				SourceScan
 					.kotlinFiles(sourceSet)
 					.flatMap { file ->
-						codeLinesOf(file.readLines()).mapNotNull { code ->
+						SourceScan.codeLines(file.readLines()).mapNotNull { code ->
 							statementIn(code)?.let { Site(file.relativeTo(root).invariantSeparatorsPath, it, production) }
 						}
 					}.toList()
@@ -172,23 +174,17 @@ class DtMaxSingleSiteTripwireTest {
 		 * A `dtMax = …` statement (plain, or compound with `+=`): at the start of the line or after
 		 * `{`, `;`, `)` (an `if` without braces), `>` (a `when` branch arrow) or `else`; not `==`,
 		 * and a named argument is matched only when it starts its line without the trailing comma.
-		 * [statementOf] works on the comment-stripped code [codeLinesOf] produces.
+		 * [statementOf] works on the comment-stripped code [SourceScan.codeLines] produces.
 		 */
 		val STATEMENT = Regex("""(?:^|[{;)]|>|\belse)\s*((?:\w+\.)*dtMax\s*(?:\+=|=)(?!=).*?)\s*}?\s*$""")
 
 		/**
-		 * A string literal with Kotlin's backslash escapes (an inner `\"`), blanked before the
-		 * statement search so a `dtMax` in one cannot match.
-		 */
-		val STRING_LITERAL = Regex("\"(?:[^\"\\\\]|\\\\.)*\"")
-
-		/**
 		 * The `dtMax = …` statement [line] holds outside comments and string literals, or null: named
 		 * arguments (trailing comma) and assignments inside comments or string literals are not
-		 * statements. The line is stripped first — string literals go first (a `//` inside one must
-		 * not truncate a real statement), then the comment handling of [codeLinesOf] with fresh state.
+		 * statements. The line is stripped first by [SourceScan.codeLines] with fresh comment state —
+		 * string literals go first (a `//` inside one must not truncate a real statement).
 		 */
-		fun statementOf(line: String): String? = statementIn(codeLinesOf(listOf(line)).first())
+		fun statementOf(line: String): String? = statementIn(SourceScan.codeLines(listOf(line)).first())
 
 		private fun statementIn(code: String): String? =
 			STATEMENT
@@ -197,56 +193,5 @@ class DtMaxSingleSiteTripwireTest {
 				?.get(1)
 				?.trim()
 				?.takeUnless { it.endsWith(",") }
-
-		/**
-		 * The [lines] as code-only strings: string literals blanked first (a `//` or a comment opener
-		 * inside one must not act on the comment state), then `//` to end of line and block-comment
-		 * spans (opener to close) removed, with the block-comment state carried across the lines.
-		 */
-		fun codeLinesOf(lines: List<String>): List<String> {
-			var inBlock = false
-			return lines.map { raw ->
-				val (code, state) = commentFree(raw, inBlock)
-				inBlock = state
-				code
-			}
-		}
-
-		private fun commentFree(
-			raw: String,
-			inBlockComment: Boolean
-		): Pair<String, Boolean> {
-			val blanked = raw.replace(STRING_LITERAL, "")
-			val code = StringBuilder()
-			var inBlock = inBlockComment
-			var i = 0
-			while (i < blanked.length) {
-				if (inBlock) {
-					val close = blanked.indexOf("*/", i)
-					if (close < 0) return code.toString() to true
-					i = close + 2
-					inBlock = false
-				} else {
-					val lineComment = blanked.indexOf("//", i)
-					val blockStart = blanked.indexOf("/*", i)
-					when {
-						lineComment >= 0 && (blockStart < 0 || lineComment < blockStart) -> {
-							code.append(blanked.substring(i, lineComment))
-							return code.toString() to false
-						}
-						blockStart >= 0 -> {
-							code.append(blanked.substring(i, blockStart))
-							i = blockStart + 2
-							inBlock = true
-						}
-						else -> {
-							code.append(blanked.substring(i))
-							return code.toString() to false
-						}
-					}
-				}
-			}
-			return code.toString() to inBlock
-		}
 	}
 }
