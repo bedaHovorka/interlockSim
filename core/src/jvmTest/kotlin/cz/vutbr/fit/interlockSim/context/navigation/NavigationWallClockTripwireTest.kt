@@ -29,7 +29,9 @@ import java.io.File
  * detekt's `ForbiddenMethodCall` is off and the commonMain purity gate only catches `System.*`, so
  * neither sees `currentTimeMillisKMP`, `Clock.System`, `TimeSource` or `measureTime`; this line-based
  * scan does. It reads code through [SourceScan.codeLines] (Issue #1379): comments, KDoc, trailing
- * comments and string literals are stripped, so documentation may still name them.
+ * comments and string literals are stripped, so documentation may still name them — and so does a
+ * string constant that only names one of these APIs, because a name inside a quoted string
+ * produces no read.
  */
 class NavigationWallClockTripwireTest {
 	private companion object {

@@ -50,7 +50,10 @@ object SourceScan {
 	 * Deliberate holes (a per-line scanner is not a parser): a raw triple-quoted string spanning
 	 * lines is not blanked, so its content reads as code; a close pair inside a quoted span is
 	 * blanked with it, which can move a block comment's close; nested block comments close at the
-	 * first close pair, so the code-looking rest of the outer comment reads as code.
+	 * first close pair, so the code-looking rest of the outer comment reads as code. A string
+	 * quoted inside a `${…}` template expression does not mask as one literal either: the inner
+	 * quotes end the regex match, so the expression's argument reads as code and the tail up to
+	 * the next quote is masked with it.
 	 */
 	fun codeLines(lines: List<String>): List<String> = scan(lines, keepStrings = false)
 

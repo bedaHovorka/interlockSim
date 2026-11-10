@@ -55,7 +55,8 @@ import java.util.concurrent.TimeUnit
  *   and the declaring package `context/navigation` implements the API itself, so both are out of
  *   scope. Only code is examined (comments, trailing comments and string literals stripped by
  *   [cz.vutbr.fit.interlockSim.testutil.SourceScan.codeLines]) — KDoc may name the API and the
- *   vocabulary freely.
+ *   vocabulary freely, and so may a quoted string: a name inside a string literal is not a call
+ *   either (the reflection-level circumvention caveat below still applies).
  * - The scans are line-based heuristics. A declaration split across lines, an alias import or a
  *   reflection-level circumvention can slip past a single line; the type-annotation, generic and
  *   getter patterns below cover the spellings this codebase actually uses, and every new one has
@@ -131,7 +132,8 @@ class TargetSelectionSingleEntryTest {
 
 		/**
 		 * Every in-scope production file as `label/…` → its code lines, scanned once for the whole
-		 * class; comments are stripped here ([codeOf]) so the assertions just pattern-match.
+		 * class; comments are stripped here ([SourceScan.codeLines]) so the assertions just
+		 * pattern-match.
 		 */
 		val SCANNED_SOURCES: Map<String, List<String>> by lazy {
 			SOURCE_ROOTS
@@ -143,16 +145,10 @@ class TargetSelectionSingleEntryTest {
 							file.relativeTo(root).invariantSeparatorsPath.contains(DECLARING_PACKAGE_PATH)
 						}.map { file ->
 							label + "/" + file.relativeTo(root).invariantSeparatorsPath to
-								codeOf(file.readLines())
+								SourceScan.codeLines(file.readLines())
 						}.toList()
 				}.toMap()
 		}
-
-		/**
-		 * The code of one file's [lines], as the scans see it: [SourceScan.codeLines] strips comments,
-		 * KDoc, trailing comments and string literals (Issue #1379).
-		 */
-		fun codeOf(lines: List<String>): List<String> = SourceScan.codeLines(lines)
 
 		/** `true` when any line of [code] contains [pattern]. */
 		fun anyMatch(
@@ -200,7 +196,7 @@ class TargetSelectionSingleEntryTest {
 	@Test
 	@DisplayName("an API name in a trailing comment is not a call")
 	fun trailingCommentIsNotACall() {
-		val code = codeOf(listOf("\t\tval state = facade.state() // was facade.reservePath(a, b)"))
+		val code = SourceScan.codeLines(listOf("\t\tval state = facade.state() // was facade.reservePath(a, b)"))
 
 		assertThat(anyMatch(TARGET_API_CALL, code), "trailing-comment match").isFalse()
 	}
@@ -208,7 +204,7 @@ class TargetSelectionSingleEntryTest {
 	@Test
 	@DisplayName("a call inside a block comment is not a call")
 	fun blockCommentIsNotACall() {
-		val code = codeOf(listOf("/* Former selection:", "\tval route = facade.reservePath(a, b)", "*/"))
+		val code = SourceScan.codeLines(listOf("/* Former selection:", "\tval route = facade.reservePath(a, b)", "*/"))
 
 		assertThat(anyMatch(TARGET_API_CALL, code), "block-comment match").isFalse()
 	}
@@ -217,7 +213,7 @@ class TargetSelectionSingleEntryTest {
 	@DisplayName("a real call, a handle and a candidateTargets read are still seen")
 	fun realCodeIsStillSeen() {
 		val code =
-			codeOf(
+			SourceScan.codeLines(
 				listOf(
 					"\t\tval route = facade.reservePath(a, b) // the one entry",
 					"\tprivate val service: PathReservationService,",
