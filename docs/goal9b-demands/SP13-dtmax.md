@@ -19,7 +19,7 @@ SP11, the native seed-1 pin, the #895 numbers and the JVM/native parity pin do n
 | `Generator.DT_MAX` | the constant, 1e-3 s |
 | `Generator.startAction` | `dtMax = DT_MAX`, the one production statement |
 | `LowTrafficExitScenario.DT_MAX` (`core` `commonTest`) | `= Generator.DT_MAX`, the exit parameter |
-| `DtMaxSingleSiteTripwireTest` (`core` `jvmTest`, untagged) | greps every module: in production source sets the only `dtMax = …` statement is `dtMax = DT_MAX` in `Generator.kt`; in test source sets only `EngineStandaloneTest`, `SimpleTestProcess`, `TrainHoldAtStationIntegrationTest` and the SP13 reproducer may set their own step, and each of them must still do so |
+| `DtMaxSingleSiteTripwireTest` (`core` `jvmTest` sources, untagged; runs on its own task `:core:dtMaxSingleSiteCheck`, which declares every module's `src` tree as an input, #1377) | greps every module: in production source sets the only `dtMax = …` statement is `dtMax = DT_MAX` in `Generator.kt`; in test source sets only `EngineStandaloneTest`, `SimpleTestProcess`, `TrainHoldAtStationIntegrationTest` and the SP13 reproducer may set their own step, and each of them must still do so |
 | `DtMaxTenthStallReproducerTest` (`core` `jvmTest`, untagged) | the 1e-1 reproducer (below), and a check that `MultiTrainLoop` and `ShuntingLoop` run at `Generator.DT_MAX` — `MultiTrainLoop` records its own tick, `ShuntingLoop` through the wrapper process at t = 0.5 s, so its value is the context's `dtMax` (kDisco's default 1.0 would surface if the generator had not set it) |
 
 Why 1e-3 and no raise:

@@ -19,6 +19,7 @@ simulation engine integration, and XML layer. Targets: `jvm` (primary) and
 ./gradlew :core:heavyTest                   # Manual only — see root CLAUDE.md testing policy
 ./gradlew :core:checkCoreCommonMainPurity   # commonMain purity gate (part of check)
 ./gradlew :core:docLineAnchorCheck          # doc line-anchor tripwire (docs/**/*.md)
+./gradlew :core:dtMaxSingleSiteCheck        # dtMax single-site tripwire (every module's src)
 ```
 
 - **Purity gate:** `checkCoreCommonMainPurity` fails the build if
@@ -27,6 +28,10 @@ simulation engine integration, and XML layer. Targets: `jvm` (primary) and
 - **Doc line anchors are forbidden:** `docLineAnchorCheck` runs `DocLineAnchorTripwireTest`
   (`jvmTest/.../docs/`), which scans `docs/**/*.md` and fails on any `Name.kt:123` anchor.
   Reference code by symbol instead.
+- **dtMax has one production site:** `dtMaxSingleSiteCheck` runs `DtMaxSingleSiteTripwireTest`
+  (`jvmTest/.../sim/`), which greps every module's `src/` trees (declared as the task's inputs,
+  #1377) and fails on any `dtMax = …` statement outside `Generator.startAction` and its test allowlist.
+  Both tripwire tests run only on their own tasks, which finalize `jvmTest` and are part of `check`.
 - **`linuxX64Test` JUnit XML reports are disabled** in `core/build.gradle.kts` — a
   workaround for a Gradle × Kotlin/Native race
   ([gradle/gradle#33990](https://github.com/gradle/gradle/issues/33990), KT-69896)

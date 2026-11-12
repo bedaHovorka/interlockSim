@@ -469,6 +469,7 @@ sonarModule {
             "build/test-results/jvmTest",
             "build/test-results/integrationTest",
             "build/test-results/docLineAnchorCheck",
+            "build/test-results/dtMaxSingleSiteCheck",
         ),
     )
 }
@@ -618,13 +619,71 @@ val docLineAnchorCheck by tasks.registering(Test::class) {
     }
 }
 
+// ===========================================
+// dtMax single-site tripwire task (Issue #1377)
+// ===========================================
+// DtMaxSingleSiteTripwireTest greps the .kt files of every source set of every top-level module
+// (<module>/src/<sourceSet>/...) for a `dtMax = …` statement. Only core/src is an input of
+// :core:jvmTest, so a new override in desktop-ui or dispatcher-agent alone left jvmTest
+// UP-TO-DATE and the tripwire unchecked. Cloned from docLineAnchorCheck: the test runs on its own
+// task that declares the scanned trees as inputs, jvmTest leaves it out and is finalizedBy it,
+// and `check` depends on it. The excludes are top-level only (they keep Gradle from walking
+// .worktrees and the like); no scanned tree lies below them.
+
+val dtMaxSingleSiteCheck by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Run DtMaxSingleSiteTripwireTest (Issue #1160) with every module's src trees as inputs"
+
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("*.DtMaxSingleSiteTripwireTest")
+        isFailOnNoMatchingTests = true
+    }
+
+    testClassesDirs =
+        kotlin
+            .jvm()
+            .compilations["test"]
+            .output.classesDirs
+    classpath = kotlin.jvm().compilations["test"].runtimeDependencyFiles
+
+    inputs
+        .files(
+            fileTree(rootDir) {
+                include("*/src/**/*.kt")
+                exclude(anchorSkippedDirectories.map { "$it/**" })
+            },
+        ).withPropertyName("dtMaxScannedSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // Same reason as docLineAnchorCheck: its coverage adds nothing to the JaCoCo reports.
+    extensions.configure<JacocoTaskExtension> { isEnabled = false }
+
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        showStandardStreams = false
+    }
+
+    reports {
+        junitXml.required.set(true)
+        junitXml.outputLocation.set(file("${layout.buildDirectory.get()}/test-results/dtMaxSingleSiteCheck"))
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/tests/dtMaxSingleSiteCheck"))
+    }
+}
+
 tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching("*.DocLineAnchorTripwireTest")
-    finalizedBy(docLineAnchorCheck)
+    filter.excludeTestsMatching("*.DtMaxSingleSiteTripwireTest")
+    finalizedBy(docLineAnchorCheck, dtMaxSingleSiteCheck)
 }
 
 tasks.named("check") {
-    dependsOn(docLineAnchorCheck)
+    dependsOn(docLineAnchorCheck, dtMaxSingleSiteCheck)
 }
 
 // ===========================================
