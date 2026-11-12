@@ -160,8 +160,13 @@ object NextHopResolver {
 		}
 	}
 
-	/** `true` when [input] qualifies as a forward-reservation candidate for its owner. */
-	private fun isEligible(input: BlockInputObservation): Boolean =
+	/**
+	 * `true` when [input] qualifies as a forward-reservation candidate for its owner — the single
+	 * NEXT SECTION eligibility predicate. Also used by
+	 * [cz.vutbr.fit.interlockSim.dispatcher.NextSectionTargets] for the target its rejection names
+	 * (Issue #1378), so a refusal never suggests a hop this prompt would not offer.
+	 */
+	internal fun isEligible(input: BlockInputObservation): Boolean =
 		(!input.pathAlreadyExtendedBeyond || input.awaitingRouteExtension) &&
 			(input.isApproachingThisInput || input.pathSetUpTowardThisInput) &&
 			// Issue #1244: an awaiting train whose pick is the end of the route it already holds has

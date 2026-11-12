@@ -253,6 +253,7 @@ class ActionValidator(
 		validateRequestRouteTrainPhase(action, trainInList, trainInQueue)?.let { return it }
 		validateRequestRouteConflict(action, observation)?.let { return it }
 		validateRequestRouteDestinationAndOrigin(action, trainInList)?.let { return it }
+		validateRequestRouteNextSection(action, observation)?.let { return it }
 		validateRequestRoutePathAvailability(action, observation)?.let { return it }
 		validateRequestRouteSpan(action)?.let { return it }
 
@@ -391,6 +392,37 @@ class ActionValidator(
 		}
 
 		return null
+	}
+
+	/**
+	 * Rejects a section-hop (Signal) target that is not listed one section ahead of the origin for
+	 * this train — the [RejectionCode.TARGET_NOT_NEXT_SECTION] twin of the live check in
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool.execute] (Issue #1378). Both
+	 * call the same rule, [NextSectionTargets], over the observation's inner and outer block inputs,
+	 * and return the same text.
+	 *
+	 * Gated exactly like the tool: inert when [inOutNames] is empty (every target would look like a
+	 * Signal), and applied only to a [RouteScope.Section] request with a non-InOut target — an
+	 * [RouteScope.EndToEnd] request is the destination rule's business. Inert when the observation carries no candidate list for the
+	 * train's input facing the origin (see [NextSectionTargets]).
+	 */
+	private fun validateRequestRouteNextSection(
+		action: DispatchAction.RequestRoute,
+		observation: DispatcherObservation
+	): ValidationVerdict.Rejected? {
+		if (inOutNames.isEmpty()) return null
+		if (action.scope != RouteScope.Section || action.toEndpointName in inOutNames) return null
+		val mismatch =
+			NextSectionTargets.mismatch(
+				observation.innerBlockInputs + observation.outerBlockInputs,
+				action.trainId,
+				action.fromEndpointName,
+				action.toEndpointName
+			) ?: return null
+		return rejected(
+			RejectionCode.TARGET_NOT_NEXT_SECTION,
+			NextSectionTargets.rejectionMessage(action.trainId, action.toEndpointName, mismatch)
+		)
 	}
 
 	private fun validateRequestRoutePathAvailability(
