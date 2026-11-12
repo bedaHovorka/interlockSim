@@ -16,7 +16,10 @@
        before the first south switch, as on the north side: InOut, home signal, then switches
        (InOut-to-home-signal block 150 m, like the north approaches);
      - the switch at (44,18) is named SW72 so the two SW70-adjacent throat blocks get distinct
-       stableBlockIds (the LLM must tell their occupancies apart).
+       stableBlockIds (the LLM must tell their occupancies apart);
+     - the five other unnamed switches are named (#1376, #1378), so every switch and every throat
+       block has a distinct name: (14,8) SW29, (14,12) SW26, (14,16) SW23, (44,12) SW61,
+       (44,16) SW65.
      Kept: the 11 InOut names, the 9 signal-bounded station tracks (8 platforms + bypass) with their
      signals, all 50 switches.
 
@@ -75,20 +78,20 @@
 	<RailSwitch X="9" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW18" />
 	<RailSwitch X="12" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW21" />
 	<RailSwitch X="13" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW19" />
-	<RailSwitch X="14" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+	<RailSwitch X="14" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW23" />
 	<RailSwitch X="11" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW22" />
 	<RailSwitch X="11" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW20" />
 	<!-- North throat — Y=14 row switches -->
-	<RailSwitch X="14" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+	<RailSwitch X="14" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW26" />
 	<RailSwitch X="11" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW25" />
 	<RailSwitch X="12" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW24" />
 	<!-- North throat — Y=8 and Y=10 row switches -->
-	<RailSwitch X="14" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+	<RailSwitch X="14" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW29" />
 	<RailSwitch X="12" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW28" />
 	<RailSwitch X="11" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW27" />
 	<!-- South throat — L1 entry switches at X=44 (Y=12, 16) -->
-	<RailSwitch X="44" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
-	<RailSwitch X="44" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
+	<RailSwitch X="44" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW61" />
+	<RailSwitch X="44" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW65" />
 	<!-- South throat — Y=4 row: InOut, home signal and exit switches -->
 	<RailSwitch X="59" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW36" />
 	<InOut X="61" Y="4" SpatialType="HORIZONTAL" orientation="true" name="S-Vin-1" />

@@ -16,6 +16,7 @@ import cz.ksimulantenbande.kdisco.dtMin
 import cz.ksimulantenbande.kdisco.maxAbsError
 import cz.ksimulantenbande.kdisco.maxRelError
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -26,6 +27,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * station, never between two exits of the same side (Cerveny Ujezd has four InOuts, two per side;
  * Goal 1B SP3.1, Issue #1163). With two InOuts, or InOuts of one orientation only, the pair is
  * the first two of the shuffled list as before, so vyhybna output is unchanged.
+ *
+ * A subclass can narrow the pairs through [isPairAcceptable] (Issue #1376); [selectPair] then
+ * moves on to the next candidate pair without drawing another random number.
  *
  * @param seed seed of the kDisco random stream; the default 0 is the historical value
  * @param maxTrains stop generating after this many trains; `null` (default) generates until
@@ -88,10 +92,7 @@ open class Generator(
 		}
 		val timeIn = time() + random.normal(15.0, 5.0)
 		val timeOut = timeIn + random.normal(15.0, 5.0)
-		val from = inOutsList[0]
-		// The first InOut of the other side; the plain second entry when there is none, so two
-		// InOuts (vyhybna) pair exactly as before.
-		val to = inOutsList.drop(1).firstOrNull { it.getOrientation() != from.getOrientation() } ?: inOutsList[1]
+		val (from, to) = selectPair(inOutsList, ::isPairAcceptable)
 		logger.debug {
 			"Generating random timetable: from ${from.name} to ${to.name}, " +
 				"arrival at $timeIn, departure at $timeOut"
@@ -106,6 +107,16 @@ open class Generator(
 		placeTrain(train)
 		trains.add(train)
 	}
+
+	/**
+	 * Whether a train may be generated from [from] to [to] (Issue #1376). The default accepts every
+	 * pair, so the generator picks the same pairs as before the hook existed; a subclass narrows it
+	 * (`ShuntingLoop` to the switch-legal pairs of the Praha arms). See [selectPair].
+	 */
+	protected open fun isPairAcceptable(
+		from: DynamicInOut,
+		to: DynamicInOut
+	): Boolean = true
 
 	/**
 	 * @param train
@@ -130,4 +141,39 @@ open class Generator(
 			}
 		}
 	}
+}
+
+/**
+ * The (origin, destination) pair of a generated train, chosen from the [shuffled] InOuts by a
+ * deterministic scan that draws no random number (Issue #1376).
+ *
+ * When [shuffled] holds InOuts of both orientations, the pair is one InOut of each side; otherwise
+ * the destination is a later entry of the list. Origins are tried in list order, and for each
+ * origin its partners in list order; the first pair [accept] takes wins. With an accept-all
+ * [accept] this is exactly the historical rule: the first InOut and the first later one of the
+ * other side, or the first two when there is no other side.
+ *
+ * @throws IllegalArgumentException when [shuffled] holds fewer than two InOuts
+ * @throws IllegalStateException when [accept] takes no pair: a network whose hook rejects every
+ *   pair cannot be run, so it fails fast instead of falling back to a rejected pair
+ */
+internal fun selectPair(
+	shuffled: List<DynamicInOut>,
+	accept: (DynamicInOut, DynamicInOut) -> Boolean
+): Pair<DynamicInOut, DynamicInOut> {
+	require(shuffled.size >= 2) { "A timetable needs at least two InOuts, got ${shuffled.size}" }
+	val crossSide = shuffled.any { it.getOrientation() != shuffled[0].getOrientation() }
+	for ((i, from) in shuffled.withIndex()) {
+		val partners =
+			if (crossSide) {
+				shuffled.filter { it.getOrientation() != from.getOrientation() }
+			} else {
+				shuffled.drop(i + 1)
+			}
+		partners.firstOrNull { accept(from, it) }?.let { return from to it }
+	}
+	error(
+		"No InOut pair of this network passes isPairAcceptable: " +
+			"${shuffled.size} InOut(s) ${shuffled.map { it.name }}"
+	)
 }
