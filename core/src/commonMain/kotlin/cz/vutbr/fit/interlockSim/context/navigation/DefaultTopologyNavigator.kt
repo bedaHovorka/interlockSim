@@ -21,6 +21,9 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
+import cz.vutbr.fit.interlockSim.sim.emitRunAccountingEvent
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -579,6 +582,8 @@ class DefaultTopologyNavigator(
 	 * with [RouteSearch.BudgetExceeded] (Issue #1151). Never cached.
 	 *
 	 * Within the budget the routes and their order are exactly those of the unbounded enumeration.
+	 * A stop is logged once at WARN and announced as [RunAccountingEvent.RouteSearchBudgetExceeded]
+	 * (Issue #1306), which the run's performance row counts.
 	 */
 	internal fun searchSwitchConstrainedPaths(
 		start: PathSeparator,
@@ -600,6 +605,16 @@ class DefaultTopologyNavigator(
 			"Route search from $start to $target stopped after ${outcome.expandedNodes} expanded nodes " +
 				"(budget $nodeBudget); the pair is treated as having no route"
 		}
+		// Issue #1306 (Goal 6 SP8): counted in the run's performance row; a no-op outside a run.
+		emitRunAccountingEvent(
+			RunAccountingEvent.RouteSearchBudgetExceeded(
+				start = start.toString(),
+				target = target.toString(),
+				nodeBudget = nodeBudget,
+				expandedNodes = outcome.expandedNodes,
+				time = currentSimulationTime()
+			)
+		)
 		return RouteSearch.BudgetExceeded(start, target, nodeBudget, outcome.expandedNodes)
 	}
 

@@ -4,6 +4,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
+import platform.posix.CLOCK_MONOTONIC
 import platform.posix.CLOCK_REALTIME
 import platform.posix.clock_gettime
 import platform.posix.timespec
@@ -15,4 +16,13 @@ actual fun currentTimeMillisKMP(): Long =
 		val rc = clock_gettime(CLOCK_REALTIME, ts.ptr)
 		if (rc != 0) error("clock_gettime failed with code $rc")
 		ts.tv_sec * 1000L + ts.tv_nsec / 1_000_000L
+	}
+
+@OptIn(ExperimentalForeignApi::class)
+actual fun monotonicNanosKMP(): Long =
+	memScoped {
+		val ts = alloc<timespec>()
+		val rc = clock_gettime(CLOCK_MONOTONIC, ts.ptr)
+		if (rc != 0) error("clock_gettime(CLOCK_MONOTONIC) failed with code $rc")
+		ts.tv_sec * 1_000_000_000L + ts.tv_nsec
 	}

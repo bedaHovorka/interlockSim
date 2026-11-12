@@ -163,6 +163,34 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `RequestRoute announces its grant and its refusal for the run-end accounting, loop counters unchanged`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+		val loop = ShuntingLoop(context, endTime = 0L)
+		context.setMainProcess(loop)
+		val actuatorPort = DefaultNetworkActuatorPort(env = context)
+		val events = mutableListOf<RunAccountingEvent>()
+		context.onRunAccountingEvent { events.add(it) }
+
+		loop.controlStepListener =
+			ControlStepListener {
+				applyDecision(DispatchDecision.RequestRoute("trainA", "A", "zA"), loop, actuatorPort)
+				applyDecision(DispatchDecision.RequestRoute("trainB", "A", "zA"), loop, actuatorPort)
+				actuatorPort.releaseRoute("trainA")
+			}
+		context.run()
+
+		assertThat(events.filterIsInstance<RunAccountingEvent.RouteGranted>().map { it.trainId }.toSet())
+			.isEqualTo(setOf("trainA"))
+		assertThat(events.filterIsInstance<RunAccountingEvent.ReservationRefused>().map { it.trainId }.toSet())
+			.isEqualTo(setOf("trainB"))
+		// Documented legacy behaviour: RequestRoute never moved the loop counters.
+		assertThat(loop.getBlockTransitions("trainA")).isEqualTo(0)
+		assertThat(loop.getFailedReservations()).isEqualTo(0)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	fun `HoldTrain is a no-op in the synchronous path and does not throw`() {
 		// HoldTrain is not supported in the synchronous wiring (TrainLifecyclePort is not
 		// available here); it should log a warning and drop the decision without throwing.

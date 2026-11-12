@@ -17,10 +17,13 @@ import assertk.assertions.isLessThan
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
@@ -101,7 +104,7 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 	private fun runWith(
 		lateTrains: Int = 0,
 		stagedHoldings: (List<DynamicTrackBlock>) -> List<List<DynamicTrackBlock>>
-	): Pair<MultiTrainLoop, StagedHoldingService> {
+	): Triple<MultiTrainLoop, StagedHoldingService, RunEndSummary> {
 		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true).tracked()
 		val blocks = lineRouteBlocks(ctx)
 		assertThat(blocks.size, name = "route blocks of A -> B").isGreaterThanOrEqualTo(2)
@@ -126,14 +129,15 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 			)
 		ctx.setMainProcess(loop)
 		ctx.run()
-		return loop to service
+		// Issue #1304: the stall as the metrics service counted it from events.
+		return Triple(loop, service, ctx.getMetricsServices().getMetricsCollectionService().runEndSummary())
 	}
 
 	@Test
 	fun constructedWaitForCycleRaisesSimulationStalledAndAborts() {
 		// A third train is generated at t=100, long after the report: if the run kept going, it
 		// would be approved, so staying absent proves the run actually stopped.
-		val (loop, service) =
+		val (loop, service, summary) =
 			runWith(
 				lateTrains = 1
 			) { blocks -> listOf(listOf(blocks[0]), listOf(blocks[1])) }
@@ -148,6 +152,14 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 			.isLessThanOrEqualTo(stall.simTime + 1.0)
 		assertThat(loop.getApprovedTrains().size, name = "the late train was never approved").isEqualTo(2)
 		assertThat(loop.getTrainsExited(), name = "trains exited").isZero()
+		// Issue #1304: the same stall reaches the metrics as data, and the run is classified by it.
+		val counted = summary.stall
+		assertThat(counted, name = "stall in the run-end summary").isNotNull()
+		assertThat(counted!!.cycle, name = "counted cycle").isEqualTo(stall.cycle)
+		assertThat(counted.knot, name = "counted knot").isEqualTo(stall.knot)
+		assertThat(counted.persistedTicks, name = "counted ticks").isEqualTo(stall.persistedTicks)
+		assertThat(counted.simTime, name = "counted time").isEqualTo(stall.simTime)
+		assertThat(summary.classification, name = "classification").isEqualTo(RunEndClassification.STALLED)
 	}
 
 	@Test
@@ -193,9 +205,12 @@ class WatchdogDetectsCycleTest : CommonKoinTestBase() {
 	fun longWaitWithoutACycleDoesNotRaise() {
 		// The first train holds nothing and waits on the second, which holds one route block but
 		// needs nothing held by the first: a chain, not a cycle.
-		val (loop, service) = runWith { blocks -> listOf(emptyList(), listOf(blocks[1])) }
+		val (loop, service, summary) = runWith { blocks -> listOf(emptyList(), listOf(blocks[1])) }
 
 		assertThat(loop.stall, name = "stall report").isNull()
+		// Issue #1304: a stall-free run shows no stall in the metrics and is not classified STALLED.
+		assertThat(summary.stall, name = "stall in the run-end summary").isNull()
+		assertThat(summary.endTimeReached, name = "end time reached").isTrue()
 		assertThat(service.lastQueryTime, name = "the run reached its end").isGreaterThanOrEqualTo(END_TIME - 5.0)
 		assertThat(loop.getEntryFailures(), name = "no entry failure").isEmpty()
 	}
