@@ -271,17 +271,41 @@ class CandidateCommitterTest : PathReservationServiceTestBase() {
 		assertThat(doA1.signal, "the partially written START aspect is reset").isEqualTo(Signal.STOP)
 	}
 
+	/**
+	 * Since Issue #1378 `reservePath` refuses a rear-facing START at the Step 1.4 screen, before the
+	 * committer sees the candidate; the committer's own G4 arm is pinned directly by the next test.
+	 */
 	@Test
-	fun `a START facing away from the direction of travel is recorded as a geometric impossibility`() {
+	fun `reservePath refuses a START facing away from the direction of travel before the committer runs`() {
 		// doA1 faces B to A, so a route from it towards B has a rear-facing START (G4).
 		val result = service.reservePath("t1", doA1, inOutB)
 
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 		assertThat((result as PathReservationService.ReservationResult.GeometricallyImpossible).reason)
-			.contains("faces away from the requested direction of travel")
+			.contains("faces away from the direction of travel")
 		assertNothingLeftBehind("t1", candidate("t1", doA1, inOutB).blocks)
 		assertThat(doA1.signal).isEqualTo(Signal.STOP)
 		assertThat(vA.locked).isFalse()
+	}
+
+	/**
+	 * Defence in depth (Issue #1378): the Step 2g G4 arm still refuses a rear-facing START that reaches
+	 * the committer directly, records it as a geometric failure with its own reason, and rolls the
+	 * candidate back.
+	 */
+	@Test
+	fun `the committer records a rear-facing START it is handed as a geometric failure and rolls it back`() {
+		val request = candidate("t1", doA1, inOutB)
+		assertThat(committer.tryAtomicReservation("t1", doA1, request.forwardBlocks)).isNull()
+
+		val (failures, outcome) = committer.registerAndFinalizeCandidate(request, GeometricFailures())
+
+		assertThat(outcome, "the candidate is rejected").isNull()
+		assertThat(failures.count).isEqualTo(1)
+		assertThat(failures.reason)
+			.isEqualTo("START semaphore for candidate 0 faces away from the requested direction of travel")
+		assertNothingLeftBehind("t1", request.blocks)
+		assertThat(doA1.signal).isEqualTo(Signal.STOP)
 	}
 
 	// ── Step 2i: rollbackIfMergeAborted ──

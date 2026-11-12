@@ -10,11 +10,13 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
@@ -86,9 +88,11 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 	}
 
 	/**
-	 * Issue #961: the rear-facing START is rolled back by `rollbackUnconfigurableCandidate` after its
-	 * blocks were reserved and registered but before any reservation event. The rollback must not
-	 * publish a release either, or the event counters the detectors keep go out of balance (#1081).
+	 * Issue #961: a rear-facing START candidate must publish neither a reserve nor a release event, or
+	 * the event counters the detectors keep go out of balance (#1081). Before Issue #1378 the candidate
+	 * was rolled back by `rollbackUnconfigurableCandidate` after its blocks were reserved and
+	 * registered; since then the Step 1.4 screen refuses it before anything is reserved, and this pin
+	 * keeps both event counts at zero either way.
 	 */
 	@Test
 	fun `a candidate rolled back inside reservePath publishes no reserve and no release event`() {
@@ -130,15 +134,18 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 	}
 
 	@Test
-	fun `re-requesting an already-owned sub-route does not re-light a rear-facing START`() {
-		// Early-return branch (blocks.isNotEmpty() but forwardBlocks.isEmpty()): reserve
-		// the full A->B route first (governed by zA/doB1; doA1 is intermediate and
+	fun `re-requesting an already-owned sub-route from a rear-facing START is geometrically impossible`() {
+		// Reserve the full A->B route first (governed by zA/doB1; doA1 is intermediate and
 		// rear-facing for this direction, so PR #892's guard already leaves it at STOP --
 		// see PathReservationSignalReleaseTest."reservePath never clears a semaphore the route passes
 		// from behind"). Then re-request the doA1->doB1 sub-route, which the train
 		// already fully owns: this is the SAME rear-facing doA1/doB1 pairing as the
-		// rejection test above, but reached through the early-return branch instead of
-		// the main candidate loop.
+		// rejection test above, but one that used to reach the already-owned early return.
+		//
+		// Issue #1378 (traffic-simulation-expert ruling): Step 1.4 screens a candidate whose
+		// first block lies behind its semaphore START before the candidate loop, so it also
+		// covers the already-owned early return. The re-request was granted as Success before;
+		// it is now refused, and the held route stays exactly as it was.
 		val doA1 = findSemaphoreByName("doA1")
 		val doB1 = findSemaphoreByName("doB1")
 
@@ -150,19 +157,44 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 		assertThat(doA1.signal)
 			.withMessage("doA1 is rear-facing on this A->B route; it must start at STOP")
 			.isEqualTo(Signal.STOP)
+		val heldBlocks = registry.getBlocks("t1").toSet()
+		val heldPathInfo = registry.getPathInfo("t1")
 
 		val reRequest = service.reservePath("t1", doA1, doB1)
 
-		// Grant stands per current early-return semantics -- there is nothing to roll
-		// back and the train's authority over this sub-route already exists.
-		assertThat(reRequest).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertThat(reRequest).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		assertThat(registry.getBlocks("t1").toSet())
+			.withMessage("a refused re-request must leave the held blocks unchanged")
+			.isEqualTo(heldBlocks)
+		assertThat(registry.getPathInfo("t1"))
+			.withMessage("a refused re-request must leave the held PathInfo unchanged")
+			.isEqualTo(heldPathInfo)
 		assertThat(doA1.signal)
-			.withMessage(
-				"the early-return branch must not re-light a semaphore the route passes " +
-					"from behind, even for an already-owned sub-route"
-			).isEqualTo(Signal.STOP)
-		// Whether the (re-)clearing is internally "recorded" for later reset is not
-		// inspectable from outside DefaultPathReservationService; the signal staying at
-		// STOP is the observable proof that no re-light was attempted.
+			.withMessage("a semaphore the route passes from behind must stay at STOP")
+			.isEqualTo(Signal.STOP)
+	}
+
+	/**
+	 * Issue #1378: `doA1 -> zB` has two candidates. Candidate 0 leaves doA1 eastwards, from behind
+	 * (Step 1.4); candidate 1 loops round the sibling track and reaches zB from behind (Step 1.5, G8).
+	 * Both are permanent, and the reported reason is candidate 0's, the first in priority order.
+	 */
+	@Test
+	fun `a start refusal on candidate 0 and an end refusal on candidate 1 report candidate 0`() {
+		var summary = ""
+		lateinit var result: PathReservationService.ReservationResult
+		withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
+			result = service.reservePath("t1", findSemaphoreByName("doA1"), findSemaphoreByName("zB"))
+			summary =
+				serviceLog.list
+					.single { it.formattedMessage.startsWith("reservePath: refused 't1'") }
+					.formattedMessage
+		}
+
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		val reason = (result as PathReservationService.ReservationResult.GeometricallyImpossible).reason
+		assertThat(reason).startsWith("Route origin 'doA1' faces away from the direction of travel on candidate 0;")
+		assertThat(summary).contains(": 2 geometric (first: Route origin 'doA1'")
+		assertThat(registry.getBlocks("t1")).isEmpty()
 	}
 }

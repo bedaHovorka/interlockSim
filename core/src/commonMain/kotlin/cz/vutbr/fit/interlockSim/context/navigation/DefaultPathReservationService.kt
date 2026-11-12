@@ -27,6 +27,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/** The endpoints of one `reservePath` request, for its refusal summary (Issue #1378). */
+private data class ExhaustedRequest(
+	val trainId: String,
+	val start: DynamicPathSeparator,
+	val target: DynamicPathSeparator
+)
+
 /**
  * Default implementation of path reservation service: the facade of the reservation kernel.
  *
@@ -220,8 +227,10 @@ class DefaultPathReservationService(
 	 *    [RouteCandidateScreen.rejectNonOrientedEnd]) and a [start] that is not contiguous with
 	 *    the train's own footprint (Issue #893) — see [RouteCandidateScreen.rejectNonContiguousStart]
 	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise), then screen
-	 *    out rear-facing ends (1.5, Issue #1064) and candidates that diverge from the held route (1.6,
-	 *    Issue #1066) -- both before anything is reserved
+	 *    out rear-facing semaphore starts (1.4, Issue #1378), rear-facing ends (1.5, Issue #1064) and
+	 *    candidates that diverge from the held route (1.6, Issue #1066) -- all before anything is
+	 *    reserved, so the already-owned early return is screened too. The G4 checks of Step 2g and of
+	 *    the already-owned START re-light stay as defence in depth.
 	 * 2. For each remaining path in priority order (cheapest cost first for InOut routes):
 	 *    a. Extract unique DynamicTrackBlocks from TrackSections and exclude those the train already
 	 *       owns (2a.5; a path of only owned blocks is `reserveAlreadyOwnedPath`)
@@ -237,6 +246,8 @@ class DefaultPathReservationService(
 	 *
 	 * - Start not contiguous with the train's footprint → return NonContiguousStart
 	 * - Start or target is not an OrientedPathSeparator (a switch) → return GeometricallyImpossible
+	 * - Every candidate leaves a semaphore start from behind or is otherwise geometrically impossible →
+	 *   return GeometricallyImpossible (one summary WARN per refused call, Issue #1378)
 	 * - RouteFinder returns empty list → return NoPathExists (clear failure, no crash)
 	 * - TrackOperationException during setUpPath() → rollback and try next path
 	 * - Registry conflict → roll back only the forward blocks THIS call reserved (never the
@@ -306,13 +317,24 @@ class DefaultPathReservationService(
 		// GeometricallyImpossible): first reason and count, for the permanence gate of
 		// classifyExhaustedAttempt.
 		//
+		// Step 1.4 (Issue #1378): a route must START at a signal facing the train. Screened before the
+		// loop, so it also covers the already-owned early return, which granted a switch-free reversal
+		// onto the train's own block. The screened-out candidates are folded into geometricFailures,
+		// or the permanence gate's count == attemptedPaths could never hold for them.
+		val (rearFacingStarts, startFacingUsable) = candidateScreen.screenRearFacingStarts(start, candidatePaths)
+
 		// Step 1.5 (Issue #1064, G8): a route must END at a signal facing the train. Screened before
 		// the loop — so before the already-owned early return and before any block, switch or signal
 		// is touched — which leaves a refused candidate nothing to roll back. Screened-out candidates
 		// are recorded like G4, so a request whose every candidate ends rear-facing is reported as a
 		// permanent GeometricallyImpossible.
-		val (rearFacingEnds, rearFacingUsable) = candidateScreen.screenRearFacingEnds(start, target, candidatePaths)
-		var geometricFailures = rearFacingEnds
+		val (rearFacingEnds, rearFacingUsable) = candidateScreen.screenRearFacingEnds(start, target, startFacingUsable)
+		var geometricFailures =
+			foldInCandidateOrder(
+				candidatePaths.size,
+				rearFacingStarts to startFacingUsable,
+				rearFacingEnds to rearFacingUsable
+			)
 
 		// Step 1.6 (Issue #1066): a candidate that does not continue the route the train already
 		// holds can never merge, so it is skipped here -- before anything is reserved, thrown or
@@ -391,13 +413,37 @@ class DefaultPathReservationService(
 		// Issue #937 permanence gate. Extracted so this branching stays out of reservePath's own
 		// cyclomatic complexity count.
 		return classifyExhaustedAttempt(
-			trainId,
+			ExhaustedRequest(trainId, start, target),
 			geometricFailures,
 			divergentFailures,
 			firstBlockedConflict,
 			candidatePaths.size,
 			blockedBy
 		)
+	}
+
+	/**
+	 * Folds the Step 1.4 START failures and the Step 1.5 END failures into one record (Issue #1378).
+	 * The counts add up; the reported reason is the one of the lower-indexed screened candidate, so the
+	 * Issue #903 first-hit-wins still follows the candidate priority order and a request whose first
+	 * candidate ends rear-facing keeps reporting its end (`RouteEndDirectionTest`).
+	 *
+	 * @param candidateCount the number of enumerated candidates the START screen received
+	 * @param starts the START screen's failures and survivors
+	 * @param ends the END screen's failures and survivors (screened from the START survivors)
+	 */
+	private fun foldInCandidateOrder(
+		candidateCount: Int,
+		starts: Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>>,
+		ends: Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>>
+	): GeometricFailures {
+		val startSurvivors = starts.second.map { it.index }.toSet()
+		val endSurvivors = ends.second.map { it.index }.toSet()
+		val firstStartScreened = (0 until candidateCount).firstOrNull { it !in startSurvivors }
+		val firstEndScreened = starts.second.map { it.index }.firstOrNull { it !in endSurvivors }
+		val endFirst =
+			firstEndScreened != null && (firstStartScreened == null || firstEndScreened < firstStartScreened)
+		return if (endFirst) ends.first + starts.first else starts.first + ends.first
 	}
 
 	/**
@@ -496,8 +542,64 @@ class DefaultPathReservationService(
 	 * mid-run (it does not trigger an automatic simulation pause, so it can be delivered without the
 	 * false-positive-pause problem that led to the Goal 3 restriction) -- but only the FIRST time a
 	 * given (trainId, block) contention is observed; see [ReservationContentionTracker.recordContentionAndEmitIfNew].
+	 *
+	 * Issue #1378: logs one summary line per refused `reservePath` call ([logRefusalSummary]); the start-direction
+	 * failures of Step 1.4 arrive folded into [geometricFailures], like G8's.
 	 */
 	private fun classifyExhaustedAttempt(
+		request: ExhaustedRequest,
+		geometricFailures: GeometricFailures,
+		divergentFailures: GeometricFailures,
+		firstBlockedConflict: Pair<DynamicTrackBlock, String>?,
+		attemptedPaths: Int,
+		blockedBy: List<PathReservationService.BlockedCandidate>
+	): PathReservationService.ReservationResult {
+		val result =
+			classifyExhaustedOutcome(
+				request.trainId,
+				geometricFailures,
+				divergentFailures,
+				firstBlockedConflict,
+				attemptedPaths,
+				blockedBy
+			)
+		logRefusalSummary(request, result, geometricFailures, divergentFailures, attemptedPaths)
+		return result
+	}
+
+	/**
+	 * The one summary line per refused `reservePath` call (Issue #1378), replacing the per-candidate WARN
+	 * storm. Per call, not per outer request: `reservePathToAny` and `reservePathToAnyNextSemaphore` call
+	 * `reservePath` once per target, so a refused multi-target request logs one line per target tried.
+	 * the per-candidate detail (`SwitchConfigurator`'s Issue #742 line, the screens' skip lines) is at
+	 * DEBUG. WARN only for a permanent refusal (`GeometricallyImpossible`, `DivergesFromHeldRoute`),
+	 * which the caller must not retry; DEBUG for `AllPathsBlocked`, routine contention polled every tick.
+	 * "blocked" counts every candidate that failed for a non-permanent reason.
+	 */
+	private fun logRefusalSummary(
+		request: ExhaustedRequest,
+		result: PathReservationService.ReservationResult,
+		geometricFailures: GeometricFailures,
+		divergentFailures: GeometricFailures,
+		attemptedPaths: Int
+	) {
+		val summary = {
+			val blocked = attemptedPaths - geometricFailures.count - divergentFailures.count
+			"reservePath: refused '${request.trainId}' ${separatorLabel(request.start)} -> " +
+				"${separatorLabel(request.target)}: ${geometricFailures.count} geometric " +
+				"(first: ${geometricFailures.reason ?: "none"}), ${divergentFailures.count} divergent, " +
+				"$blocked blocked of $attemptedPaths candidate(s); per-candidate detail at DEBUG " +
+				"(SwitchConfigurator, RouteCandidateScreen)"
+		}
+		if (result is PathReservationService.ReservationResult.AllPathsBlocked) {
+			logger.debug(summary)
+		} else {
+			logger.warn(summary)
+		}
+	}
+
+	/** The verdict of [classifyExhaustedAttempt]; its KDoc carries the rules. */
+	private fun classifyExhaustedOutcome(
 		trainId: String,
 		geometricFailures: GeometricFailures,
 		divergentFailures: GeometricFailures,

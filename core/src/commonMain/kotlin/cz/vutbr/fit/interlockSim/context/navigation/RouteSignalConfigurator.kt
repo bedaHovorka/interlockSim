@@ -343,7 +343,8 @@ internal class RouteSignalConfigurator(
 
 	/**
 	 * [facesDirectionOfTravel], tolerant of a [nextBlock] that cannot be resolved (Issue #893
-	 * task A1, Issue #1062).
+	 * task A1, Issue #1062): the shared [semaphoreFacesNextBlockOrOpen] (Issue #1378), which the
+	 * Step 1.4 screen ([RouteCandidateScreen.screenRearFacingStarts]) applies too.
 	 *
 	 * Both START-signal call sites ([configureStartSignal] and [configureAlreadyOwnedStartSignal], the
 	 * already-owned early-return branch of [DefaultPathReservationService.reservePath]) hand this the
@@ -355,8 +356,10 @@ internal class RouteSignalConfigurator(
 	 * next to the start on an extension; [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.getSegment] threw
 	 * for it and this guard fell open.)
 	 *
-	 * The `catch` stays as a fail-open safety net ("cannot resolve -> proceed, never strand the route") for a pair that
-	 * is unexpectedly not adjacent, without changing [facesDirectionOfTravel]'s contract or its callers within
+	 * Since Issue #1378 a rear-facing semaphore START is screened out at Step 1.4, before any candidate
+	 * reaches either call site, so both checks here are defence in depth. The fail-open `catch` stays a
+	 * safety net ("cannot resolve -> proceed, never strand the route") for a pair that is unexpectedly not
+	 * adjacent, without changing [facesDirectionOfTravel]'s contract or its callers within
 	 * [configureIntermediateSemaphores] (which only ever pass a genuinely adjacent pair). A START that does not touch
 	 * the requesting train's footprint at all is refused earlier by the A-R1 contiguity predicate
 	 * ([RouteCandidateScreen.rejectNonContiguousStart]).
@@ -364,17 +367,7 @@ internal class RouteSignalConfigurator(
 	private fun startFacesTravelDirection(
 		semaphore: DynamicRailSemaphore,
 		nextBlock: DynamicTrackBlock
-	): Boolean =
-		try {
-			facesDirectionOfTravel(semaphore, nextBlock)
-		} catch (e: Exception) {
-			logger.debug(e) {
-				"reservePath: Could not resolve whether START semaphore ${semaphore.name} faces " +
-					"$nextBlock (unexpectedly not adjacent); treating as facing " +
-					"the travel direction"
-			}
-			true
-		}
+	): Boolean = semaphoreFacesNextBlockOrOpen(environment, semaphore, nextBlock)
 
 	/**
 	 * Configure the signal for every semaphore that lies at the junction between

@@ -328,7 +328,10 @@ internal class SwitchConfigurator(
 			// switch configuration joins them — the candidate route is physically impossible.
 			// Reject the configuration so reservePath rolls the candidate back; silently skipping
 			// here reserved untraversable routes and permanently stalled trains.
-			logger.warn {
+			// Issue #1378: DEBUG, not WARN -- a reversal request enumerates thousands of candidates
+			// and each one logged this line (20 572 WARN lines in a 215 s Praha run). reservePath logs
+			// one summary per refused call instead (DefaultPathReservationService.logRefusalSummary).
+			logger.debug {
 				"configureSwitchesInPath: Switch ${element.staticRef.getName()} cannot join " +
 					"the route's segments for train $trainId - rejecting candidate route " +
 					"(from=${from.hashCode()}, to=${to.hashCode()}, Issue #742)"
