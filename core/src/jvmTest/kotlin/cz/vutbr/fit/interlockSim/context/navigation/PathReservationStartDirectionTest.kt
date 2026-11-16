@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
@@ -182,13 +183,22 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 	@Test
 	fun `a start refusal on candidate 0 and an end refusal on candidate 1 report candidate 0`() {
 		var summary = ""
+		var skipLines: List<String> = emptyList()
 		lateinit var result: PathReservationService.ReservationResult
 		withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
-			result = service.reservePath("t1", findSemaphoreByName("doA1"), findSemaphoreByName("zB"))
-			summary =
-				serviceLog.list
-					.single { it.formattedMessage.startsWith("reservePath: refused 't1'") }
-					.formattedMessage
+			withLogOf(RouteCandidateScreen::class.java.name) { screenLog ->
+				result = service.reservePath("t1", findSemaphoreByName("doA1"), findSemaphoreByName("zB"))
+				summary =
+					serviceLog.list
+						.single { it.formattedMessage.startsWith("reservePath: refused 't1'") }
+						.formattedMessage
+				// Issue #1378 review round: the summary promises the per-candidate detail at DEBUG, for
+				// all three screens — so both screened candidates leave one skip line here.
+				skipLines =
+					screenLog.list
+						.filter { it.formattedMessage.startsWith("reservePath: skipping candidate ") }
+						.map { it.formattedMessage }
+			}
 		}
 
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
@@ -196,5 +206,13 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 		assertThat(reason).startsWith("Route origin 'doA1' faces away from the direction of travel on candidate 0;")
 		assertThat(summary).contains(": 2 geometric (first: Route origin 'doA1'")
 		assertThat(registry.getBlocks("t1")).isEmpty()
+
+		// Candidate 0 leaves doA1 from behind (Step 1.4), candidate 1 ends at zB from behind (G8):
+		// both DEBUG skip lines name their own side, with the candidate's original index.
+		assertThat(skipLines, name = "DEBUG skip lines").hasSize(2)
+		assertThat(skipLines.single { it.contains("candidate 0") }, name = "the START-side skip line")
+			.contains("Route origin 'doA1' faces away")
+		assertThat(skipLines.single { it.contains("candidate 1") }, name = "the END-side skip line")
+			.contains("Route end 'zB' faces away")
 	}
 }

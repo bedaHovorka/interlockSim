@@ -29,8 +29,9 @@ private val logger = KotlinLogging.logger {}
  * [nextBlock] must bound [semaphore]; for a non-adjacent pair `DefaultSimulationContext.getSegment`
  * throws instead of returning `null`.
  *
- * Shared by [RouteSignalConfigurator] (G4/G8 and the intermediate-signal rule of Issue #566), by
- * [PathInfoStore]'s PathInfo trim (Issue #1067 gap 2) and, through [semaphoreFacesNextBlockOrOpen], by
+ * Shared by [RouteSignalConfigurator] (G4 and the intermediate-signal rule of Issue #566), by
+ * [PathInfoStore]'s PathInfo trim (Issue #1067 gap 2; the END-side G8 rule lives in
+ * [RouteCandidateScreen.rearFacingEndReason]) and, through [semaphoreFacesNextBlockOrOpen], by
  * [RouteCandidateScreen]'s Step 1.4 START screen (Issue #1378), so all of them agree on which way a
  * signal faces.
  *
@@ -51,9 +52,11 @@ internal fun semaphoreFacesNextBlock(
  * check throws because [nextBlock] is unexpectedly not adjacent to [semaphore] ("cannot resolve ->
  * proceed, never strand the route").
  *
- * The single START facing rule (Issue #1378): [RouteSignalConfigurator] uses it for the G4 check of a
- * fresh candidate and the already-owned SKIP arm, and [RouteCandidateScreen.rearFacingStartReason] uses
- * it for the Step 1.4 screen, so the screen and the defence-in-depth checks behind it always agree.
+ * The START facing rule (Issue #1378): [RouteSignalConfigurator] uses it for the G4 check of a fresh
+ * candidate and the already-owned SKIP arm, and [RouteCandidateScreen.rearFacingStartShape] applies it
+ * for the Step 1.4 screen, so the screen and the defence-in-depth checks behind it always agree. (The
+ * `reservePathToAnyNextSemaphore` bypass re-light keeps its own guard —
+ * [RouteSignalConfigurator.configureBypassStartSignal] — a legacy copy, follow-up candidate.)
  *
  * @since Issue #1378 (the body of RouteSignalConfigurator's `startFacesTravelDirection`, which now
  *   delegates here)

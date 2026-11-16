@@ -44,11 +44,13 @@ private val logger = KotlinLogging.logger {}
  * [forwardOnlyPathInfo] is the shared PathInfo trimming rule: the divergence screen uses it to
  * build the probe, and [CandidateCommitter] uses it at Step 2i to build the merge candidate.
  *
- * Extracted from [DefaultPathReservationService] without behaviour change: the denial reasons and
- * log lines are byte-identical, and the service-level tests (`PathReservationContiguityTest`,
- * `PathReservationNonOrientedOriginTest`, `PathReservationNonOrientedEndTest`, `RouteEndDirectionTest`,
- * `Issue1066RegressionTest`, `PathReservationSwitchStartPathInfoRegressionTest`) still pin them
- * through the public API.
+ * Extracted from [DefaultPathReservationService] in Issue #1210 without behaviour change: at the
+ * extraction, the denial reasons and log lines were byte-identical, and the service-level tests
+ * (`PathReservationContiguityTest`, `PathReservationNonOrientedOriginTest`, `PathReservationNonOrientedEndTest`,
+ * `RouteEndDirectionTest`, `Issue1066RegressionTest`, `PathReservationSwitchStartPathInfoRegressionTest`)
+ * still pin them through the public API. Issue #1378 later added the Step 1.4 START screen and
+ * reshaped Step 1.5's input; the pins of this class and the service-level suite state the current
+ * semantics.
  *
  * **NOT thread-safe**, like its owner: single-threaded simulation access only.
  *
@@ -257,18 +259,22 @@ internal class RouteCandidateScreen(
 		start: DynamicPathSeparator,
 		candidatePaths: List<List<TrackSection>>
 	): Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>> {
-		var failures = GeometricFailures()
-		val usable = mutableListOf<IndexedValue<List<TrackSection>>>()
-		for (candidate in candidatePaths.withIndex()) {
-			val reason = rearFacingStartReason(start, candidate.value, candidate.index)
-			if (reason == null) {
-				usable += candidate
-			} else {
-				logger.debug { "reservePath: skipping candidate ${candidate.index} before any mutation: $reason" }
-				failures = recordGeometricFailureOnce(failures, reason)
-			}
-		}
-		return failures to usable
+		// The facing list of the denial reason depends on [start] alone, not on the candidate: it is
+		// resolved at most once per call, lazily on the rule's first hit, and shared by every
+		// screened-out candidate of this call (Issue #1378 review round: the Praha reversal was
+		// resolving one request-constant list thousands of times). A facing candidate pays nothing.
+		val facingStarts = lazy(LazyThreadSafetyMode.NONE) { facingStartList(start) }
+		return splitOnReason(
+			candidatePaths.withIndex(),
+			reasonFor = { candidate ->
+				if (rearFacingStartShape(start, candidate.value) == null) {
+					null
+				} else {
+					startFacingReason(start, candidate.index, facingStarts.value)
+				}
+			},
+			skipLine = ::fixedSkipLine
+		)
 	}
 
 	/**
@@ -284,6 +290,10 @@ internal class RouteCandidateScreen(
 	 * [CandidateCommitter] / [RouteSignalConfigurator.configureStartSignal] and the already-owned SKIP
 	 * arm stay as defence in depth.
 	 *
+	 * Unit-rule seam: the production screen ([screenRearFacingStarts]) goes through
+	 * [rearFacingStartShape] and its memoized [facingStartList]; this wrapper resolves the facing
+	 * list per call.
+	 *
 	 * @return the English denial reason, naming the signals or exits that do face the train from [start]
 	 *   (`none` when there are none); `null` when [start] is not a semaphore, [path] is empty, its first
 	 *   section has no dynamic block, or the START faces the first block
@@ -292,22 +302,98 @@ internal class RouteCandidateScreen(
 		start: DynamicPathSeparator,
 		path: List<TrackSection>,
 		candidateIndex: Int
-	): String? {
+	): String? =
+		if (rearFacingStartShape(start, path) == null) {
+			null
+		} else {
+			startFacingReason(start, candidateIndex, facingStartList(start))
+		}
+
+	/**
+	 * The START-side shape of Step 1.4: `null` when the candidate survives the screen — [start] is
+	 * not a semaphore, [path] is empty, its first section has no dynamic block (the fail-open arms,
+	 * like the G4 check: a first section with no dynamic block cannot be judged), or the START faces
+	 * the first block — and non-`null` when the rule fires.
+	 */
+	private fun rearFacingStartShape(
+		start: DynamicPathSeparator,
+		path: List<TrackSection>
+	): DynamicTrackBlock? {
 		if (start !is DynamicRailSemaphore || path.isEmpty()) return null
-		// Fails open, like the G4 check: a first section with no dynamic block cannot be judged.
 		val firstBlock = path.first().getTrackBlock() as? DynamicTrackBlock ?: return null
-		if (semaphoreFacesNextBlockOrOpen(environment, start, firstBlock)) return null
-		val facingStarts =
-			runCatching {
-				val location = environment.getRailWayNetGrid().getLocation(start)
-				val facingSection = location?.let { environment.getGraph().assignedEdges(it)[start.direction()] }
-				facingSection?.let { targetDiscovery.findNextSemaphoresVia(start, it) } ?: emptyList()
-			}.getOrDefault(emptyList())
-				.joinToString(", ") { separatorLabel(it) }
-				.ifEmpty { "none" }
-		return "Route origin '${separatorLabel(start)}' faces away from the direction of travel on candidate " +
+		return firstBlock.takeUnless { semaphoreFacesNextBlockOrOpen(environment, start, it) }
+	}
+
+	/** The reason text of a Step 1.4 screening; substitutes [facingStarts] verbatim. */
+	private fun startFacingReason(
+		start: DynamicPathSeparator,
+		candidateIndex: Int,
+		facingStarts: String
+	): String =
+		"Route origin '${separatorLabel(start)}' faces away from the direction of travel on candidate " +
 			"$candidateIndex; a route must start at a signal facing the train. The next signals or exits " +
 			"facing the train from '${separatorLabel(start)}' are: $facingStarts."
+
+	/**
+	 * The signals or exits that face the train from [start] — the request-constant part of the Step
+	 * 1.4 denial reason, `none` when there are none. [screenRearFacingStarts] resolves it at most
+	 * once per call (Issue #1378 review round), while the [rearFacingStartReason] unit seam resolves
+	 * it per call; a failing lookup degrades to `none` and is logged at DEBUG, never swallowed
+	 * silently — like [semaphoreFacesNextBlockOrOpen]'s own fail-open.
+	 */
+	private fun facingStartList(start: DynamicPathSeparator): String {
+		// Only the semaphore arm of [rearFacingStartShape] reaches this lookup, so the cast is the
+		// guard's type-level restatement; if it still ever misses, the arm degrades to `none` the
+		// same fail-open way.
+		val semaphore = start as? DynamicRailSemaphore ?: return "none"
+		return runCatching {
+			val location = environment.getRailWayNetGrid().getLocation(semaphore)
+			val facingSection = location?.let { environment.getGraph().assignedEdges(it)[semaphore.direction()] }
+			facingSection?.let { targetDiscovery.findNextSemaphoresVia(semaphore, it) } ?: emptyList()
+		}.onFailure {
+			logger.debug(it) {
+				"reservePath: Could not resolve the signals facing the train from " +
+					"'${separatorLabel(start)}' (unexpectedly failed grid lookup); treating the " +
+					"facing list as none"
+			}
+		}.getOrDefault(emptyList())
+			.joinToString(", ") { separatorLabel(it) }
+			.ifEmpty { "none" }
+	}
+
+	/**
+	 * The fixed per-candidate DEBUG trace of the START and END screens; the refusal summary promises
+	 * it ("the screens' skip lines", Issue #1378 review round). Step 1.6 carries its own variant with
+	 * the train id.
+	 */
+	private fun fixedSkipLine(
+		candidate: IndexedValue<List<TrackSection>>,
+		reason: String
+	): String = "reservePath: skipping candidate ${candidate.index} before any mutation: $reason"
+
+	/**
+	 * The shared split-and-record scaffold of the three candidate screens (Issue #1378 review round):
+	 * [reasonFor] judges one candidate (`null` = keep, with its original index), [skipLine] builds the
+	 * per-candidate DEBUG trace. Survivors keep their original index; every failure is recorded with
+	 * [recordGeometricFailureOnce]'s first-reason-first rule.
+	 */
+	private fun splitOnReason(
+		candidates: Iterable<IndexedValue<List<TrackSection>>>,
+		reasonFor: (IndexedValue<List<TrackSection>>) -> String?,
+		skipLine: (IndexedValue<List<TrackSection>>, String) -> String
+	): Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>> {
+		var failures = GeometricFailures()
+		val usable = mutableListOf<IndexedValue<List<TrackSection>>>()
+		for (candidate in candidates) {
+			val reason = reasonFor(candidate)
+			if (reason == null) {
+				usable += candidate
+			} else {
+				logger.debug { skipLine(candidate, reason) }
+				failures = recordGeometricFailureOnce(failures, reason)
+			}
+		}
+		return failures to usable
 	}
 
 	/**
@@ -325,19 +411,12 @@ internal class RouteCandidateScreen(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
 		candidates: List<IndexedValue<List<TrackSection>>>
-	): Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>> {
-		var failures = GeometricFailures()
-		val usable = mutableListOf<IndexedValue<List<TrackSection>>>()
-		for (candidate in candidates) {
-			val reason = rearFacingEndReason(start, target, candidate.value, candidate.index)
-			if (reason == null) {
-				usable += candidate
-			} else {
-				failures = recordGeometricFailureOnce(failures, reason)
-			}
-		}
-		return failures to usable
-	}
+	): Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>> =
+		splitOnReason(
+			candidates,
+			reasonFor = { candidate -> rearFacingEndReason(start, target, candidate.value, candidate.index) },
+			skipLine = ::fixedSkipLine
+		)
 
 	/**
 	 * Step 1.6 screening of [candidates] (Issue #1066): splits off every candidate whose merge
@@ -359,16 +438,15 @@ internal class RouteCandidateScreen(
 		target: DynamicPathSeparator,
 		candidates: List<IndexedValue<List<TrackSection>>>
 	): Pair<GeometricFailures, List<IndexedValue<List<TrackSection>>>> {
-		var failures = GeometricFailures()
-		val usable = mutableListOf<IndexedValue<List<TrackSection>>>()
 		// Early-out for the common case: a train with no stored route cannot diverge from one, so
 		// skip the per-candidate PathInfo build entirely. reservePath sits on the per-tick polling
 		// path (see [ReservationContentionTracker.recordContentionAndEmitIfNew]'s KDoc), so this guard
 		// saves a full probe build per candidate on every first reservation.
-		if (registry.getPathInfo(trainId) == null) return failures to candidates
-		for (candidate in candidates) {
-			val forwardBlocks = extractUniqueBlocks(candidate.value).excludingOwnedBy(trainId)
-			val reason =
+		if (registry.getPathInfo(trainId) == null) return GeometricFailures() to candidates
+		return splitOnReason(
+			candidates,
+			reasonFor = { candidate ->
+				val forwardBlocks = extractUniqueBlocks(candidate.value).excludingOwnedBy(trainId)
 				if (forwardBlocks.isEmpty()) {
 					null
 				} else {
@@ -377,14 +455,11 @@ internal class RouteCandidateScreen(
 						forwardOnlyPathInfo(start, target, candidate.value, forwardBlocks)
 					)
 				}
-			if (reason == null) {
-				usable += candidate
-			} else {
-				logger.debug { "reservePath: skipping candidate ${candidate.index} for $trainId before any mutation: $reason" }
-				failures = recordGeometricFailureOnce(failures, reason)
+			},
+			skipLine = { candidate, reason ->
+				"reservePath: skipping candidate ${candidate.index} for $trainId before any mutation: $reason"
 			}
-		}
-		return failures to usable
+		)
 	}
 
 	/**
@@ -421,7 +496,16 @@ internal class RouteCandidateScreen(
 		if (target.direction() == anti(arrival)) return null
 		val facingEnds =
 			runCatching { targetDiscovery.findNextSemaphoresVia(start, path.first()) }
-				.getOrDefault(emptyList())
+				.onFailure {
+					// The mirrored facingStartList lesson (Issue #1378 review round): the degraded
+					// facing list renders an empty suffix after "are: ", so the degradation must not
+					// fail silently.
+					logger.debug(it) {
+						"reservePath: Could not resolve the signals facing the train from " +
+							"'${separatorLabel(start)}' (unexpectedly failed grid lookup); treating the " +
+							"facing list as empty"
+					}
+				}.getOrDefault(emptyList())
 				.joinToString(", ") { separatorLabel(it) }
 		return "Route end '${separatorLabel(target)}' faces away from the direction of travel on candidate " +
 			"$candidateIndex; a route must end at a signal facing the train. The next signals facing the " +
