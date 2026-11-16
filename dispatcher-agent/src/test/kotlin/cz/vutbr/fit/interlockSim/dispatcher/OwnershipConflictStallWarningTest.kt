@@ -29,7 +29,9 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.ORIGIN_ROUTE_EXTENSION_FRAGMENT
+import cz.vutbr.fit.interlockSim.testutil.ORIGIN_STALL_WARN_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.ROUTE_EXTENSION_FRAGMENT
+import cz.vutbr.fit.interlockSim.testutil.STALL_WARN_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
@@ -422,12 +424,6 @@ class OwnershipConflictStallWarningTest : DispatcherKoinTestBase() {
 	}
 
 	private companion object {
-		/** Distinctive fragment of the mid-journey stall WARN. */
-		const val STALL_WARN_FRAGMENT = "for the dispatcher to extend its route"
-
-		/** Distinctive fragment of the origin stall WARN. */
-		const val ORIGIN_STALL_WARN_FRAGMENT = "for the dispatcher to reserve its entry route"
-
 		/**
 		 * Extracts the `after N s` horizon value from a stall WARN, to check each episode's own clock.
 		 * `\d+` and not a decimal pattern on purpose: the WARN reports whole seconds, rounded down.
