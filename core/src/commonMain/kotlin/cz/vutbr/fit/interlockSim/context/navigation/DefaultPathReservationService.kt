@@ -311,6 +311,7 @@ class DefaultPathReservationService(
 		val candidatePaths = findCandidatePaths(trainId, start, target, maxDepth, topologicalPaths)
 
 		if (candidatePaths.isEmpty()) {
+			logNoPathRefusal(trainId, start, target)
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
@@ -586,6 +587,10 @@ class DefaultPathReservationService(
 	 * DEBUG. WARN only for a permanent refusal (`GeometricallyImpossible`, `DivergesFromHeldRoute`),
 	 * which the caller must not retry; DEBUG for `AllPathsBlocked`, routine contention polled every tick.
 	 * "blocked" counts every candidate that failed for a non-permanent reason.
+	 *
+	 * Not every refusal passes here. A call with no candidate at all returns `NoPathExists` before the
+	 * loop and logs its own line of the same `reservePath: refused` family ([logNoPathRefusal], Issue
+	 * #1393); the Step 0 endpoint guards log their own dedicated WARN lines.
 	 */
 	private fun logRefusalSummary(
 		request: ExhaustedRequest,
@@ -606,6 +611,29 @@ class DefaultPathReservationService(
 			logger.debug(summary)
 		} else {
 			logger.warn(summary)
+		}
+	}
+
+	/**
+	 * The one refusal line of a `reservePath` call that returns `NoPathExists` because it found no
+	 * candidate path (Issue #1393), in the [logRefusalSummary] family so a consumer counting
+	 * `reservePath: refused` lines sees this shape too.
+	 *
+	 * WARN: `NoPathExists` is permanent, not contention -- the answer is topology-only and does not
+	 * change on retry (`InOutWorker` throws, `MultiTrainLoop` records `NO_ROUTE`), the same class as
+	 * the WARN refusals of [logRefusalSummary]. No consumer pins a WARN count this line could break:
+	 * the only pinned service WARN count (`PathReservationStartDirectionPrahaTest`) covers a request
+	 * that has candidates. Like [logRefusalSummary] it is per call, so `reservePathToAny` logs one
+	 * line per unreachable target it tries.
+	 */
+	private fun logNoPathRefusal(
+		trainId: String,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator
+	) {
+		logger.warn {
+			"reservePath: refused '$trainId' ${separatorLabel(start)} -> ${separatorLabel(target)}: " +
+				"no topological path, 0 candidate(s) (NoPathExists)"
 		}
 	}
 
