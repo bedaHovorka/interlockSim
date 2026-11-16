@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.containsExactlyInAnyOrder
+import assertk.assertions.endsWith
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -24,10 +25,16 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.startsWith
+import ch.qos.logback.classic.Level
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.spyk
+import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -194,7 +201,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val candidates = candidatePaths(zA, doA1, maxDepth = 3)
 		assertThat(candidates).hasSize(1)
 
-		val (failures, usable) = screen.screenRearFacingEnds(zA, doA1, candidates)
+		val (failures, usable) = screen.screenRearFacingEnds(zA, doA1, candidates.withIndex().toList())
 
 		assertThat(usable).isEmpty()
 		assertThat(failures.count).isEqualTo(1)
@@ -204,6 +211,41 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		)
 	}
 
+	/**
+	 * The END-side twin of the failed-start-lookup pin (Issue #1378 review round): the G8 facing
+	 * lookup degrades to an empty suffix AND logs its failure at DEBUG, never silently.
+	 */
+	@Test
+	fun `a failed end-facing lookup degrades to an empty suffix and logs its failure`() {
+		val discovery = mockk<ReservationTargetDiscovery>()
+		every { discovery.findNextSemaphoresVia(any(), any()) } throws IllegalStateException("graph lookup failed")
+		val throwingScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
+		val zA = findSemaphoreByName("zA")
+		var debugFailureLines: List<String> = emptyList()
+		var reason: String? = null
+		withLogOf(RouteCandidateScreen::class.java.name) { screenLog ->
+			reason =
+				throwingScreen.rearFacingEndReason(
+					zA,
+					findSemaphoreByName("doA1"),
+					candidatePaths(zA, findSemaphoreByName("doA1"), maxDepth = 3).single(),
+					0
+				)
+			debugFailureLines =
+				screenLog.list
+					.filter { it.level == Level.DEBUG }
+					.map { it.formattedMessage }
+		}
+
+		assertThat(reason!!)
+			.isNotNull()
+			.endsWith("The next signals facing the train from 'zA' are: .")
+		assertThat(debugFailureLines.single { it.contains("Could not resolve") }, name = "the DEBUG failure line")
+			.contains("'zA'")
+		assertThat(debugFailureLines.single { it.contains("Could not resolve") }, name = "the DEBUG failure line")
+			.contains("treating the facing list as empty")
+	}
+
 	@Test
 	fun `a candidate ending at a facing signal is kept with its original index`() {
 		val zA = findSemaphoreByName("zA")
@@ -211,7 +253,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val candidates = candidatePaths(zA, doB1)
 		assertThat(candidates).hasSize(2)
 
-		val (failures, usable) = screen.screenRearFacingEnds(zA, doB1, candidates)
+		val (failures, usable) = screen.screenRearFacingEnds(zA, doB1, candidates.withIndex().toList())
 
 		// Candidate 0 is the main leg and ends at doB1 facing the train. Candidate 1 loops through the
 		// branch and reaches doB1 from the east, so doB1 faces away from that arrival: it is screened
@@ -227,7 +269,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val zA = findSemaphoreByName("zA")
 		val candidates = candidatePaths(zA, inOutB())
 
-		val (failures, usable) = screen.screenRearFacingEnds(zA, inOutB(), candidates)
+		val (failures, usable) = screen.screenRearFacingEnds(zA, inOutB(), candidates.withIndex().toList())
 
 		assertThat(failures).isEqualTo(GeometricFailures())
 		assertThat(usable.map { it.index }).isEqualTo(candidates.indices.toList())
@@ -240,7 +282,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		val candidates = candidatePaths(zA, doA1)
 		assertThat(candidates.size).isGreaterThan(1)
 
-		val (failures, usable) = screen.screenRearFacingEnds(zA, doA1, candidates)
+		val (failures, usable) = screen.screenRearFacingEnds(zA, doA1, candidates.withIndex().toList())
 
 		// The direct candidate arrives from the west and is screened; the loop-around candidate
 		// arrives from the east, so doA1 faces it and it is kept under its original index.
@@ -406,11 +448,96 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		screen.rejectNonOrientedStart("t1", findSwitchByName("vA"), "reservePath")
 		screen.rejectNonOrientedEnd("t1", findSwitchByName("vB"), "reservePath")
 		screen.rejectNonContiguousStart("t1", zA)
-		screen.screenRearFacingEnds(zA, doA1, candidates)
+		// Issue #1378: the START screen joins the same read-only guarantee.
+		screen.screenRearFacingStarts(doA1, candidatePaths(doA1, inOutB()))
+		screen.screenRearFacingEnds(zA, doA1, candidates.withIndex().toList())
 		screen.screenDivergentCandidates("t1", zA, doA1, candidates.withIndex().toList())
 
 		val blocks = environment.getGraph().values().filterIsInstance<DynamicTrackBlock>()
 		blocks.forEach { assertThat(registry.getOwner(it), "owner of $it").isNull() }
 		assertThat(registry.getBlocks("t1")).isEmpty()
+	}
+
+	@Test
+	fun `a candidate leaving a semaphore start from behind is refused with the facing signals or exits`() {
+		val doA1 = findSemaphoreByName("doA1")
+		val towardB = candidatePaths(doA1, inOutB()).first()
+
+		assertThat(screen.rearFacingStartReason(doA1, towardB, 0)).isEqualTo(
+			"Route origin 'doA1' faces away from the direction of travel on candidate 0; a route must start at " +
+				"a signal facing the train. The next signals or exits facing the train from 'doA1' are: A, doA2."
+		)
+	}
+
+	@Test
+	fun `a start refusal with no facing signal or exit says none`() {
+		val discovery = mockk<ReservationTargetDiscovery>()
+		every { discovery.findNextSemaphoresVia(any(), any()) } returns emptyList()
+		val emptyScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
+		val doA1 = findSemaphoreByName("doA1")
+
+		assertThat(emptyScreen.rearFacingStartReason(doA1, candidatePaths(doA1, inOutB()).first(), 0))
+			.isNotNull()
+			.endsWith("The next signals or exits facing the train from 'doA1' are: none.")
+	}
+
+	@Test
+	fun `a start whose first section has no dynamic block fails open`() {
+		val staticSection = mockk<TrackSection>()
+		every { staticSection.getTrackBlock() } returns mockk<TrackBlock>()
+
+		assertThat(screen.rearFacingStartReason(findSemaphoreByName("doA1"), listOf(staticSection), 0)).isNull()
+	}
+
+	/**
+	 * Issue #1378 review round: a failing facing-list lookup degrades to `none` AND logs the failure
+	 * at DEBUG, like [semaphoreFacesNextBlockOrOpen] logs its own fail-open. A silent catch would
+	 * mislead the diagnosis: the reason would say `none` while the lookup actually failed.
+	 */
+	@Test
+	fun `a failed facing lookup degrades to none and logs its failure`() {
+		val discovery = mockk<ReservationTargetDiscovery>()
+		every { discovery.findNextSemaphoresVia(any(), any()) } throws IllegalStateException("graph lookup failed")
+		val throwingScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
+		val doA1 = findSemaphoreByName("doA1")
+		var debugFailureLines: List<String> = emptyList()
+		var reason: String? = null
+		withLogOf(RouteCandidateScreen::class.java.name) { screenLog ->
+			reason =
+				throwingScreen.rearFacingStartReason(
+					doA1,
+					candidatePaths(doA1, inOutB()).first(),
+					0
+				)
+			debugFailureLines =
+				screenLog.list
+					.filter { it.level == Level.DEBUG }
+					.map { it.formattedMessage }
+		}
+
+		assertThat(reason!!)
+			.isNotNull()
+			.endsWith("The next signals or exits facing the train from 'doA1' are: none.")
+		assertThat(debugFailureLines.single { it.contains("Could not resolve") }, name = "the DEBUG failure line")
+			.contains("'doA1'")
+		assertThat(debugFailureLines.single { it.contains("Could not resolve") }, name = "the DEBUG failure line")
+			.contains("treating the facing list as none")
+	}
+
+	/**
+	 * Issue #1378 review round: the START-screen's facing list is request-constant, so the screen
+	 * resolves it at most once per call, not once per screened-out candidate (the Praha reversal
+	 * screened thousands of candidates through one request-constant BFS + joinToString).
+	 */
+	@Test
+	fun `screening resolves the request-constant facing list at most once per call`() {
+		val discovery = spyk(ReservationTargetDiscovery(navigator, environment))
+		val spyScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
+		val doA1 = findSemaphoreByName("doA1")
+
+		val (failures, _) = spyScreen.screenRearFacingStarts(doA1, candidatePaths(doA1, inOutB()))
+
+		assertThat(failures.count, name = "screened-out candidates").isGreaterThan(0)
+		verify(exactly = 1) { discovery.findNextSemaphoresVia(any(), any()) }
 	}
 }
