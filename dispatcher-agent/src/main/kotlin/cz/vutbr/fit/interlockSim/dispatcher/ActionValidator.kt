@@ -402,9 +402,9 @@ class ActionValidator(
 	 * and return the same text.
 	 *
 	 * Gated exactly like the tool: inert when [inOutNames] is empty (every target would look like a
-	 * Signal), and applied only to a [RouteScope.Section] request with a non-InOut target — an
-	 * [RouteScope.EndToEnd] request is the destination rule's business. Inert when the observation carries no candidate list for the
-	 * train's input facing the origin (see [NextSectionTargets]).
+	 * Signal), and applied only to a [RouteScope.Section] request with a non-InOut target — the
+	 * destination rule owns any [RouteScope.EndToEnd] request. Inert when the observation carries no
+	 * candidate list for the train's input facing the origin (see [NextSectionTargets]).
 	 */
 	private fun validateRequestRouteNextSection(
 		action: DispatchAction.RequestRoute,
@@ -412,17 +412,15 @@ class ActionValidator(
 	): ValidationVerdict.Rejected? {
 		if (inOutNames.isEmpty()) return null
 		if (action.scope != RouteScope.Section || action.toEndpointName in inOutNames) return null
-		val mismatch =
-			NextSectionTargets.mismatch(
-				observation.innerBlockInputs + observation.outerBlockInputs,
+		val refusal =
+			NextSectionTargets.refusal(
+				observation.innerBlockInputs,
+				observation.outerBlockInputs,
 				action.trainId,
 				action.fromEndpointName,
 				action.toEndpointName
 			) ?: return null
-		return rejected(
-			RejectionCode.TARGET_NOT_NEXT_SECTION,
-			NextSectionTargets.rejectionMessage(action.trainId, action.toEndpointName, mismatch)
-		)
+		return rejected(RejectionCode.TARGET_NOT_NEXT_SECTION, refusal)
 	}
 
 	private fun validateRequestRoutePathAvailability(

@@ -100,7 +100,6 @@ class NextSectionTargetsAcceptRuleBasedPicksTest : DispatcherKoinTestBase() {
 		loop.controlStepListener =
 			ControlStepListener {
 				val observation = captureObservation(perception, loop)
-				val inputs = observation.innerBlockInputs + observation.outerBlockInputs
 				val requests =
 					oracle
 						.decide(observation)
@@ -109,8 +108,16 @@ class NextSectionTargetsAcceptRuleBasedPicksTest : DispatcherKoinTestBase() {
 						hopsOf(observation).map { (trainId, hop) -> Triple(trainId, hop.fromSignalName, hop.toTargetName) }
 				for ((trainId, from, to) in requests) {
 					requestsChecked++
-					NextSectionTargets.mismatch(inputs, trainId, from, to)?.let {
-						violations += "t=${observation.snapshot.simTime} $trainId $from -> $to refused: $it"
+					val refusal =
+						NextSectionTargets.refusal(
+							observation.innerBlockInputs,
+							observation.outerBlockInputs,
+							trainId,
+							from,
+							to
+						)
+					if (refusal != null) {
+						violations += "t=${observation.snapshot.simTime} $trainId $from -> $to refused: $refusal"
 					}
 				}
 				wired?.onControlStep()

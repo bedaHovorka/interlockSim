@@ -10,8 +10,6 @@
 package cz.vutbr.fit.interlockSim.dispatcher
 
 import assertk.assertThat
-import assertk.assertions.contains
-import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -62,7 +60,15 @@ class NextSectionTargetsTest {
 	@Test
 	@DisplayName("no block inputs at all: inert")
 	fun emptyInputsAreInert() {
-		assertThat(NextSectionTargets.mismatch(emptyList(), train, "S9", "S15")).isNull()
+		assertThat(NextSectionTargets.refusal(emptyList(), emptyList(), train, "S9", "S15")).isNull()
+	}
+
+	@Test
+	@DisplayName("outer block inputs take part in the membership check")
+	fun outerInputsParticipate() {
+		val outer = listOf(input(candidates = listOf(inOut("N-Vys-1", true), signal("S3", false))))
+
+		assertThat(NextSectionTargets.refusal(emptyList(), outer, train, "S9", "N-Vys-1")).isNull()
 	}
 
 	@Test
@@ -70,7 +76,7 @@ class NextSectionTargetsTest {
 	fun availableCandidatePasses() {
 		val inputs = listOf(input(candidates = listOf(inOut("N-Vys-1", true), signal("S3", false))))
 
-		assertThat(NextSectionTargets.mismatch(inputs, train, "S9", "N-Vys-1")).isNull()
+		assertThat(NextSectionTargets.refusal(inputs, emptyList(), train, "S9", "N-Vys-1")).isNull()
 	}
 
 	@Test
@@ -78,50 +84,31 @@ class NextSectionTargetsTest {
 	fun unavailableCandidatePasses() {
 		val inputs = listOf(input(candidates = listOf(inOut("N-Vys-1", true), signal("S3", false))))
 
-		assertThat(NextSectionTargets.mismatch(inputs, train, "S9", "S3")).isNull()
+		assertThat(NextSectionTargets.refusal(inputs, emptyList(), train, "S9", "S3")).isNull()
 	}
 
 	@Test
-	@DisplayName("a target that is not listed ahead is a mismatch naming the pick and the sorted sections ahead")
-	fun unlistedTargetIsMismatch() {
-		val inputs = listOf(input(candidates = listOf(signal("S3", false), inOut("N-Vys-1", true))))
+	@DisplayName("a Signal target not listed ahead is refused with the exact pick guidance")
+	fun refusalWithAPickIsPinnedVerbatim() {
+		val inputs = listOf(input(candidates = listOf(inOut("N-Vys-1", true), signal("S3", false))))
 
-		val mismatch = NextSectionTargets.mismatch(inputs, train, "S9", "S15")
-
-		assertThat(mismatch).isEqualTo(
-			NextSectionTargets.Mismatch(from = "S9", pick = "N-Vys-1", ahead = listOf("N-Vys-1", "S3"))
+		assertThat(NextSectionTargets.refusal(inputs, emptyList(), train, "S9", "S15")).isEqualTo(
+			"Train 'Train #2' cannot go from 'S9' to 'S15': 'S15' is not the next section ahead of the " +
+				"train at 'S9'. Its NEXT SECTION is from 'S9' to 'N-Vys-1'. Request exactly " +
+				"fromEndpointName='S9', toEndpointName='N-Vys-1'. Do not retry 'S15'."
 		)
 	}
 
 	@Test
-	@DisplayName("inputs of another train, toward another signal, or with no candidates leave the rule inert")
-	fun unrelatedInputsAreInert() {
-		val inputs =
-			listOf(
-				input(ownerTrainId = "Train #9", candidates = listOf(inOut("N-Vys-1", true))),
-				input(towardSemaphoreName = "S15", candidates = listOf(inOut("N-Vys-1", true))),
-				input(ownerTrainId = null, candidates = listOf(inOut("N-Vys-1", true))),
-				input(candidates = emptyList())
-			)
+	@DisplayName("a refused target with no available pick pins the no-request reply, sections ahead sorted")
+	fun refusalWithoutAPickIsPinnedVerbatim() {
+		val inputs = listOf(input(candidates = listOf(signal("S3", false), inOut("N-Vys-1", false))))
 
-		assertThat(NextSectionTargets.mismatch(inputs, train, "S9", "S15")).isNull()
-	}
-
-	@Test
-	@DisplayName("with no available candidate the mismatch has no pick and the message says to make no request")
-	fun noAvailableCandidateHasNoPick() {
-		val inputs = listOf(input(candidates = listOf(inOut("N-Vys-1", false))))
-
-		val mismatch = NextSectionTargets.mismatch(inputs, train, "S9", "S15")
-
-		assertThat(mismatch).isEqualTo(NextSectionTargets.Mismatch(from = "S9", pick = null, ahead = listOf("N-Vys-1")))
-		val message = NextSectionTargets.rejectionMessage(train, "S15", mismatch!!)
-		assertThat(message).contains("No section ahead of 'S9' can be reserved right now")
-		assertThat(message).contains("Make no route request for this train this tick.")
-		assertThat(message).doesNotContain("NEXT SECTION is")
-		for (word in listOf("occupied", "blocked", "option", "choose", "select")) {
-			assertThat(message.lowercase()).doesNotContain(word)
-		}
+		assertThat(NextSectionTargets.refusal(inputs, emptyList(), train, "S9", "S15")).isEqualTo(
+			"Train 'Train #2' cannot go from 'S9' to 'S15': 'S15' is not the next section ahead of the " +
+				"train at 'S9'. No section ahead of 'S9' can be reserved right now (sections ahead: " +
+				"'N-Vys-1', 'S3'). Make no route request for this train this tick."
+		)
 	}
 
 	/**
@@ -140,29 +127,24 @@ class NextSectionTargetsTest {
 				heldRouteEndName = "N-Vys-1"
 			)
 
-		val mismatch = NextSectionTargets.mismatch(listOf(awaiting), train, "S9", "S15")
-
-		assertThat(mismatch).isEqualTo(NextSectionTargets.Mismatch(from = "S9", pick = null, ahead = listOf("N-Vys-1")))
+		assertThat(NextSectionTargets.refusal(listOf(awaiting), emptyList(), train, "S9", "S15")).isEqualTo(
+			"Train 'Train #2' cannot go from 'S9' to 'S15': 'S15' is not the next section ahead of the " +
+				"train at 'S9'. No section ahead of 'S9' can be reserved right now (sections ahead: " +
+				"'N-Vys-1'). Make no route request for this train this tick."
+		)
 	}
 
 	@Test
-	@DisplayName("the message with a pick names the exact pair to request and forbids retrying the target")
-	fun messageWithPickNamesExactPair() {
-		val message =
-			NextSectionTargets.rejectionMessage(
-				train,
-				"S15",
-				NextSectionTargets.Mismatch(from = "S9", pick = "N-Vys-1", ahead = listOf("N-Vys-1", "S3"))
+	@DisplayName("inputs of another train, toward another signal, or with no candidates leave the rule inert")
+	fun unrelatedInputsAreInert() {
+		val inputs =
+			listOf(
+				input(ownerTrainId = "Train #9", candidates = listOf(inOut("N-Vys-1", true))),
+				input(towardSemaphoreName = "S15", candidates = listOf(inOut("N-Vys-1", true))),
+				input(ownerTrainId = null, candidates = listOf(inOut("N-Vys-1", true))),
+				input(candidates = emptyList())
 			)
 
-		assertThat(message).contains("'S15' is not the next section ahead of the train at 'S9'")
-		// Covers behind, sideways and too far alike — no claim about which of them it is.
-		assertThat(message).doesNotContain("more than one section away")
-		assertThat(message).contains("Its NEXT SECTION is from 'S9' to 'N-Vys-1'")
-		assertThat(message).contains("fromEndpointName='S9', toEndpointName='N-Vys-1'")
-		assertThat(message).contains("Do not retry 'S15'.")
-		for (word in listOf("occupied", "blocked", "option", "choose", "select")) {
-			assertThat(message.lowercase()).doesNotContain(word)
-		}
+		assertThat(NextSectionTargets.refusal(inputs, emptyList(), train, "S9", "S15")).isNull()
 	}
 }

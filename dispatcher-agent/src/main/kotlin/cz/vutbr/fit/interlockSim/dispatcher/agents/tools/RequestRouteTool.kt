@@ -91,15 +91,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * ## Next-section validation for Signal targets (Issue #1378)
  *
  * A Signal target is a section hop, which this tool's own description recommends, and it says
- * nothing about where the train finishes — so the destination rule above does not apply to it. It
- * must, however, lie **one section ahead** of the train: on the Praha station the model asked for
- * the signal at the far end of the train's own platform track (behind it), the engine granted a
- * one-block "route" onto the block the train stood on, and the train never moved again. [execute]
- * therefore refuses a Signal target that the interlocking does not list one section ahead of
- * [fromEndpointName] for this train, with [RejectionCode.TARGET_NOT_NEXT_SECTION] and a reply naming
- * the train's NEXT SECTION. The rule is [NextSectionTargets], shared with
- * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator]; it reads the block inputs of [sensorPort]
- * and is inert whenever they carry no candidate list for that train and signal.
+ * nothing about where the train finishes — the destination rule above therefore does not apply to
+ * it. Instead it must lie **one section ahead** of the train, and [execute] refuses a target that
+ * is not, with [RejectionCode.TARGET_NOT_NEXT_SECTION] and a reply naming the train's NEXT
+ * SECTION. The rule is [NextSectionTargets], shared with
+ * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator]; the behind-the-train Praha stall it
+ * closes and the exact inertness contract are told once in [NextSectionTargets]'s KDoc, and the
+ * block inputs come from [sensorPort].
  *
  * @param blockIds Static Block IDs of this network, used only to classify a rejected endpoint as
  *   [RejectionCode.ENDPOINT_IS_BLOCK_ID] rather than [RejectionCode.UNKNOWN_ENDPOINT]. Static
@@ -356,17 +354,15 @@ class RequestRouteTool(
 	): ToolResult.Error? {
 		if (inOutNames.isEmpty() || toEndpointName in inOutNames) return null
 		val snapshot = sensorPort?.snapshot() ?: return null
-		val mismatch =
-			NextSectionTargets.mismatch(
-				snapshot.innerBlockInputs + snapshot.outerBlockInputs,
+		val refusal =
+			NextSectionTargets.refusal(
+				snapshot.innerBlockInputs,
+				snapshot.outerBlockInputs,
 				trainId,
 				fromEndpointName,
 				toEndpointName
 			) ?: return null
-		return ToolResult.Error(
-			NextSectionTargets.rejectionMessage(trainId, toEndpointName, mismatch),
-			rejection = RejectionCode.TARGET_NOT_NEXT_SECTION
-		)
+		return ToolResult.Error(refusal, rejection = RejectionCode.TARGET_NOT_NEXT_SECTION)
 	}
 
 	/**

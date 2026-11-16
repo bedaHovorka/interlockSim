@@ -33,88 +33,82 @@ import cz.vutbr.fit.interlockSim.sim.chosenTargetName
  * of the prompt (`NextHopResolver`) and the rule-based dispatcher read through
  * [cz.vutbr.fit.interlockSim.sim.ReservationTargetPolicy]. The inputs considered are those owned by
  * the train, facing `from`, with a non-empty candidate list. When `to` is among their candidates —
- * available or not; an unavailable one is the engine's to answer — the request passes. Otherwise it
- * is a [Mismatch]: `to` is behind the train, sideways, or more than one section away.
+ * available or not; an unavailable one is the engine's to answer — the request passes. Otherwise the
+ * request is refused: `to` is behind the train, sideways, or more than one section away, and the
+ * refusal text names the NEXT SECTION to request instead.
  *
  * The rule is **inert** whenever there is no such input — the empty list means *no comparison is
- * possible* (a look-ahead request with no owned input toward `from`, a path already extended
- * beyond it, a queued train, an empty snapshot before the first capture), never *every target is
- * wrong*.
+ * possible* (a look-ahead request with no owned input toward `from`, a path extended beyond the
+ * signal without awaiting an extension, a queued train, an empty snapshot before the first
+ * capture), never *every target is wrong*.
  *
  * ## The suggested pick
  *
- * The pick follows the NEXT SECTION eligibility rule ([NextHopResolver.isEligible]) but not
+ * The pick is [chosenTargetName] of the first input that is eligible by
+ * [NextHopResolver.isEligible] — the single NEXT SECTION eligibility predicate, the same one the
+ * prompt's NEXT SECTION line uses. It is `null` when no input is eligible, including the Issue
+ * #1244 case of a train awaiting a route extension whose pick is the end of the route it already
+ * holds (naming that end would re-grant the held route). The pick follows that predicate but not
  * [NextHopResolver.resolveAll]'s same-tick dedup, so it may name a hop the prompt shows as
  * ClaimedByAnotherTrain this tick. That costs one turn, not a stall: the engine answers the
  * follow-up request, and the refusal comes back as an outcome the model can act on.
  *
- * One shared helper so the live tool (`RequestRouteTool`) and the reference validator
- * ([ActionValidator]) cannot drift apart.
+ * One shared entry point so the live tool (`RequestRouteTool`) and the reference validator
+ * ([ActionValidator]) cannot drift apart — both emit the text of [refusal] verbatim.
  *
  * Reading `candidateTargets` here is allow-listed in `:core`'s `TargetSelectionSingleEntryTest`
  * (`ALLOWED_CANDIDATE_TARGET_FILES`) as a membership check only: this object never selects a target.
  */
 object NextSectionTargets {
 	/**
-	 * A refused next-section target.
+	 * The model-facing refusal for a refused Signal target, or `null` when the request passes or the
+	 * rule is inert. The two layers emit this text verbatim, so they can no longer drift apart.
 	 *
-	 * @property from The signal the request starts at.
-	 * @property pick The NEXT SECTION target for [from]: [chosenTargetName] of the first input that
-	 *   is eligible by [NextHopResolver.isEligible] — the same predicate the prompt's NEXT SECTION
-	 *   line uses. `null` when no input is eligible, including the Issue #1244 case of a train
-	 *   awaiting a route extension whose pick is the end of the route it already holds (naming that
-	 *   end would re-grant the held route).
-	 * @property ahead Every separator listed one section ahead of [from], sorted.
+	 * @param inner Inner block inputs; searched before [outer] — the fixed order the shell produces
+	 *   them in, owned here so a future caller cannot flip it.
+	 * @param outer Outer block inputs.
+	 * @return The refusal text, or `null` when [to] is listed one section ahead of [from] for
+	 *   [trainId], or when no input of [trainId] facing [from] carries a candidate list (inert).
 	 */
-	data class Mismatch(
-		val from: String,
-		val pick: String?,
-		val ahead: List<String>
-	)
-
-	/**
-	 * Checks [to] against the separators listed one section ahead of [from] for [trainId].
-	 *
-	 * @return `null` when [to] is listed, or when no input of [trainId] facing [from] carries a
-	 *   candidate list (inert); a [Mismatch] otherwise.
-	 */
-	fun mismatch(
-		inputs: List<BlockInputObservation>,
+	fun refusal(
+		inner: List<BlockInputObservation>,
+		outer: List<BlockInputObservation>,
 		trainId: String,
 		from: String,
 		to: String
-	): Mismatch? {
+	): String? {
 		val matching =
-			inputs.filter {
+			(inner + outer).filter {
 				it.ownerTrainId == trainId && it.towardSemaphoreName == from && it.candidateTargets.isNotEmpty()
 			}
 		if (matching.isEmpty()) return null
-		val allowed = matching.flatMap { it.candidateTargets }.map { it.name }.toSet()
-		if (to in allowed) return null
-		return Mismatch(
-			from = from,
-			pick = matching.firstOrNull { NextHopResolver.isEligible(it) }?.chosenTargetName(),
-			ahead = allowed.sorted()
-		)
+		val ahead = matching.flatMap { it.candidateTargets }.map { it.name }.toSet()
+		if (to in ahead) return null
+		val pick = matching.firstOrNull { NextHopResolver.isEligible(it) }?.chosenTargetName()
+		return message(trainId, from, to, pick = pick, ahead = ahead.sorted())
 	}
 
-	/** The model-facing rejection text for [mismatch], shared verbatim by the tool and the validator. */
-	fun rejectionMessage(
+	/**
+	 * Builds the refusal text. With a [pick], the head plus the exact pair to request instead and
+	 * the no-retry instruction; without one, the head plus the no-request instruction over the
+	 * sorted sections ahead.
+	 */
+	private fun message(
 		trainId: String,
+		from: String,
 		to: String,
-		mismatch: Mismatch
+		pick: String?,
+		ahead: List<String>
 	): String {
-		val from = mismatch.from
 		val head =
 			"Train '$trainId' cannot go from '$from' to '$to': '$to' is not the next section ahead of the " +
 				"train at '$from'."
-		val pick = mismatch.pick
 		return if (pick != null) {
 			"$head Its NEXT SECTION is from '$from' to '$pick'. Request exactly fromEndpointName='$from', " +
 				"toEndpointName='$pick'. Do not retry '$to'."
 		} else {
 			"$head No section ahead of '$from' can be reserved right now (sections ahead: " +
-				mismatch.ahead.joinToString(", ") { "'$it'" } +
+				ahead.joinToString(", ") { "'$it'" } +
 				"). Make no route request for this train this tick."
 		}
 	}
