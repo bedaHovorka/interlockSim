@@ -110,6 +110,23 @@ enum class RejectionCode {
 	TARGET_NOT_TRAIN_DESTINATION,
 
 	/**
+	 * A section-hop (Signal) `toEndpointName` is not one of the separators the interlocking lists
+	 * one section ahead of `fromEndpointName` for this train (Issue #1378) — it is behind the train,
+	 * sideways, or more than one section away. The Signal-target counterpart of
+	 * [TARGET_NOT_TRAIN_DESTINATION], which covers InOut targets only.
+	 *
+	 * The Praha stall it closes is told once, in full, in [NextSectionTargets]'s KDoc.
+	 *
+	 * Decided by the shared pure rule [NextSectionTargets] over
+	 * [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.candidateTargets] — the list the prompt's
+	 * NEXT SECTION line is rendered from. A listed but unavailable target passes (the engine answers
+	 * it), and the rule is inert when no input of the train facing `fromEndpointName` carries a
+	 * candidate list, so look-ahead requests — and a train whose path already extends beyond the
+	 * signal without awaiting a route extension — are never refused by it.
+	 */
+	TARGET_NOT_NEXT_SECTION,
+
+	/**
 	 * Both `fromEndpointName` and `toEndpointName` are InOuts, so the route would span the station
 	 * from entry to exit and hold every block in between (Issue #936).
 	 *
