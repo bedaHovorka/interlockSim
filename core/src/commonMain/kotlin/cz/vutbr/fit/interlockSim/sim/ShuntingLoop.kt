@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.ports.toDispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
 import cz.vutbr.fit.interlockSim.util.platformStartDaemonThread
@@ -358,6 +359,35 @@ class ShuntingLoop(
 	private var ownExitWaitingSince: Map<String, Double> = emptyMap()
 	private val ownExitWaitsThisTick: MutableMap<String, Double> = mutableMapOf()
 
+	/**
+	 * Issue #1387: the trains whose timetable exit has been listed as a station-exit candidate in at
+	 * least one of their observations. A train leaving by another exit is class B when it is in this
+	 * set and class A when it is not; the entry is dropped when the train is pruned.
+	 */
+	private val ownExitOfferedTrains: MutableSet<String> = mutableSetOf()
+	private var wrongOutClassACount: Int = 0
+	private var wrongOutClassAFallbackCount: Int = 0
+
+	/**
+	 * Issue #1387: per train, the signal candidates toward its own exit
+	 * ([BlockInputObservation.destinationReachableVia]) the last time all of them were busy at one of
+	 * its picks. A class A train listed here is a fallback (its platform toward the exit was busy),
+	 * not blind routing; the entry is dropped when the train is pruned.
+	 */
+	private val busyPlatformsTowardOwnExit: MutableMap<String, Set<String>> = mutableMapOf()
+	private var wrongOutClassBCount: Int = 0
+
+	/**
+	 * Issue #1387: the exits reachable beyond each signal ([exitsReachableBeyond]), per loop instance.
+	 * The interlocking's next-target lists are topology only, so one walk per signal and run suffices.
+	 */
+	private val exitsReachableBeyondMemo: MutableMap<DynamicRailSemaphore, Set<String>> = mutableMapOf()
+
+	/** Issue #1387: the network's signals by name, to resolve a [CandidateTarget] back to its signal. */
+	private val semaphoresByName: Map<String, DynamicRailSemaphore> by lazy {
+		env.getRailWayNetGrid().cellsOfType<DynamicRailSemaphore>().associateBy { it.name }
+	}
+
 	private inner class RealTimeSynch : LoopProcess() {
 		private var beginTime: Long = 0
 
@@ -470,6 +500,7 @@ class ShuntingLoop(
 			val (terminated, survivors) = approwedTrains.partition { it.terminated() }
 			approwedTrains = survivors
 			trainsExitedCount += terminated.size
+			terminated.forEach(::classifyWrongOut)
 		}
 		env.getRoutingServices().getReservationExpiry().expireStaleReservations() // Issue #1174
 
@@ -569,6 +600,31 @@ class ShuntingLoop(
 			} else {
 				approwedTrains.firstOrNull { it.name == ownerTrainId }?.timetableDestinationName
 			}
+		val ownExitListed =
+			destinationName != null &&
+				candidateTargets.any { it.kind == SeparatorKind.IN_OUT && it.name == destinationName }
+		if (ownExitListed) ownExitOfferedTrains.add(requireSimulationNotNull(ownerTrainId)) // Issue #1387
+		// Issue #1387 (TSE ruling): the signal candidates beyond which the own exit is reachable, so the
+		// pick prefers a platform track whose exit side offers it. Not while the own exit is itself a
+		// candidate (#1278/#1299 decide) or while awaiting an extension (#1244 guard).
+		val destinationReachableVia =
+			if (destinationName == null || ownExitListed || awaitingRouteExtension) {
+				emptySet()
+			} else {
+				candidateTargets
+					.filter { it.kind == SeparatorKind.SEMAPHORE }
+					.mapNotNull { candidate -> semaphoresByName[candidate.name] }
+					.filter { destinationName in exitsReachableBeyond(it) }
+					.map { it.name }
+					.toSet()
+			}
+		// Issue #1387: remember the platforms toward the own exit that were all busy at a pick, so a
+		// class A wrong-out can be told apart as a fallback (busy) rather than blind routing.
+		if (destinationReachableVia.isNotEmpty() &&
+			candidateTargets.none { it.available && it.name in destinationReachableVia }
+		) {
+			busyPlatformsTowardOwnExit[requireSimulationNotNull(ownerTrainId)] = destinationReachableVia
+		}
 		val blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" }
 		val destinationWaitSeconds =
 			if (ReservationTargetPolicy.isWaitingForOwnExit(candidateTargets, destinationName)) {
@@ -588,7 +644,8 @@ class ShuntingLoop(
 			awaitingRouteExtension = awaitingRouteExtension,
 			heldRouteEndName = heldRouteEndName,
 			destinationName = destinationName,
-			destinationWaitSeconds = destinationWaitSeconds
+			destinationWaitSeconds = destinationWaitSeconds,
+			destinationReachableVia = destinationReachableVia
 		)
 	}
 
@@ -601,6 +658,63 @@ class ShuntingLoop(
 		val since = ownExitWaitingSince[waitKey] ?: now
 		ownExitWaitsThisTick[waitKey] = since
 		return now - since
+	}
+
+	/**
+	 * The names of the station exits reachable beyond [signal] (Issue #1387): a walk over the
+	 * interlocking's next-target lists ([ReservationTargetQuery.findReservationTargetCandidates],
+	 * FREE-only, availability ignored), collecting every InOut and continuing through every signal.
+	 * Topology only, so the answer is memoised per signal for the life of this loop.
+	 */
+	internal fun exitsReachableBeyond(signal: DynamicRailSemaphore): Set<String> =
+		exitsReachableBeyondMemo.getOrPut(signal) {
+			val exits = mutableSetOf<String>()
+			val visited = mutableSetOf(signal)
+			val queue = ArrayDeque(listOf(signal))
+			while (queue.isNotEmpty()) {
+				for (candidate in reservationTargetQuery.findReservationTargetCandidates(queue.removeFirst(), null)) {
+					when (val separator = candidate.separator) {
+						is DynamicInOut -> exits.add(separator.name)
+						is DynamicRailSemaphore -> if (visited.add(separator)) queue.addLast(separator)
+						else -> Unit
+					}
+				}
+			}
+			exits
+		}
+
+	/**
+	 * Issue #1387: classifies a pruned [train] that left by another exit than its timetable's — class
+	 * A when its own exit was never offered as a station-exit candidate, class B when it was — and
+	 * logs one line for it. A class A line is tagged "fallback" when every platform toward the own
+	 * exit was busy at one of the train's picks ([busyPlatformsTowardOwnExit]), else "blind". Runs at
+	 * prune time, like [getTrainsExited]'s count.
+	 */
+	private fun classifyWrongOut(train: Train) {
+		val offered = ownExitOfferedTrains.remove(train.name)
+		val busyPlatforms = busyPlatformsTowardOwnExit.remove(train.name)
+		val exit = train.exitName ?: return
+		if (exit == train.timetableDestinationName) return
+		val verdict =
+			when {
+				offered -> "class B (its own exit was offered but not taken)"
+				busyPlatforms != null ->
+					"class A (its own exit was never offered; fallback: platform(s) " +
+						"${busyPlatforms.sorted().joinToString(", ")} toward its exit were busy)"
+				else -> "class A (its own exit was never offered; blind: no platform toward its exit was free)"
+			}
+		when {
+			offered -> wrongOutClassBCount++
+			busyPlatforms != null -> {
+				wrongOutClassACount++
+				wrongOutClassAFallbackCount++
+			}
+			else -> wrongOutClassACount++
+		}
+		logger.info {
+			"${time()} WRONG_OUT: ${train.name} left by $exit instead of its timetable exit " +
+				"${train.timetableDestinationName}: $verdict"
+		}
 	}
 
 	/**
@@ -846,6 +960,24 @@ class ShuntingLoop(
 	fun getTrainsEntered(): Int = trainsEnteredCount
 
 	fun getTrainsExited(): Int = trainsExitedCount
+
+	/**
+	 * Issue #1387: exited trains that left by another exit than their timetable's although that exit
+	 * was never offered to them as a candidate (class A). Counted at prune time, like [getTrainsExited].
+	 */
+	fun getWrongOutClassA(): Int = wrongOutClassACount
+
+	/**
+	 * Issue #1387: exited trains that left by another exit than their timetable's after that exit
+	 * had been offered to them as a candidate (class B, e.g. busy past the #1299 wait bound).
+	 */
+	fun getWrongOutClassB(): Int = wrongOutClassBCount
+
+	/**
+	 * Issue #1387 diagnostic: the class A trains ([getWrongOutClassA]) for which every platform toward
+	 * the own exit was busy at one of their picks — the owner's fallback clause, not blind routing.
+	 */
+	fun getWrongOutClassAFallback(): Int = wrongOutClassAFallbackCount
 
 	/**
 	 * Peak number of trains simultaneously approved (holding an admitted slot) at any

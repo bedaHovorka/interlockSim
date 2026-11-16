@@ -21,18 +21,24 @@ package cz.vutbr.fit.interlockSim.sim
  *    train's route holds the throat), nothing is picked — the train waits and is reconsidered next
  *    tick — for as long as the shell's [BlockInputObservation.destinationWaitSeconds] stays below
  *    [OWN_EXIT_WAIT_BOUND_SECONDS] of simulation time.
- * 3. **Otherwise the fixed order** (also once the wait reaches the bound, and whenever the shell
+ * 3. **A signal toward the own exit** (Issue #1387): when the own exit is not a station-exit
+ *    candidate, the first available signal candidate from which it is reachable
+ *    ([BlockInputObservation.destinationReachableVia]) wins — so a train is routed onto a platform
+ *    track whose exit side offers its exit. No wait: when none is available, step 4 applies.
+ * 4. **Otherwise the fixed order** (also once the wait reaches the bound, and whenever the shell
  *    reports no wait): station exits first, then signals; within one kind the
  *    interlocking's search order ([BlockInputObservation.candidateTargets] is already in that
  *    order); the first available one wins. The sort is stable and the interlocking already lists
  *    InOuts first, so on real data this is the first available candidate in list order —
  *    byte-identical to the pre-#970 `findNextReservationTarget` result.
  *
- * The destination only decides between candidates **one section ahead**: it lets a train whose
+ * The destination decides between candidates **one section ahead**: it lets a train whose
  * own exit is reachable from here take it rather than the nearest one (Červený Újezd has two
- * exits per side; on `vyhybna.xml`, one exit per side, the pick is the same either way). It does
- * not steer a train through the station toward its exit — the signal a train is routed to inside
- * the station is still the first available one — and its wait for the own exit is bounded: a train
+ * exits per side; on `vyhybna.xml`, one exit per side, the pick is the same either way). Since
+ * Issue #1387 it also steers one level: among signal candidates (the platform tracks seen from a
+ * home signal) it prefers one from which the own exit is reachable, when one is available;
+ * otherwise the signal a train is routed to is still the first available one. Its wait for the
+ * own exit is bounded: a train
  * still held out after [OWN_EXIT_WAIT_BOUND_SECONDS] leaves by the next available exit. A full
  * destination-aware router remains Goal 19.
  *
@@ -92,15 +98,20 @@ object ReservationTargetPolicy {
 	 * @param destinationWaitSeconds How long, in simulation seconds, the train has waited for
 	 *   [destinationName] while it is a candidate but not available (Issue #1299), or `null` when
 	 *   no wait is reported — then a blocked own exit falls back at once, as before #1299.
+	 * @param destinationReachableVia Names of signal candidates from which [destinationName] is
+	 *   reachable (Issue #1387); an available one is preferred when the own exit is not itself a
+	 *   station-exit candidate. Empty (the default) keeps the order of steps 1, 2 and 4.
 	 * @return The available exit named [destinationName] if there is one; `null` while the train
 	 *   waits for that exit below [OWN_EXIT_WAIT_BOUND_SECONDS]; otherwise the first available
-	 *   candidate, station exits before signals; `null` when [candidates] is empty or none is
+	 *   signal in [destinationReachableVia], else the first available candidate, station exits
+	 *   before signals; `null` when [candidates] is empty or none is
 	 *   available.
 	 */
 	fun pick(
 		candidates: List<CandidateTarget>,
 		destinationName: String? = null,
-		destinationWaitSeconds: Double? = null
+		destinationWaitSeconds: Double? = null,
+		destinationReachableVia: Set<String> = emptySet()
 	): CandidateTarget? {
 		val ownExit =
 			destinationName?.let { destination ->
@@ -109,7 +120,27 @@ object ReservationTargetPolicy {
 		return when {
 			ownExit != null -> ownExit
 			holdsOutForOwnExit(candidates, destinationName, destinationWaitSeconds) -> null
-			else -> candidates.sortedBy { it.kind.rank }.firstOrNull { it.available }
+			else ->
+				towardOwnExit(candidates, destinationName, destinationReachableVia)
+					?: candidates.sortedBy { it.kind.rank }.firstOrNull { it.available }
+		}
+	}
+
+	/**
+	 * Issue #1387: the first available signal candidate from which [destinationName] is reachable
+	 * ([destinationReachableVia]), in list order — or `null` when there is none, when there is no
+	 * destination, or when the destination is itself a station-exit candidate (then the #1278 and
+	 * #1299 rules decide alone). No wait: a busy reachable signal leaves the fixed order to pick.
+	 */
+	private fun towardOwnExit(
+		candidates: List<CandidateTarget>,
+		destinationName: String?,
+		destinationReachableVia: Set<String>
+	): CandidateTarget? {
+		if (destinationName == null || destinationReachableVia.isEmpty()) return null
+		if (candidates.any { it.kind == SeparatorKind.IN_OUT && it.name == destinationName }) return null
+		return candidates.firstOrNull {
+			it.kind == SeparatorKind.SEMAPHORE && it.available && it.name in destinationReachableVia
 		}
 	}
 
@@ -152,4 +183,4 @@ object ReservationTargetPolicy {
  * @since Issue #1152 (SP5 — Goal 1B)
  */
 fun BlockInputObservation.chosenTargetName(): String? =
-	ReservationTargetPolicy.pick(candidateTargets, destinationName, destinationWaitSeconds)?.name
+	ReservationTargetPolicy.pick(candidateTargets, destinationName, destinationWaitSeconds, destinationReachableVia)?.name
