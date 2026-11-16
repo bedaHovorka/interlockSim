@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.testutil.RecordingBlockOccupancyListener
+import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test

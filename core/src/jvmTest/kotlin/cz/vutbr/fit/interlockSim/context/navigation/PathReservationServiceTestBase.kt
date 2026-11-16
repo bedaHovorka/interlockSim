@@ -15,7 +15,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -35,9 +34,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
+import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import org.junit.jupiter.api.BeforeEach
 import org.koin.test.inject
-import org.slf4j.LoggerFactory
 
 /**
  * Shared fixture for the PathReservationService test suite.
@@ -66,6 +65,14 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	 * review round).
 	 */
 	protected open fun loadTestContext(): DefaultSimulationContext = loadVyhybnaContext()
+
+	/**
+	 * How many InOuts [setUp] asserts the [loadTestContext] network has. Default 2 (vyhybna.xml and
+	 * the other two-ended fixtures); a fixture with more endpoints overrides it next to
+	 * [loadTestContext] instead of forking this base (Issue #1394). [inOut1]/[inOut2] are the first
+	 * two of them in the context's order, so the count must be at least 2.
+	 */
+	protected open val expectedInOutCount: Int = 2
 
 	protected val editingContextFactory: JvmEditingContextFactory by inject()
 	protected val simulationContextFactory: SimulationContextFactory by inject()
@@ -105,7 +112,7 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 
 		// Get InOut elements
 		val inOuts = simulationContext.getInOuts()
-		assertThat(inOuts.size).isEqualTo(2)
+		assertThat(inOuts.size).isEqualTo(expectedInOutCount)
 
 		// Convert Java List to Kotlin List and get by index
 		val inOutsList = inOuts.toList()
@@ -224,24 +231,6 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	/** The aspect of every semaphore of the network, by name. */
 	protected fun semaphoreAspects(): Map<String, Signal> =
 		simulationContext.cellsOfType<DynamicRailSemaphore>().associate { it.name to it.signal }
-
-	/**
-	 * Runs [body] with a Logback appender attached to the logger named [loggerName]; the appender is
-	 * detached in `finally`. `logback-test.xml` must keep that logger at the level the test reads.
-	 */
-	protected fun withLogOf(
-		loggerName: String,
-		body: (ListAppender<ILoggingEvent>) -> Unit
-	) {
-		val logger = LoggerFactory.getLogger(loggerName) as Logger
-		val appender = ListAppender<ILoggingEvent>().also { it.start() }
-		logger.addAppender(appender)
-		try {
-			body(appender)
-		} finally {
-			logger.detachAppender(appender)
-		}
-	}
 
 	/**
 	 * Runs [body] with an appender on the [RouteReleaser] logger, which `logback-test.xml` keeps at

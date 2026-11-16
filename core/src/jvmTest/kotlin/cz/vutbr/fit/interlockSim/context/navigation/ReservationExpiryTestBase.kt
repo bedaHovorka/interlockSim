@@ -14,6 +14,7 @@ import ch.qos.logback.core.read.ListAppender
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
 import cz.ksimulantenbande.kdisco.SimulationEvent
+import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import kotlinx.coroutines.runBlocking
 
