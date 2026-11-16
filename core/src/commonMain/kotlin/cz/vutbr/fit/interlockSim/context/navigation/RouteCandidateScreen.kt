@@ -467,8 +467,10 @@ internal class RouteCandidateScreen(
 	 * direction the train arrives in gives the train nothing it can use: navigation cannot build a
 	 * leg past the last signal facing it, so the train stops there holding track it cannot leave and
 	 * waits for an extension (Issue #1031, Issue #1060). The rule-based path never asks for such a
-	 * route — [ReservationTargetDiscovery.findNextSemaphoresVia] skips backward-facing signals — so
-	 * only a free-form `request_route(from, to)` reaches this.
+	 * route — [ReservationTargetDiscovery.findNextSemaphoresVia] skips backward-facing signals with
+	 * this same rule ([semaphoreFacesArrivalVia], Issue #1390) — so only a free-form
+	 * `request_route(from, to)` reaches this, or a candidate that reaches an offered target over a
+	 * different, rear-facing arrival.
 	 *
 	 * The direction is taken per candidate at the target's own cell: the segment through which
 	 * [path]'s last section enters the target, reversed, is the direction of travel there. A loop-
@@ -512,19 +514,14 @@ internal class RouteCandidateScreen(
 			"train from '${separatorLabel(start)}' are: $facingEnds."
 	}
 
-	/** The segment of [target]'s cell through which [lastSection] reaches it, or `null` if they are not adjacent. */
+	/**
+	 * The segment of [target]'s cell through which [lastSection] reaches it, or `null` if they are not
+	 * adjacent. Delegates to the shared lookup that candidate discovery also uses (Issue #1390).
+	 */
 	internal fun arrivalSegmentAt(
 		target: PathSeparator,
 		lastSection: TrackSection
-	): Cell.Segment? {
-		val location = environment.getRailWayNetGrid().getLocation(target) ?: return null
-		return environment
-			.getGraph()
-			.assignedEdges(location)
-			.entries
-			.firstOrNull { (_, section) -> section == lastSection }
-			?.key
-	}
+	): Cell.Segment? = arrivalSegmentAt(environment, target, lastSection)
 
 	/**
 	 * Issue #904 root-cause fix (traffic-simulation-expert ruling): builds the PathInfo passed to

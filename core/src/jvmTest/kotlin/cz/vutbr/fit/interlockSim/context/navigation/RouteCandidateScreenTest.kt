@@ -465,7 +465,7 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 
 		assertThat(screen.rearFacingStartReason(doA1, towardB, 0)).isEqualTo(
 			"Route origin 'doA1' faces away from the direction of travel on candidate 0; a route must start at " +
-				"a signal facing the train. The next signals or exits facing the train from 'doA1' are: A, doA2."
+				"a signal facing the train. The next signals or exits facing the train from 'doA1' are: A."
 		)
 	}
 

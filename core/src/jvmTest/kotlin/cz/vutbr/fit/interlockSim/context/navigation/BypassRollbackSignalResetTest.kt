@@ -19,13 +19,17 @@ import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
+import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -34,6 +38,7 @@ import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -61,6 +66,15 @@ import org.junit.jupiter.api.Test
  * left the aspects standing — `sem1` reading S80 over track the interlocking had just returned to
  * FREE, the same evergreen-aspect class of defect #847 fixes on the release paths. That aspect
  * authorises an opposing movement onto track nothing is protecting.
+ *
+ * ## Since Issue #1390: a seam, because real discovery no longer offers the bypass target
+ *
+ * The bypass target came from a discovery walk that turned back through a switch, a leg no train can
+ * drive. Issue #1390 restricted the walk to switch-legal legs, and no swept fixture reaches the bypass
+ * branch any more (the new test below pins that on this fixture). The rollback stays as defence in depth
+ * (traffic-simulation-expert ruling), so the rollback tests run on a service built with the
+ * [DefaultPathReservationService.nextTargetsOverride] seam that replays the pre-#1390 walk
+ * ([preIssue1390Targets]). Everything after the target list is the real service.
  *
  * @since Issue #847 (SP2c.24 — code-review follow-up)
  */
@@ -92,6 +106,45 @@ class BypassRollbackSignalResetTest : PathReservationServiceTestBase() {
 		assertThat(trackedContextCount)
 			.withMessage("the simulation context must be registered for tearDownKoin() to close")
 			.isEqualTo(1)
+	}
+
+	/** The rollback tests run on the seam service (see the class KDoc); the #1390 pin uses the real one. */
+	@BeforeEach
+	fun useThePreIssue1390TargetList() {
+		realService = service
+		service =
+			DefaultPathReservationService(
+				navigator,
+				simulationContext,
+				registry,
+				pathInfoBuilder,
+				routeFinder,
+				nextTargetsOverride = ::preIssue1390Targets
+			)
+	}
+
+	private lateinit var realService: PathReservationService
+
+	@Test
+	@DisplayName("Issue #1390: real discovery offers no bypass target; the rear start is refused, nothing reserved")
+	fun realDiscoveryOffersNoBypassTarget() {
+		val sem1 = semaphoreNamed("sem1")
+		val requiredNext = blockBetweenRefs("RailSemaphore:sem1", "RailSwitch:swB")
+		requiredNext.setUpPath(sem1, "other-train")
+		val events = mutableListOf<BlockOccupancyEvent>()
+		realService.addBlockOccupancyListener { event -> if (event.trainId == "train1") events += event }
+
+		val result = realService.reservePathToAnyNextSemaphore("train1", sem1, requiredNext)
+
+		// Before Issue #1390 the walk also offered A here (round the loop through sem2, reached by
+		// turning back at swB); that candidate succeeded without `requiredNext` and was rolled back, so
+		// the call ended as AllPathsBlocked. Now B is the only target, and sem1 faces west: every route to
+		// B leaves sem1 from behind, a permanent Step 1.4 refusal (Issue #1378).
+		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+		assertThat((result as PathReservationService.ReservationResult.GeometricallyImpossible).reason)
+			.startsWith("Route origin 'sem1' faces away")
+		assertThat(events.map { it.type }).withMessage("no candidate may be reserved at all").isEmpty()
+		assertThat(sem1.signal).isEqualTo(Signal.STOP)
 	}
 
 	@Test
@@ -259,6 +312,51 @@ class BypassRollbackSignalResetTest : PathReservationServiceTestBase() {
 		assertThat(switches().associate { it.name to it.locked })
 			.withMessage("candidate switch locks must be undone; the live reservation's locks must survive")
 			.isEqualTo(lockedBefore)
+	}
+
+	/**
+	 * The pre-#1390 `ReservationTargetDiscovery.findNextSemaphoresVia`, kept as a test oracle: one travel
+	 * direction taken at [start] for the whole walk, every edge followed at a switch, one visit per
+	 * separator. This is what offered the bypass target.
+	 */
+	private fun preIssue1390Targets(
+		start: DynamicPathSeparator,
+		next: TrackSection
+	): List<DynamicPathSeparator> {
+		val grid = simulationContext.getRailWayNetGrid()
+		val graph = simulationContext.getGraph()
+		val travelDirection =
+			graph
+				.assignedEdges(grid.getLocation(start)!!)
+				.entries
+				.first { it.value == next }
+				.key
+		val found = mutableListOf<DynamicPathSeparator>()
+		val queue = ArrayDeque(listOf<Pair<PathSeparator, TrackSection>>(start to next))
+		val visited = mutableSetOf<PathSeparator>(start)
+		while (queue.isNotEmpty()) {
+			val (from, section) = queue.removeFirst()
+			val reached = section.getSecondEnd(from)
+			if (!visited.add(reached)) continue
+			val stop =
+				when {
+					reached is InOut || reached is DynamicInOut -> true
+					reached is OrientedPathSeparator -> reached.direction() == travelDirection
+					else -> false
+				}
+			if (stop) {
+				found += simulationContext.toDynamic(reached)
+			} else {
+				val location = grid.getLocation(reached) ?: continue
+				graph
+					.assignedEdges(location)
+					.values
+					.filter { it != section }
+					.forEach { queue += reached to it }
+			}
+		}
+		val distinct = found.distinct()
+		return distinct.filterIsInstance<DynamicInOut>() + distinct.filterNot { it is DynamicInOut }
 	}
 
 	private fun semaphoreNamed(name: String): DynamicRailSemaphore =

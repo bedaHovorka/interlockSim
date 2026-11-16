@@ -12,7 +12,12 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -45,6 +50,43 @@ internal fun semaphoreFacesNextBlock(
 	val towards = context.getSegment(semaphore, nextBlock, null) ?: return true
 	return towards == semaphore.direction()
 }
+
+/**
+ * The segment of [separator]'s cell through which [section] reaches it, or `null` when [separator]
+ * has no grid location or [section] is not one of its assigned edges.
+ *
+ * The one arrival lookup behind the G8 END rule ([RouteCandidateScreen.rearFacingEndReason]) and
+ * the facing test of candidate discovery ([ReservationTargetDiscovery.findNextSemaphoresVia]), so
+ * the two cannot disagree about which way a signal faces (Issue #1390).
+ *
+ * @since Issue #1390 (the body of RouteCandidateScreen's `arrivalSegmentAt`, which now delegates here)
+ */
+internal fun arrivalSegmentAt(
+	environment: SimulationEnvironment,
+	separator: PathSeparator,
+	section: TrackSection
+): Cell.Segment? {
+	val location = environment.getRailWayNetGrid().getLocation(separator) ?: return null
+	return environment
+		.getGraph()
+		.assignedEdges(location)
+		.entries
+		.firstOrNull { (_, edge) -> edge == section }
+		?.key
+}
+
+/**
+ * `true` when a train that reaches [semaphore] over [arrival] finds the signal facing it: the travel
+ * direction at the signal's own cell is the arrival segment reversed. `null` when [arrival] does not
+ * reach [semaphore] (nothing to judge).
+ *
+ * The G8 END rule (Issue #1064), shared with candidate discovery (Issue #1390).
+ */
+internal fun semaphoreFacesArrivalVia(
+	environment: SimulationEnvironment,
+	semaphore: OrientedPathSeparator,
+	arrival: TrackSection
+): Boolean? = arrivalSegmentAt(environment, semaphore, arrival)?.let { semaphore.direction() == anti(it) }
 
 /**
  * [semaphoreFacesNextBlock] for a semaphore route START, failing open twice: `true` when

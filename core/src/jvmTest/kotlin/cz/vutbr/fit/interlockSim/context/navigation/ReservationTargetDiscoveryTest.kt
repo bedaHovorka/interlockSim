@@ -80,14 +80,19 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 	@Nested
 	@DisplayName("next-separator enumeration (findNextSemaphoresVia)")
 	inner class NextSeparators {
-		/** Candidate names and verdicts on a free network, recorded before the extraction. */
+		/**
+		 * Candidate names and verdicts on a free network, recorded before the extraction. Issue #1390
+		 * dropped the opposing loop signal from the four loop-track starts (`doA1` no longer offers
+		 * `doA2`, and so on): the walk reached it only through a branch-to-branch reversal at `vA`/`vB`,
+		 * so it had no switch-legal route and was never available.
+		 */
 		private val expectedCandidates =
 			mapOf(
 				"zA" to listOf("doB1" to true, "doB2" to true),
-				"doA1" to listOf("A" to true, "doA2" to false),
-				"doA2" to listOf("A" to true, "doA1" to false),
-				"doB2" to listOf("B" to true, "doB1" to false),
-				"doB1" to listOf("B" to true, "doB2" to false),
+				"doA1" to listOf("A" to true),
+				"doA2" to listOf("A" to true),
+				"doB2" to listOf("B" to true),
+				"doB1" to listOf("B" to true),
 				"zB" to listOf("doA1" to true, "doA2" to true),
 				"A" to listOf("zA" to true),
 				"B" to listOf("zB" to true)
@@ -268,13 +273,15 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		}
 
 		@Test
-		@DisplayName("findNextSemaphoresVia puts the InOut before the opposing loop signal")
+		@DisplayName("findNextSemaphoresVia from doB1 offers the InOut, not the opposing loop signal (Issue #1390)")
 		fun nextSeparatorsPutInOutFirst() {
+			// Before Issue #1390 the walk turned back through vB onto the other loop track and listed
+			// doB2 after B. No train can drive that branch-to-branch leg.
 			val doB1 = separator("doB1") as OrientedPathSeparator
 			val (start, next) = discovery.resolveForwardSection(doB1, "test")!!
 
 			assertThat(discovery.findNextSemaphoresVia(start, next).map { separatorLabel(it) })
-				.containsExactly("B", "doB2")
+				.containsExactly("B")
 		}
 
 		@Test

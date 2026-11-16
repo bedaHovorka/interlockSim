@@ -42,9 +42,9 @@ import org.koin.core.component.get
  *
  * Routes measured on the fixtures (switch-constrained enumeration):
  * - `cerveny_ujezd.xml`, from `homeW2`: `e31` over vW2/vW3 BRANCH + vW5 MAIN, `e30` over vW2/vW3/vW5
- *   BRANCH, `e32`/`e33` over vW2/vW4 MAIN (one route each); `homeW1` is a candidate without a
- *   route. This is the #1359 log: Train #4 holds vW5 in MAIN and Train #5's route to `e30` needs
- *   BRANCH.
+ *   BRANCH, `e32`/`e33` over vW2/vW4 MAIN (one route each). `homeW1` was a candidate without a
+ *   route until Issue #1390: discovery reached it only through a crossover reversal. This is the
+ *   #1359 log: Train #4 holds vW5 in MAIN and Train #5's route to `e30` needs BRANCH.
  * - `praha-hlavni-nadrazi.xml`, from `S_8_4`: two routes to `S5`, one over SW5 MAIN + SW9 MAIN, the
  *   other over SW5 BRANCH, SW7 BRANCH, SW8 BRANCH, SW9 BRANCH.
  */
@@ -136,12 +136,12 @@ class ReservationTargetSwitchLockTest : CommonKoinTestBase() {
 		lockFor(TRAIN_4, switchNamed("vW5"), RailSwitch.Conf.MAIN)
 
 		assertThat(availabilityFrom("homeW2"), name = "while vW5 is locked in MAIN")
-			.isEqualTo(mapOf("homeW1" to false, "e31" to true, "e30" to false, "e32" to true, "e33" to true))
+			.isEqualTo(mapOf("e31" to true, "e30" to false, "e32" to true, "e33" to true))
 
 		registry.unregisterSwitches(TRAIN_4)
 
 		assertThat(availabilityFrom("homeW2"), name = "after vW5 is released")
-			.isEqualTo(mapOf("homeW1" to false, "e31" to true, "e30" to true, "e32" to true, "e33" to true))
+			.isEqualTo(mapOf("e31" to true, "e30" to true, "e32" to true, "e33" to true))
 	}
 
 	@Test

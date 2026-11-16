@@ -462,12 +462,15 @@ internal class ReservationTargetDiscovery(
 	 *
 	 * ## Algorithm (Modified for Multi-Path Discovery)
 	 *
-	 * 1. Calculate travel direction from start + next track section
+	 * 1. Check that [next] leaves [start] (else throw)
 	 * 2. Use BFS to explore ALL reachable separators through the network
-	 * 3. At switches, explore ALL outgoing edges (enables parallel path discovery)
+	 * 3. At switches, explore every outgoing edge a train can drive from the arrival segment
+	 *    ([PathSeparator.possibleFollowers]; enables parallel path discovery, never a crossover
+	 *    reversal — Issue #1390)
 	 * 4. Filter separators to include only:
 	 *    - InOut elements (always valid endpoints)
-	 *    - Forward-facing semaphores (direction() matches travel direction)
+	 *    - Semaphores facing the train at their own cell: `direction()` equals the reversed arrival
+	 *      segment ([semaphoreFacesArrivalVia], the G8 END rule — Issue #1390)
 	 * 5. Return list of all valid targets, InOuts first
 	 *
 	 * ## Rationale for Multi-Path Discovery
@@ -479,8 +482,8 @@ internal class ReservationTargetDiscovery(
 	 *   should retry alternative paths (e.g., k2 for Train 2).
 	 * - This enables true parallel operations with shared switches but disjoint tracks.
 	 *
-	 * **Backward-facing semaphores must be skipped**: A semaphore whose direction() does NOT
-	 * match the travel direction shows RED and cannot be changed. Path discovery must continue
+	 * **Backward-facing semaphores must be skipped**: A semaphore that does NOT face the train
+	 * where the train reaches it shows RED and cannot be changed. Path discovery must continue
 	 * until finding a forward-facing semaphore (can show GREEN) or an InOut destination.
 	 *
 	 * **InOut elements are bidirectional**: InOut points represent entry/exit to external
@@ -531,25 +534,30 @@ internal class ReservationTargetDiscovery(
 			"findNextSemaphoresVia: Starting multi-path search from $start via $next"
 		}
 
-		val travelDirection = calculateTravelDirection(start, next)
-		logger.trace { "findNextSemaphoresVia: Travel direction=$travelDirection" }
+		// The start segment is only the connection check now (Issue #1390): each reached signal is
+		// judged at its own cell, by the segment the walk arrives through.
+		val startSegment = calculateTravelDirection(start, next)
+		logger.trace { "findNextSemaphoresVia: Start segment=$startSegment" }
 
 		// BFS to explore all reachable separators
 		val validTargets = mutableListOf<DynamicPathSeparator>()
 		val queue = mutableListOf<Pair<PathSeparator, TrackSection?>>()
 		queue.add(Pair(start, next))
-		val visited = mutableSetOf<PathSeparator>()
-		visited.add(start)
+		// Keyed on (separator, arrival section), not on the separator alone (Issue #1390): with the
+		// switch-legal walk the arrival decides which legs leave a switch, so a switch reached later
+		// from its other side must still be expanded. The walk still ends: the graph has finitely
+		// many edges. The start itself is never a target.
+		val visited = mutableSetOf<Pair<PathSeparator, TrackSection>>()
 
 		while (queue.isNotEmpty()) {
 			val (currentSep, currentSection) = queue.removeAt(0)
 			if (currentSection == null) continue
 
 			val nextSeparator = currentSection.getSecondEnd(currentSep)
-			if (!visited.add(nextSeparator)) continue
+			if (nextSeparator == start || !visited.add(nextSeparator to currentSection)) continue
 
 			// Check if separator is a valid target and whether to stop exploring beyond it
-			val stopExploration = processReachedSeparator(nextSeparator, travelDirection, validTargets)
+			val stopExploration = processReachedSeparator(nextSeparator, currentSection, validTargets)
 
 			// Only explore outgoing paths if we haven't reached a stopping point
 			// This discovers parallel paths UP TO the first layer of forward-facing semaphores
@@ -569,7 +577,7 @@ internal class ReservationTargetDiscovery(
 	 */
 	private fun processReachedSeparator(
 		separator: PathSeparator,
-		travelDirection: Cell.Segment,
+		arrival: TrackSection,
 		validTargets: MutableList<DynamicPathSeparator>
 	): Boolean =
 		when {
@@ -581,10 +589,14 @@ internal class ReservationTargetDiscovery(
 				true // Stop exploring beyond InOuts
 			}
 
-			// Oriented semaphore - check if facing forward
+			// Oriented semaphore - check if it faces the train arriving over [arrival], at its own cell
+			// (the G8 rule, Issue #1390); an unresolvable arrival is not a target
 			separator is OrientedPathSeparator -> {
-				val isFacingForward = (separator.direction() == travelDirection)
-				if (isFacingForward) {
+				val facing = semaphoreFacesArrivalVia(environment, separator, arrival)
+				if (facing == null) {
+					logger.debug { "findNextSemaphoresVia: Cannot resolve the arrival at $separator; walking past it" }
+				}
+				if (facing == true) {
 					val dynamicSep = environment.toDynamic(separator)
 					logger.trace { "findNextSemaphoresVia: Found forward-facing semaphore: $dynamicSep" }
 					validTargets.add(dynamicSep)
@@ -620,12 +632,18 @@ internal class ReservationTargetDiscovery(
 		queue: MutableList<Pair<PathSeparator, TrackSection?>>
 	) {
 		val location = environment.getRailWayNetGrid().getLocation(separator) ?: return
+		val edges = environment.getGraph().assignedEdges(location)
+		// Issue #1390: only the legs a train can drive from the arrival segment
+		// ([PathSeparator.possibleFollowers], the rule of the switch-constrained route search). A
+		// crossover reversal used to reach the neighbour track's signal head-on, so discovery offered
+		// a target that every route candidate ends at from behind. An unresolvable arrival keeps the
+		// old every-edge walk.
+		val arrivalSegment = edges.entries.firstOrNull { (_, section) -> section == currentSection }?.key
+		val followers = arrivalSegment?.let { separator.possibleFollowers(it) }
 		val outgoingSections: List<TrackSection> =
-			environment
-				.getGraph()
-				.assignedEdges(location)
-				.values
-				.filter { block -> block != currentSection }
+			edges.entries
+				.filter { (segment, block) -> block != currentSection && (followers == null || segment in followers) }
+				.map { it.value }
 
 		when {
 			outgoingSections.size > 1 -> {
