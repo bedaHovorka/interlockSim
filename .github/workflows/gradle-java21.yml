@@ -203,6 +203,7 @@ jobs:
           core/build/test-results/jvmTest/
           core/build/test-results/integrationTest/
           core/build/test-results/docLineAnchorCheck/
+          core/build/test-results/dtMaxSingleSiteCheck/
           dispatcher-agent/build/test-results/test/
           dispatcher-agent/build/test-results/integrationTest/
           desktop-ui/build/test-results/

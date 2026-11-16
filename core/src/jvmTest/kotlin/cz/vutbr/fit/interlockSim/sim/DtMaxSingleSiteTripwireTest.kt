@@ -46,8 +46,9 @@ import java.io.File
  * accepted. The walk up to `settings.gradle.kts` must always succeed under Gradle and CI; when it
  * cannot, the tests fail loudly — never a silent skip.
  *
- * The grep reads files outside `:core`, which Gradle does not track as inputs of this test task,
- * so a change in another module alone can leave this test up to date until `:core` changes too.
+ * The grep reads files outside `:core`, which are no inputs of `:core:jvmTest`. The test therefore
+ * runs on its own task, `:core:dtMaxSingleSiteCheck`, which declares every module's `src` tree as
+ * an input; `jvmTest` leaves it out (Issue #1377).
  */
 @DisplayName("SP13: kDisco dtMax is set only at its one global site")
 class DtMaxSingleSiteTripwireTest {
