@@ -297,7 +297,7 @@ class ReservationTargetPolicyTest {
 	}
 
 	@Test
-	fun `the own exit as a candidate keeps the #1278 and #1299 rules, the reachable set does not apply`() {
+	fun `the own exit as a candidate keeps the Issue 1278 and Issue 1299 rules and the reachable set does not apply`() {
 		val candidates = listOf(inOutCandidate("B2", true), semaphoreCandidate("zB", true), inOutCandidate("B1", false))
 		val reachable = setOf("zB")
 
