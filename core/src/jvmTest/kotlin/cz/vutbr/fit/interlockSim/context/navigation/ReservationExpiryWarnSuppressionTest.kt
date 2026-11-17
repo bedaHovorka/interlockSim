@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
+import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
