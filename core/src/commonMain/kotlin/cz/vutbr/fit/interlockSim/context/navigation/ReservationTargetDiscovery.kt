@@ -592,6 +592,11 @@ internal class ReservationTargetDiscovery(
 	 * Fail-closed: an enumeration that exhausted the navigator's node budget answers no route,
 	 * like every other consumer of the enumeration here (Issue #1151); no shipped fixture gets
 	 * near the budget, which [RouteSearchBudgetTest] pins.
+	 *
+	 * On the shipped networks the filter is expected to drop nothing: the 8-network audit of the
+	 * commit-1 walk found every offered target reachable over such a route, and a drop needs a
+	 * revisited switch, which only a loop walk produces. A dropped offer is a signal about the
+	 * topology, not a steady-state event.
 	 */
 	private fun drivableTargets(
 		start: PathSeparator,
@@ -602,7 +607,7 @@ internal class ReservationTargetDiscovery(
 			val drivable = hasSimpleSwitchLegalRoute(start, next, target)
 			if (!drivable) {
 				logger.debug {
-					"findNextSemaphoresVia: Dropping $target: no simple switch-legal route from $start via $next"
+					"findNextSemaphoresVia: Dropping $target: no switch-legal route from $start via $next ends facing the train"
 				}
 			}
 			drivable
@@ -682,11 +687,12 @@ internal class ReservationTargetDiscovery(
 	 * enqueued and this arm of the search ends here.
 	 *
 	 * [currentSection] is excluded, so the search does not immediately turn back on the section
-	 * it arrived on. The comparison is `!=`, which is reference equality today because no
-	 * `TrackSection` implementation overrides `equals`; an override would silently widen this
-	 * filter. The exclusion is local — it does not stop the same section being enqueued later
-	 * from its other end. Traversal-level cycle protection is the caller's `visited` set in
-	 * [findNextSemaphoresVia], and it is keyed on separators, not sections.
+	 * it arrived on. The comparison is `!=`, and since `DynamicTrackBlock.equals` compares the
+	 * wrapped static block, it also excludes the arrival section's other wrapper if the walk
+	 * re-encounters it through one. The exclusion is local — it does not stop the same section
+	 * being enqueued later from its other end. Traversal-level cycle protection is the caller's
+	 * `visited` set in [findNextSemaphoresVia], keyed on (separator, arrival section) — see the
+	 * note there for why a switch may still be expanded twice.
 	 */
 	private fun exploreOutgoingPaths(
 		separator: PathSeparator,
