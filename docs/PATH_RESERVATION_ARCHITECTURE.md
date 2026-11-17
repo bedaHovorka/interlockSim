@@ -191,11 +191,11 @@ FREE ----setUpPath()----> RESERVED ----enter()----> OCCUPIED
 
 **Sources, in order of precedence:**
 - **InOut to InOut:** `RouteFinder.findRoutes`, cost-sorted, so the cheapest route is tried first.
-- **Any other pair:** `TopologyNavigator.findAllTopologicalPaths(start, target, maxDepth)`, or the list the caller already enumerated (Issue #966), which the `reservePathToAny` attempt loop passes in so the paths are not enumerated twice.
+- **Any other pair:** `TopologyNavigator.findAllSwitchConstrainedPaths(start, target, maxDepth)` (Issue #1385; before it, the switch-blind `findAllTopologicalPaths`), or the list the caller already enumerated (Issue #966), which the `reservePathToAny` attempt loop passes in so the paths are not enumerated twice.
 
-**Output:** a list of paths (each path = list of TrackSections); empty if no topological route exists.
+**Output:** a list of paths (each path = list of TrackSections); empty if no switch-legal route exists, which `reservePath` reports as `NoPathExists`. A pair whose only paths reverse through a switch (for example Praha `S2 -> S11`, 20 480 switch-blind paths) therefore has no candidate at all instead of candidates that every screen refuses.
 
-**Cost control:** the switch-constrained enumeration behind target discovery and `isPathAvailable` is bounded by a node budget and cached per navigator (`RouteSearch`, Issue #1151); it depends on the static topology only, never on block state.
+**Cost control:** the switch-constrained enumeration behind candidate discovery, target discovery and `isPathAvailable` is bounded by a node budget and cached per navigator (`RouteSearch`, Issue #1151); it depends on the static topology only, never on block state. `reservePath` reads the cached list and never sorts or mutates it.
 
 #### Step 2a: Block Extraction
 

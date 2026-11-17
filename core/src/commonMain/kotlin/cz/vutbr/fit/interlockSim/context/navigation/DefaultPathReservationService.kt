@@ -214,7 +214,11 @@ class DefaultPathReservationService(
 			return routes.map { it.segments }
 		}
 
-		return topologicalPaths?.value ?: navigator.findAllTopologicalPaths(start, target, maxDepth)
+		// Issue #1385: the bounded, cached, switch-legal enumeration, as the InOut branch and target
+		// discovery use. The switch-blind findAllTopologicalPaths had no budget and listed phantom
+		// reversals (20 480 paths for Praha S2 -> S11, none of them drivable). The list is the
+		// navigator's cache entry: reservePath only reads it, never sorts or mutates it.
+		return topologicalPaths?.value ?: navigator.findAllSwitchConstrainedPaths(start, target, maxDepth)
 	}
 
 	/**
@@ -224,14 +228,16 @@ class DefaultPathReservationService(
 	 *
 	 * When both [start] and [target] are [DynamicInOut] elements, [RouteFinder] is used
 	 * to obtain cost-sorted candidate routes. The lowest-cost route is tried first.
-	 * For other separator types (e.g. semaphore-to-InOut), BFS topology paths from
-	 * [TopologyNavigator] are used instead.
+	 * For other separator types (e.g. semaphore-to-InOut), the switch-legal BFS routes of
+	 * [TopologyNavigator.findAllSwitchConstrainedPaths] are used instead (bounded and cached; Issue #1385).
 	 *
 	 * 0. Reject a non-oriented [start] (a switch — Issue #1188, see
 	 *    [RouteCandidateScreen.rejectNonOrientedStart]), a non-oriented [target] (Issue #1200, see
 	 *    [RouteCandidateScreen.rejectNonOrientedEnd]) and a [start] that is not contiguous with
 	 *    the train's own footprint (Issue #893) — see [RouteCandidateScreen.rejectNonContiguousStart]
-	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise), then screen
+	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, the switch-constrained TopologyNavigator
+	 *    search otherwise -- a pair whose only paths reverse through a switch has no candidate and is
+	 *    `NoPathExists`, Issue #1385), then screen
 	 *    out rear-facing semaphore starts (1.4, Issue #1378), rear-facing ends (1.5, Issue #1064) and
 	 *    candidates that diverge from the held route (1.6, Issue #1066) -- all before anything is
 	 *    reserved, so the already-owned early return is screened too. The G4 checks of Step 2g and of
@@ -274,8 +280,9 @@ class DefaultPathReservationService(
 	/**
 	 * [reservePath] with the topological candidate paths supplied by the caller (Issue #966).
 	 *
-	 * [topologicalPaths] must be `navigator.findAllTopologicalPaths(start, target, maxDepth)`; the
-	 * `reservePathToAny` attempt loop takes it from [TargetAttempt.topologicalPaths]. It
+	 * [topologicalPaths] must be `navigator.findAllSwitchConstrainedPaths(start, target, maxDepth)` (Issue
+	 * #1385; the name predates the switch-legal enumeration); the `reservePathToAny` attempt loop takes it
+	 * from [TargetAttempt.topologicalPaths]. It
 	 * replaces that enumeration in the non-InOut↔InOut branch of candidate discovery and is read
 	 * only there, so a caller that already enumerated the paths (for example to sort targets)
 	 * does not enumerate them again. InOut↔InOut requests still go to [RouteFinder]. `null`
@@ -625,6 +632,10 @@ class DefaultPathReservationService(
 	 * the only pinned service WARN count (`PathReservationStartDirectionPrahaTest`) covers a request
 	 * that has candidates. Like [logRefusalSummary] it is per call, so `reservePathToAny` logs one
 	 * line per unreachable target it tries.
+	 *
+	 * Since Issue #1385 the empty candidate list means "no switch-legal route" (the switch-constrained
+	 * search found none, or exceeded its budget); the "no topological path" wording is kept because
+	 * the shared log fragments and their tripwire pin it.
 	 */
 	private fun logNoPathRefusal(
 		trainId: String,
@@ -837,11 +848,11 @@ class DefaultPathReservationService(
 					}
 					return result
 				}
+				// Issue #1385: as permanent as a geometric target (counted for classifyExhaustedSemaphores) and
+				// logged like one, at TRACE: reservePath already WARNs once, and InOutWorker retries repeat it.
 				is PathReservationService.ReservationResult.NoPathExists -> {
-					// Should not happen (we found the semaphore), but handle it
-					logger.warn {
-						"reservePathToAnyNextSemaphore: No topological path to $semaphore (unexpected)"
-					}
+					logger.trace { "reservePathToAnyNextSemaphore: no switch-legal route to $semaphore (NoPathExists)" }
+					permanentAttempts++
 					lastResult = recordAttemptResult(lastResult, PathReservationService.ReservationResult.NoPathExists)
 					continue
 				}
@@ -883,7 +894,8 @@ class DefaultPathReservationService(
 	 * Final classification for [reservePathToAnyNextSemaphore] once every target semaphore has been
 	 * tried, applying Issue #937's permanence gate to the outer aggregation.
 	 *
-	 * A permanent verdict — geometric, or (Issue #1066) divergent from the held route — may stand
+	 * A permanent verdict — geometric, (Issue #1066) divergent from the held route, or (Issue #1385) no
+	 * switch-legal route at all — may stand
 	 * only if **every** attempted semaphore was permanent ([permanentAttempts] ==
 	 * [attemptCount]). If even one was merely blocked it can free up, so the
 	 * attempt is contention and the caller must wait rather than throw — the same rule
@@ -905,7 +917,8 @@ class DefaultPathReservationService(
 		}
 		val permanentVerdict =
 			lastResult is PathReservationService.ReservationResult.GeometricallyImpossible ||
-				lastResult is PathReservationService.ReservationResult.DivergesFromHeldRoute
+				lastResult is PathReservationService.ReservationResult.DivergesFromHeldRoute ||
+				lastResult is PathReservationService.ReservationResult.NoPathExists
 		if (permanentVerdict && permanentAttempts < attemptCount) {
 			return PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 		}

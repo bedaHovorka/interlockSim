@@ -177,9 +177,11 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 	}
 
 	/**
-	 * Issue #1378: `doA1 -> zB` has two candidates. Candidate 0 leaves doA1 eastwards, from behind
-	 * (Step 1.4); candidate 1 loops round the sibling track and reaches zB from behind (Step 1.5, G8).
-	 * Both are permanent, and the reported reason is candidate 0's, the first in priority order.
+	 * Issue #1378: `doA1 -> zB` has two switch-blind candidates. Candidate 0 leaves doA1 eastwards,
+	 * from behind (Step 1.4); candidate 1 loops round the sibling track and reaches zB from behind
+	 * (Step 1.5, G8). Both are permanent, and the reported reason is candidate 0's, the first in
+	 * priority order. Since Issue #1385 the public request enumerates only candidate 0 (the loop is
+	 * switch-illegal), so the fold is fed both through the caller-supplied-paths overload.
 	 */
 	@Test
 	fun `a start refusal on candidate 0 and an end refusal on candidate 1 report candidate 0`() {
@@ -188,7 +190,8 @@ class PathReservationStartDirectionTest : PathReservationServiceTestBase() {
 		lateinit var result: PathReservationService.ReservationResult
 		withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
 			withLogOf(RouteCandidateScreen::class.java.name) { screenLog ->
-				result = service.reservePath("t1", findSemaphoreByName("doA1"), findSemaphoreByName("zB"))
+				result =
+					reservePathOverSwitchBlindCandidates("t1", findSemaphoreByName("doA1"), findSemaphoreByName("zB"))
 				summary =
 					serviceLog.list
 						.single { it.formattedMessage.startsWith("reservePath: refused 't1'") }

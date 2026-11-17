@@ -175,7 +175,8 @@ interface TopologyNavigator {
 	 *
 	 * - Network validation: Check if route exists between two points
 	 * - Editor features: Show all possible routes for user selection
-	 * - Foundation for reservation: [PathReservationService] filters by availability
+	 * - Not for reservation: [PathReservationService] enumerates its candidates with
+	 *   [findAllSwitchConstrainedPaths] (Issue #1385), which never lists a switch-illegal reversal
 	 *
 	 * @see getNextTrackSection
 	 * @see findCandidatePaths

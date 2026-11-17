@@ -30,8 +30,8 @@ private val logger = KotlinLogging.logger {}
 /**
  * One target of the `reservePathToAny` attempt loop, as [ReservationTargetDiscovery.reservePathToAnyTargets]
  * hands it over (Issue #1209). Sealed, so the two kinds of target cannot be told apart by a silent
- * `null`: an [InOutTarget] carries the topological paths enumerated for sorting (Issue #966), a
- * [SemaphoreTarget] carries none.
+ * `null`: an [InOutTarget] carries the switch-legal paths enumerated for sorting (Issue #966; the
+ * bounded switch-constrained search since Issue #1385), a [SemaphoreTarget] carries none.
  */
 internal sealed interface TargetAttempt {
 	/** The separator the attempt reserves a route to. */
@@ -39,16 +39,18 @@ internal sealed interface TargetAttempt {
 
 	/**
 	 * What the attempt hands to `reservePath` as its `topologicalPaths`: this target's
-	 * `findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH)`, or `null` when `reservePath`
-	 * has to enumerate them itself.
+	 * `findAllSwitchConstrainedPaths(start, target, DEFAULT_MAX_PATH_DEPTH)` (Issue #1385), or `null` when
+	 * `reservePath` has to enumerate them itself.
 	 */
 	val topologicalPaths: Lazy<List<List<TrackSection>>>?
 
 	/**
-	 * An InOut target with its topological candidate paths, enumerated lazily and at most once
-	 * (Issue #966): [paths] is shared by the sort key and the reservation attempt. It is
-	 * `findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH)` for this exact target and
-	 * the `start` the targets were discovered for, valid for one `reservePathToAny` call.
+	 * An InOut target with its candidate paths, enumerated lazily and at most once (Issue #966): [paths]
+	 * is shared by the sort key and the reservation attempt. It is
+	 * `findAllSwitchConstrainedPaths(start, target, DEFAULT_MAX_PATH_DEPTH)` for this exact target and
+	 * the `start` the targets were discovered for (Issue #1385: bounded, cached and switch-legal, so the
+	 * lazy reads the navigator's cache entry rather than a fresh switch-blind listing), valid for one
+	 * `reservePathToAny` call.
 	 */
 	class InOutTarget(
 		override val target: DynamicInOut,
@@ -380,7 +382,7 @@ internal class ReservationTargetDiscovery(
 	 * **Step 2: InOut sorting** — [start] is oriented (a semaphore or an InOut):
 	 * 1. partition the InOuts into opposite-side (orientation differs from the start's: crossing
 	 *    the network, forward progress) and same-side (returning to the same side),
-	 * 2. sort each partition by shortest topological path length (unreachable last),
+	 * 2. sort each partition by shortest switch-legal route length (unreachable last),
 	 * 3. combine: [opposite-side InOuts] + [same-side InOuts].
 	 *
 	 * Partitioning before sorting ensures ALL opposite-side targets are tried before ANY same-side
@@ -393,10 +395,12 @@ internal class ReservationTargetDiscovery(
 	 * ## Paths are enumerated lazily, once (Issue #966)
 	 *
 	 * `sortedBy` evaluates its selector on both sides of every comparison, so enumerating inside it
-	 * ran `findAllTopologicalPaths` O(n log n) times, and the reservation attempt enumerated the
+	 * ran the enumeration O(n log n) times, and the reservation attempt enumerated the
 	 * same paths again. Each InOut is therefore a [TargetAttempt.InOutTarget] holding one lazy
 	 * enumeration shared by the sort key and the attempt. The key is unchanged and `sortedBy` is stable,
-	 * so the order is identical. `LazyThreadSafetyMode.NONE` is safe and cheaper: each lazy is
+	 * so the order is identical. Since Issue #1385 the enumeration is `findAllSwitchConstrainedPaths`
+	 * (cached per pair by the navigator), so an InOut reachable only over a switch-illegal reversal
+	 * sorts last. `LazyThreadSafetyMode.NONE` is safe and cheaper: each lazy is
 	 * created and consumed inside a single `reservePathToAny` call.
 	 *
 	 * ## Example: shunting loop
@@ -434,12 +438,12 @@ internal class ReservationTargetDiscovery(
 				TargetAttempt.InOutTarget(
 					target,
 					lazy(LazyThreadSafetyMode.NONE) {
-						navigator.findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH)
+						navigator.findAllSwitchConstrainedPaths(start, target, DEFAULT_MAX_PATH_DEPTH)
 					}
 				)
 			}
-		// findAllTopologicalPaths returns the paths sorted by length (empty if none exists), so
-		// firstOrNull() is the shortest; Int.MAX_VALUE sorts unreachable targets last.
+		// findAllSwitchConstrainedPaths returns the paths in BFS order, by section count (empty if none
+		// exists), so firstOrNull() is the shortest; Int.MAX_VALUE sorts unreachable targets last.
 		val shortestPathLength: (TargetAttempt.InOutTarget) -> Int = { attempt ->
 			val shortest = attempt.paths.value.firstOrNull()
 			shortest?.size ?: Int.MAX_VALUE

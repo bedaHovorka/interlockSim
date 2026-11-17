@@ -175,6 +175,15 @@ at cache write (same routes), nothing the sweep exercises.
    for non-InOut `reservePath` starts and `findCandidatePaths`) has neither cache nor budget. It is
    not on a Praha hot path today, but it is the one that grows exponentially (760 paths for one
    Praha pair, SP1).
+
+   *Addendum 2026-11-17 (Issue #1385):* `reservePath` no longer uses it. A request whose pair is not
+   InOut-to-InOut enumerates its candidates with the cached, budgeted `findAllSwitchConstrainedPaths`,
+   and so does the `reservePathToAny` InOut sort key. A pair with no switch-legal route is now
+   `NoPathExists` (Praha `S2 -> S11`: 20 480 switch-blind paths, none legal), and an over-budget pair
+   of that kind gets the same lossy `NoPathExists` that demand 3 describes. On the Praha station
+   asset every semaphore-to-InOut search completes, at most 203 expanded nodes
+   (`SignalTargetSwitchConstrainedPrahaTest`). The switch-blind listing remains behind
+   `findShortestTopologicalDistance`'s default body and `DefaultTopologyNavigator.findCandidatePaths`.
 5. **Memoise the expansion per start.** For InOut targets the search expands the same tree from a
    start whatever the target, but the cache key includes the target, so each target of one start
    pays the full expansion once. A per-start memo (one tree, all targets) would cut that to one

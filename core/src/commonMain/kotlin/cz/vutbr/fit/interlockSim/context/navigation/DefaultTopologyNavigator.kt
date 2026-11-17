@@ -548,9 +548,10 @@ class DefaultTopologyNavigator(
 	 * In a simulation context every `(start, target, maxDepth)` search runs once per navigator and
 	 * later calls return the same list.
 	 *
-	 * What the empty list means to callers over budget: an InOut-to-InOut `reservePath` reports
-	 * `NoPathExists`, a permanent refusal (`InOutWorker` throws, `MultiTrainLoop` records
-	 * `NO_ROUTE`, `ReservationResultMapping` gives `DenialCause.NoPath`), while `isPathAvailable`
+	 * What the empty list means to callers over budget: a `reservePath` reports `NoPathExists` -- an
+	 * InOut-to-InOut request and, since Issue #1385, a request to a Signal target too -- a permanent
+	 * refusal (`InOutWorker` throws, `MultiTrainLoop` records `NO_ROUTE`, `ReservationResultMapping`
+	 * gives `DenialCause.NoPath`), while `isPathAvailable`
 	 * and `isPathToAnyNextSemaphoreAvailable` read it as "every path blocked", so a train asking
 	 * them would wait forever behind the one budget warning. No shipped network gets near the
 	 * budget (at most 236 expanded nodes against [ROUTE_SEARCH_NODE_BUDGET]).

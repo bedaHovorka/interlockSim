@@ -188,6 +188,32 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 			} ?: throw IllegalStateException("No block found between $first and $second")
 
 	/**
+	 * `reservePath` over the switch-blind candidates of [start] -> [target], through the internal
+	 * caller-supplied-paths overload. Since Issue #1385 the public `reservePath` enumerates only
+	 * switch-legal routes, so a candidate that reverses through a switch never reaches the screens,
+	 * the switch configurator or the exhausted-candidate classification. Tests whose subject is that
+	 * downstream machinery feed it the old phantom candidates here; tests of what a request returns
+	 * use the public overload. Runs no reservation expiry, unlike the public overload.
+	 *
+	 * For the vyhybna and Praha pairs involved, these guards are now unreachable through the public API:
+	 * the Issue #1076 null-configuration ownership guard, the Issue #742 reversal / G4 rollback path, the
+	 * Issue #1066 divergence screen and the Step 1.4 mixed fold (Issue #1378). They stay as defence in
+	 * depth, and so do the tests that reach them here: do not delete either as dead code.
+	 */
+	protected fun reservePathOverSwitchBlindCandidates(
+		trainId: String,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator
+	): PathReservationService.ReservationResult =
+		(service as DefaultPathReservationService).reservePath(
+			trainId,
+			start,
+			target,
+			DEFAULT_MAX_PATH_DEPTH,
+			lazyOf(navigator.findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH))
+		)
+
+	/**
 	 * Put [trainId] physically on [block] without touching the registry — the state a
 	 * train admitted before any route was granted is in.
 	 */

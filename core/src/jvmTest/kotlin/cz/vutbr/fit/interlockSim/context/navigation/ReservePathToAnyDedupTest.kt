@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Pins the work [DefaultPathReservationService.reservePathToAny] no longer repeats:
  * the semaphore grid scan (Issue #965, [ReservationTargetDiscovery]'s since SP12.5) and the
- * second topological path enumeration per InOut target (Issue #966).
+ * second candidate path enumeration per InOut target (Issue #966; switch-constrained since Issue #1385).
  */
 @DisplayName("reservePathToAny de-duplication")
 class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
@@ -102,19 +102,23 @@ class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 		}
 	}
 
-	/** Counts [findAllTopologicalPaths] calls per (start, target) pair. */
+	/**
+	 * Counts candidate enumerations per (start, target) pair: [TopologyNavigator.findAllSwitchConstrainedPaths]
+	 * calls, the enumeration `reservePath` and the target sort use since Issue #1385 (before it,
+	 * [TopologyNavigator.findAllTopologicalPaths], which is now never called on this path).
+	 */
 	private class CountingNavigator(
 		private val real: TopologyNavigator
 	) : TopologyNavigator by real {
 		val calls = mutableMapOf<Pair<PathSeparator, PathSeparator>, Int>()
 
-		override fun findAllTopologicalPaths(
+		override fun findAllSwitchConstrainedPaths(
 			start: PathSeparator,
 			target: PathSeparator,
 			maxDepth: Int
 		): List<List<TrackSection>> {
 			calls.merge(start to target, 1, Int::plus)
-			return real.findAllTopologicalPaths(start, target, maxDepth)
+			return real.findAllSwitchConstrainedPaths(start, target, maxDepth)
 		}
 	}
 
@@ -135,7 +139,7 @@ class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 			val publicBlocks = (viaPublic as PathReservationService.ReservationResult.Success).reservedBlocks
 			service.releasePath("train1")
 
-			val precomputed = navigator.findAllTopologicalPaths(zA, inOutB)
+			val precomputed = navigator.findAllSwitchConstrainedPaths(zA, inOutB)
 			counting.calls.clear()
 			val viaOverload = service.reservePath("train1", zA, inOutB, 100, lazyOf(precomputed))
 
