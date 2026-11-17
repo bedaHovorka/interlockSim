@@ -346,10 +346,13 @@ internal class RouteCandidateScreen(
 		// guard's type-level restatement; if it still ever misses, the arm degrades to `none` the
 		// same fail-open way.
 		val semaphore = start as? DynamicRailSemaphore ?: return "none"
+		// The forward section comes from the shared Issue #957 helper, log-free: a missing section is
+		// a silent `none` here, not the WARN the helper's other callers want (Issue #1385 follow-up).
 		return runCatching {
-			val location = environment.getRailWayNetGrid().getLocation(semaphore)
-			val facingSection = location?.let { environment.getGraph().assignedEdges(it)[semaphore.direction()] }
-			facingSection?.let { targetDiscovery.findNextSemaphoresVia(semaphore, it) } ?: emptyList()
+			targetDiscovery
+				.resolveForwardSection(semaphore, "reservePath", warnOnMiss = false)
+				?.let { (dynamicStart, next) -> targetDiscovery.findNextSemaphoresVia(dynamicStart, next) }
+				?: emptyList()
 		}.onFailure {
 			logger.debug(it) {
 				"reservePath: Could not resolve the signals facing the train from " +

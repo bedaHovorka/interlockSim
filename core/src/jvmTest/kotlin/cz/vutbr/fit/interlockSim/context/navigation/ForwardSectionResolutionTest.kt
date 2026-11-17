@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -18,9 +20,13 @@ import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
+import cz.vutbr.fit.interlockSim.testutil.warnMessages
+import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
@@ -120,6 +126,32 @@ class ForwardSectionResolutionTest : PathReservationServiceTestBase() {
 			assertThat(registry.getPathInfo(trainId)?.target, name = "reserved target from $start")
 				.isEqualTo(target)
 			service.releasePath(trainId)
+		}
+	}
+
+	/**
+	 * Issue #1385 follow-up (screen-cost item 3): the START screen's facing list treats a missing
+	 * forward section as a silent `none`, so it resolves the section through the log-free form; the
+	 * default form keeps its WARN on both failure branches.
+	 */
+	@Test
+	fun `only the default form warns when a failure branch yields no forward section`() {
+		for (environment in listOf(NoLocationEnvironment(simulationContext), NoEdgeEnvironment(simulationContext))) {
+			val discovery = ReservationTargetDiscovery(navigator, environment)
+			var silent: Pair<DynamicPathSeparator, TrackSection>? = null
+			var silentWarnings: List<String> = emptyList()
+			var defaultWarnings: List<String> = emptyList()
+			withLogOf(ReservationTargetDiscovery::class.java.name) { log ->
+				silent = discovery.resolveForwardSection(semaphoreZA, "test", warnOnMiss = false)
+				silentWarnings = log.warnMessages()
+				log.list.clear()
+				discovery.resolveForwardSection(semaphoreZA, "test")
+				defaultWarnings = log.warnMessages()
+			}
+
+			assertThat(silent, name = "log-free result").isNull()
+			assertThat(silentWarnings, name = "log-free WARN lines").isEmpty()
+			assertThat(defaultWarnings, name = "default WARN lines").hasSize(1)
 		}
 	}
 }

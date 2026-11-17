@@ -541,4 +541,21 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 		assertThat(failures.count, name = "screened-out candidates").isGreaterThan(0)
 		verify(exactly = 1) { discovery.findNextSemaphoresVia(any(), any()) }
 	}
+
+	/**
+	 * Issue #1385 follow-up (screen-cost item 3): the facing list takes its forward section from the
+	 * shared Issue #957 helper, in its log-free form (a missing section is a silent `none` here), instead
+	 * of re-deriving it from the grid and the graph.
+	 */
+	@Test
+	fun `the facing list resolves its forward section through the shared log-free helper`() {
+		val discovery = spyk(ReservationTargetDiscovery(navigator, environment))
+		val spyScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
+		val doA1 = findSemaphoreByName("doA1")
+
+		val (failures, _) = spyScreen.screenRearFacingStarts(doA1, candidatePaths(doA1, inOutB()))
+
+		assertThat(failures.count, name = "screened-out candidates").isGreaterThan(0)
+		verify(exactly = 1) { discovery.resolveForwardSection(doA1, any(), false) }
+	}
 }

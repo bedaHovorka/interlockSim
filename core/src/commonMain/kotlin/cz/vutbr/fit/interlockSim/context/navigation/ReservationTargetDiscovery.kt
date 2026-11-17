@@ -135,16 +135,20 @@ internal class ReservationTargetDiscovery(
 	 *    `direction()` is its forward travel direction.
 	 * 3. Look up the separator's grid location and the graph edge assigned to that segment.
 	 *
-	 * Shared by [PathReservationService.reservePathToAnyNextSemaphore] (the oriented overload) and
-	 * [findReservationTargetCandidates] so the two cannot drift (Issue #957).
+	 * Shared by [PathReservationService.reservePathToAnyNextSemaphore] (the oriented overload),
+	 * [findReservationTargetCandidates] and the START screen's facing list
+	 * ([RouteCandidateScreen.screenRearFacingStarts], log-free) so they cannot drift (Issue #957).
 	 *
 	 * @param caller name of the calling method, used as the log prefix
-	 * @return the dynamic start and the forward section, or `null` (logged as a warning) when
-	 *   [start] has no grid location or no track section in its forward direction
+	 * @param warnOnMiss whether a `null` answer is logged as a warning; `false` for a caller that
+	 *   treats a missing section as a silent "none" (Issue #1385 follow-up)
+	 * @return the dynamic start and the forward section, or `null` (logged as a warning when
+	 *   [warnOnMiss]) when [start] has no grid location or no track section in its forward direction
 	 */
 	fun resolveForwardSection(
 		start: OrientedPathSeparator,
-		caller: String
+		caller: String,
+		warnOnMiss: Boolean = true
 	): Pair<DynamicPathSeparator, TrackSection>? {
 		val dynamicStart = environment.toDynamic(start)
 		val forwardSegment =
@@ -159,15 +163,17 @@ internal class ReservationTargetDiscovery(
 
 		val location = environment.getRailWayNetGrid().getLocation(start)
 		if (location == null) {
-			logger.warn { "$caller: No location found for $start" }
+			if (warnOnMiss) logger.warn { "$caller: No location found for $start" }
 			return null
 		}
 		logger.debug { "$caller: Location=$location" }
 
 		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
 		if (next == null) {
-			logger.warn {
-				"$caller: No outgoing track section from $start at $location in direction $forwardSegment"
+			if (warnOnMiss) {
+				logger.warn {
+					"$caller: No outgoing track section from $start at $location in direction $forwardSegment"
+				}
 			}
 			return null
 		}
