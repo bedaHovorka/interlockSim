@@ -70,8 +70,9 @@ internal sealed interface TargetAttempt {
  * and in which order they are tried. Read-only — nothing here reserves, registers or signals.
  *
  * Two enumerations live here:
- * - **One section ahead** ([findNextSemaphoresVia]): the forward-facing semaphores and InOuts
- *   reachable through one given track section. It serves
+ * - **One section ahead** ([findNextSemaphoresVia]): the drivable semaphores and InOuts reachable
+ *   through one given track section — a find is offered only when a simple switch-legal route
+ *   reaches it ([drivableTargets]; Issue #1390 review round). It serves
  *   [PathReservationService.reservePathToAnyNextSemaphore], and, with each target's availability
  *   attached by the shared primitive [evaluateTargets] (Issue #1208), the read-only candidate
  *   query [findReservationTargetCandidates] (Issue #970) and [isAnyNextTargetAvailable].
@@ -471,7 +472,9 @@ internal class ReservationTargetDiscovery(
 	 *    - InOut elements (always valid endpoints)
 	 *    - Semaphores facing the train at their own cell: `direction()` equals the reversed arrival
 	 *      segment ([semaphoreFacesArrivalVia], the G8 END rule — Issue #1390)
-	 * 5. Return list of all valid targets, InOuts first
+	 * 5. Keep only the finds a simple switch-legal route reaches from [start] through [next]
+	 *    ([drivableTargets]; navigator-authoritative — Issue #1390 review round)
+	 * 6. Return list of all valid targets, InOuts first
 	 *
 	 * ## Rationale for Multi-Path Discovery
 	 *
@@ -546,7 +549,9 @@ internal class ReservationTargetDiscovery(
 		// Keyed on (separator, arrival section), not on the separator alone (Issue #1390): with the
 		// switch-legal walk the arrival decides which legs leave a switch, so a switch reached later
 		// from its other side must still be expanded. The walk still ends: the graph has finitely
-		// many edges. The start itself is never a target.
+		// many edges. A start reached again over a loop passes the walk with a fresh (separator,
+		// section) key; [drivableTargets] drops it, because a route from a separator to itself is
+		// the trivial empty path (Issue #1390 review round).
 		val visited = mutableSetOf<Pair<PathSeparator, TrackSection>>()
 
 		while (queue.isNotEmpty()) {
@@ -566,8 +571,65 @@ internal class ReservationTargetDiscovery(
 			}
 		}
 
-		return prioritizeInOuts(validTargets)
+		return prioritizeInOuts(drivableTargets(start, next, validTargets))
 	}
+
+	/**
+	 * The walk's raw finds, filtered to the targets a train can drive to: a target is kept only if
+	 * some simple switch-legal route leads from [start] to it through [next] and — for a signal —
+	 * ends with the train facing it at the route's own last section (the G8 rule; the walk judged
+	 * the arrival it happened to use, which a loop walk reaches differently). The arrival-sensitive
+	 * visited key of [findNextSemaphoresVia] lets the walk expand a switch through both of its
+	 * sides, so a target whose every route repeats a separator — or the start itself over such a
+	 * loop — sits in the raw finds while the navigator refuses the routes (Issue #1390 review
+	 * round).
+	 *
+	 * Delegation, not a re-implementation: the navigator owns route existence, the enumeration is
+	 * cached per (start, target, max depth) and is the same one [isPathAvailableFor] and the
+	 * switch-compatibility filter of [findReservationTargetCandidates] run right after the
+	 * discovery, so each route is enumerated once (routeCache shares the answers, Issue #1359).
+	 *
+	 * Fail-closed: an enumeration that exhausted the navigator's node budget answers no route,
+	 * like every other consumer of the enumeration here (Issue #1151); no shipped fixture gets
+	 * near the budget, which [RouteSearchBudgetTest] pins.
+	 */
+	private fun drivableTargets(
+		start: PathSeparator,
+		next: TrackSection,
+		found: List<DynamicPathSeparator>
+	): List<DynamicPathSeparator> =
+		found.distinct().filter { target ->
+			val drivable = hasSimpleSwitchLegalRoute(start, next, target)
+			if (!drivable) {
+				logger.debug {
+					"findNextSemaphoresVia: Dropping $target: no simple switch-legal route from $start via $next"
+				}
+			}
+			drivable
+		}
+
+	/**
+	 * Whether a simple switch-legal route from [start] to [target] leaves through [next] and, for
+	 * a signal, ends facing the train at the route's own last section. An empty path (which the
+	 * walk answers for the start itself, see the visited-key note in [findNextSemaphoresVia])
+	 * starts no route — that is why the empty-path check refuses it.
+	 */
+	private fun hasSimpleSwitchLegalRoute(
+		start: PathSeparator,
+		next: TrackSection,
+		target: DynamicPathSeparator
+	): Boolean =
+		navigator
+			.findAllSwitchConstrainedPaths(start, target, DEFAULT_MAX_PATH_DEPTH)
+			.any { path ->
+				path.isNotEmpty() &&
+					path.first() == next &&
+					(
+						target is DynamicInOut ||
+							target !is OrientedPathSeparator ||
+							semaphoreFacesArrivalVia(environment, target, path.last()) == true
+					)
+			}
 
 	/**
 	 * Process a reached separator to check if it's a valid target.
@@ -660,10 +722,12 @@ internal class ReservationTargetDiscovery(
 		}
 	}
 
-	/** Prioritize InOuts over semaphores in the (de-duplicated) result list. */
+	/**
+	 * Prioritize InOuts over semaphores in the result list. The input arrives distinct:
+	 * [drivableTargets] de-duplicates before it validates, so this is ordering only.
+	 */
 	private fun prioritizeInOuts(validTargets: List<DynamicPathSeparator>): List<DynamicPathSeparator> {
-		val distinctTargets = validTargets.distinct()
-		val (inouts, semaphores) = distinctTargets.partition { it is DynamicInOut }
+		val (inouts, semaphores) = validTargets.partition { it is DynamicInOut }
 		logger.trace {
 			"findNextSemaphoresVia: Returning ${inouts.size} InOut(s) + ${semaphores.size} semaphore(s)"
 		}

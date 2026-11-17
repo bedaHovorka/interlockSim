@@ -468,7 +468,11 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		fun sequenceIsLazy() {
 			val (start, next) = zAForwardSection()
 
-			val candidates = discovery.evaluateTargets(start, discovery.findNextSemaphoresVia(start, next), null)
+			val offers = discovery.findNextSemaphoresVia(start, next)
+			// Offer validation ran inside the discovery (Issue #1390 review round) and consumed
+			// enumerations; this pin is about evaluateTargets' laziness, so counting starts after it.
+			counting.evaluations = 0
+			val candidates = discovery.evaluateTargets(start, offers, null)
 			assertThat(counting.evaluations, name = "evaluations before iterating").isEqualTo(0)
 
 			val first = candidates.first()
@@ -486,7 +490,9 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 
 			assertThat(discovery.isAnyNextTargetAvailable(start, next)).isTrue()
 
-			assertThat(counting.evaluations, name = "availability evaluations").isEqualTo(1)
+			// 2 = the offer validations of the discovery call inside (Issue #1390 review round, one per
+			// distinct target), 1 = the availability evaluation that stops after the first available.
+			assertThat(counting.evaluations, name = "availability + validation evaluations").isEqualTo(3)
 		}
 
 		@Test
@@ -499,7 +505,9 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 			assertThat(candidates.map { separatorLabel(it.separator) }).containsExactly("doB1", "doB2")
 			// Two per target: the block check of evaluateTargets, then, for a block-free target, the
 			// switch-compatibility pass (Issue #1359; a route-cache hit in a simulation context).
-			assertThat(counting.evaluations, name = "route enumerations").isEqualTo(4)
+			// Plus one offer-validation enumeration per distinct target from the discovery call
+			// inside (Issue #1390 review round).
+			assertThat(counting.evaluations, name = "route enumerations").isEqualTo(6)
 		}
 	}
 

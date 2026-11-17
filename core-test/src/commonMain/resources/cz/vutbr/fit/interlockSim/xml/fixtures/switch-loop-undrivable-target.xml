@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<!--
+  Three-switch loop for the Issue #1390 review round: the walk's visited key is
+  (separator, arrival section), so it legitimately expands w1 and w0 twice - and the ONLY walk
+  from the entry S that reaches T passes through a revisit - while the navigator refuses every
+  route to T (a route may not repeat a separator). The offer lists this network must produce
+  are pinned by SwitchLoopDiscoveryOffersTest.
+
+      S(5,10) -e0- w0(9,10) -e1- w1(13,10) -e2- w2(17,10) -e5- u(21,10)
+                   |           |e3 (SE branch)   |e4 (SE branch, from s2)
+                   |e6 (SW branch)
+                   T(5,12)        s2(15,12)
+
+  Walk from S: w0(main leg in, merge out) -> w1(merge in) -> both legs: e2 -> w2 -> u (target),
+  and e3 -> s2 (rear-facing over e3, walked past) -> e4 -> w2(leg in, merge out) -> w1(REVISIT:
+  leg in, merge out) -> w0(revisit, merge in) -> T (target). Every simple route S -> T repeats
+  w1, so the navigator returns no route: the offer must be dropped. From T the walk mirrors it
+  and offers the InOut S through the same revisit arm. s2 breaks the doubled w1-w2 cell pair the
+  graph storage cannot represent (graph edges are keyed on the cell pair alone). w0 is a
+  SIMPLE_LEFT_TRUE (merge on the east/f side, SW branch leg D), w1/w2 are SIMPLE_RIGHT_FALSE
+  (merge on the west/a side, SE branch leg G); s2 faces west so it is walked past from the west
+  and offered from the east; T faces west towards the return movement.
+-->
+<net X="100" Y="100">
+  <InOut X="5" Y="10" SpatialType="HORIZONTAL" orientation="false" name="S"/>
+  <RailSwitch X="9" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="w0"/>
+  <RailSwitch X="13" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="w1"/>
+  <RailSwitch X="17" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="w2"/>
+  <RailSemaphore X="15" Y="12" SpatialType="HORIZONTAL" orientation="true" name="s2"/>
+  <RailSemaphore X="5" Y="12" SpatialType="HORIZONTAL" orientation="true" name="T"/>
+  <InOut X="21" Y="10" SpatialType="HORIZONTAL" orientation="true" name="u"/>
+  <SimpleTrackBlock fromX="5" fromY="10" toX="9" toY="10" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="9" fromY="10" toX="13" toY="10" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="13" fromY="10" toX="17" toY="10" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="17" fromY="10" toX="21" toY="10" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="13" fromY="10" toX="15" toY="12" fromSegment="G" toSegment="A" length="30.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
+  <SimpleTrackBlock fromX="15" fromY="12" toX="17" toY="10" fromSegment="F" toSegment="G" length="30.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
+  <SimpleTrackBlock fromX="9" fromY="10" toX="5" toY="12" fromSegment="D" toSegment="F" length="50.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
+</net>
