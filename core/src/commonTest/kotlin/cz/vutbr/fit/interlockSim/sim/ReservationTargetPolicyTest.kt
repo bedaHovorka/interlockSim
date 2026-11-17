@@ -322,6 +322,16 @@ class ReservationTargetPolicyTest {
 	}
 
 	@Test
+	fun `an available own exit wins over the reachable steer`() {
+		val candidates = listOf(inOutCandidate("N-Lib-2", true), semaphoreCandidate("S3", true))
+
+		// Step 1 precedes step 3: a reachable signal must never shadow the own exit itself.
+		assertThat(
+			ReservationTargetPolicy.pick(candidates, destinationName = "N-Lib-2", destinationReachableVia = setOf("S3"))
+		).isEqualTo(inOutCandidate("N-Lib-2", true))
+	}
+
+	@Test
 	fun `chosenTargetName reads the observation's reachable set`() {
 		val input =
 			BlockInputObservation(
