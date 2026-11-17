@@ -56,8 +56,8 @@ class TrainErrorStopFragmentTripwireTest {
 		/** The origin pin: the fragment as its message renders it, before ` at InOut '<where>'`. */
 		const val ORIGIN_NEEDLE = ORIGIN_ROUTE_EXTENSION_FRAGMENT + " at InOut"
 
-		/** The origin no-path pin: the fragment before ` '<origin>'`. */
-		const val ORIGIN_NO_PATH_NEEDLE = ORIGIN_NO_PATH_FRAGMENT + " '"
+		/** The origin no-path pin: the terminal message's continuation, distinct from its retry WARN. */
+		const val ORIGIN_NO_PATH_NEEDLE = ORIGIN_NO_PATH_FRAGMENT + " '\${where.name}' after"
 
 		/** The mid-journey no-path pin: the fragment before ` from '<where>'`. */
 		const val MID_JOURNEY_NO_PATH_NEEDLE = MID_JOURNEY_NO_PATH_FRAGMENT + " from '"
