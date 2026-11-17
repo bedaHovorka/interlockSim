@@ -80,14 +80,19 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 	@Nested
 	@DisplayName("next-separator enumeration (findNextSemaphoresVia)")
 	inner class NextSeparators {
-		/** Candidate names and verdicts on a free network, recorded before the extraction. */
+		/**
+		 * Candidate names and verdicts on a free network, recorded before the extraction. Issue #1390
+		 * dropped the opposing loop signal from the four loop-track starts (`doA1` no longer offers
+		 * `doA2`, and so on): the walk reached it only through a branch-to-branch reversal at `vA`/`vB`,
+		 * so it had no switch-legal route and was never available.
+		 */
 		private val expectedCandidates =
 			mapOf(
 				"zA" to listOf("doB1" to true, "doB2" to true),
-				"doA1" to listOf("A" to true, "doA2" to false),
-				"doA2" to listOf("A" to true, "doA1" to false),
-				"doB2" to listOf("B" to true, "doB1" to false),
-				"doB1" to listOf("B" to true, "doB2" to false),
+				"doA1" to listOf("A" to true),
+				"doA2" to listOf("A" to true),
+				"doB2" to listOf("B" to true),
+				"doB1" to listOf("B" to true),
 				"zB" to listOf("doA1" to true, "doA2" to true),
 				"A" to listOf("zA" to true),
 				"B" to listOf("zB" to true)
@@ -268,13 +273,15 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		}
 
 		@Test
-		@DisplayName("findNextSemaphoresVia puts the InOut before the opposing loop signal")
+		@DisplayName("findNextSemaphoresVia from doB1 offers the InOut, not the opposing loop signal (Issue #1390)")
 		fun nextSeparatorsPutInOutFirst() {
+			// Before Issue #1390 the walk turned back through vB onto the other loop track and listed
+			// doB2 after B. No train can drive that branch-to-branch leg.
 			val doB1 = separator("doB1") as OrientedPathSeparator
 			val (start, next) = discovery.resolveForwardSection(doB1, "test")!!
 
 			assertThat(discovery.findNextSemaphoresVia(start, next).map { separatorLabel(it) })
-				.containsExactly("B", "doB2")
+				.containsExactly("B")
 		}
 
 		@Test
@@ -461,7 +468,11 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		fun sequenceIsLazy() {
 			val (start, next) = zAForwardSection()
 
-			val candidates = discovery.evaluateTargets(start, discovery.findNextSemaphoresVia(start, next), null)
+			val offers = discovery.findNextSemaphoresVia(start, next)
+			// Offer validation ran inside the discovery (Issue #1390 review round) and consumed
+			// enumerations; this pin is about evaluateTargets' laziness, so counting starts after it.
+			counting.evaluations = 0
+			val candidates = discovery.evaluateTargets(start, offers, null)
 			assertThat(counting.evaluations, name = "evaluations before iterating").isEqualTo(0)
 
 			val first = candidates.first()
@@ -479,7 +490,9 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 
 			assertThat(discovery.isAnyNextTargetAvailable(start, next)).isTrue()
 
-			assertThat(counting.evaluations, name = "availability evaluations").isEqualTo(1)
+			// 2 = the offer validations of the discovery call inside (Issue #1390 review round, one per
+			// distinct target), 1 = the availability evaluation that stops after the first available.
+			assertThat(counting.evaluations, name = "availability + validation evaluations").isEqualTo(3)
 		}
 
 		@Test
@@ -492,7 +505,9 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 			assertThat(candidates.map { separatorLabel(it.separator) }).containsExactly("doB1", "doB2")
 			// Two per target: the block check of evaluateTargets, then, for a block-free target, the
 			// switch-compatibility pass (Issue #1359; a route-cache hit in a simulation context).
-			assertThat(counting.evaluations, name = "route enumerations").isEqualTo(4)
+			// Plus one offer-validation enumeration per distinct target from the discovery call
+			// inside (Issue #1390 review round).
+			assertThat(counting.evaluations, name = "route enumerations").isEqualTo(6)
 		}
 	}
 

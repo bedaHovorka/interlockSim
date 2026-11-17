@@ -78,6 +78,10 @@ private data class ExhaustedRequest(
  * @property reservationTtlSimSeconds Simulated seconds a holding of un-entered blocks may go without a
  *   new block registration before [expireStaleReservations] releases it (Issue #1174); see
  *   [DEFAULT_RESERVATION_TTL_SIM_SECONDS]
+ * @property nextTargetsOverride Test seam only (Issue #1390); `null` in production. Replaces the
+ *   target list of [reservePathToAnyNextSemaphore], so a test can still offer a target whose only
+ *   free route avoids the required `next` block and cover the bypass rollback, which real discovery
+ *   no longer reaches on the swept fixtures
  * @since Issue #294 (Phase 2 of Issue #292)
  */
 class DefaultPathReservationService(
@@ -86,7 +90,8 @@ class DefaultPathReservationService(
 	private val registry: PathReservationRegistry,
 	private val pathInfoBuilder: PathInfoBuilder,
 	private val routeFinder: RouteFinder,
-	private val reservationTtlSimSeconds: Double = DEFAULT_RESERVATION_TTL_SIM_SECONDS
+	private val reservationTtlSimSeconds: Double = DEFAULT_RESERVATION_TTL_SIM_SECONDS,
+	internal val nextTargetsOverride: ((DynamicPathSeparator, TrackSection) -> List<DynamicPathSeparator>)? = null
 ) : PathReservationService,
 	ReservationTargetQuery,
 	BlockRollbackStep {
@@ -695,7 +700,7 @@ class DefaultPathReservationService(
 		}
 
 		// Find ALL reachable semaphores via this track section
-		val semaphores = targetDiscovery.findNextSemaphoresVia(start, next)
+		val semaphores = nextTargetsOverride?.invoke(start, next) ?: targetDiscovery.findNextSemaphoresVia(start, next)
 		if (semaphores.isEmpty()) {
 			logger.debug {
 				"reservePathToAnyNextSemaphore: No semaphores found from $start via $next"
@@ -746,7 +751,10 @@ class DefaultPathReservationService(
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
-					// FIX: validate the reserved path goes through the required 'next' block
+					// FIX: validate the reserved path goes through the required 'next' block. Defence in
+					// depth since Issue #1390: discovery now offers only targets reached through `next`
+					// over switch-legal legs, and no swept fixture reaches this branch any more; a
+					// target that is also reachable without `next` (a loop) still can.
 					if (!result.reservedBlocks.contains(nextBlock)) {
 						logger.debug {
 							"reservePathToAnyNextSemaphore: Path to $semaphore rejected (doesn't use required next block)"

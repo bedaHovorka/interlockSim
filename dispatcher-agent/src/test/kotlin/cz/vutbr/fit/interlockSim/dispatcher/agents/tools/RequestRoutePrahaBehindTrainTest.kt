@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsExactly
+import assertk.assertions.containsOnly
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -66,12 +67,15 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 		const val AT_SIGNAL = "S9"
 		const val BEHIND = "S15"
 		const val EXIT = "N-Vys-1"
+		const val HOP_SECTION = "hop-section"
 	}
 
 	private class PrahaFacts(
 		val endpointNames: Set<String>,
 		val inOutNames: Set<String>,
-		val candidatesAheadOfS9: List<CandidateTarget>
+		val candidatesAheadOfS9: List<CandidateTarget>,
+		val signalWithSignalAhead: String,
+		val candidatesAheadOfIt: List<CandidateTarget>
 	)
 
 	private fun prahaFacts(): PrahaFacts =
@@ -83,12 +87,11 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 					.map { it.name }
 					.filter { it.isNotBlank() }
 					.toSet()
-			val s9 = semaphores.single { it.name == AT_SIGNAL }
-			val candidates =
-				context
-					.getRoutingServices()
-					.getReservationTargetQuery()
-					.findReservationTargetCandidates(s9 as OrientedPathSeparator, TRAIN)
+			val query = context.getRoutingServices().getReservationTargetQuery()
+
+			fun candidatesAhead(signal: String): List<CandidateTarget> =
+				query
+					.findReservationTargetCandidates(semaphores.single { it.name == signal } as OrientedPathSeparator, TRAIN)
 					.map { candidate ->
 						when (val separator = candidate.separator) {
 							is DynamicInOut -> CandidateTarget(separator.name, SeparatorKind.IN_OUT, candidate.available)
@@ -97,14 +100,26 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 							else -> error("Unexpected candidate separator $separator")
 						}
 					}
+			val (hopStart, aheadOfHopStart) =
+				semaphores
+					.map { it.name }
+					.sorted()
+					.asSequence()
+					.map { it to candidatesAhead(it) }
+					.first { (_, ahead) -> ahead.any { it.kind == SeparatorKind.SEMAPHORE } }
 			PrahaFacts(
 				endpointNames = inOuts + semaphores.map { it.name }.filter { it.isNotBlank() },
 				inOutNames = inOuts,
-				candidatesAheadOfS9 = candidates
+				candidatesAheadOfS9 = candidatesAhead(AT_SIGNAL),
+				signalWithSignalAhead = hopStart,
+				candidatesAheadOfIt = aheadOfHopStart
 			)
 		}
 
-	private fun perceptionPort(): NetworkPerceptionPort =
+	private fun perceptionPort(
+		atSignal: String = AT_SIGNAL,
+		section: String = "k6"
+	): NetworkPerceptionPort =
 		mockk<NetworkPerceptionPort>(relaxed = true).also { port ->
 			every { port.snapshot() } returns
 				SimulationSnapshot.EMPTY.copy(
@@ -112,14 +127,14 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 						listOf(
 							TrainPerceptionReading(
 								trainId = TRAIN,
-								signalAheadName = AT_SIGNAL,
+								signalAheadName = atSignal,
 								signalAheadAspect = null,
 								distanceToSignalAheadMetres = 0.0,
 								currentSpeedLimitMps = 24.0,
 								velocity = 0.0,
 								acceleration = 0.0,
 								totalDistance = 0.0,
-								frontSectionName = "k6",
+								frontSectionName = section,
 								destinationInOutName = EXIT,
 								scheduledArrivalTime = 0.0,
 								isDwelling = true
@@ -132,13 +147,17 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 								velocity = 0.0,
 								acceleration = 0.0,
 								totalDistance = 0.0,
-								frontSectionName = "k6"
+								frontSectionName = section
 							)
 						)
 				)
 		}
 
-	private fun sensorPort(candidates: List<CandidateTarget>): DispatchLoopSensorPort =
+	private fun sensorPort(
+		candidates: List<CandidateTarget>,
+		atSignal: String = AT_SIGNAL,
+		section: String = "k6"
+	): DispatchLoopSensorPort =
 		mockk<DispatchLoopSensorPort>(relaxed = true).also { port ->
 			every { port.getQueuedTrains() } returns emptyList()
 			every { port.snapshot() } returns
@@ -147,8 +166,8 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 					innerBlockInputs =
 						listOf(
 							BlockInputObservation(
-								blockId = "k6",
-								towardSemaphoreName = AT_SIGNAL,
+								blockId = section,
+								towardSemaphoreName = atSignal,
 								state = TrackFacility.State.OCCUPIED,
 								ownerTrainId = TRAIN,
 								isApproachingThisInput = true,
@@ -163,7 +182,7 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 		}
 
 	@Test
-	@DisplayName("S9 -> S15 is TARGET_NOT_NEXT_SECTION and names N-Vys-1; a real Signal ahead of S9 passes")
+	@DisplayName("S9 -> S15 is TARGET_NOT_NEXT_SECTION and names N-Vys-1; the exit N-Vys-1 is granted")
 	fun behindTheTrainIsRefusedAndTheExitIsNamed() {
 		val facts = prahaFacts()
 		val aheadNames = facts.candidatesAheadOfS9.map { it.name }
@@ -171,6 +190,9 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 		assertThat(aheadNames, "candidates one section ahead of S9").contains(EXIT)
 		assertThat(aheadNames, "candidates one section ahead of S9").doesNotContain(BEHIND)
 		assertThat(facts.endpointNames, "S15 is a real Praha signal").contains(BEHIND)
+		// Issue #1390: S9's one Signal target, S8, was reachable only by turning back through a
+		// crossover, a leg no train can drive; the exit is now the only target one section ahead of S9.
+		assertThat(facts.candidatesAheadOfS9.map { it.kind }, "kinds ahead of S9").containsOnly(SeparatorKind.IN_OUT)
 
 		val emitted = mutableListOf<DispatchAction>()
 		val tool =
@@ -193,25 +215,40 @@ class RequestRoutePrahaBehindTrainTest : DispatcherKoinTestBase() {
 		assertThat(error.message, "reply").contains("NEXT SECTION is from '$AT_SIGNAL' to '$EXIT'")
 		assertThat(emitted, "emitted after the refusal").isEmpty()
 
-		// A Signal the real query lists one section ahead of S9 passes the guard: the rule refuses
-		// what is not ahead, not every Signal target.
-		val signalAhead =
-			facts.candidatesAheadOfS9.first { it.kind == SeparatorKind.SEMAPHORE }.name
-		val signalHop =
-			runBlocking {
-				tool.execute(mapOf("trainName" to TRAIN, "fromEndpointName" to AT_SIGNAL, "toEndpointName" to signalAhead))
-			}
-		assertThat(signalHop, "S9 -> $signalAhead").isInstanceOf(ToolResult.Success::class)
-
 		// Sanity check only: an InOut target is not subject to the next-section guard at all.
 		val granted =
 			runBlocking {
 				tool.execute(mapOf("trainName" to TRAIN, "fromEndpointName" to AT_SIGNAL, "toEndpointName" to EXIT))
 			}
 		assertThat(granted).isInstanceOf(ToolResult.Success::class)
-		assertThat(emitted).containsExactly(
-			DispatchAction.RequestRoute(TRAIN, AT_SIGNAL, signalAhead, RouteScope.Section),
-			DispatchAction.RequestRoute(TRAIN, AT_SIGNAL, EXIT, RouteScope.EndToEnd)
-		)
+		assertThat(emitted).containsExactly(DispatchAction.RequestRoute(TRAIN, AT_SIGNAL, EXIT, RouteScope.EndToEnd))
+	}
+
+	@Test
+	@DisplayName("a real Signal one section ahead of a Praha signal passes the guard (Issue #1390 moved this from S9)")
+	fun aSignalAheadPassesTheGuard() {
+		val facts = prahaFacts()
+		// The rule refuses what is not ahead, not every Signal target. Since Issue #1390 no Signal is
+		// one section ahead of S9, so the hop starts at the first Praha signal (by name) whose real
+		// candidate list holds a Signal.
+		val start = facts.signalWithSignalAhead
+		val signalAhead = facts.candidatesAheadOfIt.first { it.kind == SeparatorKind.SEMAPHORE }.name
+		val emitted = mutableListOf<DispatchAction>()
+		val tool =
+			RequestRouteTool(
+				SinkHolder(EmittedActionSink { emitted += it }),
+				facts.endpointNames,
+				perceptionPort(start, HOP_SECTION),
+				sensorPort(facts.candidatesAheadOfIt, start, HOP_SECTION),
+				inOutNames = facts.inOutNames
+			)
+
+		val signalHop =
+			runBlocking {
+				tool.execute(mapOf("trainName" to TRAIN, "fromEndpointName" to start, "toEndpointName" to signalAhead))
+			}
+
+		assertThat(signalHop, "$start -> $signalAhead").isInstanceOf(ToolResult.Success::class)
+		assertThat(emitted).containsExactly(DispatchAction.RequestRoute(TRAIN, start, signalAhead, RouteScope.Section))
 	}
 }

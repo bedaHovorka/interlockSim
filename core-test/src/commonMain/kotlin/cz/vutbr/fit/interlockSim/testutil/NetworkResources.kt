@@ -82,4 +82,10 @@ object NetworkResources {
 
 	/** The same station with the misdirected signal left nameless in the XML (Issue #1272). */
 	val STATION_UNNAMED_HOME_SIGNAL_XML: String by lazy { fixture("station-unnamed-home-signal.xml") }
+
+	/**
+	 * Three-switch loop whose only walk from the entry `S` to the west semaphore `T` revisits `w1`
+	 * and `w0` — the offer the navigator refuses, pinned by the Issue #1390 review round.
+	 */
+	val SWITCH_LOOP_UNDRIVABLE_TARGET_XML: String by lazy { fixture("switch-loop-undrivable-target.xml") }
 }
