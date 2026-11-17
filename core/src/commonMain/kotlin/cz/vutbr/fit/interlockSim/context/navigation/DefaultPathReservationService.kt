@@ -780,9 +780,11 @@ class DefaultPathReservationService(
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
 					// FIX: validate the reserved path goes through the required 'next' block. Defence in
-					// depth since Issue #1390: discovery now offers only targets reached through `next`
-					// over switch-legal legs, and no swept fixture reaches this branch any more; a
-					// target that is also reachable without `next` (a loop) still can.
+					// depth since Issue #1390: discovery offers a target only when a simple switch-legal
+					// route through `next` reaches it (the offer-time drivability filter), so a target
+					// whose every route avoids `next` is never offered and no swept fixture reaches this
+					// branch any more. It still guards a target that is also reachable without `next`
+					// (a loop), where reservePath may pick the route that avoids `next`.
 					if (!result.reservedBlocks.contains(nextBlock)) {
 						logger.debug {
 							"reservePathToAnyNextSemaphore: Path to $semaphore rejected (doesn't use required next block)"
