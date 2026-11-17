@@ -66,6 +66,10 @@ private val logger = KotlinLogging.logger {}
  * enters only at about 10 s. kDisco keeps `dtMax` per simulation context, so the value cannot leak
  * into the next run; the second run of each comparison proves it by observing the global value.
  *
+ * Wording role: this test is the untagged runtime witness that the rendered mid-journey `errorStop`
+ * carries [ROUTE_EXTENSION_FRAGMENT]; the source-text pin of that wording is
+ * [TrainErrorStopFragmentTripwireTest]'s.
+ *
  * Bounded by the simulated `endTime` ([END_TIME]); the `@Timeout` is only a safety ceiling.
  */
 @DisplayName("SP13: the dtMax 1e-1 resolve-and-restall stall does not reproduce")

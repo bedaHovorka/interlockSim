@@ -16,6 +16,7 @@ import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.MID_JOURNEY_NO_PATH_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
@@ -132,7 +133,7 @@ class MidJourneyNoPathErrorStopRegressionTest : KoinTestBase() {
 
 		// (2) The bound fired rather than the train polling to END_TIME. The mid-journey wording
 		//     distinguishes this from the origin bound's "No topological path from origin InOut".
-		assertCapturedErrorStop(capturedErrors, "navigation reports no usable path")
+		assertCapturedErrorStop(capturedErrors, MID_JOURNEY_NO_PATH_FRAGMENT)
 	}
 
 	private companion object {

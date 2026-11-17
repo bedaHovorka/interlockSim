@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ORIGIN_NO_PATH_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import cz.vutbr.fit.interlockSim.testutil.decoratingTrainNavigationService
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
@@ -147,8 +148,5 @@ class Issue905OriginNoPathErrorStopRegressionTest : KoinTestBase() {
 		 * this; the margin is for admission and control-tick scheduling slack only.
 		 */
 		const val END_TIME: Long = 60L
-
-		/** Distinctive fragment of the origin `NoTopologicalPath` `errorStop` message. */
-		const val ORIGIN_NO_PATH_FRAGMENT = "No topological path from origin InOut"
 	}
 }
