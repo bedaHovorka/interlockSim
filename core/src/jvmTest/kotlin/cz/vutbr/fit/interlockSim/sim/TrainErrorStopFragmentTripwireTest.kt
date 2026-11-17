@@ -38,7 +38,9 @@ import java.util.concurrent.TimeUnit
  *
  * Each needle is a constant extended to its message shape (for example [MID_JOURNEY_NEEDLE]), built
  * from the constant itself: a reword cannot sneak past by keeping the bare fragment somewhere else,
- * and the constant cannot drift while this test passes. Only code counts
+ * and the constant cannot drift while this test passes. Each needle must occur exactly once: a
+ * wording carried by two independently editable sites would let a reword of the pinned one pass
+ * unseen. Only code counts
  * ([SourceScan.codeLinesKeepingStrings]: comment spans removed, string literals kept), so the scan
  * reads only `sim/Train.kt`: KDoc, block-comment and trailing `//` comment text cannot trip the pins,
  * and consumer-file wording echoes are outside its surface altogether. A wording split over a
@@ -59,8 +61,8 @@ class TrainErrorStopFragmentTripwireTest {
 		/** The origin no-path pin: the terminal message's continuation, distinct from its retry WARN. */
 		const val ORIGIN_NO_PATH_NEEDLE = ORIGIN_NO_PATH_FRAGMENT + " '\${where.name}' after"
 
-		/** The mid-journey no-path pin: the fragment before ` from '<where>'`. */
-		const val MID_JOURNEY_NO_PATH_NEEDLE = MID_JOURNEY_NO_PATH_FRAGMENT + " from '"
+		/** The mid-journey no-path pin: the terminal message's continuation, distinct from its retry `logger.error`. */
+		const val MID_JOURNEY_NO_PATH_NEEDLE = MID_JOURNEY_NO_PATH_FRAGMENT + " from '\$where' after"
 
 		/** The mid-journey stall-WARN pin: the fragment before ` after <N> s`. */
 		const val STALL_WARN_NEEDLE = STALL_WARN_FRAGMENT + " after"
@@ -89,16 +91,31 @@ class TrainErrorStopFragmentTripwireTest {
 		 * the join, which can only make a pin fail, never pass.
 		 */
 		fun joinConcatenations(lines: List<String>): String = lines.joinToString("\n").replace(CONCATENATION_BOUNDARY, "")
+
+		/** The count of the overlapping occurrences of [needle] in [text]. */
+		fun countOccurrences(
+			text: String,
+			needle: String
+		): Int {
+			var count = 0
+			var fromIndex = text.indexOf(needle)
+			while (fromIndex >= 0) {
+				count++
+				fromIndex = text.indexOf(needle, fromIndex + 1)
+			}
+			return count
+		}
 	}
 
-	/** Asserts one message-shaped needle appears in the code of `Train.kt`. */
+	/** Asserts one message-shaped needle occurs exactly once in the code of `Train.kt`. */
 	private fun assertPinned(needle: String) {
 		assertThat(
-			needle in TRAIN_CODE,
+			countOccurrences(TRAIN_CODE, needle),
 			name =
-				"Train.kt code carrying '$needle' — the wording changed: update the " +
-					"TrainErrorStopMessages fragments and their consumers together"
-		).isTrue()
+				"Train.kt code occurrences of '$needle' — the wording changed or " +
+					"gained a second site: update the TrainErrorStopMessages fragments " +
+					"and their consumers together"
+		).isEqualTo(1)
 	}
 
 	@Test
@@ -124,7 +141,7 @@ class TrainErrorStopFragmentTripwireTest {
 
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
-	@DisplayName("the mid-journey no-path errorStop message still names its shared fragment")
+	@DisplayName("the mid-journey no-path errorStop message still names its shared fragment (quoted destination)")
 	fun midJourneyNoPathErrorStopMessageStillNamesItsFragment() {
 		assertPinned(MID_JOURNEY_NO_PATH_NEEDLE)
 	}
@@ -143,6 +160,11 @@ class TrainErrorStopFragmentTripwireTest {
 		assertPinned(ORIGIN_STALL_WARN_NEEDLE)
 	}
 
+	/**
+	 * The split fixture below is a deliberately reduced synthetic of `Train.kt`'s origin stall
+	 * WARN, cut at the ` its ` / `entry route` boundary — it is not the full wording; the real
+	 * split is pinned by [originStallWarnStillNamesItsFragment].
+	 */
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("a wording split over a line-concatenation boundary reads whole once joined")
@@ -154,6 +176,13 @@ class TrainErrorStopFragmentTripwireTest {
 			)
 
 		assertThat(ORIGIN_STALL_WARN_NEEDLE in joinConcatenations(SourceScan.codeLinesKeepingStrings(split))).isTrue()
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName("the occurrence count counts overlapping matches: 'aa' occurs twice in 'aaa'")
+	fun occurrenceCountCountsOverlaps() {
+		assertThat(countOccurrences("aaa", "aa")).isEqualTo(2)
 	}
 
 	@Test
