@@ -10,17 +10,16 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
-import assertk.assertions.isIn
-import assertk.assertions.isTrue
 import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.testutil.SteeredPickObserver
+import cz.vutbr.fit.interlockSim.testutil.WRONG_OUT_TRAIN_REPORT_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.runSampled
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -44,6 +43,10 @@ import org.koin.core.component.get
  * the owner's "fallback stays" clause — is counted, not failed: on seeds 1366 and 1 one train each
  * takes that fallback (traffic-simulation-expert ruling on #1387: report it, do not widen the
  * change; the acceptance "class A = 0" is the owner's to decide).
+ *
+ * The loop is deliberately built by hand instead of through the example registry: the run pins the
+ * rule-based dispatcher wiring and the differential [SteeredPickObserver] listener, which the
+ * generic run helpers do not compose (the listener must wrap the dispatcher step).
  */
 @Tag("integration-test")
 class PrahaEntryPlatformExitTest : KoinTestBase() {
@@ -53,7 +56,6 @@ class PrahaEntryPlatformExitTest : KoinTestBase() {
 		const val END_TIME: Long = 600L
 		const val TRAINS: Int = 8
 		const val MAX_CONCURRENT: Int = 4
-		const val WRONG_OUT_SUFFIX: String = " ends in wrong out"
 	}
 
 	private fun prahaContext(): DefaultSimulationContext {
@@ -97,26 +99,20 @@ class PrahaEntryPlatformExitTest : KoinTestBase() {
 		val loop = prahaLoop(ctx, seed)
 		wireSynchronousDispatcher(ctx, loop)
 		val dispatcherStep = checkNotNull(loop.controlStepListener)
-		var steeredPicks = 0
-		loop.controlStepListener =
-			ControlStepListener {
-				for (input in loop.getInnerBlockInputs() + loop.getOuterBlockInputs()) {
-					steeredPicks += checkObservation(input)
-				}
-				dispatcherStep.onControlStep()
-			}
+		val observer = SteeredPickObserver()
+		loop.controlStepListener = observer.controlStepListener(loop, dispatcherStep)
 		ctx.setMainProcess(loop)
 
 		var wrongOutReports = 0
 		runSampled(ctx) { message ->
-			if (message?.endsWith(WRONG_OUT_SUFFIX) == true) wrongOutReports++
+			if (message?.endsWith(WRONG_OUT_TRAIN_REPORT_FRAGMENT) == true) wrongOutReports++
 		}
 
 		logger.info {
 			"Praha #1387 run: seed=$seed entered=${loop.getTrainsEntered()} exited=${loop.getTrainsExited()} " +
 				"wrongOut=$wrongOutReports classA=${loop.getWrongOutClassA()} classB=${loop.getWrongOutClassB()} " +
 				"classAFallback=${loop.getWrongOutClassAFallback()} " +
-				"steeredPicks=$steeredPicks"
+				"steeredPicks=${observer.steeredPicks}"
 		}
 		assertThat(loop.getTrainsEntered(), name = "trains entered").isEqualTo(TRAINS)
 		assertThat(loop.getTrainsExited(), name = "trains exited").isEqualTo(TRAINS)
@@ -127,38 +123,6 @@ class PrahaEntryPlatformExitTest : KoinTestBase() {
 			name = "blind class A: own exit never offered and no platform toward it free"
 		).isZero()
 		// Every seed had class A wrong-outs before #1387, so the reachable set must have changed picks.
-		assertThat(steeredPicks, name = "picks changed by the reachable set").isGreaterThan(0)
-	}
-
-	/**
-	 * Checks the #1387 invariants of one observation and returns 1 when the reachable set changed
-	 * the pick (the old fixed order would have taken another candidate), else 0.
-	 */
-	private fun checkObservation(input: BlockInputObservation): Int {
-		val reachable = input.destinationReachableVia
-		val ownExitListed =
-			input.candidateTargets.any { it.kind == SeparatorKind.IN_OUT && it.name == input.destinationName }
-		if (ownExitListed || input.awaitingRouteExtension || input.destinationName == null) {
-			// TSE fixes 1 and 2: the #1299 wait and the #1244 guard see the old observation.
-			assertThat(reachable, name = "reachable set of ${input.blockId}>${input.towardSemaphoreName}").isEmpty()
-			return 0
-		}
-		val signalNames = input.candidateTargets.filter { it.kind == SeparatorKind.SEMAPHORE }.map { it.name }
-		reachable.forEach { assertThat(it, name = "reachable candidate").isIn(*signalNames.toTypedArray()) }
-		val oldPick = input.copy(destinationReachableVia = emptySet()).chosenTargetName()
-		// The owner's fallback clause: with every reachable signal busy the pick is the old one.
-		val allReachableBusy =
-			input.copy(
-				candidateTargets = input.candidateTargets.map { if (it.name in reachable) it.copy(available = false) else it }
-			)
-		assertThat(allReachableBusy.chosenTargetName(), name = "pick with every reachable signal busy")
-			.isEqualTo(allReachableBusy.copy(destinationReachableVia = emptySet()).chosenTargetName())
-		val pick = input.chosenTargetName()
-		if (input.candidateTargets.any { it.available && it.name in reachable }) {
-			assertThat(pick in reachable, name = "pick $pick is reachable for ${input.destinationName}").isTrue()
-		} else {
-			assertThat(pick, name = "fallback pick").isEqualTo(oldPick)
-		}
-		return if (pick != oldPick) 1 else 0
+		assertThat(observer.steeredPicks, name = "picks changed by the reachable set").isGreaterThan(0)
 	}
 }
