@@ -216,7 +216,16 @@ data class BlockInputObservation(
 	 * same wait. [ReservationTargetPolicy.pick] holds out for the own exit while the wait is below
 	 * [ReservationTargetPolicy.OWN_EXIT_WAIT_BOUND_SECONDS]; `null` keeps the immediate fallback.
 	 */
-	val destinationWaitSeconds: Double? = null
+	val destinationWaitSeconds: Double? = null,
+	/**
+	 * The names of the signal ([SeparatorKind.SEMAPHORE]) candidates in [candidateTargets] from which
+	 * [destinationName] is reachable — over the interlocking's next-target lists, transitively, by
+	 * topology only (Issue #1387). [ReservationTargetPolicy.pick] prefers an available one of them,
+	 * so a train is routed onto a platform track from which its own exit is offered. Empty when
+	 * [destinationName] is `null`, when it is itself a station-exit candidate (the #1278/#1299 rules
+	 * apply unchanged), and while [awaitingRouteExtension] (the #1244 guard sees the old pick).
+	 */
+	val destinationReachableVia: Set<String> = emptySet()
 )
 
 /**

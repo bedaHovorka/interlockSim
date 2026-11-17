@@ -42,6 +42,23 @@ object SourceScan {
 			.toList()
 
 	/**
+	 * The comment-free, string-keeping code text of one [relativePath] source file, resolved under
+	 * the first of [spellings] that names an existing directory ([directory], Issue #1387): the
+	 * read-once plumbing of the wording tripwires, so a resolution or join fix lands here once.
+	 *
+	 * @throws IllegalStateException when no [spellings] resolves the file.
+	 */
+	fun codeText(
+		relativePath: String,
+		vararg spellings: String
+	): String =
+		directory(*spellings)
+			.resolve(relativePath)
+			.takeIf { it.isFile }
+			?.let { joinConcatenations(codeLinesKeepingStrings(it.readLines())) }
+			?: error("$relativePath not found under the scanned commonMain sources")
+
+	/**
 	 * The [lines] of one file as code-only strings, one output line per input line (indices kept):
 	 * string literals blanked first (a `//` or a comment opener inside one must not act on the
 	 * comment state), then `//` to end of line and block-comment spans (opener to close) removed,
@@ -65,6 +82,30 @@ object SourceScan {
 	 * as [codeLines] apply.
 	 */
 	fun codeLinesKeepingStrings(lines: List<String>): List<String> = scan(lines, keepStrings = true)
+
+	/** A `"…" +` line end followed by the next line's opening quote: one concatenation boundary (Issue #1396). */
+	private val stringLiteralBoundary = Regex("\"\\s*\\+\\s*\n\\s*\"")
+
+	/**
+	 * The code [lines] as one text with each `"…" +` / `"…"` boundary across a line end removed
+	 * (Issue #1396), so a wording split over two lines reads whole. A comment line between the two
+	 * halves breaks the join, which can only make a wording pin fail, never pass.
+	 */
+	fun joinConcatenations(lines: List<String>): String = lines.joinToString("\n").replace(stringLiteralBoundary, "")
+
+	/** The count of the overlapping occurrences of [needle] in [text]. */
+	fun countOccurrences(
+		text: String,
+		needle: String
+	): Int {
+		var count = 0
+		var fromIndex = text.indexOf(needle)
+		while (fromIndex >= 0) {
+			count++
+			fromIndex = text.indexOf(needle, fromIndex + 1)
+		}
+		return count
+	}
 
 	/**
 	 * Both scanners in one: each literal is masked with [LITERAL_MASK] characters of the same length,

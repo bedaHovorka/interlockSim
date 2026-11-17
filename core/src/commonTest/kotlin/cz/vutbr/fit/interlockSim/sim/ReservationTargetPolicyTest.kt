@@ -258,6 +258,99 @@ class ReservationTargetPolicyTest {
 		assertThat(input.copy(destinationWaitSeconds = null).chosenTargetName()).isEqualTo("B2")
 	}
 
+	// Platform choice by reachability (Issue #1387): when the own exit is not a station-exit
+	// candidate, an available signal from which it is reachable wins; when none is available the
+	// fixed order applies unchanged (no wait for a busy reachable signal).
+
+	@Test
+	fun `an available signal from which the own exit is reachable wins over one listed before it`() {
+		val candidates = listOf(semaphoreCandidate("S2", true), semaphoreCandidate("S3", true))
+
+		assertThat(
+			ReservationTargetPolicy.pick(candidates, destinationName = "N-Lib-2", destinationReachableVia = setOf("S3"))
+		).isEqualTo(semaphoreCandidate("S3", true))
+	}
+
+	@Test
+	fun `a reachable signal wins over a wrong available exit`() {
+		val candidates = listOf(inOutCandidate("B2", true), semaphoreCandidate("zB", true))
+
+		assertThat(ReservationTargetPolicy.pick(candidates, destinationName = "B1", destinationReachableVia = setOf("zB")))
+			.isEqualTo(semaphoreCandidate("zB", true))
+	}
+
+	@Test
+	fun `a busy reachable signal falls back to the fixed order at once`() {
+		val candidates = listOf(semaphoreCandidate("S2", true), semaphoreCandidate("S3", false))
+
+		assertThat(
+			ReservationTargetPolicy.pick(candidates, destinationName = "N-Lib-2", destinationReachableVia = setOf("S3"))
+		).isEqualTo(ReservationTargetPolicy.pick(candidates, destinationName = "N-Lib-2"))
+	}
+
+	@Test
+	fun `the reachable set is ignored without a destination`() {
+		val candidates = listOf(semaphoreCandidate("S2", true), semaphoreCandidate("S3", true))
+
+		assertThat(ReservationTargetPolicy.pick(candidates, destinationName = null, destinationReachableVia = setOf("S3")))
+			.isEqualTo(semaphoreCandidate("S2", true))
+	}
+
+	@Test
+	fun `the own exit as a candidate keeps the Issue 1278 and Issue 1299 rules and the reachable set does not apply`() {
+		val candidates = listOf(inOutCandidate("B2", true), semaphoreCandidate("zB", true), inOutCandidate("B1", false))
+		val reachable = setOf("zB")
+
+		// Below the bound the train still holds out for its blocked own exit.
+		assertThat(
+			ReservationTargetPolicy.pick(
+				candidates,
+				destinationName = "B1",
+				destinationWaitSeconds = 0.0,
+				destinationReachableVia = reachable
+			)
+		).isNull()
+		// Past the bound the pick equals the old fixed-order fallback, not the reachable signal.
+		assertThat(
+			ReservationTargetPolicy.pick(
+				candidates,
+				destinationName = "B1",
+				destinationWaitSeconds = ReservationTargetPolicy.OWN_EXIT_WAIT_BOUND_SECONDS,
+				destinationReachableVia = reachable
+			)
+		).isEqualTo(inOutCandidate("B2", true))
+	}
+
+	@Test
+	fun `an available own exit wins over the reachable steer`() {
+		val candidates = listOf(inOutCandidate("N-Lib-2", true), semaphoreCandidate("S3", true))
+
+		// Step 1 precedes step 3: a reachable signal must never shadow the own exit itself.
+		assertThat(
+			ReservationTargetPolicy.pick(candidates, destinationName = "N-Lib-2", destinationReachableVia = setOf("S3"))
+		).isEqualTo(inOutCandidate("N-Lib-2", true))
+	}
+
+	@Test
+	fun `chosenTargetName reads the observation's reachable set`() {
+		val input =
+			BlockInputObservation(
+				blockId = "block",
+				towardSemaphoreName = "S_60_4",
+				state = TrackFacility.State.OCCUPIED,
+				ownerTrainId = "Train #1",
+				isApproachingThisInput = true,
+				pathSetUpTowardThisInput = false,
+				pathAlreadyExtendedBeyond = false,
+				candidateTargets = listOf(semaphoreCandidate("S2", true), semaphoreCandidate("S3", true)),
+				destinationName = "N-Lib-2",
+				destinationReachableVia = setOf("S3")
+			)
+
+		assertThat(input.chosenTargetName()).isEqualTo("S3")
+		assertThat(input.copy(destinationReachableVia = emptySet()).chosenTargetName()).isEqualTo("S2")
+	}
+
 	private companion object {
 		/** ShuntingLoop's control step: observations, and hence wait readings, arrive every 2 s of simulation time. */
 		const val CONTROL_TICK_SECONDS: Double = 2.0

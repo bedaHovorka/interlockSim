@@ -1512,6 +1512,9 @@ class Train :
 					)
 				}
 			}
+			if (next == null) {
+				exitName = (where as? DynamicInOut)?.name // Issue #1387: read by ShuntingLoop's wrong-out class
+			}
 			if (next == null &&
 				where != timetable.getOut()
 			) {
@@ -2014,6 +2017,14 @@ class Train :
 	/** @see timetableOriginName */
 	val timetableDestinationName: String
 		get() = timetable.getOut().name
+
+	/**
+	 * The name of the InOut the train's tail left the network by, or `null` while the train is still
+	 * in the network (Issue #1387). Set at the same point that reports "ends in wrong out", so a
+	 * value other than [timetableDestinationName] is exactly a wrong-out train.
+	 */
+	var exitName: String? = null
+		private set
 
 	/** @see timetableOriginName */
 	val scheduledDepartureTime: Double

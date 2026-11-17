@@ -41,11 +41,11 @@ import java.util.concurrent.TimeUnit
  * and the constant cannot drift while this test passes. Each needle must occur exactly once: a
  * wording carried by two independently editable sites would let a reword of the pinned one pass
  * unseen. Only code counts
- * ([SourceScan.codeLinesKeepingStrings]: comment spans removed, string literals kept), so the scan
+ * [SourceScan.codeLinesKeepingStrings]: comment spans removed, string literals kept), so the scan
  * reads only `sim/Train.kt`: KDoc, block-comment and trailing `//` comment text cannot trip the pins,
  * and consumer-file wording echoes are outside its surface altogether. A wording split over a
  * `"…" +` / `"…"` line-concatenation boundary (the origin stall WARN is one) is read joined:
- * [joinConcatenations] removes the boundary before the needles are searched.
+ * [SourceScan.joinConcatenations] removes the boundary before the needles are searched.
  *
  * @since Issue #1380 (SP13 — Goal 1B)
  */
@@ -70,47 +70,22 @@ class TrainErrorStopFragmentTripwireTest {
 		/** The origin stall-WARN pin: the fragment before ` after <N> s`; split over two literals in `Train.kt`. */
 		const val ORIGIN_STALL_WARN_NEEDLE = ORIGIN_STALL_WARN_FRAGMENT + " after"
 
-		/** A `"…" +` line end followed by the next line's opening quote: one concatenation boundary. */
-		val CONCATENATION_BOUNDARY = Regex("\"\\s*\\+\\s*\n\\s*\"")
-
 		/**
-		 * `Train.kt`'s comment-free code, read once from the first source-root spelling that resolves,
-		 * with its line-concatenation boundaries joined ([joinConcatenations]).
+		 * `Train.kt`'s comment-free code, read once from the first source-root spelling that resolves
+		 * ([SourceScan.codeText]), with its line-concatenation boundaries joined.
 		 */
 		val TRAIN_CODE: String =
-			SourceScan
-				.directory("core/src/commonMain/kotlin", "src/commonMain/kotlin")
-				.resolve("cz/vutbr/fit/interlockSim/sim/Train.kt")
-				.takeIf { it.isFile }
-				?.let { joinConcatenations(SourceScan.codeLinesKeepingStrings(it.readLines())) }
-				?: error("sim/Train.kt not found under the scanned commonMain sources")
-
-		/**
-		 * The code [lines] as one text with each `"…" +` / `"…"` boundary across a line end removed,
-		 * so a literal split over two lines reads whole. A comment line between the two halves breaks
-		 * the join, which can only make a pin fail, never pass.
-		 */
-		fun joinConcatenations(lines: List<String>): String = lines.joinToString("\n").replace(CONCATENATION_BOUNDARY, "")
-
-		/** The count of the overlapping occurrences of [needle] in [text]. */
-		fun countOccurrences(
-			text: String,
-			needle: String
-		): Int {
-			var count = 0
-			var fromIndex = text.indexOf(needle)
-			while (fromIndex >= 0) {
-				count++
-				fromIndex = text.indexOf(needle, fromIndex + 1)
-			}
-			return count
-		}
+			SourceScan.codeText(
+				"cz/vutbr/fit/interlockSim/sim/Train.kt",
+				"core/src/commonMain/kotlin",
+				"src/commonMain/kotlin"
+			)
 	}
 
 	/** Asserts one message-shaped needle occurs exactly once in the code of `Train.kt`. */
 	private fun assertPinned(needle: String) {
 		assertThat(
-			countOccurrences(TRAIN_CODE, needle),
+			SourceScan.countOccurrences(TRAIN_CODE, needle),
 			name =
 				"Train.kt code occurrences of '$needle' — the wording changed or " +
 					"gained a second site: update the TrainErrorStopMessages fragments " +
@@ -175,14 +150,16 @@ class TrainErrorStopFragmentTripwireTest {
 				"\t\t\t\"entry route after \$waited s\""
 			)
 
-		assertThat(ORIGIN_STALL_WARN_NEEDLE in joinConcatenations(SourceScan.codeLinesKeepingStrings(split))).isTrue()
+		assertThat(
+			ORIGIN_STALL_WARN_NEEDLE in SourceScan.joinConcatenations(SourceScan.codeLinesKeepingStrings(split))
+		).isTrue()
 	}
 
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("the occurrence count counts overlapping matches: 'aa' occurs twice in 'aaa'")
 	fun occurrenceCountCountsOverlaps() {
-		assertThat(countOccurrences("aaa", "aa")).isEqualTo(2)
+		assertThat(SourceScan.countOccurrences("aaa", "aa")).isEqualTo(2)
 	}
 
 	@Test
