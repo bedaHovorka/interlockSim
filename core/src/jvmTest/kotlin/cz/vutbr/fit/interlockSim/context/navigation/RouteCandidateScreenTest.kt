@@ -526,17 +526,29 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 	}
 
 	/**
+	 * The arrange/act the two facing-list pins share: a [RouteCandidateScreen] around a spyk
+	 * [ReservationTargetDiscovery], run over `start`'s topological candidates as the rear-facing
+	 * screen's input. Returns the spy discovery for the per-test `verify` and the screened-out
+	 * failures for its assertion.
+	 */
+	private fun screenedRearFacingStarts(
+		start: DynamicPathSeparator
+	): Pair<ReservationTargetDiscovery, GeometricFailures> {
+		val discovery = spyk(ReservationTargetDiscovery(navigator, environment))
+		val spyScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
+
+		val (failures, _) = spyScreen.screenRearFacingStarts(start, candidatePaths(start, inOutB()))
+		return discovery to failures
+	}
+
+	/**
 	 * Issue #1378 review round: the START-screen's facing list is request-constant, so the screen
 	 * resolves it at most once per call, not once per screened-out candidate (the Praha reversal
 	 * screened thousands of candidates through one request-constant BFS + joinToString).
 	 */
 	@Test
 	fun `screening resolves the request-constant facing list at most once per call`() {
-		val discovery = spyk(ReservationTargetDiscovery(navigator, environment))
-		val spyScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
-		val doA1 = findSemaphoreByName("doA1")
-
-		val (failures, _) = spyScreen.screenRearFacingStarts(doA1, candidatePaths(doA1, inOutB()))
+		val (discovery, failures) = screenedRearFacingStarts(findSemaphoreByName("doA1"))
 
 		assertThat(failures.count, name = "screened-out candidates").isGreaterThan(0)
 		verify(exactly = 1) { discovery.findNextSemaphoresVia(any(), any()) }
@@ -549,11 +561,9 @@ class RouteCandidateScreenTest : PathReservationServiceTestBase() {
 	 */
 	@Test
 	fun `the facing list resolves its forward section through the shared log-free helper`() {
-		val discovery = spyk(ReservationTargetDiscovery(navigator, environment))
-		val spyScreen = RouteCandidateScreen(registry, environment, discovery, pathInfoBuilder)
 		val doA1 = findSemaphoreByName("doA1")
 
-		val (failures, _) = spyScreen.screenRearFacingStarts(doA1, candidatePaths(doA1, inOutB()))
+		val (discovery, failures) = screenedRearFacingStarts(doA1)
 
 		assertThat(failures.count, name = "screened-out candidates").isGreaterThan(0)
 		verify(exactly = 1) { discovery.resolveForwardSection(doA1, any(), false) }

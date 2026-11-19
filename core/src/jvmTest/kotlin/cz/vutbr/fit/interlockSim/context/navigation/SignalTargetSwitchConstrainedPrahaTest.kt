@@ -11,28 +11,23 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.all
 import assertk.assertThat
-import assertk.assertions.each
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isSameInstanceAs
-import assertk.assertions.prop
 import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.warnMessages
 import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-
-/** One recorded switch-constrained enumeration: the `(start, target)` pair and the list handed back. */
-private typealias RecordedAnswer = Pair<Pair<PathSeparator, PathSeparator>, List<List<TrackSection>>>
 
 /**
  * Issue #1385 (traffic-simulation-expert ruling): a request whose target is not an InOut enumerates its
@@ -45,55 +40,10 @@ private typealias RecordedAnswer = Pair<Pair<PathSeparator, PathSeparator>, List
  */
 @Tag("integration-test")
 class SignalTargetSwitchConstrainedPrahaTest : PrahaPathReservationTestBase() {
-	/**
-	 * Counts the switch-blind enumerations and records the switch-constrained ones, whose answer a test
-	 * can replace for chosen targets; every other pair goes to the real navigator.
-	 */
-	private class RecordingNavigator(
-		private val real: TopologyNavigator,
-		private val noRouteTo: Set<PathSeparator> = emptySet(),
-		private val stubbedSwitchConstrained: Map<PathSeparator, List<List<TrackSection>>> = emptyMap()
-	) : TopologyNavigator by real {
-		var topologicalCalls = 0
-		val switchConstrainedAnswers = mutableListOf<RecordedAnswer>()
-
-		override fun findAllTopologicalPaths(
-			start: PathSeparator,
-			target: PathSeparator,
-			maxDepth: Int
-		): List<List<TrackSection>> {
-			topologicalCalls++
-			return real.findAllTopologicalPaths(start, target, maxDepth)
-		}
-
-		override fun findAllSwitchConstrainedPaths(
-			start: PathSeparator,
-			target: PathSeparator,
-			maxDepth: Int
-		): List<List<TrackSection>> {
-			val answer =
-				when (target) {
-					in noRouteTo -> emptyList()
-					in stubbedSwitchConstrained -> stubbedSwitchConstrained.getValue(target)
-					else -> real.findAllSwitchConstrainedPaths(start, target, maxDepth)
-				}
-			switchConstrainedAnswers += (start to target) to answer
-			return answer
-		}
-	}
-
 	private fun serviceOver(
 		navigator: TopologyNavigator,
 		nextTargets: ((DynamicPathSeparator, TrackSection) -> List<DynamicPathSeparator>)? = null
-	): DefaultPathReservationService =
-		DefaultPathReservationService(
-			navigator,
-			simulationContext,
-			registry,
-			pathInfoBuilder,
-			routeFinder,
-			nextTargetsOverride = nextTargets
-		)
+	): DefaultPathReservationService = serviceOf(navigator, nextTargets)
 
 	@Test
 	fun `a signal-target request never runs the switch-blind enumeration`() {
@@ -128,10 +78,9 @@ class SignalTargetSwitchConstrainedPrahaTest : PrahaPathReservationTestBase() {
 		}
 
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.NoPathExists>()
-		assertThat(warnings.filter { it.startsWith(REFUSED) }, name = "refusal lines").all {
-			prop(List<String>::size).isEqualTo(1)
-			each { it.startsWith("$REFUSED'$TRAIN' $S14 -> $S15: ") }
-		}
+		val refusals = warnings.filter { it.startsWith(REFUSED) }
+		assertThat(refusals, name = "refusal lines").hasSize(1)
+		assertThat(refusals.single(), name = "the refusal line").startsWith("$REFUSED'$TRAIN' $S14 -> $S15: ")
 	}
 
 	@Test
@@ -148,32 +97,25 @@ class SignalTargetSwitchConstrainedPrahaTest : PrahaPathReservationTestBase() {
 				discovery.resolveForwardSection(semaphore, "test")?.let { (start, next) ->
 					discovery.findNextSemaphoresVia(start, next).filterIsInstance<DynamicInOut>()
 				} ?: emptyList()
-			for (inOut in inOuts) {
+			// InOut targets first, then semaphores: the two former inner loops in one pass, in their
+			// original order, so the searched pair set and sequence — and the measured numbers below —
+			// stay exactly what they were.
+			for (target in inOuts + semaphores) {
 				val search =
 					topology.searchSwitchConstrainedPaths(
 						semaphore,
-						inOut,
+						target,
 						DEFAULT_MAX_PATH_DEPTH,
 						DefaultTopologyNavigator.ROUTE_SEARCH_NODE_BUDGET
 					)
-				assertThat(search, name = "search ${semaphore.name} -> ${inOut.name}")
+				assertThat(search, name = "search ${semaphore.name} -> ${separatorNameOf(target)}")
 					.isInstanceOf<RouteSearch.Completed>()
-				if (inOut in offered) {
-					assertThat((search as RouteSearch.Completed).paths, name = "${semaphore.name} -> ${inOut.name}")
-						.isNotEmpty()
+				if (target is DynamicInOut && target in offered) {
+					assertThat(
+						(search as RouteSearch.Completed).paths,
+						name = "${semaphore.name} -> ${separatorNameOf(target)}"
+					).isNotEmpty()
 				}
-				maxExpanded = maxOf(maxExpanded, search.expandedNodes)
-			}
-			for (targetSemaphore in semaphores) {
-				val search =
-					topology.searchSwitchConstrainedPaths(
-						semaphore,
-						targetSemaphore,
-						DEFAULT_MAX_PATH_DEPTH,
-						DefaultTopologyNavigator.ROUTE_SEARCH_NODE_BUDGET
-					)
-				assertThat(search, name = "search ${semaphore.name} -> ${targetSemaphore.name}")
-					.isInstanceOf<RouteSearch.Completed>()
 				maxExpanded = maxOf(maxExpanded, search.expandedNodes)
 			}
 		}
@@ -197,9 +139,9 @@ class SignalTargetSwitchConstrainedPrahaTest : PrahaPathReservationTestBase() {
 		service.reservePath(TRAIN, start, target)
 		service.reservePath(TRAIN, start, target)
 
-		val answers = recording.switchConstrainedAnswers.filter { it.first == (start as PathSeparator) to target }
+		val answers = recording.switchConstrainedAnswers.filter { it.start == start && it.target == target }
 		assertThat(answers.size, name = "enumerations handed to reservePath").isEqualTo(2)
-		answers.forEach { (_, answer) -> assertThat(answer).isSameInstanceAs(cached) }
+		answers.forEach { search -> assertThat(search.answer).isSameInstanceAs(cached) }
 		assertThat(navigator.findAllSwitchConstrainedPaths(start, target, DEFAULT_MAX_PATH_DEPTH)).all {
 			isSameInstanceAs(cached)
 			isEqualTo(snapshot)

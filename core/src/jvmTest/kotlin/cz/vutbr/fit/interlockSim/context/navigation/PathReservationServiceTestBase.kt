@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.FakeTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
@@ -212,6 +213,96 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 			DEFAULT_MAX_PATH_DEPTH,
 			lazyOf(navigator.findAllTopologicalPaths(start, target, DEFAULT_MAX_PATH_DEPTH))
 		)
+
+	/**
+	 * A [DefaultPathReservationService] over [navigator] on the loaded context — the construction
+	 * the Praha suite's `serviceOver` (`SignalTargetSwitchConstrainedPrahaTest`) and the de-dup
+	 * suite's `newService` (`ReservePathToAnyDedupTest`) delegate to. [nextTargetsOverride] replaces
+	 * the target list of `reservePathToAnyNextSemaphore`, the Issue #1390 test seam (`null` in
+	 * production).
+	 */
+	protected fun serviceOf(
+		navigator: TopologyNavigator,
+		nextTargetsOverride: ((DynamicPathSeparator, TrackSection) -> List<DynamicPathSeparator>)? = null
+	): DefaultPathReservationService =
+		DefaultPathReservationService(
+			navigator,
+			simulationContext,
+			registry,
+			pathInfoBuilder,
+			routeFinder,
+			nextTargetsOverride = nextTargetsOverride
+		)
+
+	/**
+	 * One switch-constrained enumeration [RecordingNavigator] recorded: the `(start, target)` pair
+	 * and the candidate list the search handed back for it. A proper data class, so a consumer
+	 * filters the records by name instead of by nested-pair position.
+	 */
+	protected data class RecordedSearch(
+		val start: PathSeparator,
+		val target: PathSeparator,
+		val answer: List<List<TrackSection>>
+	)
+
+	/**
+	 * A [TopologyNavigator] that delegates everything to [real] and records the enumerations the
+	 * reservation machinery runs through it (Issue #1385) — one double for the three suites whose
+	 * private counting doubles it replaces. Every `findAllSwitchConstrainedPaths` call is noted
+	 * three ways, one per consumer: as a probe count ([evaluations], one per availability
+	 * evaluation, resettable to recount from the next call), as a per-pair call count ([calls]),
+	 * and as the full record with the handed-back answer ([switchConstrainedAnswers],
+	 * [RecordedSearch]). A switch-blind [findAllTopologicalPaths] call is counted alone in
+	 * [topologicalCalls], the seam the public `reservePath` must never run since Issue #1385.
+	 *
+	 * On top of recording, a target in [noRouteTo] is always answered with no candidates and a
+	 * target in [stubbedSwitchConstrained] with the mapped list, so a test can steer a request to
+	 * targets real discovery no longer offers (the permanent-verdict pins); every other target goes
+	 * to [real].
+	 */
+	protected class RecordingNavigator(
+		private val real: TopologyNavigator,
+		private val noRouteTo: Set<PathSeparator> = emptySet(),
+		private val stubbedSwitchConstrained: Map<PathSeparator, List<List<TrackSection>>> = emptyMap()
+	) : TopologyNavigator by real {
+		/** The switch-blind [findAllTopologicalPaths] calls, counted alone. */
+		var topologicalCalls = 0
+
+		/** The switch-constrained searches, one count per call (the availability-probe counter). */
+		var evaluations = 0
+
+		/** The switch-constrained searches, per `(start, target)` pair; a consumer clears it to recount. */
+		val calls = mutableMapOf<Pair<PathSeparator, PathSeparator>, Int>()
+
+		/** The switch-constrained searches with their answers, in call order. */
+		val switchConstrainedAnswers = mutableListOf<RecordedSearch>()
+
+		override fun findAllTopologicalPaths(
+			start: PathSeparator,
+			target: PathSeparator,
+			maxDepth: Int
+		): List<List<TrackSection>> {
+			topologicalCalls++
+			return real.findAllTopologicalPaths(start, target, maxDepth)
+		}
+
+		override fun findAllSwitchConstrainedPaths(
+			start: PathSeparator,
+			target: PathSeparator,
+			maxDepth: Int
+		): List<List<TrackSection>> {
+			val answer =
+				when (target) {
+					in noRouteTo -> emptyList()
+					in stubbedSwitchConstrained -> stubbedSwitchConstrained.getValue(target)
+					else -> real.findAllSwitchConstrainedPaths(start, target, maxDepth)
+				}
+			evaluations++
+			calls.merge(start to target, 1, Int::plus)
+			switchConstrainedAnswers += RecordedSearch(start, target, answer)
+			return answer
+		}
+	}
 
 	/**
 	 * Put [trainId] physically on [block] without touching the registry — the state a
