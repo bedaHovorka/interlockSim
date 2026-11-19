@@ -221,6 +221,19 @@ class DispatchTickLoop(
 	 *    observe with [fallbackGuard].
 	 * 7. **PACE** — [SimulationController.awaitIfPaused]; [SimulationController.throttle].
 	 *
+	 * ## Warning: PACE ratchets against a self-paced sim (Issue #1340)
+	 *
+	 * PACE throttles `simDelta` minus the wall time of this tick's emission only — the formula
+	 * [AgentLoopDriver.runCycle] used before Issue #1340. It does not ratchet while the sim clock is
+	 * frozen during the emission (the F1 paused-clock regime this class was built for). Against a
+	 * sim that keeps running on the same controller, `simDelta` also holds the sim time of the
+	 * previous tick's own throttle sleep, which PACE then sleeps again: after one long emission the
+	 * tick period stays at that emission's length for the rest of the run. [AgentLoopDriver] fixed
+	 * this by measuring the wall time from the previous tick's snapshot read. This loop has no
+	 * production caller, and its harnesses (the P10 determinism gate, the F1 ruling harness,
+	 * `HeadlessPacingFeasibilityTest`) measure the current pacing, so it is left as it is; port the
+	 * [AgentLoopDriver] fix before reviving it with a sim that is not frozen during emission.
+	 *
 	 * @return The completed [TickRecord] when a tick ran; `null` on short-circuit.
 	 */
 	suspend fun runTick(): TickRecord? {

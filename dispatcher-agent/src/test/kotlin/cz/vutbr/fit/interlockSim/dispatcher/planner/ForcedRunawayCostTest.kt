@@ -16,6 +16,7 @@ import assertk.assertions.isLessThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
+import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
@@ -36,8 +37,11 @@ import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 /**
  * Issue #1340, acceptance 1: one runaway Ollama generation costs at most one dispatcher tick.
@@ -70,15 +74,22 @@ import java.util.concurrent.CopyOnWriteArrayList
  * ## Driver level (the pacing found by the #1301 campaign)
  *
  * The adapter-level test above calls `plan()` back to back, so it cannot see what the cycle after a
- * runaway costs in pacing. The second test runs the same chain under the real [AgentLoopDriver]
- * against a sim that paces itself on the wall clock ([SelfPacedSimClock], speed 20 so the timeout
- * is 100 sim s and the test stays short) with a controller that sleeps like
- * `ThrottlingSimulationController` ([SleepingPacingRecorder]). Before the #1340 pacing fix in
- * [AgentLoopDriver.runCycle], PACE slept again for the sim time that passed during the timed-out
- * cycle, and every later cycle re-slept it: the period stayed at the timeout's length for the rest
- * of the run (the Červený Újezd campaign run r02: actions 58 sim s apart after one 30 s timeout).
- * The test pins, as sim-time and cycle counts, that the period is back to a few control steps
- * one cycle after the runaway, besides the same 1 / 0 / 3 counts. This part of the measurement
+ * runaway costs in pacing. The two driver-level tests run the same chain under the real
+ * [AgentLoopDriver] against a sim that paces itself on the wall clock ([SelfPacedSimClock], speed
+ * [SIM_SPEED], so the 5 s timeout is 20 sim s) with a controller that sleeps like
+ * `ThrottlingSimulationController` ([SleepingPacingRecorder]): once in polling mode, once with the
+ * production [DefaultSnapshotSignal] fired once per control step, as `ShuntingLoop` fires it. Before
+ * the #1340 pacing fix in [AgentLoopDriver.runCycle], PACE slept again for the sim time that passed
+ * during the timed-out cycle, and every later cycle re-slept it: the period stayed at the timeout's
+ * length for the rest of the run (the Červený Újezd campaign run r02: actions 58 sim s apart after
+ * one 30 s timeout).
+ *
+ * Besides the same 1 / 0 counts, they pin every throttle argument after the runaway, and their sum,
+ * as sim time no machine load can move: at most one control step per cycle in polling mode; in
+ * signal mode one more step for the driver's wake-up lag after a signal (see
+ * [AgentLoopDriver]'s `awaitFreshSnapshot`), which at speed [SIM_SPEED] is half a second of wall
+ * clock. The old code gives about 20 per cycle. The sim-time periods between cycles hold real wall
+ * time (HTTP, scheduling), so they are printed, never asserted. This part of the measurement
  * changed production code (the driver's PACE step); the adapter and its fallback did not change.
  */
 @DisplayName("A forced runaway Ollama generation costs one dispatcher tick (Issue #1340)")
@@ -99,18 +110,17 @@ class ForcedRunawayCostTest {
 		 */
 		val ANSWERED = TickOutcome.LLM_SILENT_NONACTIONABLE
 
-		/** Driver-level test: the sim runs 20 sim s per wall second, so the timeout is 100 sim s. */
-		const val SIM_SPEED = 20.0
+		/**
+		 * Driver-level tests: the sim runs 4 sim s per wall second, so the timeout is 20 sim s and a
+		 * control step is half a second of wall clock.
+		 */
+		const val SIM_SPEED = 4.0
 
 		/** `ShuntingLoop`'s control step: one tick per 2 sim s. */
 		const val CONTROL_STEP = 2.0
 
-		/**
-		 * A quarter of the 100 sim s runaway. The period after the runaway also holds cycle 3's own
-		 * `plan()` (the slot wait and a new connection, about 4 sim s here), so it gets room for a
-		 * loaded machine; the load-free pin is the throttle argument (at most one control step).
-		 */
-		const val RECOVERED_PERIOD_CEILING = 25.0
+		/** Signal mode: one control step of the driver's wake-up lag on top of the polling bound. */
+		const val SIGNAL_LAG_STEPS = 1
 
 		/** Upper bound on [AgentLoopDriver.runCycle] calls, short-circuited ones included. */
 		const val MAX_RUN_CYCLE_CALLS = 100_000
@@ -171,18 +181,37 @@ class ForcedRunawayCostTest {
 	}
 
 	@Test
-	fun `under the driver, the decision rate recovers one cycle after the runaway`() {
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `under the polling driver, the decision rate recovers one cycle after the runaway`() {
+		runawayUnderDriver(signalled = false)
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `under the signalled driver, the decision rate recovers one cycle after the runaway`() {
+		runawayUnderDriver(signalled = true)
+	}
+
+	/**
+	 * Runs [CYCLES] processed cycles of the real [AgentLoopDriver] over the real adapter chain with
+	 * request [HELD_REQUEST] held, against the self-paced sim; in [signalled] mode a publisher thread
+	 * publishes the sim time and fires a [DefaultSnapshotSignal] once per control step.
+	 */
+	private fun runawayUnderDriver(signalled: Boolean) {
 		HoldingOllamaServer(
 			heldRequest = HELD_REQUEST,
 			slotReleaseDelayMillis = SLOT_RELEASE_DELAY_MILLIS
 		).use { server ->
 			val config = OllamaExecutorConfig(ollamaEndpoint = server.baseUrl)
 			val executor = OllamaSimpleExecutor(config)
+			val clock = SelfPacedSimClock(speedMultiplier = SIM_SPEED, controlStepSeconds = CONTROL_STEP)
+			val publisher = if (signalled) StepPublisher(clock) else null
 			try {
 				val adapter = adapterOver(executor, config)
-				val clock = SelfPacedSimClock(speedMultiplier = SIM_SPEED, controlStepSeconds = CONTROL_STEP)
 				val perceptionPort = mockk<NetworkPerceptionPort>()
-				every { perceptionPort.snapshot() } answers { emptySnapshot(clock.simTime()) }
+				every { perceptionPort.snapshot() } answers {
+					emptySnapshot(publisher?.publishedSimTime ?: clock.simTime())
+				}
 				val ticks = CopyOnWriteArrayList<TickRecord>()
 				val pacing = SleepingPacingRecorder(SIM_SPEED)
 				val driver =
@@ -191,9 +220,11 @@ class ForcedRunawayCostTest {
 						adapter,
 						ActuatorCommandQueue(),
 						pacing,
+						snapshotSignal = publisher?.signal,
 						plannerTickSource = adapter,
 						onTickRecord = { ticks.add(it) }
 					)
+				publisher?.start()
 
 				runBlocking {
 					var calls = 0
@@ -207,12 +238,14 @@ class ForcedRunawayCostTest {
 				val periods = ticks.map { it.simTime }.zipWithNext { a, b -> b - a }
 				val fallbackCycles = outcomes.count { it == TickOutcome.RULE_FALLBACK }
 				val breakerOpenings = adapter.circuitBreaker.openCount
+				val afterRunaway = pacing.throttleDeltas.drop(1)
+				val perCycleBound = CONTROL_STEP * (1 + if (signalled) SIGNAL_LAG_STEPS else 0)
 				println(
-					"Issue #1340 driver level: forced runaway on cycle $RUNAWAY_CYCLE of $CYCLES " +
-						"(cycle timeout ${CYCLE_TIMEOUT.toMillis()} ms, slot release ${SLOT_RELEASE_DELAY_MILLIS} ms, " +
-						"sim speed $SIM_SPEED): fallbackCycles=$fallbackCycles, breakerOpenings=$breakerOpenings, " +
-						"outcomes=$outcomes, simTimes=${ticks.map { it.simTime }}, periods=$periods, " +
-						"throttle=${pacing.throttleDeltas}"
+					"Issue #1340 driver level (${if (signalled) "signal" else "polling"} mode): forced runaway " +
+						"on cycle $RUNAWAY_CYCLE of $CYCLES (cycle timeout ${CYCLE_TIMEOUT.toMillis()} ms, " +
+						"slot release ${SLOT_RELEASE_DELAY_MILLIS} ms, sim speed $SIM_SPEED): " +
+						"fallbackCycles=$fallbackCycles, breakerOpenings=$breakerOpenings, outcomes=$outcomes, " +
+						"simTimes=${ticks.map { it.simTime }}, periods=$periods, throttle=${pacing.throttleDeltas}"
 				)
 
 				assertThat(outcomes.size, "cycles").isEqualTo(CYCLES)
@@ -220,18 +253,57 @@ class ForcedRunawayCostTest {
 				assertThat(fallbackCycles, "fallback cycles").isEqualTo(1)
 				assertThat(breakerOpenings, "circuit-breaker openings").isEqualTo(0L)
 				// PACE never sleeps again for the sim time the runaway already spent on the wall clock.
-				pacing.throttleDeltas.drop(1).forEachIndexed { i, delta ->
-					assertThat(delta, "throttle argument of cycle ${i + 2}").isLessThanOrEqualTo(CONTROL_STEP)
+				afterRunaway.forEachIndexed { i, delta ->
+					assertThat(delta, "throttle argument of cycle ${i + 2}").isLessThanOrEqualTo(perCycleBound)
 				}
-				// periods[i] is the sim time from cycle i + 1 to cycle i + 2. The runaway's own cost is
-				// the gap from cycle 2 to cycle 3; from cycle 3 to cycle 4 on, the rate is back.
-				periods.drop(RUNAWAY_CYCLE).forEachIndexed { i, period ->
-					assertThat(period, "sim-time period from cycle ${i + RUNAWAY_CYCLE + 1} to ${i + RUNAWAY_CYCLE + 2}")
-						.isLessThanOrEqualTo(RECOVERED_PERIOD_CEILING)
-				}
+				assertThat(afterRunaway.sum(), "throttle arguments of cycles 2..$CYCLES, summed")
+					.isLessThanOrEqualTo((CYCLES - 1) * perCycleBound)
 			} finally {
+				publisher?.close()
 				executor.close()
 			}
+		}
+	}
+
+	/**
+	 * The sim side of signal mode: publishes [clock]'s sim time and then fires [signal] once per
+	 * control step — the order `ShuntingLoop` uses (publish the tick observation, then signal).
+	 */
+	private class StepPublisher(
+		private val clock: SelfPacedSimClock
+	) : AutoCloseable {
+		val signal = DefaultSnapshotSignal()
+
+		@Volatile
+		var publishedSimTime: Double = 0.0
+			private set
+
+		@Volatile
+		private var running = true
+
+		private val thread =
+			thread(start = false, isDaemon = true, name = "issue-1340-step-publisher") {
+				var lastPublished = -1.0
+				while (running) {
+					val now = clock.simTime()
+					if (now != lastPublished) {
+						lastPublished = now
+						publishedSimTime = now
+						signal.signal()
+					}
+					Thread.sleep(1)
+				}
+			}
+
+		fun start() = thread.start()
+
+		override fun close() {
+			running = false
+			thread.join(JOIN_MILLIS)
+		}
+
+		private companion object {
+			const val JOIN_MILLIS = 1_000L
 		}
 	}
 

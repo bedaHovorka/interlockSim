@@ -42,7 +42,8 @@ class SelfPacedSimClock(
 /**
  * A [SimulationController] that throttles like `ThrottlingSimulationController` (sleeps
  * `simDelta / speedMultiplier` of wall clock, never pauses) and records every argument it is given,
- * so a test can see what the driver asked to sleep for.
+ * so a test can see what the driver asked to sleep for. It has no pause or step support:
+ * [awaitIfPaused] returns at once, [isPaused] is always `false`, and step requests are ignored.
  */
 class SleepingPacingRecorder(
 	private val speedMultiplier: Double

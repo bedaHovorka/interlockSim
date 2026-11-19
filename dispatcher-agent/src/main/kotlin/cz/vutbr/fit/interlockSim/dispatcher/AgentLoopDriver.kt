@@ -101,7 +101,9 @@ import kotlin.time.TimeSource
  *   previous tick's observation.
  *   `null` by default: preserves the original polling behaviour for callers that do
  *   not supply a signal (e.g. tests exercising [runCycle] directly against a mocked
- *   [perceptionPort] with no real sim thread to signal from).
+ *   [perceptionPort] with no real sim thread to signal from). In polling mode (used only by
+ *   tests; production wires a signal) the driver's idle time between ticks moves from
+ *   [SimulationController.throttle] to the 1 ms stale-guard poll since Issue #1340.
  */
 class AgentLoopDriver(
 	perceptionPort: NetworkPerceptionPort,
@@ -280,8 +282,10 @@ class AgentLoopDriver(
 	 * Both modes read [dispatchLoopSensorPort] exactly once; the guards test the record's
 	 * [DispatchLoopSnapshot.snapshot] (Issue #1354).
 	 *
-	 * The wall clock is marked just before the read, so the mark is never later than the moment
-	 * the record's sim time was current (Issue #1340: PACE measures from it).
+	 * The wall clock is marked just before the read (Issue #1340: PACE measures from it). The mark is
+	 * taken before the read; it may lag the publish by up to the driver's wake-up delay, which
+	 * over-throttles the next cycle by at most that lag (under one control step) and never
+	 * accumulates.
 	 *
 	 * @return the fresh tick-stamped record to process this cycle with its read mark, or `null`
 	 *   if this call should short-circuit (see [runCycle]'s return-value contract).
@@ -461,8 +465,8 @@ class AgentLoopDriver(
 
 		// 4. PACE — honour pause/step requests, then throttle wall-clock time.
 		//
-		// #926: the raw simDelta must not be thrown at throttle() unadjusted — planner.plan()
-		// above may have blocked on real (async LLM) inference for a while, and that wall-clock
+		// First processed cycle (#926): the raw simDelta must not be thrown at throttle()
+		// unadjusted — planner.plan() above may have blocked on real (async LLM) inference for a while, and that wall-clock
 		// time was already "spent" from the operator's point of view. Passing the full simDelta
 		// to throttle() on top of that would double-count it, sleeping again for time that has
 		// already elapsed. wallElapsedInSimUnits converts the wall time actually spent inside
@@ -470,11 +474,12 @@ class AgentLoopDriver(
 		// multiplier — the same conversion throttle() itself applies internally, just inverted),
 		// so it can be subtracted before throttling. Clamped at 0.0: if plan() alone took longer
 		// than the sim-time budget for this tick, there is no throttling left to do — a negative
-		// duration would be meaningless.
+		// duration would be meaningless. The clamp applies to every cycle.
 		//
-		// #1340: from the second processed cycle on, the wall time is measured from the previous
-		// cycle's snapshot read, not from this plan() call — simDelta spans that whole interval, and
-		// the sim already matched it on the wall clock; see runCycle's KDoc.
+		// Every later cycle (#1340): the wall time is measured from the previous cycle's snapshot
+		// read, not from this plan() call — simDelta spans that whole interval, and the sim already
+		// matched it on the wall clock; see runCycle's KDoc. The current speed multiplier converts the
+		// whole interval, so a speed change since the previous read is approximated.
 		controller.awaitIfPaused()
 		val simDelta = snapshot.simTime - prevSimTime
 		val wallElapsed = (prevSenseMark ?: planStart).elapsedNow()

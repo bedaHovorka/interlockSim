@@ -648,8 +648,11 @@ class AgentLoopDriverTest {
 		 *
 		 * Speed 20 instead of the production 2.0 keeps the test short (a 60 sim s gap is 3 s of wall
 		 * clock, not 30 s); the defect does not depend on the speed. The pins are sim-time and cycle
-		 * counts: a throttle argument of at most one control step, and a sim-time period back within
-		 * a few control steps one cycle after the long one — the old code gives about 60 on both.
+		 * counts that no machine load can move: every throttle argument after the long cycle is at
+		 * most one control step, and so their sum is at most one step per cycle (the old code gives
+		 * about 60 per cycle). The sim-time period between cycles includes real wall time, so it is
+		 * only printed, never asserted (the [cz.vutbr.fit.interlockSim.dispatcher.planner.OllamaTimeoutAbortTest]
+		 * ruling: counts, never wall clock).
 		 */
 		@Test
 		@Timeout(value = 60, unit = TimeUnit.SECONDS)
@@ -670,28 +673,31 @@ class AgentLoopDriverTest {
 			runProcessedCycles(driver, CYCLES)
 
 			val periods = decidedAt.zipWithNext { a, b -> b - a }
-			println("Issue #1340 driver pacing: decidedAt=$decidedAt throttle=${pacing.throttleDeltas}")
+			println(
+				"Issue #1340 driver pacing: decidedAt=$decidedAt periods=$periods throttle=${pacing.throttleDeltas}"
+			)
 			assertThat(decidedAt.size, "processed cycles").isEqualTo(CYCLES)
 			// Cycle 2 sees the long cycle's gap; that gap is the cost of the long cycle itself.
 			assertThat(periods[0], "sim time the long cycle took").isGreaterThan(LONG_CYCLE_SIM_SECONDS / 2)
-			pacing.throttleDeltas.drop(1).forEachIndexed { i, delta ->
+			val afterLongCycle = pacing.throttleDeltas.drop(1)
+			afterLongCycle.forEachIndexed { i, delta ->
 				assertThat(delta, "throttle argument of cycle ${i + 2}").isLessThanOrEqualTo(CONTROL_STEP)
 			}
-			periods.drop(1).forEachIndexed { i, period ->
-				assertThat(period, "sim-time period before cycle ${i + 3}")
-					.isLessThanOrEqualTo(RECOVERED_PERIOD_CEILING)
-			}
+			assertThat(afterLongCycle.sum(), "throttle arguments of cycles 2..$CYCLES, summed")
+				.isLessThanOrEqualTo((CYCLES - 1) * CONTROL_STEP)
 		}
 
 		/**
 		 * The other side of the #1340 fix: sim time NOT yet matched on the wall clock is still slept
 		 * for. A sim that ran 10 sim s ahead between two instant cycles (an unpaced sim thread) gets
 		 * nearly the whole 10 s as the second throttle argument, so the fix is not "never throttle".
+		 * At speed 0.1 the 10 sim s are 100 s of wall clock, so the `> 5.0` floor holds unless the
+		 * two cycles are 50 s apart: load-proof.
 		 */
 		@Test
 		@DisplayName("sim time not yet matched on the wall clock is still throttled on a later cycle")
 		fun simTimeAheadOfWallClockIsStillThrottled() {
-			controller.speedMultiplier = 1.0
+			controller.speedMultiplier = 0.1
 			every { perceptionPort.snapshot() } returnsMany listOf(emptySnapshot(2.0), emptySnapshot(12.0))
 			val driver = makeDriver()
 
@@ -702,8 +708,7 @@ class AgentLoopDriverTest {
 
 			assertThat(controller.throttleCalls).isEqualTo(2)
 			assertThat(controller.lastThrottleDelta).isLessThanOrEqualTo(10.0)
-			// Two instant cycles: well under 1 s of wall clock between the two reads.
-			assertThat(controller.lastThrottleDelta).isGreaterThan(9.0)
+			assertThat(controller.lastThrottleDelta).isGreaterThan(5.0)
 		}
 	}
 
@@ -860,9 +865,6 @@ class AgentLoopDriverTest {
 		/** The long cycle: a 30 s LLM timeout at the production speed 2.0. */
 		const val LONG_CYCLE_SIM_SECONDS = 60.0
 		const val CYCLES = 6
-
-		/** Five control steps: far below the 60 sim s ratchet, loose enough for a loaded machine. */
-		const val RECOVERED_PERIOD_CEILING = 5 * CONTROL_STEP
 
 		/** Upper bound on [AgentLoopDriver.runCycle] calls, short-circuited ones included. */
 		const val MAX_RUN_CYCLE_CALLS = 100_000
