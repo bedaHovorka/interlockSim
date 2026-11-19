@@ -22,6 +22,8 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.SelfPacedSimClock
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.SleepingPacingRecorder
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
@@ -630,6 +632,81 @@ class AgentLoopDriverTest {
 		}
 	}
 
+	// ── Pacing after one long cycle (Issue #1340) ────────────────────────────────
+
+	@Nested
+	@DisplayName("Pacing recovers within one cycle after one long plan() (Issue #1340)")
+	inner class PacingAfterLongCycle {
+		/**
+		 * The #1301 campaign shape: the sim thread paces itself on the same controller, so it keeps
+		 * running while one `plan()` call is stuck (a 30 s LLM timeout at speed 2 = about 60 sim s).
+		 * The next snapshot is then about 60 sim s ahead, but that sim time has already passed on the
+		 * wall clock, so PACE must not sleep for it again. Before the fix it did: it subtracted only
+		 * the wall time spent inside `plan()`, slept the rest, the sim ran on meanwhile, and every
+		 * later cycle saw the same 60 sim s gap — the period ratcheted to the longest `plan()` for
+		 * the rest of the run (Červený Újezd run r02: dispatcher actions exactly 58 sim s apart).
+		 *
+		 * Speed 20 instead of the production 2.0 keeps the test short (a 60 sim s gap is 3 s of wall
+		 * clock, not 30 s); the defect does not depend on the speed. The pins are sim-time and cycle
+		 * counts: a throttle argument of at most one control step, and a sim-time period back within
+		 * a few control steps one cycle after the long one — the old code gives about 60 on both.
+		 */
+		@Test
+		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@DisplayName("throttle never re-sleeps sim time that already passed during a long plan()")
+		fun throttleDoesNotResleepElapsedSimTime() {
+			val speed = 20.0
+			val clock = SelfPacedSimClock(speedMultiplier = speed, controlStepSeconds = CONTROL_STEP)
+			val pacing = SleepingPacingRecorder(speed)
+			every { perceptionPort.snapshot() } answers { emptySnapshot(clock.simTime()) }
+			val decidedAt = mutableListOf<Double>()
+			coEvery { planner.plan(any()) } coAnswers {
+				decidedAt += firstArg<DispatchObservation>().snapshot.simTime
+				if (decidedAt.size == 1) Thread.sleep((LONG_CYCLE_SIM_SECONDS / speed * 1_000).toLong())
+				listOf(DispatchDecision.NoAction)
+			}
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, pacing)
+
+			runProcessedCycles(driver, CYCLES)
+
+			val periods = decidedAt.zipWithNext { a, b -> b - a }
+			println("Issue #1340 driver pacing: decidedAt=$decidedAt throttle=${pacing.throttleDeltas}")
+			assertThat(decidedAt.size, "processed cycles").isEqualTo(CYCLES)
+			// Cycle 2 sees the long cycle's gap; that gap is the cost of the long cycle itself.
+			assertThat(periods[0], "sim time the long cycle took").isGreaterThan(LONG_CYCLE_SIM_SECONDS / 2)
+			pacing.throttleDeltas.drop(1).forEachIndexed { i, delta ->
+				assertThat(delta, "throttle argument of cycle ${i + 2}").isLessThanOrEqualTo(CONTROL_STEP)
+			}
+			periods.drop(1).forEachIndexed { i, period ->
+				assertThat(period, "sim-time period before cycle ${i + 3}")
+					.isLessThanOrEqualTo(RECOVERED_PERIOD_CEILING)
+			}
+		}
+
+		/**
+		 * The other side of the #1340 fix: sim time NOT yet matched on the wall clock is still slept
+		 * for. A sim that ran 10 sim s ahead between two instant cycles (an unpaced sim thread) gets
+		 * nearly the whole 10 s as the second throttle argument, so the fix is not "never throttle".
+		 */
+		@Test
+		@DisplayName("sim time not yet matched on the wall clock is still throttled on a later cycle")
+		fun simTimeAheadOfWallClockIsStillThrottled() {
+			controller.speedMultiplier = 1.0
+			every { perceptionPort.snapshot() } returnsMany listOf(emptySnapshot(2.0), emptySnapshot(12.0))
+			val driver = makeDriver()
+
+			runBlocking {
+				driver.runCycle()
+				driver.runCycle()
+			}
+
+			assertThat(controller.throttleCalls).isEqualTo(2)
+			assertThat(controller.lastThrottleDelta).isLessThanOrEqualTo(10.0)
+			// Two instant cycles: well under 1 s of wall clock between the two reads.
+			assertThat(controller.lastThrottleDelta).isGreaterThan(9.0)
+		}
+	}
+
 	// ── Signal-based pacing (SP0.11c, Issue #746) ────────────────────────────────
 
 	@Nested
@@ -773,6 +850,36 @@ class AgentLoopDriverTest {
 			assertThat(commandQueue.drain()).containsExactly(DispatchDecision.ApproveTrain("T1"))
 			assertThat(controller.awaitCalls).isEqualTo(1)
 			assertThat(controller.throttleCalls).isEqualTo(1)
+		}
+	}
+
+	private companion object {
+		/** `ShuntingLoop`'s control step: one tick per 2 sim s. */
+		const val CONTROL_STEP = 2.0
+
+		/** The long cycle: a 30 s LLM timeout at the production speed 2.0. */
+		const val LONG_CYCLE_SIM_SECONDS = 60.0
+		const val CYCLES = 6
+
+		/** Five control steps: far below the 60 sim s ratchet, loose enough for a loaded machine. */
+		const val RECOVERED_PERIOD_CEILING = 5 * CONTROL_STEP
+
+		/** Upper bound on [AgentLoopDriver.runCycle] calls, short-circuited ones included. */
+		const val MAX_RUN_CYCLE_CALLS = 100_000
+	}
+
+	/** Calls [AgentLoopDriver.runCycle] until [cycles] of them have processed a snapshot. */
+	private fun runProcessedCycles(
+		driver: AgentLoopDriver,
+		cycles: Int
+	) {
+		var processed = 0
+		var calls = 0
+		runBlocking {
+			while (processed < cycles && calls < MAX_RUN_CYCLE_CALLS) {
+				calls++
+				if (driver.runCycle()) processed++
+			}
 		}
 	}
 

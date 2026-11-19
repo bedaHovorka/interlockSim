@@ -12,18 +12,24 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
+import assertk.assertions.isLessThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.executor.HoldingOllamaServer
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.SelfPacedSimClock
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.SleepingPacingRecorder
+import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -60,6 +66,20 @@ import java.util.concurrent.CopyOnWriteArrayList
  * timeout and the slot-release delay keep at least the production ratio (30 s / 1 s, the 1 s being
  * the #1341 live check of 2026-11-03): [CYCLE_TIMEOUT] / [SLOT_RELEASE_DELAY_MILLIS] is about 30
  * (5,000 ms / 167 ms).
+ *
+ * ## Driver level (the pacing found by the #1301 campaign)
+ *
+ * The adapter-level test above calls `plan()` back to back, so it cannot see what the cycle after a
+ * runaway costs in pacing. The second test runs the same chain under the real [AgentLoopDriver]
+ * against a sim that paces itself on the wall clock ([SelfPacedSimClock], speed 20 so the timeout
+ * is 100 sim s and the test stays short) with a controller that sleeps like
+ * `ThrottlingSimulationController` ([SleepingPacingRecorder]). Before the #1340 pacing fix in
+ * [AgentLoopDriver.runCycle], PACE slept again for the sim time that passed during the timed-out
+ * cycle, and every later cycle re-slept it: the period stayed at the timeout's length for the rest
+ * of the run (the Červený Újezd campaign run r02: actions 58 sim s apart after one 30 s timeout).
+ * The test pins, as sim-time and cycle counts, that the period is back to a few control steps
+ * one cycle after the runaway, besides the same 1 / 0 / 3 counts. This part of the measurement
+ * changed production code (the driver's PACE step); the adapter and its fallback did not change.
  */
 @DisplayName("A forced runaway Ollama generation costs one dispatcher tick (Issue #1340)")
 class ForcedRunawayCostTest {
@@ -78,6 +98,22 @@ class ForcedRunawayCostTest {
 		 * fallback as an oracle; it finds only [DispatchDecision.NoAction], so the cycle is not a fallback.
 		 */
 		val ANSWERED = TickOutcome.LLM_SILENT_NONACTIONABLE
+
+		/** Driver-level test: the sim runs 20 sim s per wall second, so the timeout is 100 sim s. */
+		const val SIM_SPEED = 20.0
+
+		/** `ShuntingLoop`'s control step: one tick per 2 sim s. */
+		const val CONTROL_STEP = 2.0
+
+		/**
+		 * A quarter of the 100 sim s runaway. The period after the runaway also holds cycle 3's own
+		 * `plan()` (the slot wait and a new connection, about 4 sim s here), so it gets room for a
+		 * loaded machine; the load-free pin is the throttle argument (at most one control step).
+		 */
+		const val RECOVERED_PERIOD_CEILING = 25.0
+
+		/** Upper bound on [AgentLoopDriver.runCycle] calls, short-circuited ones included. */
+		const val MAX_RUN_CYCLE_CALLS = 100_000
 	}
 
 	private val observation =
@@ -128,6 +164,71 @@ class ForcedRunawayCostTest {
 				assertThat(fallbackCycles, "fallback cycles").isEqualTo(1)
 				assertThat(breakerOpenings, "circuit-breaker openings").isEqualTo(0L)
 				assertThat(firstAnsweredAfterRunaway, "first answered cycle after the runaway").isEqualTo(3)
+			} finally {
+				executor.close()
+			}
+		}
+	}
+
+	@Test
+	fun `under the driver, the decision rate recovers one cycle after the runaway`() {
+		HoldingOllamaServer(
+			heldRequest = HELD_REQUEST,
+			slotReleaseDelayMillis = SLOT_RELEASE_DELAY_MILLIS
+		).use { server ->
+			val config = OllamaExecutorConfig(ollamaEndpoint = server.baseUrl)
+			val executor = OllamaSimpleExecutor(config)
+			try {
+				val adapter = adapterOver(executor, config)
+				val clock = SelfPacedSimClock(speedMultiplier = SIM_SPEED, controlStepSeconds = CONTROL_STEP)
+				val perceptionPort = mockk<NetworkPerceptionPort>()
+				every { perceptionPort.snapshot() } answers { emptySnapshot(clock.simTime()) }
+				val ticks = CopyOnWriteArrayList<TickRecord>()
+				val pacing = SleepingPacingRecorder(SIM_SPEED)
+				val driver =
+					AgentLoopDriver(
+						perceptionPort,
+						adapter,
+						ActuatorCommandQueue(),
+						pacing,
+						plannerTickSource = adapter,
+						onTickRecord = { ticks.add(it) }
+					)
+
+				runBlocking {
+					var calls = 0
+					while (ticks.size < CYCLES && calls < MAX_RUN_CYCLE_CALLS) {
+						calls++
+						driver.runCycle()
+					}
+				}
+
+				val outcomes = ticks.map { it.outcome }
+				val periods = ticks.map { it.simTime }.zipWithNext { a, b -> b - a }
+				val fallbackCycles = outcomes.count { it == TickOutcome.RULE_FALLBACK }
+				val breakerOpenings = adapter.circuitBreaker.openCount
+				println(
+					"Issue #1340 driver level: forced runaway on cycle $RUNAWAY_CYCLE of $CYCLES " +
+						"(cycle timeout ${CYCLE_TIMEOUT.toMillis()} ms, slot release ${SLOT_RELEASE_DELAY_MILLIS} ms, " +
+						"sim speed $SIM_SPEED): fallbackCycles=$fallbackCycles, breakerOpenings=$breakerOpenings, " +
+						"outcomes=$outcomes, simTimes=${ticks.map { it.simTime }}, periods=$periods, " +
+						"throttle=${pacing.throttleDeltas}"
+				)
+
+				assertThat(outcomes.size, "cycles").isEqualTo(CYCLES)
+				assertThat(outcomes[RUNAWAY_CYCLE - 1], "the runaway cycle").isEqualTo(TickOutcome.RULE_FALLBACK)
+				assertThat(fallbackCycles, "fallback cycles").isEqualTo(1)
+				assertThat(breakerOpenings, "circuit-breaker openings").isEqualTo(0L)
+				// PACE never sleeps again for the sim time the runaway already spent on the wall clock.
+				pacing.throttleDeltas.drop(1).forEachIndexed { i, delta ->
+					assertThat(delta, "throttle argument of cycle ${i + 2}").isLessThanOrEqualTo(CONTROL_STEP)
+				}
+				// periods[i] is the sim time from cycle i + 1 to cycle i + 2. The runaway's own cost is
+				// the gap from cycle 2 to cycle 3; from cycle 3 to cycle 4 on, the rate is back.
+				periods.drop(RUNAWAY_CYCLE).forEachIndexed { i, period ->
+					assertThat(period, "sim-time period from cycle ${i + RUNAWAY_CYCLE + 1} to ${i + RUNAWAY_CYCLE + 2}")
+						.isLessThanOrEqualTo(RECOVERED_PERIOD_CEILING)
+				}
 			} finally {
 				executor.close()
 			}
