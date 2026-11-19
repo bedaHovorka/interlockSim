@@ -135,14 +135,15 @@ class SignalTargetSwitchConstrainedPrahaTest : PrahaPathReservationTestBase() {
 	}
 
 	@Test
-	fun `every semaphore-to-InOut search completes within the budget`() {
+	fun `every semaphore-to-semaphore and semaphore-to-InOut search completes within the budget`() {
 		val topology = navigator as DefaultTopologyNavigator
 		val discovery = ReservationTargetDiscovery(navigator, simulationContext)
 		val inOuts = simulationContext.getInOuts().map { simulationContext.toDynamic(it) as DynamicInOut }
+		val semaphores = simulationContext.cellsOfType<DynamicRailSemaphore>()
 		var maxExpanded = 0
-		for (semaphore in simulationContext.cellsOfType<DynamicRailSemaphore>()) {
-			// An InOut discovery offers one section ahead is drivable over a simple switch-legal route
-			// (Issue #1390), so the enumeration must find at least one route to it.
+		for (semaphore in semaphores) {
+			// An InOut the offer walk (Issue #1390) offers is reachable through `next` by a simple
+			// switch-legal route, so the enumeration must find at least one route to it.
 			val offered =
 				discovery.resolveForwardSection(semaphore, "test")?.let { (start, next) ->
 					discovery.findNextSemaphoresVia(start, next).filterIsInstance<DynamicInOut>()
@@ -163,9 +164,23 @@ class SignalTargetSwitchConstrainedPrahaTest : PrahaPathReservationTestBase() {
 				}
 				maxExpanded = maxOf(maxExpanded, search.expandedNodes)
 			}
+			for (targetSemaphore in semaphores) {
+				val search =
+					topology.searchSwitchConstrainedPaths(
+						semaphore,
+						targetSemaphore,
+						DEFAULT_MAX_PATH_DEPTH,
+						DefaultTopologyNavigator.ROUTE_SEARCH_NODE_BUDGET
+					)
+				assertThat(search, name = "search ${semaphore.name} -> ${targetSemaphore.name}")
+					.isInstanceOf<RouteSearch.Completed>()
+				maxExpanded = maxOf(maxExpanded, search.expandedNodes)
+			}
 		}
-		// Measured 2026-11-17: 203 expanded nodes at most (S_60_16 -> N-Lib-1), all 319 pairs in about
-		// 0.2 s. The bound is a tripwire with headroom, far below the 300 000 budget.
+		// Measured 2026-11-19: 203 expanded nodes at most across all 1160 pairs (worst pair
+		// S_60_16 -> S_4_4, a semaphore target; the 319 semaphore-to-InOut pairs peaked at the same 203,
+		// S_60_16 -> N-Lib-1), all finished in under a second. The bound is a tripwire with headroom,
+		// far below the 300 000 budget.
 		assertThat(maxExpanded, name = "most expanded nodes of one pair").isLessThanOrEqualTo(MAX_EXPANDED_TRIPWIRE)
 	}
 

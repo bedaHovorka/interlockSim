@@ -238,7 +238,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 					.isEqualTo(
 						simulationContext.scope
 							.get<TopologyNavigator>()
-							.findAllTopologicalPaths(zA, attempt.target, DEFAULT_MAX_PATH_DEPTH)
+							.findAllSwitchConstrainedPaths(zA, attempt.target, DEFAULT_MAX_PATH_DEPTH)
 					)
 			}
 		}

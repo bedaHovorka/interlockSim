@@ -628,10 +628,12 @@ class DefaultPathReservationService(
 	 *
 	 * WARN: `NoPathExists` is permanent, not contention -- the answer is topology-only and does not
 	 * change on retry (`InOutWorker` throws, `MultiTrainLoop` records `NO_ROUTE`), the same class as
-	 * the WARN refusals of [logRefusalSummary]. No consumer pins a WARN count this line could break:
-	 * the only pinned service WARN count (`PathReservationStartDirectionPrahaTest`) covers a request
-	 * that has candidates. Like [logRefusalSummary] it is per call, so `reservePathToAny` logs one
-	 * line per unreachable target it tries.
+	 * the WARN refusals of [logRefusalSummary]. Since Issue #1385 two Praha tests pin this line's
+	 * refusal count (the S2 -> S11 pin of `PathReservationStartDirectionPrahaTest`, whose one expected
+	 * service WARN is exactly this line, and the `reservePath: refused` prefix count of
+	 * `SignalTargetSwitchConstrainedPrahaTest`, S14 -> S15): a level change or removing the line must
+	 * move those pins, while changes to the tail wording stay free. Like [logRefusalSummary] it is
+	 * per call, so `reservePathToAny` logs one line per unreachable target it tries.
 	 *
 	 * Since Issue #1385 the empty candidate list means "no switch-legal route" (the switch-constrained
 	 * search found none, or exceeded its budget); the "no topological path" wording is kept because
