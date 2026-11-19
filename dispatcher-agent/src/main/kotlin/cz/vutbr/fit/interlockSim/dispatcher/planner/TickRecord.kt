@@ -34,6 +34,11 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  *   (Issue #1365). `null` for every other cycle, and when the command queue has no correlation map.
  *   [DefaultDispatcherRunRecorder] uses it to count
  *   [DispatcherRunSnapshot.staleOriginRefusalsAfterSilentCycle].
+ * @param nextSectionOffers The offered and skipped NEXT SECTION hops of a cycle that skipped the
+ *   rule-based fallback (Issue #1302, see [NextSectionOfferCount]). `null` on every other cycle
+ *   ending, and when the count failed (logged at WARN). Travels only here — never into the
+ *   cycle history, which feeds later prompts. [DefaultDispatcherRunRecorder] sums it into
+ *   [DispatcherRunSnapshot.skippedNextSectionOffers] and [DispatcherRunSnapshot.offeredNextSectionHops].
  *
  * @see PlannerTickListener
  * @see TickOutcome
@@ -46,7 +51,8 @@ data class TickRecord(
 	val simTime: Double,
 	val timeoutNoOpCause: TimeoutNoOpCause? = null,
 	val latencyMs: Long? = null,
-	val silentNonIdleCycleIndex: Long? = null
+	val silentNonIdleCycleIndex: Long? = null,
+	val nextSectionOffers: NextSectionOfferCount? = null
 ) {
 	init {
 		val expectsCause = outcome == TickOutcome.TIMEOUT_NOOP

@@ -523,6 +523,129 @@ class DefaultDispatcherRunRecorderTest {
 		r.logFinalSummary()
 	}
 
+	// ── Skipped NEXT SECTION offers (Issue #1302) ────────────────────────────
+
+	private fun llmRecorder(): DefaultDispatcherRunRecorder =
+		DefaultDispatcherRunRecorder(
+			runId = "test-run-llm",
+			arm = DispatcherArm.LLM_TOOL_CALLING,
+			params = defaultParams
+		)
+
+	/** A tick that skipped the fallback and left [skipped] trains' offers unrequested. */
+	private fun offerTick(
+		simTime: Double,
+		offered: Int,
+		skipped: Set<String>,
+		standing: Int = 0,
+		outcome: TickOutcome = TickOutcome.LLM_NO_OP
+	): TickRecord =
+		TickRecord(
+			outcome,
+			simTime = simTime,
+			nextSectionOffers =
+				NextSectionOfferCount(offered = offered, skippedTrainIds = skipped, skippedStandingAtSignal = standing)
+		)
+
+	@Test
+	fun `skipped and offered NEXT SECTION counts are summed over the ticks that carry one`() {
+		val r = llmRecorder()
+		r.onTick(offerTick(1.0, offered = 2, skipped = setOf("T1"), standing = 1))
+		r.onTick(offerTick(2.0, offered = 3, skipped = emptySet(), outcome = TickOutcome.LLM_ACTIONS))
+		// A fallback cycle carries no count and contributes nothing.
+		r.onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 3.0))
+
+		val snap = r.snapshot()
+		assertThat(snap.skippedNextSectionOffers).isEqualTo(1L)
+		assertThat(snap.offeredNextSectionHops).isEqualTo(5L)
+		assertThat(snap.skippedNextSectionOffersStandingAtSignal).isEqualTo(1L)
+	}
+
+	@Test
+	fun `standing-at-signal skips are summed only from the standing count`() {
+		val r = llmRecorder()
+		r.onTick(offerTick(1.0, offered = 2, skipped = setOf("T1", "T2"), standing = 1))
+		r.onTick(offerTick(2.0, offered = 1, skipped = setOf("T1"), standing = 0))
+
+		val snap = r.snapshot()
+		assertThat(snap.skippedNextSectionOffers).isEqualTo(3L)
+		assertThat(snap.skippedNextSectionOffersStandingAtSignal).isEqualTo(1L)
+	}
+
+	@Test
+	fun `two trains skipped once each make a streak of one cycle`() {
+		val r = llmRecorder()
+		r.onTick(offerTick(1.0, offered = 2, skipped = setOf("T1")))
+		r.onTick(offerTick(2.0, offered = 2, skipped = setOf("T2")))
+
+		val snap = r.snapshot()
+		assertThat(snap.skippedNextSectionOffers).isEqualTo(2L)
+		assertThat(snap.longestSkippedOfferStreakCycles).isEqualTo(1L)
+		assertThat(snap.longestSkippedOfferStreakSimSeconds).isEqualTo(0.0)
+	}
+
+	@Test
+	fun `one train skipped three cycles in a row makes a streak of three`() {
+		val r = llmRecorder()
+		r.onTick(offerTick(10.0, offered = 1, skipped = setOf("T1")))
+		r.onTick(offerTick(12.5, offered = 1, skipped = setOf("T1")))
+		r.onTick(offerTick(15.0, offered = 1, skipped = setOf("T1")))
+
+		val snap = r.snapshot()
+		assertThat(snap.longestSkippedOfferStreakCycles).isEqualTo(3L)
+		assertThat(snap.longestSkippedOfferStreakSimSeconds).isEqualTo(5.0)
+	}
+
+	@Test
+	fun `a fallback tick resets the streak`() {
+		val r = llmRecorder()
+		r.onTick(offerTick(1.0, offered = 1, skipped = setOf("T1")))
+		r.onTick(offerTick(2.0, offered = 1, skipped = setOf("T1")))
+		r.onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 3.0))
+		r.onTick(offerTick(4.0, offered = 1, skipped = setOf("T1")))
+
+		val snap = r.snapshot()
+		assertThat(snap.longestSkippedOfferStreakCycles).isEqualTo(2L)
+		assertThat(snap.longestSkippedOfferStreakSimSeconds).isEqualTo(1.0)
+	}
+
+	@Test
+	fun `a tick where the train is not skipped resets its streak`() {
+		val r = llmRecorder()
+		r.onTick(offerTick(1.0, offered = 1, skipped = setOf("T1")))
+		r.onTick(offerTick(2.0, offered = 1, skipped = emptySet(), outcome = TickOutcome.LLM_ACTIONS))
+		r.onTick(offerTick(3.0, offered = 1, skipped = setOf("T1")))
+
+		assertThat(r.snapshot().longestSkippedOfferStreakCycles).isEqualTo(1L)
+	}
+
+	@Test
+	fun `skipped and offered NEXT SECTION counts stay absent on a rule-based run`() {
+		val r = recorder()
+		r.onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 1.0))
+
+		val snap = r.snapshot()
+		assertThat(snap.skippedNextSectionOffers).isNull()
+		assertThat(snap.offeredNextSectionHops).isNull()
+		assertThat(snap.skippedNextSectionOffersStandingAtSignal).isNull()
+		assertThat(snap.longestSkippedOfferStreakCycles).isNull()
+		assertThat(snap.longestSkippedOfferStreakSimSeconds).isNull()
+	}
+
+	/** An LLM run whose every cycle fell back was measured: nothing was skipped (0/0), not absent. */
+	@Test
+	fun `an LLM run whose cycles all fell back measures zero skipped offers`() {
+		val r = llmRecorder()
+		r.onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 1.0))
+
+		val snap = r.snapshot()
+		assertThat(snap.skippedNextSectionOffers).isEqualTo(0L)
+		assertThat(snap.offeredNextSectionHops).isEqualTo(0L)
+		assertThat(snap.skippedNextSectionOffersStandingAtSignal).isEqualTo(0L)
+		assertThat(snap.longestSkippedOfferStreakCycles).isEqualTo(0L)
+		assertThat(snap.longestSkippedOfferStreakSimSeconds).isEqualTo(0.0)
+	}
+
 	// ── logFinalSummary log text (#1113 review round) ────────────────────────
 
 	/**
@@ -600,6 +723,37 @@ class DefaultDispatcherRunRecorderTest {
 					.single { it.contains("final summary") }
 			assertThat(summary).contains("conflicts=0 ")
 			assertThat(summary).contains("unresolvedAtRunEnd=2 ")
+		}
+
+		/** Issue #1302: the summary line names the skipped NEXT SECTION offers next to the offered total. */
+		@Test
+		fun `final summary reports the skipped NEXT SECTION offers`() {
+			val r = recorder()
+			r.onTick(offerTick(1.0, offered = 4, skipped = setOf("T1", "T2", "T3"), standing = 2))
+			r.onTick(offerTick(3.0, offered = 1, skipped = setOf("T1")))
+
+			r.logFinalSummary()
+
+			val summary =
+				appender.list
+					.map { it.formattedMessage }
+					.single { it.contains("final summary") }
+			assertThat(summary).contains("skippedNextSectionOffers=4 ")
+			assertThat(summary).contains("offeredNextSectionHops=5 ")
+			assertThat(summary).contains("skippedNextSectionOffersStandingAtSignal=2 ")
+			assertThat(summary).contains("longestSkippedOfferStreakCycles=2 ")
+			assertThat(summary).contains("longestSkippedOfferStreakSimSeconds=2.0")
+		}
+
+		@Test
+		fun `final summary marks the skipped NEXT SECTION offers as n-a when nothing measured them`() {
+			recorder().logFinalSummary()
+
+			val summary =
+				appender.list
+					.map { it.formattedMessage }
+					.single { it.contains("final summary") }
+			assertThat(summary).contains("skippedNextSectionOffers=n/a ")
 		}
 
 		@Test

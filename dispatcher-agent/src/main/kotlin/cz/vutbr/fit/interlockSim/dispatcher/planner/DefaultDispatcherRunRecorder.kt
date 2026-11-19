@@ -73,6 +73,21 @@ import java.util.concurrent.atomic.AtomicReference
  * decision is not counted. The index is reported inside `plan()`, before `AgentLoopDriver` posts the
  * cycle's decisions, so the queue's post/drain hand-off orders it before the outcome it attributes.
  *
+ * ## Skipped NEXT SECTION offers (Issue #1302)
+ *
+ * [onTick] sums [TickRecord.nextSectionOffers] — present only on the LLM cycle endings that skip
+ * the rule-based fallback — into [DispatcherRunSnapshot.skippedNextSectionOffers],
+ * [DispatcherRunSnapshot.offeredNextSectionHops] and
+ * [DispatcherRunSnapshot.skippedNextSectionOffersStandingAtSignal]. It also keeps one streak per
+ * train: consecutive ticks whose count names the train in
+ * [NextSectionOfferCount.skippedTrainIds]. Any other tick ends the train's streak — one that
+ * counts offers without skipping it, and one without a count at all (the fallback ran that cycle,
+ * so the train was not left behind by the acted-cycle guard). The longest streak, in cycles and
+ * in simulation seconds (last minus first [TickRecord.simTime] of the streak), separates one train
+ * skipped for many cycles at a STOP signal — the #895 stall shape F8 names — from many trains
+ * skipped once each, which the totals cannot. An LLM run is always measured (an LLM run whose
+ * cycles all fell back skipped nothing: 0); only a rule-based run with no count reports `null`.
+ *
  * @param runId Opaque unique identifier (typically a UUID or `yyyyMMdd-HHmmss-<short-uuid>`).
  * @param arm Which dispatcher implementation arm is active.
  * @param params Fixed run parameters captured at run start.
@@ -134,6 +149,34 @@ class DefaultDispatcherRunRecorder(
 
 	private val staleOriginRefusalsAfterSilentCycle = AtomicLong(0L)
 
+	// Issue #1302: sums of TickRecord.nextSectionOffers; nextSectionOffersMeasured tells a measured
+	// zero from "no tick carried a count" (absent is not zero).
+	private val skippedNextSectionOffers = AtomicLong(0L)
+
+	private val offeredNextSectionHops = AtomicLong(0L)
+
+	@Volatile
+	private var nextSectionOffersMeasured = false
+
+	private val skippedStandingAtSignal = AtomicLong(0L)
+
+	// Per-train skip streaks (Issue #1302). onTick runs on the driver thread and buildSnapshot on any
+	// thread, so the streak state is guarded by its own lock.
+	private val streakLock = Any()
+
+	private val openStreaks = mutableMapOf<String, SkipStreak>()
+
+	private var longestStreakCycles = 0L
+
+	private var longestStreakSimSeconds = 0.0
+
+	/** One train's run of consecutive skipped-offer ticks: how many, and the first and last sim time. */
+	private data class SkipStreak(
+		val cycles: Long,
+		val firstSimTime: Double,
+		val lastSimTime: Double
+	)
+
 	// ── Railway outcome (Issue #834, SP2c.11) ────────────────────────────────
 
 	// Not an accumulator: the recorder has no view of the railway, so the figures arrive whole
@@ -154,6 +197,33 @@ class DefaultDispatcherRunRecorder(
 		record.timeoutNoOpCause?.let { cause -> timeoutNoOpByCause.getValue(cause.name).incrementAndGet() }
 		record.latencyMs?.let { latencySamplesMs.add(it) }
 		record.silentNonIdleCycleIndex?.let { silentNonIdleCycleIndices.add(it) }
+		record.nextSectionOffers?.let { count ->
+			skippedNextSectionOffers.addAndGet(count.skipped.toLong())
+			offeredNextSectionHops.addAndGet(count.offered.toLong())
+			skippedStandingAtSignal.addAndGet(count.skippedStandingAtSignal.toLong())
+			nextSectionOffersMeasured = true
+		}
+		updateSkipStreaks(record)
+	}
+
+	/**
+	 * Extends the streak of every train [record] names as skipped and ends every other open streak
+	 * — also on a tick with no count (the fallback ran). See the class KDoc, Issue #1302.
+	 */
+	private fun updateSkipStreaks(record: TickRecord) {
+		val skipped = record.nextSectionOffers?.skippedTrainIds ?: emptySet()
+		synchronized(streakLock) {
+			openStreaks.keys.retainAll(skipped)
+			for (trainId in skipped) {
+				val previous = openStreaks[trainId]
+				val streak =
+					previous?.copy(cycles = previous.cycles + 1, lastSimTime = record.simTime)
+						?: SkipStreak(cycles = 1L, firstSimTime = record.simTime, lastSimTime = record.simTime)
+				openStreaks[trainId] = streak
+				longestStreakCycles = maxOf(longestStreakCycles, streak.cycles)
+				longestStreakSimSeconds = maxOf(longestStreakSimSeconds, streak.lastSimTime - streak.firstSimTime)
+			}
+		}
 	}
 
 	override fun onActionOutcome(outcome: ActionOutcome) {
@@ -236,7 +306,15 @@ class DefaultDispatcherRunRecorder(
 				// JSON — same reasoning as the railway figures above (#834).
 				"circuitBreakerState=${snap.circuitBreakerState ?: "n/a"} " +
 				"circuitBreakerTotalSkips=${formatFigure(snap.circuitBreakerTotalSkips)} " +
-				"circuitBreakerOpenCount=${formatFigure(snap.circuitBreakerOpenCount)}"
+				"circuitBreakerOpenCount=${formatFigure(snap.circuitBreakerOpenCount)} " +
+				// Issue #1302: offered NEXT SECTION hops the LLM left without an accepted request
+				// on cycles that skipped the fallback; `n/a` when no such cycle was counted.
+				"skippedNextSectionOffers=${formatFigure(snap.skippedNextSectionOffers)} " +
+				"offeredNextSectionHops=${formatFigure(snap.offeredNextSectionHops)} " +
+				"skippedNextSectionOffersStandingAtSignal=" +
+				"${formatFigure(snap.skippedNextSectionOffersStandingAtSignal)} " +
+				"longestSkippedOfferStreakCycles=${formatFigure(snap.longestSkippedOfferStreakCycles)} " +
+				"longestSkippedOfferStreakSimSeconds=${snap.longestSkippedOfferStreakSimSeconds ?: "n/a"}"
 		}
 		// Issue #834 review finding #6: llmSuccessRate above is reclassified in #834 (idle ticks
 		// moved RULE_FALLBACK -> LLM_NO_OP, and REVISED's cap-full no_op turns former fallback ticks
@@ -324,6 +402,10 @@ class DefaultDispatcherRunRecorder(
 		// reads could persist `OPEN` with the pre-transition `openCount` if a `plan()` thread is
 		// mid-`recordFailure` while this snapshot is built.
 		val breaker = circuitBreaker?.metricsSnapshot()
+		// Issue #1302: an LLM run is measured even when every cycle fell back (0/0); only a
+		// rule-based run that never carried a count leaves the figures absent.
+		val offersMeasured = nextSectionOffersMeasured || arm != DispatcherArm.RULE_BASED
+		val (streakCycles, streakSimSeconds) = synchronized(streakLock) { longestStreakCycles to longestStreakSimSeconds }
 
 		return DispatcherRunSnapshot(
 			runId = runId,
@@ -357,7 +439,12 @@ class DefaultDispatcherRunRecorder(
 			circuitBreakerState = breaker?.state,
 			circuitBreakerTotalSkips = breaker?.totalSkips,
 			circuitBreakerOpenCount = breaker?.openCount,
-			staleOriginRefusalsAfterSilentCycle = staleOriginRefusalsAfterSilentCycle.get()
+			staleOriginRefusalsAfterSilentCycle = staleOriginRefusalsAfterSilentCycle.get(),
+			skippedNextSectionOffers = if (offersMeasured) skippedNextSectionOffers.get() else null,
+			offeredNextSectionHops = if (offersMeasured) offeredNextSectionHops.get() else null,
+			skippedNextSectionOffersStandingAtSignal = if (offersMeasured) skippedStandingAtSignal.get() else null,
+			longestSkippedOfferStreakCycles = if (offersMeasured) streakCycles else null,
+			longestSkippedOfferStreakSimSeconds = if (offersMeasured) streakSimSeconds else null
 		)
 	}
 

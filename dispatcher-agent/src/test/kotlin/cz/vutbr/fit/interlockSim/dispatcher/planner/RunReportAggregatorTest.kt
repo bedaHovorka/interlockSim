@@ -913,6 +913,72 @@ class RunReportAggregatorTest {
 			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "1", "n/a", "n/a", "0", "1"))
 	}
 
+	/** The skipped NEXT SECTION offers section of [md], up to the next section. */
+	private fun skippedOfferSection(md: String): String =
+		md
+			.substringAfter("## Skipped NEXT SECTION Offers")
+			.substringBefore("## Latency")
+
+	/**
+	 * Issue #1302: the skipped NEXT SECTION offers of fallback-skipping LLM cycles are summed per
+	 * arm next to the offered total; a run JSON written before schema 12 is "not measured", never 0.
+	 */
+	@Test
+	fun `the skipped NEXT SECTION offers are counted per arm`() {
+		val llm =
+			aggregator.aggregate(
+				listOf(
+					runSnapshot(
+						runId = "skip1",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						skippedNextSectionOffers = 1L,
+						offeredNextSectionHops = 4L,
+						skippedNextSectionOffersStandingAtSignal = 1L,
+						longestSkippedOfferStreakCycles = 1L,
+						longestSkippedOfferStreakSimSeconds = 0.0
+					),
+					runSnapshot(
+						runId = "skip2",
+						arm = DispatcherArm.LLM_TOOL_CALLING,
+						skippedNextSectionOffers = 2L,
+						offeredNextSectionHops = 6L,
+						skippedNextSectionOffersStandingAtSignal = 2L,
+						longestSkippedOfferStreakCycles = 2L,
+						longestSkippedOfferStreakSimSeconds = 7.5
+					),
+					runSnapshot(runId = "old", arm = DispatcherArm.LLM_TOOL_CALLING)
+				)
+			)
+
+		val section = skippedOfferSection(aggregator.renderMarkdown(listOf(llm)))
+
+		assertThat(section)
+			.transform("says what an accepted request is") {
+				it.contains(
+					"accepted when the `request_route` tool emitted it for that train " +
+						"(any target, whatever the apply outcome)"
+				)
+			}.isTrue()
+		assertThat(section)
+			.transform("has the per-arm header") {
+				it.contains(
+					"| Arm | Runs | Offered hops | Skipped offers | Skipped standing at a signal | " +
+						"Runs with a skip | Longest streak (cycles) | Longest streak (sim s) | Runs measured |"
+				)
+			}.isTrue()
+		assertThat(tableRowCells(section, DispatcherArm.LLM_TOOL_CALLING.name))
+			.isEqualTo(listOf(DispatcherArm.LLM_TOOL_CALLING.name, "3", "10", "3", "3", "2", "2", "7.5", "2", "1"))
+	}
+
+	@Test
+	fun `an arm whose runs never measured skipped offers shows n-a, not zero`() {
+		val report = aggregator.aggregate(listOf(runSnapshot(runId = "ctl")))
+		val section = skippedOfferSection(aggregator.renderMarkdown(listOf(report)))
+
+		assertThat(tableRowCells(section, DispatcherArm.RULE_BASED.name))
+			.isEqualTo(listOf(DispatcherArm.RULE_BASED.name, "1", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "0", "1"))
+	}
+
 	@Test
 	fun `repair-success rate is marked as having no live producer, not presented as a bare measurement`() {
 		val report = aggregator.aggregate(listOf(runSnapshot(runId = "repair1")))

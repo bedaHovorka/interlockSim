@@ -176,8 +176,43 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 11`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS)
+	fun `current schema version is 12`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_SKIPPED_OFFERS)
+	}
+
+	/** Issue #1302 (schema version 12): the skipped and offered NEXT SECTION counts survive the round-trip. */
+	@Test
+	fun `serialization round-trips the skipped NEXT SECTION offer counts`() {
+		val snap =
+			snapshotWith().copy(
+				skippedNextSectionOffers = 3L,
+				offeredNextSectionHops = 7L,
+				skippedNextSectionOffersStandingAtSignal = 2L,
+				longestSkippedOfferStreakCycles = 4L,
+				longestSkippedOfferStreakSimSeconds = 12.5
+			)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"skippedNextSectionOffers\": 3")
+		assertThat(encoded).contains("\"offeredNextSectionHops\": 7")
+		assertThat(encoded).contains("\"skippedNextSectionOffersStandingAtSignal\": 2")
+		assertThat(encoded).contains("\"longestSkippedOfferStreakCycles\": 4")
+		assertThat(encoded).contains("\"longestSkippedOfferStreakSimSeconds\": 12.5")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded).isEqualTo(snap)
+	}
+
+	/** Issue #1302: a run JSON written before schema 12 loads with both counts absent, never zero. */
+	@Test
+	fun `a version-8 fixture without the skipped-offer counts loads them as absent`() {
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), SCHEMA_V8_JSON)
+
+		assertThat(decoded.skippedNextSectionOffers).isNull()
+		assertThat(decoded.offeredNextSectionHops).isNull()
+		assertThat(decoded.skippedNextSectionOffersStandingAtSignal).isNull()
+		assertThat(decoded.longestSkippedOfferStreakCycles).isNull()
+		assertThat(decoded.longestSkippedOfferStreakSimSeconds).isNull()
 	}
 
 	/** Issue #1365 (schema version 11): the stale-origin refusal count survives the JSON round-trip. */
@@ -439,8 +474,8 @@ class DispatcherRunSnapshotTest {
 		/** Issue #988 added the [TickOutcome.LLM_SILENT_ALL_MOVING] tick outcome. */
 		private const val SCHEMA_VERSION_WITH_ALL_MOVING_OUTCOME: Int = 9
 
-		/** Issue #1365 added the stale-origin refusal count after silent non-idle LLM cycles. */
-		private const val SCHEMA_VERSION_WITH_STALE_ORIGIN_REFUSALS: Int = 11
+		/** Issue #1302 added the skipped and offered NEXT SECTION counts of fallback-skipping cycles. */
+		private const val SCHEMA_VERSION_WITH_SKIPPED_OFFERS: Int = 12
 
 		private val json =
 			Json {
