@@ -86,7 +86,9 @@ actually performing those runs and recording each one.
 keep it out of `docs/`, and record its content in that campaign's report. The
 swept axes are `example`, `model`, `temperature`, `tickPeriodMs`, `historyN`,
 `maxActionsPerTick`, `inferenceTimeoutSeconds` (per-cycle LLM inference deadline)
-and `promptVariant` (DISPATCHER system-prompt revision); there is deliberately no
+and `promptVariant` (DISPATCHER system-prompt revision: `BASELINE`, `REVISED` — the
+shipped default — or `REVISED_STRUCTURAL`, REVISED's instructions with worked examples taken
+from the station's structure, Issue #1301); there is deliberately no
 `seed` axis, because the pinned Koog version has no path to Ollama's `seed`
 option. An axis omitted from a grid keeps its default — the example below omits
 `inferenceTimeoutSeconds` and `promptVariant` on purpose.

@@ -48,7 +48,19 @@ enum class PromptVariant {
 	 * [KoogAgentFactory.buildRevisedSystemPrompt]'s KDoc, which lists each change against the run
 	 * data that asked for it. No property that was bought with a measured failure was dropped.
 	 */
-	REVISED;
+	REVISED,
+
+	/**
+	 * [REVISED]'s instruction text, byte for byte, with worked examples taken from the station's
+	 * structure instead of the alphabetical guess (Issue #1301, the A/B arm against [REVISED]).
+	 *
+	 * The examples are one real journey: the train enters at an InOut, its home signal reserves to
+	 * the next signal, and that signal reserves on to the train's own exit — every hop a target the
+	 * interlocking itself offers ([WorkedExampleSource.STRUCTURAL], [StationTopology.entryJourney]).
+	 * Origin, target and destination of the examples change together, so the arm measures
+	 * "structural vs alphabetical examples", not one name.
+	 */
+	REVISED_STRUCTURAL;
 
 	companion object {
 		/**

@@ -833,6 +833,9 @@ class ExampleRegistry {
 	 * The fallback admits up to [loop]'s own capacity ([ShuntingLoop.stationCapacity], Issue #1303),
 	 * the cap the applier enforces and the prompt states, instead of the vyhybna default 2.
 	 *
+	 * Resolves [KoogAgentFactory] eagerly; for REVISED_STRUCTURAL this runs the reservation target
+	 * query (Issue #1301) and must stay before `setMainProcess`/`run`.
+	 *
 	 * @return a fresh [KoogAgentPlanAdapter] with a [RuleBasedDispatcher] fallback and an
 	 *   [LlmCircuitBreaker] (Issue #1058) built from the context's configuration
 	 */

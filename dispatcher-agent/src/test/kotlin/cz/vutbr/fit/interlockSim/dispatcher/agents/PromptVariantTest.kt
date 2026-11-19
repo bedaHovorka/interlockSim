@@ -83,6 +83,14 @@ class PromptVariantTest {
 			assertThat(PromptVariant.parse("  BaseLine  ")).isEqualTo(PromptVariant.BASELINE)
 		}
 
+		/** Issue #1301: the structural-examples arm is reachable through the same `-D` / grid parse path. */
+		@Test
+		@DisplayName("REVISED_STRUCTURAL parses from its name in any case")
+		fun revisedStructuralParses() {
+			assertThat(PromptVariant.parse("REVISED_STRUCTURAL")).isEqualTo(PromptVariant.REVISED_STRUCTURAL)
+			assertThat(PromptVariant.parse(" revised_structural ")).isEqualTo(PromptVariant.REVISED_STRUCTURAL)
+		}
+
 		/**
 		 * `null` rather than a thrown exception or a silently-substituted default: the caller
 		 * ([cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig]) owns the fallback *and* its

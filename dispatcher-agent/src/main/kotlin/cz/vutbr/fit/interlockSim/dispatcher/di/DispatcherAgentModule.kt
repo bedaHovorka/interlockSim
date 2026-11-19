@@ -22,8 +22,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
+import cz.vutbr.fit.interlockSim.dispatcher.agents.PreparedEntryJourney
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
+import cz.vutbr.fit.interlockSim.dispatcher.agents.WorkedExampleSource
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -370,6 +372,8 @@ val dispatcherAgentModule: Module =
 			// KoogAgentFactory (per-context builder, receives tools/config).
 			// Factory is scoped because it receives context-scoped dependencies (ports, tools).
 			// Each context gets its own factory instance.
+			// Resolve it before setMainProcess/run: for REVISED_STRUCTURAL resolution runs the
+			// reservation target query (Issue #1301, see preparedEntryJourney below).
 			scoped<KoogAgentFactory> {
 				KoogAgentFactory(
 					toolRegistry = get(), // Singleton
@@ -395,7 +399,20 @@ val dispatcherAgentModule: Module =
 					// Issue #1155: the loop's own admission cap, declared by the wiring layer
 					// (ExampleRegistry.wireDispatcherAgent) after this factory is resolved — so read
 					// lazily, like runRecorderProvider above.
-					stationCapacityProvider = { publishedOrNull<StationCapacity>() }
+					stationCapacityProvider = { publishedOrNull<StationCapacity>() },
+					// Issue #1301: the structural worked example runs the reservation target query,
+					// which must not run on the dispatcher thread once the simulation runs. The example
+					// setup resolves this factory while it builds the run (ExampleRegistry's
+					// createLlmPlanner, before setMainProcess and run), so it is computed here, on that
+					// thread, and only for the variant that renders it.
+					preparedEntryJourney =
+						if (KoogAgentFactory.workedExampleSourceOf(get<DispatcherRunConfig>().promptVariant) ==
+							WorkedExampleSource.STRUCTURAL
+						) {
+							PreparedEntryJourney.of(requireContextSource())
+						} else {
+							null
+						}
 				)
 			}
 

@@ -30,6 +30,8 @@ import java.util.concurrent.TimeUnit
  * 1. **Who calls the reservation/target API.** [ALLOWED_TARGET_API_CALLERS] — a new class calling
  *    `reservePath`, `reservePathToAnyNextSemaphore`, `findReservationTargetCandidates` or
  *    `isPathToAnyNextSemaphoreAvailable` fails this test until it is argued for and listed.
+ *    `EntryJourneyPicker` (#1301) is listed as a read-only, pre-run reader of the structure for the
+ *    prompt's worked example; it chooses no train's target.
  * 2. **Who stores a [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService].**
  *    [ALLOWED_SERVICE_HOLDERS] — `InterlockingFacade` is deliberately *not* the only entry:
  *    `InOutWorker`, `MultiTrainLoop`, `Train`, `DefaultNetworkActuatorPort` and
@@ -107,7 +109,11 @@ class TargetSelectionSingleEntryTest {
 				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/ports/DefaultNetworkActuatorPort.kt",
 				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/InOutWorker.kt",
 				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/MultiTrainLoop.kt",
-				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/ShuntingLoop.kt"
+				"core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/ShuntingLoop.kt",
+				// Prompt example only (#1301): reads the candidate list once, before the run starts, with no
+				// owner, to render the structural worked example in the system prompt. It never reserves and
+				// never selects a route for a train — the live pick stays ReservationTargetPolicy.pick.
+				"dispatcher-agent/src/main/kotlin/cz/vutbr/fit/interlockSim/dispatcher/agents/EntryJourneyPicker.kt"
 			)
 
 		val ALLOWED_SERVICE_HOLDERS =
