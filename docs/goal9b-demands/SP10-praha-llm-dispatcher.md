@@ -45,10 +45,10 @@ values. Traffic is the SP10.2 low-traffic generator (at most 4 concurrent trains
 wording of the #1147 replan; the owner may overrule).** The replan's rule accepts a seed when the control arm has 8 entered,
 8 exited and class A = 0. #1387 split class A into *blind* (the own exit was never offered and no
 platform toward it was available) and *fallback* (every platform toward the own exit was busy at one
-of the train's picks — the owner's fallback clause). The traffic-simulation-expert ruled that only
-**blind class A = 0** rejects a seed; fallback A and class B are recorded per seed and per arm. The
-classes are read from the `WRONG_OUT: … class A (… blind …)` / `(… fallback …)` / `class B` log lines
-of `ShuntingLoop`.
+of the train's picks — the owner's fallback clause). The traffic-simulation-expert ruled that a seed
+is rejected only when its **blind class-A count is positive** (an accepted seed has blind class
+A = 0); fallback A and class B are recorded per seed and per arm. The classes are read from the
+`WRONG_OUT: … class A (… blind …)` / `(… fallback …)` / `class B` log lines of `ShuntingLoop`.
 
 **Seed validation:** seeds 1366, 0, 1, … in that order until 10 were accepted. **10 accepted,
 0 rejected:** 1366, 0–8. Blind A = 0 on all ten; fallback A = 8 trains over the ten (seed 1366: 1, 5: 3, 6: 1, 7: 2, 8: 1).
@@ -70,7 +70,8 @@ and 5 were run again without the proxy on the same jar; the tables use the rerun
 was fixed before the outcomes were looked at: every run touched by the blocked Ollama slot is
 rerun. The discarded originals: seed 3 exited 6 trains, seed 4 exited 5 (actionable-tick rate 0.0),
 seed 5 exited 8 (actionable-tick rate 0.417). The seed-5 rerun is the weakest LLM run of the final
-set, so the substitution did not favour the LLM arm. A full rerun is not needed: the jar is the
+set — fewest timetable-exit arrivals (5) and the largest class-A load (1 blind + 2 fallback) of the
+final set — so the substitution did not favour the LLM arm. A full rerun is not needed: the jar is the
 same, the proxy only carries the traffic, the other seven LLM runs never reached the deadline, and
 their p50 latencies (417–463 ms) match the reruns (435–545 ms). The Ollama server log shows exactly
 one truncated (runaway) generation between 20:30 and 22:00, which covers the campaign and the
@@ -111,10 +112,10 @@ there is no tool-call sequence to record.**
 | Inference latency | p50 median 438 ms, p95 median 1 795 ms, max 30 053 ms. The two cycles at the 30 s deadline (30 053 and 30 051 ms) are in the no-proxy reruns of seeds 3 and 4; they were not runaways (no truncated generation), and their cause is not recorded |
 | Prompt size (`prompt_eval_count`, 1 470 calls of the 7 kept proxied runs) | min 6 656, median 6 828, p95 7 377, max 8 651 tokens, of the 16 384 window. The three reruns have no `prompt_eval_count` |
 | Wall time per run | LLM 303–316 s; control 1–11 s |
-| Emitted actions | route requests 335 (`RequestRoute` 170 + `request_route` 165: the run JSON counts the two spellings separately), train approvals 137 (`ApproveTrain` 108 + `approve_train` 29), fallback `ReservePath` 73. By author: LLM 450, rule fallback 95 of 545 (17 %) |
+| Emitted actions | route requests 335 (`RequestRoute` 170 + `request_route` 165: the run JSON counts the two spellings separately), train approvals 137 (`ApproveTrain` 108 + `approve_train` 29), fallback `ReservePath` 73. By author: LLM 450, rule fallback 95 of 545 (17 %; 73 of those are the fallback `ReservePath` counted above, the other 22 are route requests and train approvals) |
 | Rejections by code | `TARGET_NOT_TRAIN_DESTINATION` 86, `TARGET_NOT_NEXT_SECTION` 51, `TRAIN_ALREADY_ACTIVE` 28, `TRAIN_NOT_ADMITTED` 13, `ENDPOINT_IS_BLOCK_ID` 7, `ROUTE_SPANS_ENTRY_TO_EXIT` 5, `ACTION_LIMIT_EXCEEDED` 2, `ORIGIN_NOT_AT_TRAIN_POSITION` 1, `UNKNOWN_TRAIN` 1 |
 | Apply failures by code | `ORIGIN_NOT_CONTIGUOUS` 12, `NO_ROUTE_EXISTS` 5, `ALL_PATHS_BLOCKED` 2, `CAP_EXCEEDED_APPLY` 2, `DIVERGES_FROM_HELD_ROUTE` 1, `GEOMETRICALLY_IMPOSSIBLE` 1 |
-| `staleOriginRefusalsAfterSilentCycle` (#1355) | 0. The cycles that can produce one are the 74 indexed silent non-idle cycles (67 `RULE_FALLBACK` + 7 `LLM_SILENT_NONACTIONABLE`; `LLM_SILENT_ALL_MOVING` never consults the fallback). They posted 95 fallback actions; all 12 `ORIGIN_NOT_CONTIGUOUS` were on other decisions |
+| `staleOriginRefusalsAfterSilentCycle` (#1355) | 0. The aggregates only bound the cycles that can produce one: 67 `RULE_FALLBACK` + 7 `LLM_SILENT_NONACTIONABLE` ticks, and 95 fallback-authored actions in total (17 % of all actions). Timeouts and exceptions author a fallback without a silent-cycle index, so the per-index correlation is not derivable from these aggregates; the metric itself reads 0. All 12 `ORIGIN_NOT_CONTIGUOUS` were on other decisions |
 | Koog `AIAgentMaxNumberOfIterationsReachedException` | 7 |
 | Runaway generations | 1 (see the deviation above) |
 
@@ -148,10 +149,11 @@ reservations; cervenyUjezd 190 / 190 / 190, 380 transitions, 10 failed reservati
    (2026-11-08) ended `TERMINATED_EARLY` at 285 s on #1390. Here all 10 LLM runs complete naturally
    and move 79 of 80 trains. Destination quality is close to the control arm: 69 vs 72 trains leave by their timetable
    exit.
-2. **The pass rate is 0/10 for one reason: C7.** Every LLM run has rule-fallback-authored actions
-   (67 `RULE_FALLBACK` ticks, 4–11 per run). This is the same blocker as on Červený Újezd (#1155:
-   0/10 in all three campaigns, C7 never clean). The other `runPassed` terms hold in 8 of 10 runs
-   (9 of 10 runs; seed 7 falls just under the 0.8 actionable-tick rate with 0.795).
+2. **The pass rate is 0/10 because no run is C7-clean.** Every LLM run has rule-fallback-authored
+   actions (67 `RULE_FALLBACK` ticks, 4–11 per run). This is the same blocker as on Červený Újezd
+   (#1155: 0/10 in all three campaigns, C7 never clean). Every other `runPassed` term holds in 9 of
+   10 runs; seed 7 also falls just under the 0.8 actionable-tick rate with 0.795, so clearing C7
+   alone would pass at most 9 of 10 runs.
 3. **Two class-A trains that the log labels "blind" in the LLM arm (seeds 1 and 5), none in the
    control arm.** The LLM does see the #1387 pick: the NEXT SECTION line comes from
    `chosenTargetName()`, that is `ReservationTargetPolicy.pick` with the exit-reachability
