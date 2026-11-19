@@ -92,7 +92,8 @@ interface PathReservationService :
 	 *
 	 * ## Failure Cases
 	 *
-	 * - **NoPathExists**: No topological route exists between start and target
+	 * - **NoPathExists**: No switch-legal route between start and target (none exists, or the bounded
+	 *   search exceeded its budget; Issue #1385)
 	 * - **AllPathsBlocked**: Route(s) exist but all are occupied/reserved
 	 * - **Conflict**: Attempted to reserve block already owned by different train
 	 * - **NonContiguousStart**: The start separator is nowhere near the requesting train
@@ -113,9 +114,11 @@ interface PathReservationService :
 		) : ReservationResult()
 
 		/**
-		 * No topological path exists between start and target.
+		 * No switch-legal route between start and target: none exists, or the bounded search exceeded
+		 * its budget (Issue #1385).
 		 *
-		 * This indicates a network topology issue (dead-end, disconnected network).
+		 * This indicates a network topology issue (dead-end, disconnected network, or a pair whose only
+		 * paths reverse through a switch); it does not change on retry.
 		 */
 		data object NoPathExists : ReservationResult()
 

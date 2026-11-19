@@ -141,7 +141,10 @@ class PathReservationMultiTrainRaceConditionsTest : PathReservationServiceTestBa
 			assertBlockOwnership("train2", train2Blocks)
 		} else {
 			// Train2 failed - verify it owns no blocks
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			// reservePathToAny reports the LAST target's verdict, a grid-order semaphore. Issue #1385: its
+			// switch-legal candidates are all geometric, so the verdict is GeometricallyImpossible (it was
+			// AllPathsBlocked while a blocked switch-blind phantom candidate was in the mix).
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 			val train2Blocks = service.getReservedBlocks("train2")
 			assertThat(train2Blocks).isEmpty()
 
@@ -299,7 +302,10 @@ class PathReservationMultiTrainRaceConditionsTest : PathReservationServiceTestBa
 			assertBlockOwnership("train2", train2Blocks.toList())
 		} else {
 			// If train2 failed, verify it owns no blocks
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+			// reservePathToAny reports the LAST target's verdict, a grid-order semaphore. Issue #1385: its
+			// switch-legal candidates are all geometric, so the verdict is GeometricallyImpossible (it was
+			// AllPathsBlocked while a blocked switch-blind phantom candidate was in the mix).
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 			val train2Blocks = service.getReservedBlocks("train2")
 			assertThat(train2Blocks).isEmpty()
 		}

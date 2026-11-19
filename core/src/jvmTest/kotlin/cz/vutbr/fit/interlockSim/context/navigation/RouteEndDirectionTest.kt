@@ -162,12 +162,11 @@ class RouteEndDirectionTest : PathReservationServiceTestBase() {
 
 		val result = service.reservePath(trainId, separatorNamed("zA"), separatorNamed(ownTrackEnd))
 
-		// Issue #1066: of the two candidates, one ends rear-facing (G8, screened) and the other does
-		// not continue the held A -> B route, so it is skipped before it touches anything. The
-		// request is refused as DivergesFromHeldRoute (previously GeometricallyImpossible, because
-		// the second candidate was only rejected later, after it had reserved and thrown switches).
+		// Issue #1385: the one switch-legal candidate ends rear-facing (G8, screened), so the request is
+		// refused as GeometricallyImpossible. The divergent second candidate of Issue #1066 (refused as
+		// DivergesFromHeldRoute until then) was a switch-blind phantom and is no longer enumerated.
 		assertThat(result, "result of zA -> $ownTrackEnd for a train holding A -> B")
-			.isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 		assertThat(registry.getBlocks(trainId), "blocks held after the refusal").isEqualTo(heldBefore)
 	}
 

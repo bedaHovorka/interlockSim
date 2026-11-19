@@ -532,15 +532,21 @@ class PathReservationOrientedSeparatorOverloadTest : PathReservationServiceTestB
 	 * Without this, the AND could be satisfied vacuously or the downgrade could swallow every
 	 * geometric result, and `InOutWorker` would spin on `waitUntil(pathFree)` forever instead
 	 * of failing fast on a misconfigured network — the failure mode Issue #903 fixed. The
-	 * `doB1 -> doB2` diversion on `vyhybna.xml` has exactly one candidate and it needs the
-	 * unconfigurable `vB` join, so `count == attemptedPaths` holds and the verdict stands.
+	 * `doB1 -> doB2` diversion on `vyhybna.xml` has exactly one switch-blind candidate and it needs
+	 * the unconfigurable `vB` join, so `count == attemptedPaths` holds and the verdict stands.
+	 *
+	 * Issue #1385: the public request no longer enumerates that candidate (no switch-legal route
+	 * exists) and is the equally permanent `NoPathExists`; the gate is fed the switch-blind candidate
+	 * through the caller-supplied-paths overload.
 	 */
 	@Test
 	fun `an attempt whose every candidate is geometric still reports impossible`() {
 		val doB1 = findSemaphoreByName("doB1")
 		val doB2 = findSemaphoreByName("doB2")
 
-		val result = service.reservePath("all-geometric-train", doB1, doB2)
+		assertThat(service.reservePath("all-geometric-train", doB1, doB2), name = "public request")
+			.isInstanceOf<PathReservationService.ReservationResult.NoPathExists>()
+		val result = reservePathOverSwitchBlindCandidates("all-geometric-train", doB1, doB2)
 
 		assertThat(result)
 			.withMessage(

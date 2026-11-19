@@ -24,7 +24,6 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.util.Point
@@ -39,12 +38,12 @@ import java.util.concurrent.TimeUnit
 /**
  * Pins the work [DefaultPathReservationService.reservePathToAny] no longer repeats:
  * the semaphore grid scan (Issue #965, [ReservationTargetDiscovery]'s since SP12.5) and the
- * second topological path enumeration per InOut target (Issue #966).
+ * second candidate path enumeration per InOut target (Issue #966; switch-constrained since Issue #1385).
  */
 @DisplayName("reservePathToAny de-duplication")
 class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 	private fun newService(navigator: TopologyNavigator = this.navigator): DefaultPathReservationService =
-		DefaultPathReservationService(navigator, simulationContext, registry, pathInfoBuilder, routeFinder)
+		serviceOf(navigator)
 
 	/**
 	 * The grid scan the service used to run on every call: column by column, top to bottom.
@@ -102,22 +101,6 @@ class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 		}
 	}
 
-	/** Counts [findAllTopologicalPaths] calls per (start, target) pair. */
-	private class CountingNavigator(
-		private val real: TopologyNavigator
-	) : TopologyNavigator by real {
-		val calls = mutableMapOf<Pair<PathSeparator, PathSeparator>, Int>()
-
-		override fun findAllTopologicalPaths(
-			start: PathSeparator,
-			target: PathSeparator,
-			maxDepth: Int
-		): List<List<TrackSection>> {
-			calls.merge(start to target, 1, Int::plus)
-			return real.findAllTopologicalPaths(start, target, maxDepth)
-		}
-	}
-
 	@Nested
 	@DisplayName("path reuse (Issue #966)")
 	inner class PathReuse {
@@ -128,14 +111,14 @@ class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 			val zA = semaphoreZA()
 			// Order from XML: [0]=B at X=30, [1]=A at X=11; zA faces towards B
 			val inOutB = simulationContext.toDynamic(simulationContext.getInOuts().toList()[0])
-			val counting = CountingNavigator(navigator)
+			val counting = RecordingNavigator(navigator)
 			val service = newService(counting)
 
 			val viaPublic = service.reservePath("train1", zA, inOutB)
 			val publicBlocks = (viaPublic as PathReservationService.ReservationResult.Success).reservedBlocks
 			service.releasePath("train1")
 
-			val precomputed = navigator.findAllTopologicalPaths(zA, inOutB)
+			val precomputed = navigator.findAllSwitchConstrainedPaths(zA, inOutB)
 			counting.calls.clear()
 			val viaOverload = service.reservePath("train1", zA, inOutB, 100, lazyOf(precomputed))
 
@@ -147,7 +130,7 @@ class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 
 		@Test
 		fun `reservePathToAny enumerates each InOut target at most once on vyhybna`() {
-			val counting = CountingNavigator(navigator)
+			val counting = RecordingNavigator(navigator)
 			val service = newService(counting)
 
 			service.reservePathToAny("train1", semaphoreZA())
@@ -169,7 +152,7 @@ class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 					.use { simulationContextFactory.createContext(it) }
 					.let { it as DefaultSimulationContext }
 					.tracked()
-			val counting = CountingNavigator(cervenyUjezd.scope.get())
+			val counting = RecordingNavigator(cervenyUjezd.scope.get())
 			val service =
 				DefaultPathReservationService(
 					counting,

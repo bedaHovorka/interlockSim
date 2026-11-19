@@ -15,21 +15,14 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import assertk.assertions.startsWith
-import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
-import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.testutil.warnMessages
 import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.core.component.get
 
 /**
  * Issue #1378 (engine layer, traffic-simulation-expert ruling): a route must START at a signal
@@ -43,18 +36,12 @@ import org.koin.core.component.get
  * `S15` (east end). A train arriving from the south stands on `k6` at `S9`; `S9 -> S15` asks it to
  * reverse onto its own block.
  *
- * Extends [PathReservationServiceTestBase] with a Praha fixture override (Issue #1394): the network
- * comes from [loadTestContext] and the base's InOut-count assertion from [expectedInOutCount], so the
- * lookups, `occupy` and the log capture are the base's, not private copies.
+ * Extends [PrahaPathReservationTestBase] (the Praha fixture override of Issue #1394, shared since the
+ * Issue #1385 review round), so the lookups, `occupy` and the log capture are the base's, not private
+ * copies.
  */
 @Tag("integration-test")
-class PathReservationStartDirectionPrahaTest : PathReservationServiceTestBase() {
-	override fun loadTestContext(): DefaultSimulationContext =
-		CommonTestFixtures.parseSimulationContext(NetworkResources.PRAHA_HLAVNI_NADRAZI_STATION_XML, get())
-
-	/** The Praha station asset has eleven InOuts, not the base's default two. */
-	override val expectedInOutCount: Int = PRAHA_IN_OUTS
-
+class PathReservationStartDirectionPrahaTest : PrahaPathReservationTestBase() {
 	@Test
 	fun `a route from S9 back onto the train's own platform track is geometrically impossible`() {
 		val k6 = blockBetween(S9, S15)
@@ -66,7 +53,7 @@ class PathReservationStartDirectionPrahaTest : PathReservationServiceTestBase() 
 		lateinit var result: PathReservationService.ReservationResult
 		withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
 			result = service.reservePath(TRAIN, s9, findSemaphoreByName(S15))
-			summaries = serviceLog.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+			summaries = serviceLog.warnMessages()
 		}
 
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
@@ -88,11 +75,13 @@ class PathReservationStartDirectionPrahaTest : PathReservationServiceTestBase() 
 			withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
 				val result = service.reservePath(TRAIN, findSemaphoreByName(S2), findSemaphoreByName(S11))
 
-				// Every candidate is permanent: eastward ones leave S2 from behind (Step 1.4), westward
-				// ones end at S11 from behind (G8) or need a reversal no switch joins (Issue #742).
-				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
-				assertThat(warnCount(switchLog), name = "SwitchConfigurator WARN lines").isEqualTo(0)
-				assertThat(warnCount(serviceLog), name = "service WARN lines").isLessThanOrEqualTo(1)
+				// Issue #1385: S2 -> S11 has no switch-legal route. The switch-blind listing had 20 480
+				// candidates, every one permanent (Step 1.4, G8 or a #742 reversal no switch joins), and the
+				// request ended GeometricallyImpossible; the switch-constrained enumeration lists none, so it
+				// ends NoPathExists with its one refusal line and no candidate ever reaches a switch.
+				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.NoPathExists>()
+				assertThat(switchLog.warnMessages(), name = "SwitchConfigurator WARN lines").isEmpty()
+				assertThat(serviceLog.warnMessages().size, name = "service WARN lines").isEqualTo(1)
 			}
 		}
 	}
@@ -116,12 +105,14 @@ class PathReservationStartDirectionPrahaTest : PathReservationServiceTestBase() 
 		var summary = ""
 		lateinit var result: PathReservationService.ReservationResult
 		withLogOf(DefaultPathReservationService::class.java.name) { serviceLog ->
-			result = service.reservePath(TRAIN, findSemaphoreByName(S9), inOutNamed(N_VYS_1))
+			result = reservePathOverSwitchBlindCandidates(TRAIN, findSemaphoreByName(S9), inOutNamed(N_VYS_1))
 			summary = serviceLog.list.single { it.formattedMessage.startsWith(SUMMARY_PREFIX) }.formattedMessage
 		}
 
-		// S9 -> N-Vys-1 has candidates leaving S9 eastwards onto k6 (Step 1.4) and westwards over
-		// SW24, which the other train blocks: a mix, so the request stays retryable contention.
+		// S9 -> N-Vys-1 has switch-blind candidates leaving S9 eastwards onto k6 (Step 1.4) and westwards
+		// over SW24, which the other train blocks: a mix, so the request stays retryable contention. Since
+		// Issue #1385 the public request enumerates only the switch-legal westward ones (the eastward
+		// ones reverse through a switch), so the mix is fed through the caller-supplied-paths overload.
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 		val counts = SUMMARY_COUNTS.find(summary)
 		assertThat(counts, name = "summary counts in: $summary").isNotNull()
@@ -130,19 +121,8 @@ class PathReservationStartDirectionPrahaTest : PathReservationServiceTestBase() 
 		assertThat(summary, name = "first geometric reason").contains("(first: Route origin '$S9' faces away")
 	}
 
-	private fun warnCount(appender: ListAppender<ILoggingEvent>): Int = appender.list.count { it.level == Level.WARN }
-
 	private companion object {
-		const val PRAHA_IN_OUTS = 11
-		const val TRAIN = "Train #2"
 		const val OTHER_TRAIN = "Train #1"
-		const val S2 = "S2"
-		const val S5 = "S5"
-		const val S9 = "S9"
-		const val S11 = "S11"
-		const val S15 = "S15"
-		const val SW24 = "SW24"
-		const val N_VYS_1 = "N-Vys-1"
 		const val SUMMARY_PREFIX = "reservePath: refused '$TRAIN' $S9 -> $N_VYS_1: "
 		val SUMMARY_COUNTS = Regex("""(\d+) geometric \(first: .*\), \d+ divergent, (\d+) blocked of""")
 	}

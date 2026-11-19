@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -21,6 +23,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
+import cz.vutbr.fit.interlockSim.testutil.warnMessages
+import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
@@ -120,6 +124,31 @@ class ForwardSectionResolutionTest : PathReservationServiceTestBase() {
 			assertThat(registry.getPathInfo(trainId)?.target, name = "reserved target from $start")
 				.isEqualTo(target)
 			service.releasePath(trainId)
+		}
+	}
+
+	/**
+	 * Issue #1385 follow-up (screen-cost item 3): the START screen's facing list treats a missing
+	 * forward section as a silent `none`, so it resolves the section through the log-free form; the
+	 * default form keeps its WARN on both failure branches.
+	 */
+	@Test
+	fun `only the default form warns when a failure branch yields no forward section`() {
+		for (environment in listOf(NoLocationEnvironment(simulationContext), NoEdgeEnvironment(simulationContext))) {
+			val discovery = ReservationTargetDiscovery(navigator, environment)
+			// Two blocks per environment: `withLogOf` detaches its appender in `finally`, so the second
+			// block starts from an empty capture and the two runs cannot see each other's WARN lines.
+			withLogOf(ReservationTargetDiscovery::class.java.name) { log ->
+				assertThat(
+					discovery.resolveForwardSection(semaphoreZA, "test", warnOnMiss = false),
+					name = "log-free result"
+				).isNull()
+				assertThat(log.warnMessages(), name = "log-free WARN lines").isEmpty()
+			}
+			withLogOf(ReservationTargetDiscovery::class.java.name) { log ->
+				discovery.resolveForwardSection(semaphoreZA, "test")
+				assertThat(log.warnMessages(), name = "default WARN lines").hasSize(1)
+			}
 		}
 	}
 }

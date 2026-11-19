@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
@@ -36,3 +37,7 @@ fun withLogOf(
 		logger.detachAppender(appender)
 	}
 }
+
+/** The formatted messages of the WARN events [this] captured, in capture order. */
+fun ListAppender<ILoggingEvent>.warnMessages(): List<String> =
+	list.filter { it.level == Level.WARN }.map { it.formattedMessage }

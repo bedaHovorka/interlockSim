@@ -28,7 +28,6 @@ import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorLabel
@@ -238,7 +237,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 					.isEqualTo(
 						simulationContext.scope
 							.get<TopologyNavigator>()
-							.findAllTopologicalPaths(zA, attempt.target, DEFAULT_MAX_PATH_DEPTH)
+							.findAllSwitchConstrainedPaths(zA, attempt.target, DEFAULT_MAX_PATH_DEPTH)
 					)
 			}
 		}
@@ -432,31 +431,15 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		}
 	}
 
-	/** Counts [TopologyNavigator.findAllSwitchConstrainedPaths] calls: one per availability evaluation. */
-	private class AvailabilityCountingNavigator(
-		private val real: TopologyNavigator
-	) : TopologyNavigator by real {
-		var evaluations = 0
-
-		override fun findAllSwitchConstrainedPaths(
-			start: PathSeparator,
-			target: PathSeparator,
-			maxDepth: Int
-		): List<List<TrackSection>> {
-			evaluations++
-			return real.findAllSwitchConstrainedPaths(start, target, maxDepth)
-		}
-	}
-
 	@Nested
 	@DisplayName("the shared next-target primitive (Issue #1208)")
 	inner class NextTargetPrimitive {
-		private lateinit var counting: AvailabilityCountingNavigator
+		private lateinit var counting: RecordingNavigator
 		private lateinit var discovery: ReservationTargetDiscovery
 
 		@BeforeEach
 		fun createCountingDiscovery() {
-			counting = AvailabilityCountingNavigator(simulationContext.scope.get())
+			counting = RecordingNavigator(simulationContext.scope.get())
 			discovery = ReservationTargetDiscovery(counting, simulationContext)
 		}
 

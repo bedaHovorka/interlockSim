@@ -199,8 +199,12 @@ class Issue1076RegressionTest : PathReservationServiceTestBase() {
 
 		// When: the candidate asks for the impossible diversion doB1 -> doB2 (the Issue #742
 		// shape). The route runs back over k1 to vA and on to k2, and no configuration of vA
-		// joins branch k1 to branch k2, so the required configuration is null.
-		val diversion = service.reservePath(CANDIDATE, semaphoreDoB1, semaphoreDoB2)
+		// joins branch k1 to branch k2, so the required configuration is null. Since Issue #1385
+		// the public request lists no such candidate (NoPathExists), so the guard is fed the
+		// switch-blind candidate through the caller-supplied-paths overload.
+		assertThat(service.reservePath(CANDIDATE, semaphoreDoB1, semaphoreDoB2), name = "public request")
+			.isInstanceOf<PathReservationService.ReservationResult.NoPathExists>()
+		val diversion = reservePathOverSwitchBlindCandidates(CANDIDATE, semaphoreDoB1, semaphoreDoB2)
 
 		// Then: the permanent geometric impossibility (#742) wins. The ownership guard must not
 		// turn it into retryable contention that a live foreign owner would never resolve, so the
