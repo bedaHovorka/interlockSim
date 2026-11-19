@@ -39,10 +39,27 @@ import kotlin.concurrent.thread
  * A held request waits at most 30 s for the client to close; if the client never does, the close
  * measure ([awaitCloseLatencyAfter]) reports `null`.
  *
+ * ## One-slot mode (Issue #1340)
+ *
+ * With [heldRequest] set the fixture behaves like Ollama with one slot (`llama-server -np 1`) and
+ * one runaway generation: requests before [heldRequest] are answered at once, request [heldRequest]
+ * never ends, and every later request queues for the slot — it is answered only once the client has
+ * closed the held connection and [slotReleaseDelayMillis] has passed since that close (the server
+ * cancelling the generation and releasing the slot; about 1 s on the live Ollama check of #1341).
+ * If the client never closes the held connection, a queued request is never answered either. Without
+ * [heldRequest] (the default) the fixture keeps its original shape: request 1 answered, every later
+ * request held.
+ *
  * @property answerBody Body of the answering response; defaults to a completed `/api/chat` reply.
+ * @property heldRequest 1-based index of the one request to hold in one-slot mode, or `null` for the
+ *   original answer-the-first, hold-the-rest shape.
+ * @property slotReleaseDelayMillis One-slot mode only: how long after the held connection closes the
+ *   slot frees for the queued requests.
  */
 class HoldingOllamaServer(
-	private val answerBody: String = ANSWER_BODY
+	private val answerBody: String = ANSWER_BODY,
+	private val heldRequest: Int? = null,
+	private val slotReleaseDelayMillis: Long = 0
 ) : AutoCloseable {
 	companion object {
 		/** Ollama holds a runaway generation for minutes; 30 s is far past any test cycle timeout. */
@@ -72,6 +89,8 @@ class HoldingOllamaServer(
 		get() = heldClosedAt.get().takeIf { it >= 0 }
 
 	init {
+		require(heldRequest == null || heldRequest >= 1) { "heldRequest is 1-based, was $heldRequest" }
+		require(slotReleaseDelayMillis >= 0) { "slotReleaseDelayMillis must not be negative" }
 		thread(isDaemon = true, name = "holding-ollama-accept") {
 			while (!serverSocket.isClosed) {
 				val socket =
@@ -109,18 +128,47 @@ class HoldingOllamaServer(
 	private fun serve(socket: Socket) {
 		socket.use {
 			val input = BufferedInputStream(socket.getInputStream())
-			while (readRequest(input)) {
-				if (requestCount.incrementAndGet() <= 1) {
-					answer(socket)
-				} else {
-					hold(socket, input)
-					return
+			try {
+				while (readRequest(input)) {
+					val index = requestCount.incrementAndGet()
+					val answered =
+						when {
+							heldRequest == null -> if (index <= 1) answer(socket) else false
+							index < heldRequest -> answer(socket)
+							index == heldRequest -> false
+							awaitSlot() -> answer(socket)
+							else -> {
+								// The slot never freed: the queued request stays unanswered too, but it is
+								// not the held one, so its close is not measured.
+								awaitClientClose(socket, input)
+								return
+							}
+						}
+					if (!answered) {
+						hold(socket, input)
+						return
+					}
 				}
+			} catch (_: IOException) {
+				// The client gave up on a queued request before the slot freed; nothing to serve.
 			}
 		}
 	}
 
-	private fun answer(socket: Socket) {
+	/**
+	 * One-slot mode: waits until the held connection has closed and the slot-release delay has passed
+	 * since; returns `false` when the held connection is still open after the whole hold.
+	 */
+	private fun awaitSlot(): Boolean {
+		if (!heldClosed.await(DEFAULT_HOLD_MILLIS.toLong(), TimeUnit.MILLISECONDS)) return false
+		val freeAt = heldClosedAt.get() + slotReleaseDelayMillis * NANOS_PER_MILLI
+		val waitNanos = freeAt - System.nanoTime()
+		if (waitNanos > 0) TimeUnit.NANOSECONDS.sleep(waitNanos)
+		return true
+	}
+
+	/** Writes the answering response; always `true`, so [serve] can chain it as "answered". */
+	private fun answer(socket: Socket): Boolean {
 		val body = answerBody.toByteArray()
 		val head =
 			"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n" +
@@ -130,6 +178,7 @@ class HoldingOllamaServer(
 			write(body)
 			flush()
 		}
+		return true
 	}
 
 	private fun hold(
@@ -146,6 +195,18 @@ class HoldingOllamaServer(
 			// Still open after the whole hold: awaitCloseLatencyAfter keeps reporting null.
 		} catch (_: IOException) {
 			markClosed()
+		}
+	}
+
+	private fun awaitClientClose(
+		socket: Socket,
+		input: InputStream
+	) {
+		socket.soTimeout = DEFAULT_HOLD_MILLIS
+		try {
+			input.read()
+		} catch (_: IOException) {
+			// Closed, reset or timed out: either way the queued request is over.
 		}
 	}
 
