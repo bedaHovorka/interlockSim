@@ -131,22 +131,26 @@ class HoldingOllamaServer(
 			try {
 				while (readRequest(input)) {
 					val index = requestCount.incrementAndGet()
-					val answered =
-						when {
-							heldRequest == null -> if (index <= 1) answer(socket) else false
-							index < heldRequest -> answer(socket)
-							index == heldRequest -> false
-							awaitSlot() -> answer(socket)
-							else -> {
-								// The slot never freed: the queued request stays unanswered too, but it is
-								// not the held one, so its close is not measured.
-								awaitClientClose(socket, input)
+					when {
+						heldRequest == null ->
+							if (index <= 1) {
+								answer(socket)
+							} else {
+								hold(socket, input)
 								return
 							}
+						index < heldRequest -> answer(socket)
+						index == heldRequest -> {
+							hold(socket, input)
+							return
 						}
-					if (!answered) {
-						hold(socket, input)
-						return
+						awaitSlot() -> answer(socket)
+						else -> {
+							// The slot never freed: the queued request stays unanswered too, but it is
+							// not the held one, so its close is not measured.
+							awaitClientClose(socket, input)
+							return
+						}
 					}
 				}
 			} catch (_: IOException) {
@@ -167,8 +171,8 @@ class HoldingOllamaServer(
 		return true
 	}
 
-	/** Writes the answering response; always `true`, so [serve] can chain it as "answered". */
-	private fun answer(socket: Socket): Boolean {
+	/** Writes the answering response. */
+	private fun answer(socket: Socket) {
 		val body = answerBody.toByteArray()
 		val head =
 			"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n" +
@@ -178,7 +182,6 @@ class HoldingOllamaServer(
 			write(body)
 			flush()
 		}
-		return true
 	}
 
 	private fun hold(

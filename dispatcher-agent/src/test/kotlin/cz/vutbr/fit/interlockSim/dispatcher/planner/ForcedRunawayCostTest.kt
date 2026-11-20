@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
-import assertk.assertions.isLessThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
@@ -24,8 +23,11 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.executor.HoldingOllamaServer
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.CONTROL_STEP
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.SelfPacedSimClock
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.SleepingPacingRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.assertThrottleArgsWithinBound
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.runProcessedCycles
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
@@ -118,14 +120,8 @@ class ForcedRunawayCostTest {
 		 */
 		const val SIM_SPEED = 4.0
 
-		/** `ShuntingLoop`'s control step: one tick per 2 sim s. */
-		const val CONTROL_STEP = 2.0
-
 		/** Signal mode: one control step of the driver's wake-up lag on top of the polling bound. */
 		const val SIGNAL_LAG_STEPS = 1
-
-		/** Upper bound on [AgentLoopDriver.runCycle] calls, short-circuited ones included. */
-		const val MAX_RUN_CYCLE_CALLS = 100_000
 	}
 
 	private val observation =
@@ -178,13 +174,7 @@ class ForcedRunawayCostTest {
 				assertThat(breakerOpenings, "circuit-breaker openings").isEqualTo(0L)
 				assertThat(firstAnsweredAfterRunaway, "first answered cycle after the runaway").isEqualTo(3)
 			} finally {
-				// End-of-run teardown the way production does it (DispatcherRunLifecycle): releaseAgent
-				// closes the adapter's cached agent; the retained close covers the instance the adapter
-				// never cached. Both reach the same real instance here, and that close is idempotent
-				// (AtomicBoolean), so the second is a no-op.
-				adapter.releaseAgent()
-				runBlocking { agent.close() }
-				executor.close()
+				closeAdapterChain(adapter, agent, executor = executor)
 			}
 		}
 	}
@@ -227,12 +217,7 @@ class ForcedRunawayCostTest {
 			assertThat(adapter.circuitBreaker.openCount, "circuit-breaker openings").isEqualTo(0L)
 			coVerify(exactly = 1) { agentFactory.createAgent(any()) }
 		} finally {
-			// The way production tears a run down (DispatcherRunLifecycle): releaseAgent closes what
-			// the adapter holds — here nothing — and the retained close covers the instance the
-			// adapter never cached. The real close is idempotent (AtomicBoolean), so on the cached
-			// paths below both calls reach the same instance harmlessly.
-			adapter.releaseAgent()
-			runBlocking { retained.close() }
+			closeAdapterChain(adapter, retained)
 		}
 		assertThat(retained.closeCalls, "close calls on the retained agent the adapter never cached")
 			.isEqualTo(1)
@@ -284,19 +269,12 @@ class ForcedRunawayCostTest {
 					)
 				publisher?.start()
 
-				runBlocking {
-					var calls = 0
-					while (ticks.size < CYCLES && calls < MAX_RUN_CYCLE_CALLS) {
-						calls++
-						driver.runCycle()
-					}
-				}
+				runProcessedCycles(driver, CYCLES)
 
 				val outcomes = ticks.map { it.outcome }
 				val periods = ticks.map { it.simTime }.zipWithNext { a, b -> b - a }
 				val fallbackCycles = outcomes.count { it == TickOutcome.RULE_FALLBACK }
 				val breakerOpenings = adapter.circuitBreaker.openCount
-				val afterRunaway = pacing.throttleDeltas.drop(1)
 				val perCycleBound = CONTROL_STEP * (1 + if (signalled) SIGNAL_LAG_STEPS else 0)
 				println(
 					"Issue #1340 driver level (${if (signalled) "signal" else "polling"} mode): forced runaway " +
@@ -311,20 +289,9 @@ class ForcedRunawayCostTest {
 				assertThat(fallbackCycles, "fallback cycles").isEqualTo(1)
 				assertThat(breakerOpenings, "circuit-breaker openings").isEqualTo(0L)
 				// PACE never sleeps again for the sim time the runaway already spent on the wall clock.
-				afterRunaway.forEachIndexed { i, delta ->
-					assertThat(delta, "throttle argument of cycle ${i + 2}").isLessThanOrEqualTo(perCycleBound)
-				}
-				assertThat(afterRunaway.sum(), "throttle arguments of cycles 2..$CYCLES, summed")
-					.isLessThanOrEqualTo((CYCLES - 1) * perCycleBound)
+				assertThrottleArgsWithinBound(pacing.throttleDeltas, perCycleBound, 1)
 			} finally {
-				// End-of-run teardown the way production does it (DispatcherRunLifecycle): releaseAgent
-				// closes the adapter's cached agent; the retained close covers the instance the adapter
-				// never cached. Both reach the same real instance here, and that close is idempotent
-				// (AtomicBoolean), so the second is a no-op.
-				adapter.releaseAgent()
-				runBlocking { agent.close() }
-				publisher?.close()
-				executor.close()
+				closeAdapterChain(adapter, agent, publisher, executor)
 			}
 		}
 	}
@@ -420,5 +387,26 @@ class ForcedRunawayCostTest {
 			ActuatorCommandQueue(),
 			SinkHolder()
 		) to agent
+	}
+
+	/**
+	 * End-of-run teardown the way production does it (DispatcherRunLifecycle):
+	 * [KoogAgentPlanAdapter.releaseAgent] closes the agent the adapter cached; the [agent] close
+	 * covers the instance the adapter never cached. On the cached paths both reach the same real
+	 * instance, and that close is idempotent (AtomicBoolean), so the second is a no-op. The other
+	 * closables are optional because each test passes only the parts its scenario built: the
+	 * pre-cache failure test holds just the retained agent, the adapter-level test the executor,
+	 * the driver-level tests the step publisher on top of the executor.
+	 */
+	private fun closeAdapterChain(
+		adapter: KoogAgentPlanAdapter,
+		agent: KoogDispatchAgent? = null,
+		publisher: AutoCloseable? = null,
+		executor: OllamaSimpleExecutor? = null
+	) {
+		adapter.releaseAgent()
+		agent?.let { runBlocking { it.close() } }
+		publisher?.close()
+		executor?.close()
 	}
 }
