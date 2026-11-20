@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
+import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.executor.HoldingOllamaServer
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
@@ -32,6 +33,7 @@ import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -135,6 +137,7 @@ class ForcedRunawayCostTest {
 		)
 
 	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun `one runaway generation costs one fallback cycle and no breaker opening`() {
 		HoldingOllamaServer(
 			heldRequest = HELD_REQUEST,
@@ -142,8 +145,8 @@ class ForcedRunawayCostTest {
 		).use { server ->
 			val config = OllamaExecutorConfig(ollamaEndpoint = server.baseUrl)
 			val executor = OllamaSimpleExecutor(config)
+			val (adapter, agent) = adapterOver(executor, config)
 			try {
-				val adapter = adapterOver(executor, config)
 				val ticks = CopyOnWriteArrayList<TickRecord>()
 				adapter.addTickListener { ticks.add(it) }
 
@@ -175,9 +178,64 @@ class ForcedRunawayCostTest {
 				assertThat(breakerOpenings, "circuit-breaker openings").isEqualTo(0L)
 				assertThat(firstAnsweredAfterRunaway, "first answered cycle after the runaway").isEqualTo(3)
 			} finally {
+				// End-of-run teardown the way production does it (DispatcherRunLifecycle): releaseAgent
+				// closes the adapter's cached agent; the retained close covers the instance the adapter
+				// never cached. Both reach the same real instance here, and that close is idempotent
+				// (AtomicBoolean), so the second is a no-op.
+				adapter.releaseAgent()
+				runBlocking { agent.close() }
 				executor.close()
 			}
 		}
+	}
+
+	/**
+	 * The pre-cache failure path of the teardown: the adapter's agent factory creates an agent and
+	 * then fails — the shape of [plan]'s agent-creation try/catch, whose comment names the real
+	 * case (the factory runs `OllamaModelPrewarmer.warmUp`, real network I/O that can fail).
+	 * `getOrCreateAgent` caches what the factory returns, so a factory exception lands before the
+	 * cache assignment ever runs: the adapter holds nothing and reports an ordinary counted
+	 * fallback. [retained] stands for the agent instance the factory built and dropped — held only
+	 * by this test — so the finally's retained-agent close is the only close that can ever reach
+	 * it, and the [ClosingCountingAgent.close] call count proves it ran (an uncached agent would
+	 * otherwise leak into the rest of the suite's JVM).
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `a pre-cache planning failure still closes the retained agent`() {
+		val retained = ClosingCountingAgent()
+		val agentFactory = mockk<KoogAgentFactory>()
+		coEvery { agentFactory.createAgent(any()) } throws IllegalStateException("agent built, pre-warm request failed")
+		val fallback = mockk<Dispatcher>()
+		every { fallback.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		val adapter =
+			KoogAgentPlanAdapter(
+				agentFactory,
+				mockk<DefaultSimulationContext>(),
+				fallback,
+				CYCLE_TIMEOUT,
+				ActuatorCommandQueue(),
+				SinkHolder()
+			)
+		val ticks = CopyOnWriteArrayList<TickRecord>()
+		adapter.addTickListener { ticks.add(it) }
+		try {
+			runBlocking { adapter.plan(observation) }
+
+			assertThat(ticks.map { it.outcome }, "tick outcome of the failed cycle")
+				.containsExactly(TickOutcome.RULE_FALLBACK)
+			assertThat(adapter.circuitBreaker.openCount, "circuit-breaker openings").isEqualTo(0L)
+			coVerify(exactly = 1) { agentFactory.createAgent(any()) }
+		} finally {
+			// The way production tears a run down (DispatcherRunLifecycle): releaseAgent closes what
+			// the adapter holds — here nothing — and the retained close covers the instance the
+			// adapter never cached. The real close is idempotent (AtomicBoolean), so on the cached
+			// paths below both calls reach the same instance harmlessly.
+			adapter.releaseAgent()
+			runBlocking { retained.close() }
+		}
+		assertThat(retained.closeCalls, "close calls on the retained agent the adapter never cached")
+			.isEqualTo(1)
 	}
 
 	@Test
@@ -206,8 +264,8 @@ class ForcedRunawayCostTest {
 			val executor = OllamaSimpleExecutor(config)
 			val clock = SelfPacedSimClock(speedMultiplier = SIM_SPEED, controlStepSeconds = CONTROL_STEP)
 			val publisher = if (signalled) StepPublisher(clock) else null
+			val (adapter, agent) = adapterOver(executor, config)
 			try {
-				val adapter = adapterOver(executor, config)
 				val perceptionPort = mockk<NetworkPerceptionPort>()
 				every { perceptionPort.snapshot() } answers {
 					emptySnapshot(publisher?.publishedSimTime ?: clock.simTime())
@@ -259,6 +317,12 @@ class ForcedRunawayCostTest {
 				assertThat(afterRunaway.sum(), "throttle arguments of cycles 2..$CYCLES, summed")
 					.isLessThanOrEqualTo((CYCLES - 1) * perCycleBound)
 			} finally {
+				// End-of-run teardown the way production does it (DispatcherRunLifecycle): releaseAgent
+				// closes the adapter's cached agent; the retained close covers the instance the adapter
+				// never cached. Both reach the same real instance here, and that close is idempotent
+				// (AtomicBoolean), so the second is a no-op.
+				adapter.releaseAgent()
+				runBlocking { agent.close() }
 				publisher?.close()
 				executor.close()
 			}
@@ -308,14 +372,34 @@ class ForcedRunawayCostTest {
 	}
 
 	/**
+	 * A [KoogDispatchAgent] test double that counts [close] calls instead of closing anything: the
+	 * pre-cache-failure test must see that the finally closed the retained agent, which the real
+	 * Koog close (best-effort; it logs and swallows) cannot report. The count is raw, not
+	 * idempotent — idempotence is the production [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgentImpl]
+	 * concern, not this double's, and here a second close would be worth seeing.
+	 */
+	private class ClosingCountingAgent : KoogDispatchAgent {
+		var closeCalls: Int = 0
+			private set
+
+		override suspend fun decideAsync(observation: DispatchObservation): List<DispatchDecision> = emptyList()
+
+		override suspend fun close() {
+			closeCalls++
+		}
+	}
+
+	/**
 	 * The production planner wired to a real Koog agent built by [DefaultAgentService] over
 	 * [executor]; only the agent factory (which would also pre-warm a real Ollama) is mocked. The
 	 * fallback returns [DispatchDecision.NoAction], so a fallback cycle is visible only in its tick.
+	 * Returns the adapter together with the agent instance the factory hands it, so the tests'
+	 * finally can close the agent even when the adapter never cached it.
 	 */
 	private fun adapterOver(
 		executor: OllamaSimpleExecutor,
 		config: OllamaExecutorConfig
-	): KoogAgentPlanAdapter {
+	): Pair<KoogAgentPlanAdapter, KoogDispatchAgent> {
 		val agent =
 			runBlocking {
 				DefaultAgentService(executor, config).createDispatchAgent(
@@ -335,6 +419,6 @@ class ForcedRunawayCostTest {
 			CYCLE_TIMEOUT,
 			ActuatorCommandQueue(),
 			SinkHolder()
-		)
+		) to agent
 	}
 }

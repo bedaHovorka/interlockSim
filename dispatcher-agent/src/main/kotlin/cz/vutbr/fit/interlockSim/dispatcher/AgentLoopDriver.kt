@@ -213,6 +213,16 @@ class AgentLoopDriver(
 	 */
 	private var prevSenseMark: TimeSource.Monotonic.ValueTimeMark? = null
 
+	/**
+	 * The controller's speed multiplier as the most recently processed cycle's PACE step read it, or
+	 * `null` before the first processed cycle. PACE prices the whole simDelta interval at the faster
+	 * of this and the current multiplier (Issue #1340): a speed decrease the operator makes while a
+	 * long inference blocks the driver must not price the interval at the new, slower rate — the sim
+	 * matched that interval's sim time mostly at the pre-shift rate. Driver-thread-confined, like
+	 * [prevSimTime].
+	 */
+	private var prevPaceSpeed: Double? = null
+
 	/** A sensed record and the wall clock just before it was read. */
 	private class SensedRecord(
 		val record: DispatchLoopSnapshot,
@@ -478,17 +488,27 @@ class AgentLoopDriver(
 		//
 		// Every later cycle (#1340): the wall time is measured from the previous cycle's snapshot
 		// read, not from this plan() call — simDelta spans that whole interval, and the sim already
-		// matched it on the wall clock; see runCycle's KDoc. The current speed multiplier converts the
-		// whole interval, so a speed change since the previous read is approximated.
+		// matched it on the wall clock; see runCycle's KDoc. The interval is priced at the faster of
+		// its two endpoint speed multipliers — the previous PACE's, kept in prevPaceSpeed, and the
+		// controller's current one — so a down-shift the operator makes while a long inference is
+		// blocking the driver prices the interval at the rate it actually mostly ran at, not at the
+		// new, slower one (2.0 → 0.1 after one 60 sim s cycle priced the whole pre-shift interval at
+		// 0.1 and made throttle() sleep again: about 570 s of wall clock). Residual: a speed that
+		// flips up and back down INSIDE one interval still under-subtracts — both endpoints are then
+		// the slow rate while the sim partly matched the fast mid-rate, so that one cycle sleeps
+		// again. Pricing the interval segment by segment needs speed-change events, which the
+		// controller does not offer.
 		controller.awaitIfPaused()
 		val simDelta = snapshot.simTime - prevSimTime
 		val wallElapsed = (prevSenseMark ?: planStart).elapsedNow()
-		val wallElapsedInSimUnits =
-			wallElapsed.toDouble(DurationUnit.SECONDS) * controller.currentSpeedMultiplier()
+		val paceSpeed = controller.currentSpeedMultiplier()
+		val pricedSpeed = max(paceSpeed, prevPaceSpeed ?: paceSpeed)
+		val wallElapsedInSimUnits = wallElapsed.toDouble(DurationUnit.SECONDS) * pricedSpeed
 		controller.throttle(max(0.0, simDelta - wallElapsedInSimUnits))
 		awaitMinimumCyclePeriod()
 		prevSimTime = snapshot.simTime
 		prevSenseMark = sensed.sensedAt
+		prevPaceSpeed = paceSpeed
 		hasProcessedSnapshot = true
 		return true
 	}

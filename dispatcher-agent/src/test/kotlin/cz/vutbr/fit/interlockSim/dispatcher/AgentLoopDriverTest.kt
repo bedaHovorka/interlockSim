@@ -49,6 +49,9 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
+import kotlin.time.DurationUnit
+import kotlin.time.TimeSource
 
 /**
  * Unit tests for [AgentLoopDriver].
@@ -710,6 +713,66 @@ class AgentLoopDriverTest {
 			assertThat(controller.lastThrottleDelta).isLessThanOrEqualTo(10.0)
 			assertThat(controller.lastThrottleDelta).isGreaterThan(5.0)
 		}
+
+		/**
+		 * The operator-side half of the same shape: the speed decrease lands while a long inference is
+		 * blocking the driver, so PACE afterwards sees a fresh, slower multiplier for an interval the
+		 * sim matched mostly at the old, fast rate. Pricing that whole interval at the new, slower rate
+		 * made `throttle()` ask for minutes of sleep again (2.0 → 0.1 after one 60 sim s cycle leaves
+		 * about 57 sim s to be slept at the new speed: about 570 s of wall clock). PACE therefore
+		 * prices every interval at the faster of its two endpoint speed multipliers — the previous
+		 * PACE's and the controller's current one — so the shift interval is priced at the rate it
+		 * actually mostly ran at.
+		 *
+		 * The pins are the same sim-time bounds as [throttleDoesNotResleepElapsedSimTime]: every
+		 * throttle argument beyond the long cycle stays within one control step, as does their sum
+		 * (the pre-fix code gives about 60 for cycle 2 — that is this test's RED). Cycle periods are
+		 * printed, never asserted, per the
+		 * [cz.vutbr.fit.interlockSim.dispatcher.planner.OllamaTimeoutAbortTest] ruling (counts and
+		 * sim-time bounds, never wall clock). The recorder never sleeps — a sleeping one would stall
+		 * this run inside exactly the minutes-long sleep the defect describes — and the sim clock
+		 * ([SpeedDroppingSimClock]) drops its speed with the controller, because the sim thread paces
+		 * itself on the same shared controller the operator's speed change reaches; it advances
+		 * continuously rather than in whole control steps, since the instant test plans give the
+		 * dropped speed no wall time to fill a whole control step with (a production inference costs
+		 * tens of seconds per cycle) and the pricing under test does not depend on the floor.
+		 */
+		@Test
+		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@DisplayName("a speed drop after a long plan() never re-prices the interval at the slow rate")
+		fun speedDropAfterLongCycleNeverRepricesTheInterval() {
+			val speed = 20.0
+			val droppedSpeed = 0.1
+			val clock = SpeedDroppingSimClock(speed, droppedSpeed)
+			val pacing = SpeedDroppingPacingRecorder(speed, droppedSpeed) { clock.drop() }
+			every { perceptionPort.snapshot() } answers { emptySnapshot(clock.simTime()) }
+			val decidedAt = mutableListOf<Double>()
+			coEvery { planner.plan(any()) } coAnswers {
+				decidedAt += firstArg<DispatchObservation>().snapshot.simTime
+				if (decidedAt.size == 1) Thread.sleep((LONG_CYCLE_SIM_SECONDS / speed * 1_000).toLong())
+				listOf(DispatchDecision.NoAction)
+			}
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, pacing)
+
+			runProcessedCycles(driver, CYCLES)
+
+			val periods = decidedAt.zipWithNext { a, b -> b - a }
+			println(
+				"Issue #1340 speed drop: decidedAt=$decidedAt periods=$periods throttle=${pacing.throttleDeltas}"
+			)
+			assertThat(pacing.speedDropped, "operator speed drop landed during the run").isTrue()
+			assertThat(decidedAt.size, "processed cycles").isEqualTo(CYCLES)
+			// Cycle 2 sees the long cycle's gap; that gap is the cost of the long cycle itself.
+			assertThat(periods[0], "sim time the long cycle took").isGreaterThan(LONG_CYCLE_SIM_SECONDS / 2)
+			// After the drop PACE never hands the slow rate the sim time the fast rate already matched:
+			// the same per-cycle bound the constant-speed pins assert (the pre-fix code gives about 60).
+			val afterDrop = pacing.throttleDeltas.drop(1)
+			afterDrop.forEachIndexed { i, delta ->
+				assertThat(delta, "throttle argument of cycle ${i + 2}").isLessThanOrEqualTo(CONTROL_STEP)
+			}
+			assertThat(afterDrop.sum(), "throttle arguments of cycles 2..$CYCLES, summed")
+				.isLessThanOrEqualTo((CYCLES - 1) * CONTROL_STEP)
+		}
 	}
 
 	// ── Signal-based pacing (SP0.11c, Issue #746) ────────────────────────────────
@@ -924,5 +987,80 @@ class AgentLoopDriverTest {
 		override fun requestResume() = Unit
 
 		override fun currentSpeedMultiplier(): Double = speedMultiplier
+	}
+
+	/**
+	 * A [SimulationController] that starts at [initialSpeedMultiplier] and drops to
+	 * [droppedSpeedMultiplier] as soon as the first PACE step has throttled — the operator's
+	 * down-shift landing between the first pace and the later ones — calling [onSpeedDropped] at
+	 * that instant so the test's sim clock drops with it (the sim thread paces itself on the same
+	 * shared controller). Records every [throttle] argument without sleeping, so the pinned
+	 * per-cycle bound is what fails first on the pre-fix code instead of the run stalling inside
+	 * the minutes-long sleep the defect is about.
+	 */
+	private class SpeedDroppingPacingRecorder(
+		private val initialSpeedMultiplier: Double,
+		private val droppedSpeedMultiplier: Double,
+		private val onSpeedDropped: () -> Unit
+	) : SimulationController {
+		/** Every [throttle] argument, in call order. */
+		val throttleDeltas: MutableList<Double> = mutableListOf()
+
+		/** Whether the drop has landed (the first [throttle] call has happened). */
+		var speedDropped = false
+			private set
+
+		override suspend fun awaitIfPaused() = Unit
+
+		override fun throttle(simDeltaSeconds: Double) {
+			if (!speedDropped) {
+				speedDropped = true
+				onSpeedDropped()
+			}
+			throttleDeltas += simDeltaSeconds
+		}
+
+		override fun isPaused(): Boolean = false
+
+		override fun pollStepEvent(): Boolean = false
+
+		override fun pollStepTime(): Double? = null
+
+		override fun requestPause() = Unit
+
+		override fun requestResume() = Unit
+
+		override fun currentSpeedMultiplier(): Double = if (speedDropped) droppedSpeedMultiplier else initialSpeedMultiplier
+	}
+
+	/**
+	 * A self-paced sim clock like [SelfPacedSimClock], but without the control-step floor: sim time
+	 * accumulates at [initialSpeedMultiplier] until [drop] ends the fast stretch, then at
+	 * [droppedSpeedMultiplier]. The sim thread paces itself on the same controller the operator's
+	 * speed change reaches, so a dropped dispatcher speed is a dropped sim speed. The floor is not
+	 * kept because the instant test plans give the dropped speed no wall time to fill a whole
+	 * control step with, while a production inference costs tens of seconds per cycle — and the
+	 * throttle pricing under test does not depend on the floor.
+	 */
+	private class SpeedDroppingSimClock(
+		private val initialSpeedMultiplier: Double,
+		private val droppedSpeedMultiplier: Double
+	) {
+		private val start = TimeSource.Monotonic.markNow()
+
+		/** Wall seconds elapsed when [drop] ended the fast stretch; `null` before it. */
+		private var elapsedAtDropSeconds: Double? = null
+
+		/** Ends the fast stretch; sim time from here on accumulates at [droppedSpeedMultiplier]. */
+		fun drop() {
+			elapsedAtDropSeconds = start.elapsedNow().toDouble(DurationUnit.SECONDS)
+		}
+
+		/** The sim time of a wall clock advancing at the multiplier the controller currently reports. */
+		fun simTime(): Double {
+			val elapsed = start.elapsedNow().toDouble(DurationUnit.SECONDS)
+			val fastSeconds = min(elapsed, elapsedAtDropSeconds ?: elapsed)
+			return fastSeconds * initialSpeedMultiplier + (elapsed - fastSeconds) * droppedSpeedMultiplier
+		}
 	}
 }
