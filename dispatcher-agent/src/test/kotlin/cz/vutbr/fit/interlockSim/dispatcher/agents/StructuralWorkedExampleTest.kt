@@ -240,17 +240,22 @@ class StructuralWorkedExampleTest : DispatcherKoinTestBase() {
 		) {
 			loadNetworkContext(NETWORK_BY_EXAMPLE.getValue(example)).use { context ->
 				val service = context.getRoutingServices().getPathReservationService()
-				val blocksPerHop =
+				// Per hop: the blocks the hop's Success reports (for the overlap check) and the blocks the hop
+				// newly added to the train (for the "adds blocks" check). A delta alone cannot show overlap: a
+				// block reserved by hop 1 and reused by hop 2 is not in hop 2's delta.
+				val hopResults =
 					expected.hops.mapIndexed { index, hop ->
 						val before = service.getReservedBlocks(TRAIN_ID).toSet()
 						val result =
 							service.reservePath(TRAIN_ID, separatorNamed(context, hop.from), separatorNamed(context, hop.to))
 						assertThat(result, "$example hop ${index + 1} ${hop.from} -> ${hop.to}")
 							.isInstanceOf<PathReservationService.ReservationResult.Success>()
-						service.getReservedBlocks(TRAIN_ID).toSet() - before
+						val reported = (result as PathReservationService.ReservationResult.Success).reservedBlocks.toSet()
+						reported to (service.getReservedBlocks(TRAIN_ID).toSet() - before)
 					}
-				assertThat(blocksPerHop.all { it.isNotEmpty() }, "$example every hop adds blocks to the train").isTrue()
-				assertThat(blocksPerHop[0].intersect(blocksPerHop[1]), "$example hop 2 blocks disjoint from hop 1").isEmpty()
+				assertThat(hopResults.all { it.second.isNotEmpty() }, "$example every hop adds blocks to the train").isTrue()
+				assertThat(hopResults[0].first.intersect(hopResults[1].first), "$example hop 2 blocks disjoint from hop 1")
+					.isEmpty()
 			}
 		}
 
