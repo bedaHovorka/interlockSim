@@ -38,6 +38,7 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.Station
+import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.mockk.every
@@ -135,7 +136,7 @@ class StructuralWorkedExampleTest : DispatcherKoinTestBase() {
 			// KoogAgentFactory binding): the unprepared fallback no longer computes it, so prepare
 			// it here exactly like the wiring does.
 			val prepared =
-				if (KoogAgentFactory.workedExampleSourceOf(variant) == WorkedExampleSource.STRUCTURAL) {
+				if (KoogAgentFactory.workedExampleSourceOf(variant).needsEntryJourney) {
 					PreparedEntryJourney.of(context)
 				} else {
 					null
@@ -171,7 +172,7 @@ class StructuralWorkedExampleTest : DispatcherKoinTestBase() {
 		) {
 			val topology =
 				loadNetworkContext(NETWORK_BY_EXAMPLE.getValue(example)).use {
-					StationTopologySerializer.describe(it, WorkedExampleSource.STRUCTURAL)
+					StationTopologySerializer.describe(it).copy(entryJourney = EntryJourneyPicker.journeyOf(it))
 				}
 
 			assertThat(topology.entryJourney, "$example journey").isEqualTo(expected)
@@ -222,18 +223,18 @@ class StructuralWorkedExampleTest : DispatcherKoinTestBase() {
 				fun offered(from: String) =
 					query.findReservationTargetCandidates(separatorNamed(context, from) as OrientedPathSeparator, null)
 				for (hop in hops) {
-					assertThat(offered(hop.from).map { it.separator.nameOf() }, "$example candidates from ${hop.from}")
+					assertThat(offered(hop.from).map { separatorName(it.separator) }, "$example candidates from ${hop.from}")
 						.contains(hop.to)
 				}
 				assertThat(hops[1].from, "hop 2 starts where hop 1 ends").isEqualTo(hops[0].to)
 				// The pick rule, checked independently: hop 1 ends at the FIRST signal offered from the
 				// home signal, hop 2 at the FIRST InOut offered from that signal (query order).
 				assertThat(
-					offered(hops[0].from).first { it.separator is DynamicRailSemaphore }.separator.nameOf(),
+					offered(hops[0].from).first { it.separator is DynamicRailSemaphore }.separator.let(::separatorName),
 					"$example first signal candidate"
 				).isEqualTo(hops[0].to)
 				assertThat(
-					offered(hops[1].from).first { it.separator is DynamicInOut }.separator.nameOf(),
+					offered(hops[1].from).first { it.separator is DynamicInOut }.separator.let(::separatorName),
 					"$example first InOut candidate"
 				).isEqualTo(hops[1].to)
 				// The home signal, checked independently from the station derivation.
@@ -513,10 +514,3 @@ class StructuralWorkedExampleTest : DispatcherKoinTestBase() {
 			.isEqualTo(KoogAgentFactory.buildSystemPrompt(3, PromptVariant.REVISED, 2))
 	}
 }
-
-private fun DynamicPathSeparator.nameOf(): String =
-	when (this) {
-		is DynamicRailSemaphore -> name
-		is DynamicInOut -> name
-		else -> toString()
-	}

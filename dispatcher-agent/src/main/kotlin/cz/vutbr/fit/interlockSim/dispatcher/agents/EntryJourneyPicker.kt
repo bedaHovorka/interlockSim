@@ -11,9 +11,9 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.sim.Station
+import cz.vutbr.fit.interlockSim.sim.separatorName
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -102,12 +102,11 @@ internal object EntryJourneyPicker {
 					}.toMap()
 			pickEntryJourney(homeSignalByInOut) { origin ->
 				val semaphore = semaphoresByName[origin] ?: return@pickEntryJourney emptyList()
+				// The query offers only forward-facing semaphores and InOuts (never a switch), so
+				// the shared separatorName never names anything else here.
 				query.findReservationTargetCandidates(semaphore, null).mapNotNull { candidate ->
-					when (val separator = candidate.separator) {
-						is DynamicRailSemaphore -> separator.name.takeIf { it.isNotBlank() }?.let { JourneyTarget(it, true) }
-						is DynamicInOut -> separator.name.takeIf { it.isNotBlank() }?.let { JourneyTarget(it, false) }
-						else -> null
-					}
+					val separator = candidate.separator
+					separatorName(separator)?.let { JourneyTarget(it, separator is DynamicRailSemaphore) }
 				}
 			}
 		}.onFailure { logger.warn(it) { "EntryJourneyPicker: structural worked example not derived" } }

@@ -25,7 +25,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.PreparedEntryJourney
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
-import cz.vutbr.fit.interlockSim.dispatcher.agents.WorkedExampleSource
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -406,9 +405,7 @@ val dispatcherAgentModule: Module =
 					// createLlmPlanner, before setMainProcess and run), so it is computed here, on that
 					// thread, and only for the variant that renders it.
 					preparedEntryJourney =
-						if (KoogAgentFactory.workedExampleSourceOf(get<DispatcherRunConfig>().promptVariant) ==
-							WorkedExampleSource.STRUCTURAL
-						) {
+						if (KoogAgentFactory.workedExampleSourceOf(get<DispatcherRunConfig>().promptVariant).needsEntryJourney) {
 							PreparedEntryJourney.of(requireContextSource())
 						} else {
 							null

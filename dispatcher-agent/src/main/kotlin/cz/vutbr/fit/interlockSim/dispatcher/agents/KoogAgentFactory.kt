@@ -583,7 +583,8 @@ class KoogAgentFactory(
 			// BASELINE and REVISED make no routing call here. REVISED_STRUCTURAL renders the journey
 			// prepared before the run (Issue #1301): this runs on the dispatcher thread while the
 			// simulation runs, and the reservation target query must not (see PreparedEntryJourney).
-			val topology = describeTopology(context)
+			val examples = workedExampleSourceOf(promptVariant)
+			val topology = describeTopology(context, examples)
 			val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
 			// The station's own admission cap, stated in the system prompt and in every cycle message.
 			val stationCapacity = stationCapacityOf(context, stationCapacityProvider()?.value)
@@ -634,7 +635,7 @@ class KoogAgentFactory(
 			val instrumentedTools = tools.map { tool -> RejectionRecordingTool(tool, ::recordRejection) }
 
 			// Serialize static topology into the system prompt once.
-			val topologyPrompt = StationTopologySerializer.toPromptText(topology, workedExampleSourceOf(promptVariant))
+			val topologyPrompt = StationTopologySerializer.toPromptText(topology, examples)
 			// Budget is read from this factory's own sinkHolder, not a hardcoded literal — see
 			// buildSystemPrompt's KDoc for why that is safe. The topology half is variant-independent
 			// on purpose (#834 AC: StationTopologySerializer is untouched by the prompt rebuild) except
@@ -666,16 +667,19 @@ class KoogAgentFactory(
 		}
 
 	/**
-	 * The static topology for [promptVariant] (Issue #1301): the structural journey comes from
+	 * The static topology for [examples] (Issue #1301): the structural journey comes from
 	 * [preparedEntryJourney], prepared by the wiring before the run. An unprepared factory does not
 	 * degrade by computing it here: [PreparedEntryJourney.of] runs the reservation target query,
 	 * which mutates navigation state confined to the simulation thread, and [createAgent] runs on
 	 * the dispatcher thread while the simulation runs. The journey stays `null` — the serializer
 	 * renders its fail-soft rule-only example — and the mis-wiring is logged at ERROR level.
 	 */
-	private fun describeTopology(context: DefaultSimulationContext): StationTopology {
+	private fun describeTopology(
+		context: DefaultSimulationContext,
+		examples: WorkedExampleSource
+	): StationTopology {
 		val topology = StationTopologySerializer.describe(context)
-		if (workedExampleSourceOf(promptVariant) != WorkedExampleSource.STRUCTURAL) return topology
+		if (!examples.needsEntryJourney) return topology
 		val prepared = preparedEntryJourney
 		if (prepared == null) {
 			logger.error {

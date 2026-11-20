@@ -105,12 +105,18 @@ data class EntryJourney(
  * The serializer never sees [PromptVariant]; [KoogAgentFactory.workedExampleSourceOf] maps a variant
  * to its source, so the topology block stays variant-independent except for this one parameter.
  */
-enum class WorkedExampleSource {
+enum class WorkedExampleSource(
+	/**
+	 * Whether the source renders [StationTopology.entryJourney], which the wiring must prepare before
+	 * the run ([PreparedEntryJourney]) and the factory must then read.
+	 */
+	val needsEntryJourney: Boolean
+) {
 	/** The examples every variant rendered before Issue #1301: the first names of each list, byte for byte. */
-	ALPHABETICAL,
+	ALPHABETICAL(needsEntryJourney = false),
 
 	/** One real journey of the station ([StationTopology.entryJourney]); never an alphabetical guess. */
-	STRUCTURAL
+	STRUCTURAL(needsEntryJourney = true)
 }
 
 /**
@@ -201,27 +207,7 @@ object StationTopologySerializer {
 	 * finder, so it is safe to call at agent-construction time. It makes no routing call and leaves
 	 * [StationTopology.entryJourney] empty.
 	 */
-	fun describe(env: SimulationEnvironment): StationTopology = describe(env, WorkedExampleSource.ALPHABETICAL)
-
-	/**
-	 * [describe] for [examples]. With [WorkedExampleSource.STRUCTURAL] it also derives
-	 * [StationTopology.entryJourney] ([EntryJourneyPicker.journeyOf]), which runs the reservation
-	 * target query: that must run before the simulation starts, on the thread that builds the run
-	 * (Issue #1301). `internal` so no caller outside this module — a dispatcher-thread caller among
-	 * them — can run it during a run; production code takes the journey from [PreparedEntryJourney].
-	 */
-	internal fun describe(
-		env: SimulationEnvironment,
-		examples: WorkedExampleSource
-	): StationTopology {
-		val topology = describeStatic(env)
-		return when (examples) {
-			WorkedExampleSource.ALPHABETICAL -> topology
-			WorkedExampleSource.STRUCTURAL -> topology.copy(entryJourney = EntryJourneyPicker.journeyOf(env))
-		}
-	}
-
-	private fun describeStatic(env: SimulationEnvironment): StationTopology {
+	fun describe(env: SimulationEnvironment): StationTopology {
 		val grid = env.getRailWayNetGrid()
 
 		// Only InOuts with a usable name are listed and used as route endpoints, so a route never
@@ -273,7 +259,7 @@ object StationTopologySerializer {
 			.onFailure {
 				logger.warn(
 					it
-				) { "StationTopologySerializer: no station derivation; no structural worked example or station capacity" }
+				) { "StationTopologySerializer: no station derivation; no structural worked example" }
 			}.getOrNull()
 
 	/**
