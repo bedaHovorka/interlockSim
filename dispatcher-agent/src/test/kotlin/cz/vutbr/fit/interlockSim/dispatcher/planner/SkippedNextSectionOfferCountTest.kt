@@ -17,17 +17,12 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
-import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
-import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
-import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -40,6 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import java.time.Duration
 
 /**
  * Issue #1302 step 1 (record, #992 F8): a cycle that emits anything — one `no_op` is enough —
@@ -71,44 +67,17 @@ class SkippedNextSectionOfferCountTest {
 			candidateTargets = semaphoreCandidates(TARGET)
 		)
 
-	private fun position(trainId: String): TrainPositionReading =
-		TrainPositionReading(
-			trainId = trainId,
-			velocity = 5.0,
-			acceleration = 0.0,
-			totalDistance = 0.0,
-			frontSectionName = null
-		)
-
 	/** One active train with one offered NEXT SECTION hop. */
 	private val offeringObservation =
 		DispatchObservation(
-			snapshot = SimulationSnapshot.EMPTY.copy(simTime = 100.0, trainPositions = listOf(position(TRAIN))),
+			snapshot =
+				SimulationSnapshot.EMPTY.copy(
+					simTime = 100.0,
+					trainPositions = listOf(trainPosition(TRAIN, velocity = 5.0))
+				),
 			unapprovedTrains = emptyList(),
 			innerBlockInputs = emptyList(),
 			outerBlockInputs = listOf(trainApproachingZb)
-		)
-
-	private fun adapter(
-		koogAgent: KoogDispatchAgent,
-		sinkHolder: SinkHolder,
-		fallback: Dispatcher = mockk(),
-		cycleHistory: CycleHistory = CycleHistory(capacity = 0),
-		counter: NextSectionOfferCounter = NextSectionOfferCounter.LIVE,
-		inferenceTimeoutMs: Long = 30_000L
-	): KoogAgentPlanAdapter =
-		KoogAgentPlanAdapter(
-			agentFactory =
-				mockk<KoogAgentFactory>().also { factory ->
-					coEvery { factory.createAgent(any()) } returns koogAgent
-				},
-			context = mockk<DefaultSimulationContext>(),
-			fallbackDispatcher = fallback,
-			inferenceTimeout = java.time.Duration.ofMillis(inferenceTimeoutMs),
-			commandQueue = ActuatorCommandQueue(),
-			sinkHolder = sinkHolder,
-			cycleHistory = cycleHistory,
-			nextSectionOfferCounter = counter
 		)
 
 	/** The expected count: [offered] hops, [skipped] trains left unrequested, [standing] of them at a signal. */
@@ -148,7 +117,13 @@ class SkippedNextSectionOfferCountTest {
 		val sinkHolder = SinkHolder()
 		val fallback = mockk<Dispatcher>()
 		val (decisions, record) =
-			planOnce(adapter(emittingAgent(sinkHolder, DispatchAction.NoOp), sinkHolder, fallback))
+			planOnce(
+				adapter(
+					emittingAgent(sinkHolder, DispatchAction.NoOp),
+					fallback = fallback,
+					sinkHolder = sinkHolder
+				)
+			)
 
 		assertThat(decisions).isEmpty()
 		assertThat(record.outcome).isEqualTo(TickOutcome.LLM_NO_OP)
@@ -163,7 +138,7 @@ class SkippedNextSectionOfferCountTest {
 		// Another target than the offered one still counts as accepted: whatever the apply
 		// outcome, the LLM did act on this train this cycle.
 		val request = DispatchAction.RequestRoute(TRAIN, ORIGIN, "someOtherSignal")
-		val (_, record) = planOnce(adapter(emittingAgent(sinkHolder, request), sinkHolder))
+		val (_, record) = planOnce(adapter(emittingAgent(sinkHolder, request), sinkHolder = sinkHolder))
 
 		assertThat(record.outcome).isEqualTo(TickOutcome.LLM_ACTIONS)
 		assertThat(record.nextSectionOffers).isEqualTo(offers(1))
@@ -181,7 +156,7 @@ class SkippedNextSectionOfferCountTest {
 						DispatchAction.RequestRoute(OTHER_TRAIN, ORIGIN, TARGET),
 						DispatchAction.ApproveTrain(TRAIN)
 					),
-					sinkHolder
+					sinkHolder = sinkHolder
 				)
 			)
 
@@ -200,7 +175,7 @@ class SkippedNextSectionOfferCountTest {
 				}
 			}
 		val fallback = mockk<Dispatcher>()
-		val (decisions, record) = planOnce(adapter(koogAgent, sinkHolder, fallback))
+		val (decisions, record) = planOnce(adapter(koogAgent, fallback = fallback, sinkHolder = sinkHolder))
 
 		assertThat(decisions).isEmpty()
 		assertThat(record.outcome).isEqualTo(TickOutcome.LLM_NO_OP)
@@ -217,30 +192,18 @@ class SkippedNextSectionOfferCountTest {
 				snapshot =
 					SimulationSnapshot.EMPTY.copy(
 						simTime = 100.0,
-						trainPositions = listOf(position(TRAIN)),
+						trainPositions = listOf(trainPosition(TRAIN, velocity = 5.0)),
 						trainPerceptions =
 							listOf(
-								TrainPerceptionReading(
-									trainId = TRAIN,
-									signalAheadName = ORIGIN,
-									signalAheadAspect = null,
-									distanceToSignalAheadMetres = 100.0,
-									currentSpeedLimitMps = 20.0,
-									velocity = 5.0,
-									acceleration = 0.0,
-									totalDistance = 0.0,
-									frontSectionName = null,
-									destinationInOutName = "B",
-									scheduledArrivalTime = 0.0,
-									isDwelling = false
-								)
+								trainPerception(TRAIN, velocity = 5.0, signalAheadName = ORIGIN)
 							)
 					),
 				unapprovedTrains = emptyList(),
 				innerBlockInputs = emptyList(),
 				outerBlockInputs = emptyList()
 			)
-		val (_, record) = planOnce(adapter(emittingAgent(sinkHolder), sinkHolder), observation)
+		val (_, record) =
+			planOnce(adapter(emittingAgent(sinkHolder), sinkHolder = sinkHolder), observation)
 
 		assertThat(record.outcome).isEqualTo(TickOutcome.LLM_SILENT_ALL_MOVING)
 		assertThat(record.nextSectionOffers).isEqualTo(offers(0))
@@ -256,7 +219,7 @@ class SkippedNextSectionOfferCountTest {
 			mockk<KoogDispatchAgent>().also { agent ->
 				coEvery { agent.decideAsync(any()) } throws IllegalStateException("no answer")
 			}
-		val (_, record) = planOnce(adapter(koogAgent, sinkHolder, fallback))
+		val (_, record) = planOnce(adapter(koogAgent, fallback = fallback, sinkHolder = sinkHolder))
 
 		assertThat(record.outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
 		assertThat(record.nextSectionOffers).isNull()
@@ -268,7 +231,13 @@ class SkippedNextSectionOfferCountTest {
 		val sinkHolder = SinkHolder()
 		val throwing = NextSectionOfferCounter { _, _ -> throw IllegalStateException("counter broke") }
 		val (decisions, record) =
-			planOnce(adapter(emittingAgent(sinkHolder, DispatchAction.NoOp), sinkHolder, counter = throwing))
+			planOnce(
+				adapter(
+					emittingAgent(sinkHolder, DispatchAction.NoOp),
+					sinkHolder = sinkHolder,
+					counter = throwing
+				)
+			)
 
 		assertThat(decisions).isEmpty()
 		assertThat(record.outcome).isEqualTo(TickOutcome.LLM_NO_OP)
@@ -289,38 +258,24 @@ class SkippedNextSectionOfferCountTest {
 		val sinkHolder = SinkHolder()
 		val throwing = NextSectionOfferCounter { _, _ -> throw IllegalStateException("counter broke") }
 		val (_, failedTick) =
-			planOnce(adapter(emittingAgent(sinkHolder, DispatchAction.NoOp), sinkHolder, counter = throwing))
+			planOnce(
+				adapter(
+					emittingAgent(sinkHolder, DispatchAction.NoOp),
+					sinkHolder = sinkHolder,
+					counter = throwing
+				)
+			)
 
 		assertThat(failedTick.nextSectionOffers).isNull()
 		assertThat(failedTick.nextSectionOffersFailed).isTrue()
 
 		// The same ending with a counting (non-throwing) counter is measured, not failed.
 		val other = SinkHolder()
-		val (_, countedTick) = planOnce(adapter(emittingAgent(other, DispatchAction.NoOp), other))
+		val (_, countedTick) = planOnce(adapter(emittingAgent(other, DispatchAction.NoOp), sinkHolder = other))
 
 		assertThat(countedTick.nextSectionOffers).isEqualTo(offers(1, TRAIN))
 		assertThat(countedTick.nextSectionOffersFailed).isFalse()
 	}
-
-	private fun perception(
-		trainId: String,
-		velocity: Double,
-		signalAheadName: String?
-	): TrainPerceptionReading =
-		TrainPerceptionReading(
-			trainId = trainId,
-			signalAheadName = signalAheadName,
-			signalAheadAspect = null,
-			distanceToSignalAheadMetres = 100.0,
-			currentSpeedLimitMps = 20.0,
-			velocity = velocity,
-			acceleration = 0.0,
-			totalDistance = 0.0,
-			frontSectionName = null,
-			destinationInOutName = "B",
-			scheduledArrivalTime = 0.0,
-			isDwelling = false
-		)
 
 	/**
 	 * The #895 shape F8 names: a train standing at a STOP signal whose hop is offered and skipped.
@@ -342,11 +297,12 @@ class SkippedNextSectionOfferCountTest {
 				snapshot =
 					SimulationSnapshot.EMPTY.copy(
 						simTime = 100.0,
-						trainPositions = listOf(position(TRAIN), position(OTHER_TRAIN)),
+						trainPositions =
+							listOf(trainPosition(TRAIN, velocity = 5.0), trainPosition(OTHER_TRAIN, velocity = 5.0)),
 						trainPerceptions =
 							listOf(
-								perception(TRAIN, velocity = 0.0, signalAheadName = ORIGIN),
-								perception(OTHER_TRAIN, velocity = 5.0, signalAheadName = "zA")
+								trainPerception(TRAIN, velocity = 0.0, signalAheadName = ORIGIN),
+								trainPerception(OTHER_TRAIN, velocity = 5.0, signalAheadName = "zA")
 							)
 					),
 				unapprovedTrains = emptyList(),
@@ -354,7 +310,11 @@ class SkippedNextSectionOfferCountTest {
 				outerBlockInputs = listOf(trainApproachingZb, otherInput)
 			)
 		val sinkHolder = SinkHolder()
-		val (_, record) = planOnce(adapter(emittingAgent(sinkHolder, DispatchAction.NoOp), sinkHolder), observation)
+		val (_, record) =
+			planOnce(
+				adapter(emittingAgent(sinkHolder, DispatchAction.NoOp), sinkHolder = sinkHolder),
+				observation
+			)
 
 		assertThat(record.nextSectionOffers).isEqualTo(
 			offers(2, TRAIN, OTHER_TRAIN, standing = 1)
@@ -374,7 +334,15 @@ class SkippedNextSectionOfferCountTest {
 				}
 			}
 		val fallback = mockk<Dispatcher>()
-		val (decisions, record) = planOnce(adapter(koogAgent, sinkHolder, fallback, inferenceTimeoutMs = 50L))
+		val (decisions, record) =
+			planOnce(
+				adapter(
+					koogAgent,
+					fallback = fallback,
+					sinkHolder = sinkHolder,
+					inferenceTimeout = Duration.ofMillis(50L)
+				)
+			)
 
 		assertThat(decisions).isEmpty()
 		assertThat(record.outcome).isEqualTo(TickOutcome.LLM_NO_OP)
@@ -394,14 +362,9 @@ class SkippedNextSectionOfferCountTest {
 				coEvery { agent.decideAsync(any()) } throws IllegalStateException("no answer")
 			}
 		val planAdapter =
-			KoogAgentPlanAdapter(
-				agentFactory =
-					mockk<KoogAgentFactory>().also { factory ->
-						coEvery { factory.createAgent(any()) } returns koogAgent
-					},
-				context = mockk<DefaultSimulationContext>(),
-				fallbackDispatcher = fallback,
-				commandQueue = ActuatorCommandQueue(),
+			adapter(
+				koogAgent,
+				fallback = fallback,
 				sinkHolder = sinkHolder,
 				circuitBreaker = LlmCircuitBreaker(failureThreshold = 1, cooldownSeconds = 60.0)
 			)
@@ -427,7 +390,7 @@ class SkippedNextSectionOfferCountTest {
 				innerBlockInputs = emptyList(),
 				outerBlockInputs = emptyList()
 			)
-		val (_, record) = planOnce(adapter(emittingAgent(sinkHolder), sinkHolder), idle)
+		val (_, record) = planOnce(adapter(emittingAgent(sinkHolder), sinkHolder = sinkHolder), idle)
 
 		assertThat(record.outcome).isEqualTo(TickOutcome.LLM_NO_OP)
 		assertThat(record.nextSectionOffers).isNull()
@@ -439,7 +402,8 @@ class SkippedNextSectionOfferCountTest {
 		val sinkHolder = SinkHolder()
 		val fallback = mockk<Dispatcher>()
 		coEvery { fallback.decide(any()) } returns listOf(DispatchDecision.ReservePath(TRAIN, ORIGIN, TARGET))
-		val (decisions, record) = planOnce(adapter(emittingAgent(sinkHolder), sinkHolder, fallback))
+		val (decisions, record) =
+			planOnce(adapter(emittingAgent(sinkHolder), fallback = fallback, sinkHolder = sinkHolder))
 
 		assertThat(decisions).containsExactly(DispatchDecision.ReservePath(TRAIN, ORIGIN, TARGET))
 		assertThat(record.outcome).isEqualTo(TickOutcome.RULE_FALLBACK)
@@ -500,7 +464,7 @@ class SkippedNextSectionOfferCountTest {
 					emptyList()
 				}
 			}
-		val planAdapter = adapter(koogAgent, sinkHolder, cycleHistory = history, counter = counter)
+		val planAdapter = adapter(koogAgent, sinkHolder = sinkHolder, cycleHistory = history, counter = counter)
 		val recorded = mutableListOf<TickRecord>()
 		planAdapter.addTickListener(PlannerTickListener { recorded.add(it) })
 		val decisions = mutableListOf<List<DispatchDecision>>()

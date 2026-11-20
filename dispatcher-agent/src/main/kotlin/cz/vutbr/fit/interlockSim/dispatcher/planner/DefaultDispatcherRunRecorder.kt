@@ -351,7 +351,7 @@ class DefaultDispatcherRunRecorder(
 				"skippedNextSectionOffersStandingAtSignal=" +
 				"${formatFigure(snap.skippedNextSectionOffersStandingAtSignal)} " +
 				"longestSkippedOfferStreakCycles=${formatFigure(snap.longestSkippedOfferStreakCycles)} " +
-				"longestSkippedOfferStreakSimSeconds=${snap.longestSkippedOfferStreakSimSeconds ?: "n/a"}"
+				"longestSkippedOfferStreakSimSeconds=${formatFigure(snap.longestSkippedOfferStreakSimSeconds)}"
 		}
 		// Issue #834 review finding #6: llmSuccessRate above is reclassified in #834 (idle ticks
 		// moved RULE_FALLBACK -> LLM_NO_OP, and REVISED's cap-full no_op turns former fallback ticks
@@ -511,4 +511,14 @@ class DefaultDispatcherRunRecorder(
 	 * which is a different claim from "nothing measured it". See [RailwayOutcome].
 	 */
 	private fun formatFigure(value: Long?): String = value?.toString() ?: "n/a"
+
+	/**
+	 * Renders one simulation-seconds figure, printing `n/a` for a figure nobody measured — the
+	 * [Double] form of the [Long] overload above, so the offer-streak seconds figure renders its
+	 * absence through the same shared mechanism as every other figure on this line.
+	 *
+	 * Deliberately not `?: 0`: a zero in this line would be read as "no train ever waited at an
+	 * offered signal", which is a different claim from "nothing measured it". See [RailwayOutcome].
+	 */
+	private fun formatFigure(value: Double?): String = value?.toString() ?: "n/a"
 }

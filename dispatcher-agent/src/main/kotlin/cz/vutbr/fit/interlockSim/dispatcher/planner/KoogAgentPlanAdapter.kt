@@ -568,14 +568,7 @@ class KoogAgentPlanAdapter(
 				"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
 				"(simTime=${observation.snapshot.simTime}); not falling back"
 		}
-		val (nextSectionOffers, nextSectionOffersFailed) = countNextSectionOffers(observation)
-		reportTick(
-			outcome,
-			observation.snapshot.simTime,
-			latencyMs,
-			nextSectionOffers = nextSectionOffers,
-			nextSectionOffersFailed = nextSectionOffersFailed
-		)
+		reportTick(outcome, observation.snapshot.simTime, latencyMs, countOffersFrom = observation)
 		return decisions
 	}
 
@@ -614,13 +607,11 @@ class KoogAgentPlanAdapter(
 				"trains move with a path ahead — reporting LLM_SILENT_ALL_MOVING, not falling back " +
 				"(simTime=${observation.snapshot.simTime})"
 		}
-		val (nextSectionOffers, nextSectionOffersFailed) = countNextSectionOffers(observation)
 		reportTick(
 			TickOutcome.LLM_SILENT_ALL_MOVING,
 			observation.snapshot.simTime,
 			latencyMs,
-			nextSectionOffers = nextSectionOffers,
-			nextSectionOffersFailed = nextSectionOffersFailed
+			countOffersFrom = observation
 		)
 		return emptyList()
 	}
@@ -692,14 +683,7 @@ class KoogAgentPlanAdapter(
 				"KoogAgentPlanAdapter: LLM cycle failed after a partial emission — keeping the " +
 					"emitted actions, suppressing retry and fallback (simTime=${observation.snapshot.simTime})"
 			}
-			val (nextSectionOffers, nextSectionOffersFailed) = countNextSectionOffers(observation)
-			reportTick(
-				outcomeFromEmissions(),
-				observation.snapshot.simTime,
-				latencyMs,
-				nextSectionOffers = nextSectionOffers,
-				nextSectionOffersFailed = nextSectionOffersFailed
-			)
+			reportTick(outcomeFromEmissions(), observation.snapshot.simTime, latencyMs, countOffersFrom = observation)
 			return emptyList()
 		}
 		return runFallback(
@@ -962,22 +946,23 @@ class KoogAgentPlanAdapter(
 	 *   its own timing).
 	 * @param silentNonIdleCycleIndex Forwarded to [TickRecord.silentNonIdleCycleIndex]: set only by
 	 *   [runFallback] for a silent cycle on a non-idle station (Issue #1365).
-	 * @param nextSectionOffers Forwarded to [TickRecord.nextSectionOffers]: set only by the cycle
-	 *   endings that skip the fallback (Issue #1302, see [countNextSectionOffers]). Deliberately not
-	 *   part of [cycleHistory]: the history feeds later prompts, and this count is reporting only.
-	 * @param nextSectionOffersFailed Forwarded to [TickRecord.nextSectionOffersFailed]: the second
-	 *   half of [countNextSectionOffers]'s result — `true` only when that counter was invoked and
-	 *   threw, which tells the run recorder a *failed* count from both a measured one and a plain
-	 *   not-measured `null` (PR #1408 review round).
+	 * @param countOffersFrom The observation whose NEXT SECTION offers this ending skipped the
+	 *   rule-based fallback over — the three fallback-skipping endings ([reportActedCycle], the
+	 *   partial-emission arm of [recordFailureAndFallback], [reportAllMovingSilent]) pass it, and
+	 *   this method counts [TickRecord.nextSectionOffers] from it internally (Issue #1302, see
+	 *   [countNextSectionOffers]). Deliberately not part of [cycleHistory]: the history feeds
+	 *   later prompts, and this count is reporting only. `null` — every fallback ending — counts
+	 *   nothing and reports a plain not-measured `null` count, exactly the pre-#1302 fallback
+	 *   endings; the parameter carries the signal, so behaviour is never keyed on [outcome].
 	 */
 	private fun reportTick(
 		outcome: TickOutcome,
 		simTime: Double,
 		latencyMs: Long?,
 		silentNonIdleCycleIndex: Long? = null,
-		nextSectionOffers: NextSectionOfferCount? = null,
-		nextSectionOffersFailed: Boolean = false
+		countOffersFrom: DispatchObservation? = null
 	) {
+		val (nextSectionOffers, nextSectionOffersFailed) = countNextSectionOffers(countOffersFrom)
 		tickListeners.onTick(
 			TickRecord(
 				outcome,
@@ -994,12 +979,14 @@ class KoogAgentPlanAdapter(
 	/**
 	 * Counts the NEXT SECTION hops [observation]'s cycle message offered and the LLM left without an
 	 * accepted `request_route` (Issue #1302, step 1 "record" of #992 F8) — see
-	 * [NextSectionOfferCount] for what "accepted" means.
+	 * [NextSectionOfferCount] for what "accepted" means. A `null` [observation] — every fallback
+	 * ending, where the fallback ran on the whole cycle so no offer is left behind by the guard —
+	 * yields the plain not-measured `null to false` pair without invoking the counter.
 	 *
-	 * Called only by the three cycle endings that skip the rule-based fallback: [reportActedCycle],
-	 * the partial-emission arm of [recordFailureAndFallback], and [reportAllMovingSilent]. On every
-	 * other ending the fallback runs on the whole cycle, so no offer is left behind by the guard. The
-	 * count is reporting only: it never feeds a decision, the emissions or [cycleHistory].
+	 * Called only by [reportTick], for exactly the three cycle endings that skip the rule-based
+	 * fallback: [reportActedCycle], the partial-emission arm of [recordFailureAndFallback], and
+	 * [reportAllMovingSilent]. The count is reporting only: it never feeds a decision, the
+	 * emissions or [cycleHistory].
 	 *
 	 * Two endings worth knowing:
 	 * - [TickOutcome.LLM_SILENT_ALL_MOVING] is always (0, 0) by construction: the branch is taken only
@@ -1015,18 +1002,23 @@ class KoogAgentPlanAdapter(
 	 * count is *failed* and [DefaultDispatcherRunRecorder] publishes the run's whole offer group
 	 * absent over it; never a measured `0` (PR #1408 review round).
 	 *
-	 * @return The count for [reportTick]'s [nextSectionOffers] paired with whether the counter was
-	 *   invoked and threw — reportTick's [nextSectionOffersFailed] (PR #1408 review round).
+	 * @return [reportTick]'s nextSectionOffers paired with whether the counter was invoked and
+	 *   threw — the TickRecord.nextSectionOffersFailed flag (PR #1408 review round). Internal
+	 *   plumbing only; this pair never leaves the adapter.
 	 */
-	private fun countNextSectionOffers(observation: DispatchObservation): Pair<NextSectionOfferCount?, Boolean> =
-		try {
-			nextSectionOfferCounter.count(observation, sinkHolder.emittedActionsThisCycle()) to false
-		} catch (e: Exception) {
-			logger.warn(e) {
-				"KoogAgentPlanAdapter: counting the skipped NEXT SECTION offers failed — recording the " +
-					"count as failed (simTime=${observation.snapshot.simTime})"
-			}
-			null to true
+	private fun countNextSectionOffers(observation: DispatchObservation?): Pair<NextSectionOfferCount?, Boolean> =
+		when (observation) {
+			null -> null to false
+			else ->
+				try {
+					nextSectionOfferCounter.count(observation, sinkHolder.emittedActionsThisCycle()) to false
+				} catch (e: Exception) {
+					logger.warn(e) {
+						"KoogAgentPlanAdapter: counting the skipped NEXT SECTION offers failed — recording the " +
+							"count as failed (simTime=${observation.snapshot.simTime})"
+					}
+					null to true
+				}
 		}
 
 	/**

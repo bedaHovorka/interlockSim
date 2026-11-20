@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopResolver
+import cz.vutbr.fit.interlockSim.dispatcher.agents.standingAtSignalName
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 
 /**
@@ -62,8 +63,8 @@ fun interface NextSectionOfferCounter {
 
 	companion object {
 		/**
-		 * The production counter. It recomputes the offers with [NextHopResolver.resolveAll] over
-		 * the active trains of the cycle's own observation — the very call the cycle message's
+		 * The production counter. It recomputes the offers with [NextHopResolver.offeredNextHopOutcomes]
+		 * over the active trains of the cycle's own observation — the very call the cycle message's
 		 * NEXT SECTION lines are rendered from (`KoogDispatchAgentImpl.buildUserPrompt`), so the
 		 * count names exactly the hops the model was shown, after the same-tick same-target dedup.
 		 */
@@ -71,7 +72,7 @@ fun interface NextSectionOfferCounter {
 			NextSectionOfferCounter { observation, emitted ->
 				val offeredTrains =
 					NextHopResolver
-						.resolveAll(observation.snapshot.trainPositions.map { it.trainId }, observation)
+						.offeredNextHopOutcomes(observation)
 						.filterValues { it is NextHopOutcome.Hop }
 						.keys
 				val requestedTrains =
@@ -85,16 +86,14 @@ fun interface NextSectionOfferCounter {
 			}
 
 		/**
-		 * The cycle message's "standing at signal" predicate (`KoogDispatchAgentImpl.renderActiveTrainLine`,
-		 * the same field `RequestRouteTool`'s origin guard reads): stopped, with a named signal ahead.
+		 * The cycle message's "standing at signal" predicate — [standingAtSignalName] over the
+		 * train's perception, the single predicate the prompt clause (`KoogDispatchAgentImpl.renderActiveTrainLine`)
+		 * and `RequestRouteTool`'s origin guard also read: stopped, with a named signal ahead.
 		 * A train with no perception is not standing.
 		 */
 		private fun isStandingAtSignal(
 			trainId: String,
 			observation: DispatchObservation
-		): Boolean {
-			val perception = observation.snapshot.trainPerception(trainId) ?: return false
-			return perception.velocity == 0.0 && !perception.signalAheadName.isNullOrBlank()
-		}
+		): Boolean = observation.snapshot.trainPerception(trainId)?.standingAtSignalName() != null
 	}
 }

@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
+import cz.vutbr.fit.interlockSim.dispatcher.agents.standingAtSignalName
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
@@ -495,7 +496,9 @@ class RequestRouteTool(
 		perceptionPort?.snapshot()?.trainPerception(trainId)
 
 	/**
-	 * The signal this train is stopped at, or `null` if it is moving or has no signal ahead.
+	 * The signal this train is stopped at, or `null` if it is moving or has no signal ahead — the
+	 * cycle message's shared [standingAtSignalName] predicate over the same perception this tool
+	 * reads.
 	 *
 	 * "Stopped" is `velocity == 0.0`, the observable form of the `TrainPhase.HELD`/`DWELLING`
 	 * condition `ActionValidator` gates its own origin rule on. A train at a stand in front of a
@@ -503,11 +506,7 @@ class RequestRouteTool(
 	 * origin is a dispatcher error, and a costly one: the reservation succeeds, holds blocks, and
 	 * releases nobody until the orphan sweeper reclaims it 60 simulated seconds later.
 	 */
-	private fun standingAtSignal(trainId: String): String? =
-		activePerceptionOf(trainId)
-			?.takeIf { it.velocity == 0.0 }
-			?.signalAheadName
-			?.takeIf { it.isNotBlank() }
+	private fun standingAtSignal(trainId: String): String? = activePerceptionOf(trainId)?.standingAtSignalName()
 
 	/**
 	 * Every train name the model may legitimately pass this cycle: those queued for admission plus
