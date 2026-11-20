@@ -36,15 +36,26 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  *   [DispatcherRunSnapshot.staleOriginRefusalsAfterSilentCycle].
  * @param nextSectionOffers The offered and skipped NEXT SECTION hops of a cycle that skipped the
  *   rule-based fallback (Issue #1302, see [NextSectionOfferCount]). `null` on every other cycle
- *   ending, and when the count failed (logged at WARN). Travels only here — never into the
- *   cycle history, which feeds later prompts. [DefaultDispatcherRunRecorder] sums it into
+ *   ending, and when the count failed — see [nextSectionOffersFailed]. Travels only here — never
+ *   into the cycle history, which feeds later prompts. [DefaultDispatcherRunRecorder] sums it into
  *   [DispatcherRunSnapshot.skippedNextSectionOffers] and [DispatcherRunSnapshot.offeredNextSectionHops].
+ * @param nextSectionOffersFailed Whether this cycle's NEXT SECTION count was attempted and threw
+ *   ([KoogAgentPlanAdapter], which logs a WARN there). `true` only in that one case: an attempt
+ *   that succeeded carries [nextSectionOffers] instead, and a cycle that never attempted a count
+ *   (every fallback-counting ending) stays `false` with a `null` [nextSectionOffers]
+ *   — *not measured*, not failed. [DefaultDispatcherRunRecorder] counts the failed attempts into
+ *   a run-level counter, and **one failure drops the run's whole offer group**
+ *   ([DispatcherRunSnapshot.skippedNextSectionOffers] through
+ *   [DispatcherRunSnapshot.longestSkippedOfferStreakSimSeconds]) to absent: a count the recorder
+ *   cannot vouch for must not masquerade as a measured zero (PR #1408 review round). Later
+ *   successful counts do not rehabilitate the run — the rule is run-level, not per-cycle.
  *
  * @see PlannerTickListener
  * @see TickOutcome
  * @see DefaultDispatcherRunRecorder
  * @since Issue #842 (Goal 10 SP2c.19 — tick-outcome taxonomy); `latencyMs` added in Issue #834
- *   (SP2c.11 — real per-run inference latency)
+ *   (SP2c.11 — real per-run inference latency); `nextSectionOffers` added in Issue #1302;
+ *   `nextSectionOffersFailed` in the PR #1408 review round
  */
 data class TickRecord(
 	val outcome: TickOutcome,
@@ -52,7 +63,8 @@ data class TickRecord(
 	val timeoutNoOpCause: TimeoutNoOpCause? = null,
 	val latencyMs: Long? = null,
 	val silentNonIdleCycleIndex: Long? = null,
-	val nextSectionOffers: NextSectionOfferCount? = null
+	val nextSectionOffers: NextSectionOfferCount? = null,
+	val nextSectionOffersFailed: Boolean = false
 ) {
 	init {
 		val expectsCause = outcome == TickOutcome.TIMEOUT_NOOP

@@ -14,7 +14,9 @@ import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
@@ -261,7 +263,7 @@ class SkippedNextSectionOfferCountTest {
 	}
 
 	@Test
-	@DisplayName("a counter that throws records no count and leaves the cycle unchanged")
+	@DisplayName("a counter that throws records no count and leaves the cycle intact but marked failed")
 	fun throwingCounterRecordsNull() {
 		val sinkHolder = SinkHolder()
 		val throwing = NextSectionOfferCounter { _, _ -> throw IllegalStateException("counter broke") }
@@ -271,6 +273,33 @@ class SkippedNextSectionOfferCountTest {
 		assertThat(decisions).isEmpty()
 		assertThat(record.outcome).isEqualTo(TickOutcome.LLM_NO_OP)
 		assertThat(record.nextSectionOffers).isNull()
+		// The count did not merely measure nothing: it was invoked and threw, which the recorder
+		// must not publish as a measured zero (PR #1408 review round).
+		assertThat(record.nextSectionOffersFailed).isTrue()
+	}
+
+	/**
+	 * The failed flag separates a count the adapter attempted and lost (the recorder must drop the
+	 * run's whole offer group) from both a measured count and an ending that skipped the fallback
+	 * without attempting one — those stay a plain `null` count with `false` (PR #1408 review round).
+	 */
+	@Test
+	@DisplayName("a thrown count marks the tick failed, a counted one does not")
+	fun throwingCounterMarksTheTickFailed() {
+		val sinkHolder = SinkHolder()
+		val throwing = NextSectionOfferCounter { _, _ -> throw IllegalStateException("counter broke") }
+		val (_, failedTick) =
+			planOnce(adapter(emittingAgent(sinkHolder, DispatchAction.NoOp), sinkHolder, counter = throwing))
+
+		assertThat(failedTick.nextSectionOffers).isNull()
+		assertThat(failedTick.nextSectionOffersFailed).isTrue()
+
+		// The same ending with a counting (non-throwing) counter is measured, not failed.
+		val other = SinkHolder()
+		val (_, countedTick) = planOnce(adapter(emittingAgent(other, DispatchAction.NoOp), other))
+
+		assertThat(countedTick.nextSectionOffers).isEqualTo(offers(1, TRAIN))
+		assertThat(countedTick.nextSectionOffersFailed).isFalse()
 	}
 
 	private fun perception(

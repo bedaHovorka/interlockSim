@@ -176,9 +176,12 @@ import kotlinx.serialization.Serializable
  *   (Issue #1302, step 1 "record" of #992 F8). "Accepted" means the `request_route` tool emitted a
  *   request for that train, with any target, whatever the later apply outcome; a request the tool
  *   refused counts as skipped. See [NextSectionOfferCount]. A count, not a verdict: no decision
- *   depends on it. An LLM run is always measured — one whose cycles all fell back skipped nothing
- *   and records `0`. `null` means *not measured* — a rule-based run, a run JSON written before this
- *   field existed, or a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot.
+ *   depends on it. An LLM run is measured unless a count failed — one whose cycles all fell back
+ *   skipped nothing and records `0`, but one whose count attempt threw ([TickRecord.nextSectionOffersFailed])
+ *   leaves the whole group absent, and later successful counts do not rehabilitate it (PR #1408
+ *   review round). `null` means *not measured* — a rule-based run, a run whose count attempt
+ *   threw, a run JSON written before this field existed, or a synthetic `TIMEOUT_ABORT` / `CRASH`
+ *   snapshot.
  * @property offeredNextSectionHops The NEXT SECTION hops those same cycles offered, the
  *   denominator of [skippedNextSectionOffers]; `null` exactly when it is.
  * @property skippedNextSectionOffersStandingAtSignal The part of [skippedNextSectionOffers] whose

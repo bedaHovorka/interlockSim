@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -27,8 +28,13 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import ch.qos.logback.classic.Logger as LogbackLogger
 
 /**
@@ -644,6 +650,114 @@ class DefaultDispatcherRunRecorderTest {
 		assertThat(snap.skippedNextSectionOffersStandingAtSignal).isEqualTo(0L)
 		assertThat(snap.longestSkippedOfferStreakCycles).isEqualTo(0L)
 		assertThat(snap.longestSkippedOfferStreakSimSeconds).isEqualTo(0.0)
+	}
+
+	// ── Offer-group atomicity and failed counts (PR #1408 review round) ──────
+
+	/**
+	 * A tick whose NEXT SECTION count attempt threw ([TickRecord.nextSectionOffersFailed]): the
+	 * cycle ended without a count, so it carries no [TickRecord.nextSectionOffers].
+	 */
+	private fun failedCountTick(simTime: Double): TickRecord =
+		TickRecord(TickOutcome.LLM_NO_OP, simTime = simTime, nextSectionOffersFailed = true)
+
+	@Test
+	fun `a failed count drops the whole offer group absent on an LLM run`() {
+		val r = llmRecorder()
+		r.onTick(failedCountTick(simTime = 1.0))
+
+		val snap = r.snapshot()
+		assertOfferGroupAbsent(snap)
+
+		// The failure must not drag a legitimate measurement down: an all-fallback LLM run (no
+		// count attempted, nothing failed) still publishes its measured 0/0.
+		val clean = llmRecorder()
+		clean.onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 1.0))
+
+		assertThat(clean.snapshot().skippedNextSectionOffers).isEqualTo(0L)
+		assertThat(clean.snapshot().offeredNextSectionHops).isEqualTo(0L)
+	}
+
+	@Test
+	fun `a later successful count does not rehabilitate a failed one`() {
+		val r = llmRecorder()
+		r.onTick(offerTick(1.0, offered = 2, skipped = setOf("T1")))
+		r.onTick(offerTick(2.0, offered = 1, skipped = emptySet(), outcome = TickOutcome.LLM_ACTIONS))
+		r.onTick(failedCountTick(simTime = 3.0))
+		r.onTick(offerTick(4.0, offered = 3, skipped = setOf("T1", "T2")))
+
+		val snap = r.finish(RunEndCause.NATURAL_COMPLETION)
+		assertOfferGroupAbsent(snap)
+	}
+
+	private fun assertOfferGroupAbsent(snap: DispatcherRunSnapshot) {
+		assertThat(snap.skippedNextSectionOffers).isNull()
+		assertThat(snap.offeredNextSectionHops).isNull()
+		assertThat(snap.skippedNextSectionOffersStandingAtSignal).isNull()
+		assertThat(snap.longestSkippedOfferStreakCycles).isNull()
+		assertThat(snap.longestSkippedOfferStreakSimSeconds).isNull()
+	}
+
+	/**
+	 * The #1302 offer state moves as one group: one lock guards the three sums, the measured flag,
+	 * the failure count and the streaks, so a snapshot concurrent with onTick sees either a tick's
+	 * whole effect or none of it. This stress drives a deterministic script (mixed counts, the
+	 * all-moving (0, 0) shape, no-count reset ticks) while a thread keeps building snapshots, and
+	 * pins the impossible-torn-state invariant `skippedNextSectionOffers <= offeredNextSectionHops`
+	 * on every one of them plus final frozen sums equal to the script's totals.
+	 */
+	@Test
+	@Timeout(60, unit = TimeUnit.SECONDS)
+	fun `concurrent snapshots never observe a torn NEXT SECTION offer group`() {
+		val r = llmRecorder()
+		// Every count tick skips as many hops as it offers, so the two sums agree at rest and a
+		// snapshot reading one sum before onTick and the other after it would observe
+		// skipped > offered — the only visible shape of the tear.
+		val script =
+			List(5_000) { i ->
+				val simTime = (i + 1).toDouble()
+				when (i % 10) {
+					in 0..4 -> offerTick(simTime, offered = 1, skipped = setOf("T1"), standing = if (i % 2 == 0) 1 else 0)
+					in 5..7 -> offerTick(simTime, offered = 2, skipped = setOf("T2", "T3"))
+					8 -> offerTick(simTime, offered = 0, skipped = emptySet())
+					else -> TickRecord(TickOutcome.RULE_FALLBACK, simTime = simTime)
+				}
+			}
+		val expectedSkipped = script.sumOf { it.nextSectionOffers?.skipped?.toLong() ?: 0L }
+		val expectedOffered = script.sumOf { it.nextSectionOffers?.offered?.toLong() ?: 0L }
+		val expectedStanding = script.sumOf { it.nextSectionOffers?.skippedStandingAtSignal?.toLong() ?: 0L }
+
+		val stop = AtomicBoolean(false)
+		val observations = AtomicLong(0L)
+		val torn = AtomicReference<DispatcherRunSnapshot?>()
+		val observer =
+			Thread {
+				while (!stop.get()) {
+					val snap = r.snapshot()
+					observations.incrementAndGet()
+					val skipped = snap.skippedNextSectionOffers
+					val offered = snap.offeredNextSectionHops
+					if (skipped != null && offered != null && skipped > offered) {
+						torn.compareAndSet(null, snap)
+						stop.set(true)
+					}
+				}
+			}
+		observer.start()
+		script.forEach { r.onTick(it) }
+		val frozen = r.finish(RunEndCause.MANUAL_STOP)
+		stop.set(true)
+		observer.join()
+
+		// The long streak is "T1" skipped in cycles 0..4 of every 10-tick block (5 cycles; the
+		// (0, 0) tick and the no-count tick after it end every streak).
+		assertThat(torn.get()).isNull()
+		assertThat(observations.get()).isGreaterThan(0L)
+		assertThat(frozen.skippedNextSectionOffers).isEqualTo(expectedSkipped)
+		assertThat(frozen.offeredNextSectionHops).isEqualTo(expectedOffered)
+		assertThat(frozen.skippedNextSectionOffersStandingAtSignal).isEqualTo(expectedStanding)
+		assertThat(frozen.longestSkippedOfferStreakCycles).isEqualTo(5L)
+		assertThat(frozen.longestSkippedOfferStreakSimSeconds).isEqualTo(4.0)
 	}
 
 	// ── logFinalSummary log text (#1113 review round) ────────────────────────
