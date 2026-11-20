@@ -88,6 +88,8 @@ internal object EntryJourneyPicker {
 			val query = env.getRoutingServices().getReservationTargetQuery()
 			val semaphoresByName: Map<String, DynamicRailSemaphore> =
 				station.signals.filter { it.name.isNotBlank() }.associateBy { it.name }
+			// An InOut hosted by more than one entry/exit block takes the last processed block's home
+			// signal (toMap keeps the last pair) — deterministic in entryExitBlocks order, fail-soft.
 			val homeSignalByInOut: Map<String, String?> =
 				station.entryExitBlocks
 					.flatMap { block ->

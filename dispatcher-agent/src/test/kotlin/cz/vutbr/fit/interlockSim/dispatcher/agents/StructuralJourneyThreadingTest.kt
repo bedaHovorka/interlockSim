@@ -11,8 +11,8 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
-import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -186,19 +186,31 @@ class StructuralJourneyThreadingTest : DispatcherKoinTestBase() {
 		}
 	}
 
+	/**
+	 * The production guardrail (Issue #1301 review, Minor 1): an unprepared [PromptVariant.REVISED_STRUCTURAL]
+	 * factory must not degrade by computing the journey inside [KoogAgentFactory.createAgent] — the
+	 * reservation target query mutates navigation state confined to the simulation thread, while
+	 * createAgent runs on the dispatcher thread with the simulation already running. The mis-wiring
+	 * logs at ERROR instead, and the serializer renders its fail-soft rule-only example.
+	 */
 	@Test
-	@DisplayName("an unprepared REVISED_STRUCTURAL factory (outside a run) still computes the journey")
-	fun unpreparedFactoryComputesTheJourney() {
+	@DisplayName("an unprepared REVISED_STRUCTURAL factory stays inert and renders the rule-only example")
+	fun unpreparedFactoryRendersRuleOnlyWithoutTheQuery() {
 		loadNetworkContext(NetworkResources.VYHYBNA_XML).use { context ->
 			val (spy, query) = countingContext(context)
 			val agentService = KoogAgentFactoryTest.CapturingAgentService()
 
 			runBlocking { factory(agentService, PromptVariant.REVISED_STRUCTURAL, SinkHolder()).createAgent(spy) }
 
-			assertThat(query.calls.get()).isGreaterThan(0)
+			assertThat(query.calls.get(), "query calls in createAgent").isEqualTo(0)
+			// "RULE. " opens the serializer's rule-only block, rendered only for a null journey —
+			// the generic rule sentence alone also appears inside the worked examples.
 			assertThat(agentService.capturedSystemPrompt)
 				.isNotNull()
-				.contains("fromEndpointName=\"doB1\", toEndpointName=\"B\")")
+				.contains("RULE. Never invent a train name")
+			assertThat(agentService.capturedSystemPrompt, "no structural worked example rendered")
+				.isNotNull()
+				.doesNotContain("request_route(trainName=")
 		}
 	}
 }

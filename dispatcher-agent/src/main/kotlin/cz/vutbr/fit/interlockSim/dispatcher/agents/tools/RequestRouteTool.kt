@@ -482,7 +482,10 @@ class RequestRouteTool(
 	 * Unlike a queued train, an approved one carries its timetable in the snapshot, so its entry
 	 * InOut is known exactly, on any number of InOuts. Inert when the snapshot has no timetable for
 	 * the train or when the train has a front section (it is on the track; the rules above and below
-	 * govern it).
+	 * govern it). Inertness is wider than that — the capture-cadence window: the snapshot is the
+	 * last sim-thread capture, so a train approved but not yet present in it is in neither of the
+	 * two lists [knownTrainIds] reads; the call fails closed as UNKNOWN_TRAIN there, and no wrong
+	 * reservation can be granted in that window.
 	 */
 	private fun notYetEnteredOriginError(
 		trainId: String,

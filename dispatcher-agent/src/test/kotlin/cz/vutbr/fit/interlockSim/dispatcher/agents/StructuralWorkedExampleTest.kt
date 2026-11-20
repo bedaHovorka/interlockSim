@@ -130,6 +130,16 @@ class StructuralWorkedExampleTest : DispatcherKoinTestBase() {
 	): String =
 		loadNetworkContext(xml).use { context ->
 			Station.from(context).applyBlockNames()
+			// A correctly-wired REVISED_STRUCTURAL factory receives the journey the Koin binding
+			// computes before the run, on this building thread (the dispatcherAgentModule
+			// KoogAgentFactory binding): the unprepared fallback no longer computes it, so prepare
+			// it here exactly like the wiring does.
+			val prepared =
+				if (KoogAgentFactory.workedExampleSourceOf(variant) == WorkedExampleSource.STRUCTURAL) {
+					PreparedEntryJourney.of(context)
+				} else {
+					null
+				}
 			val agentService = KoogAgentFactoryTest.CapturingAgentService()
 			val factory =
 				KoogAgentFactory(
@@ -142,7 +152,8 @@ class StructuralWorkedExampleTest : DispatcherKoinTestBase() {
 					dispatchLoopSensorPort =
 						mockk<DispatchLoopSensorPort> { every { getQueuedTrains() } returns emptyList() },
 					sinkHolder = SinkHolder(),
-					promptVariant = variant
+					promptVariant = variant,
+					preparedEntryJourney = prepared
 				)
 			runBlocking { factory.createAgent(context) }
 			requireNotNull(agentService.capturedSystemPrompt)
@@ -288,8 +299,19 @@ class StructuralWorkedExampleTest : DispatcherKoinTestBase() {
 			val revised = renderSystemPrompt(xml, PromptVariant.REVISED)
 			val structural = renderSystemPrompt(xml, PromptVariant.REVISED_STRUCTURAL)
 			val marker = "Routes (path context only"
+			// The first worked example's header — appendEntryRouteExample's opening, the fixed literal
+			// both variants' assembly guarantees on a signalled station — is the stable boundary after
+			// the Routes region.
+			val firstExampleHeader = "EXAMPLE (entry route). Never invent a train name"
 
 			assertThat(structural.substringBefore(marker)).isEqualTo(revised.substringBefore(marker))
+			// The Routes region itself is variant-independent too, byte for byte: from the Routes
+			// marker through to the first worked example's header, both prompts render the same route
+			// list (and, when the budget caps it, the same closing note).
+			assertThat(structural).contains(firstExampleHeader)
+			assertThat(revised).contains(firstExampleHeader)
+			assertThat(structural.substringAfter(marker).substringBefore(firstExampleHeader))
+				.isEqualTo(revised.substringAfter(marker).substringBefore(firstExampleHeader))
 			assertThat(structural).contains("is that train's own destination")
 			assertThat(revised).doesNotContain("is that train's own destination")
 			println(

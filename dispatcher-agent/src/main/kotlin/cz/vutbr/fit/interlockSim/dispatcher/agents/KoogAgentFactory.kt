@@ -125,9 +125,12 @@ class KoogAgentFactory(
 	private val stationCapacityProvider: () -> StationCapacity? = { null },
 	/**
 	 * The structural worked example, computed before the run (Issue #1301; see
-	 * [PreparedEntryJourney]). Read only by [PromptVariant.REVISED_STRUCTURAL]. `null` (the default,
-	 * and every factory built outside a run) computes it in [createAgent] instead, which is safe only
-	 * while the simulation does not run.
+	 * [PreparedEntryJourney]). Read only by [PromptVariant.REVISED_STRUCTURAL]. `null` — the default,
+	 * for every factory built outside a run, and a wiring defect for a live REVISED_STRUCTURAL run —
+	 * never computes the journey in [createAgent] (the reservation target query must not run on the
+	 * dispatcher thread): the fail-soft rule-only example is rendered instead and the mis-wiring
+	 * logged at ERROR level. The correct wiring computes it — the
+	 * [cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule] KoogAgentFactory binding.
 	 */
 	internal val preparedEntryJourney: PreparedEntryJourney? = null
 ) {
@@ -664,19 +667,25 @@ class KoogAgentFactory(
 
 	/**
 	 * The static topology for [promptVariant] (Issue #1301): the structural journey comes from
-	 * [preparedEntryJourney]; only an unprepared factory — built outside a run, where no simulation
-	 * runs — computes it here, with one WARN.
+	 * [preparedEntryJourney], prepared by the wiring before the run. An unprepared factory does not
+	 * degrade by computing it here: [PreparedEntryJourney.of] runs the reservation target query,
+	 * which mutates navigation state confined to the simulation thread, and [createAgent] runs on
+	 * the dispatcher thread while the simulation runs. The journey stays `null` — the serializer
+	 * renders its fail-soft rule-only example — and the mis-wiring is logged at ERROR level.
 	 */
 	private fun describeTopology(context: DefaultSimulationContext): StationTopology {
 		val topology = StationTopologySerializer.describe(context)
 		if (workedExampleSourceOf(promptVariant) != WorkedExampleSource.STRUCTURAL) return topology
-		val prepared =
-			preparedEntryJourney ?: PreparedEntryJourney.of(context).also {
-				logger.warn {
-					"KoogAgentFactory: structural worked example computed at agent construction, not before the " +
-						"run; this is safe only while the simulation does not run"
-				}
+		val prepared = preparedEntryJourney
+		if (prepared == null) {
+			logger.error {
+				"KoogAgentFactory: a REVISED_STRUCTURAL factory was built without a prepared entry " +
+					"journey — the Koin binding should have prepared it before the run " +
+					"(PreparedEntryJourney.of). Rendering the rule-only worked example instead of " +
+					"computing it here: the reservation target query must not run on the dispatcher thread"
 			}
+			return topology
+		}
 		return topology.copy(entryJourney = prepared.journey)
 	}
 
