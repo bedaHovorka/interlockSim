@@ -16,6 +16,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Aggregates a collection of [DispatcherRunSnapshot] values (one per file from [RunSnapshotStore])
@@ -50,6 +51,7 @@ import java.time.format.DateTimeFormatter
  * | Failure Modes | [RejectionCode] × arm — most actionable for prompt iteration |
  * | Apply Failures | [ApplyFailureCode] × arm, then stale-origin refusals after a silent cycle per arm |
  * | Author Attribution | [ActionAuthor] × arm |
+ * | Skipped NEXT SECTION Offers | per arm, offered hops the LLM left unrequested on fallback-skipping cycles |
  * | Latency | arm × tick period, p50/p95/max and deadline-miss count |
  * | Parameter Sweep | one row per [RunParameters] cell |
  *
@@ -65,6 +67,9 @@ class RunReportAggregator(
 
 		/** Minimum run count for the arm gate. */
 		private const val MIN_RUN_COUNT = 10
+
+		/** Figure columns of the skipped NEXT SECTION offers table, between "Runs" and "Runs measured". */
+		private const val SKIPPED_OFFER_FIGURE_COLUMNS = 6
 
 		/** Minimum passing-run count for the arm gate. */
 		private const val MIN_PASSING_RUNS = 8
@@ -287,6 +292,7 @@ class RunReportAggregator(
 		appendFailureModes(sb, reports)
 		appendApplyFailures(sb, reports)
 		appendAuthorAttribution(sb, reports)
+		appendSkippedNextSectionOffers(sb, reports)
 		appendLatency(sb, reports)
 		appendParameterSweep(sb, reports)
 
@@ -528,6 +534,60 @@ class RunReportAggregator(
 			val runsWithRefusal = if (measured.isEmpty()) "n/a" else measured.count { it > 0L }.toString()
 			sb.appendLine(
 				"| ${r.arm} | ${r.runCount} | $refusals | $runsWithRefusal | ${measured.size} | " +
+					"${r.runCount - measured.size} |"
+			)
+		}
+		sb.appendLine()
+	}
+
+	/**
+	 * One row per arm counting the NEXT SECTION hops the LLM was offered and left without an
+	 * accepted `request_route` on the cycles that skipped the rule-based fallback (Issue #1302) —
+	 * see [DispatcherRunSnapshot.skippedNextSectionOffers]. Offered, skipped and standing-at-a-signal
+	 * figures are summed and the two longest-streak figures are the maximum, over the runs that
+	 * measured them; "Runs not measured" (a rule-based run, a run JSON written before schema 12, or
+	 * an aborted run) is kept apart, and an arm without any measured run shows `n/a`, not `0`: absent
+	 * is not zero. The streaks tell one train skipped for many cycles from many trains skipped once.
+	 */
+	private fun appendSkippedNextSectionOffers(
+		sb: StringBuilder,
+		reports: List<ArmReport>
+	) {
+		sb.appendLine("## Skipped NEXT SECTION Offers")
+		sb.appendLine()
+		sb.appendLine(
+			"Counted on the LLM cycles that skip the rule-based fallback (an acting cycle, one `no_op` " +
+				"is enough; a failure after a partial emission; `LLM_SILENT_ALL_MOVING`). A NEXT SECTION " +
+				"hop the cycle message offered is skipped when its train has no accepted `request_route` " +
+				"that cycle. A request counts as accepted when the `request_route` tool emitted it for that " +
+				"train (any target, whatever the apply outcome); a request the tool refused counts as skipped."
+		)
+		sb.appendLine()
+		sb.appendLine(
+			"| Arm | Runs | Offered hops | Skipped offers | Skipped standing at a signal | Runs with a skip | " +
+				"Longest streak (cycles) | Longest streak (sim s) | Runs measured | Runs not measured |"
+		)
+		sb.appendLine("|---|---|---|---|---|---|---|---|---|---|")
+		for (r in reports) {
+			val measured = r.snapshots.filter { it.skippedNextSectionOffers != null }
+			val cells =
+				if (measured.isEmpty()) {
+					List(SKIPPED_OFFER_FIGURE_COLUMNS) { "n/a" }
+				} else {
+					listOf(
+						measured.sumOf { it.offeredNextSectionHops ?: 0L }.toString(),
+						measured.sumOf { it.skippedNextSectionOffers ?: 0L }.toString(),
+						measured.sumOf { it.skippedNextSectionOffersStandingAtSignal ?: 0L }.toString(),
+						measured.count { (it.skippedNextSectionOffers ?: 0L) > 0L }.toString(),
+						measured.mapNotNull { it.longestSkippedOfferStreakCycles }.maxOrNull()?.toString() ?: "n/a",
+						measured
+							.mapNotNull { it.longestSkippedOfferStreakSimSeconds }
+							.maxOrNull()
+							?.let { String.format(Locale.ROOT, "%.1f", it) } ?: "n/a"
+					)
+				}
+			sb.appendLine(
+				"| ${r.arm} | ${r.runCount} | ${cells.joinToString(" | ")} | ${measured.size} | " +
 					"${r.runCount - measured.size} |"
 			)
 		}

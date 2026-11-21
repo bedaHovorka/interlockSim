@@ -194,8 +194,7 @@ class KoogDispatchAgentImpl(
 			)
 			// Resolved once for every active train together so the same-tick same-target dedup
 			// applies across the whole cycle message — see this method's "NEXT SECTION facts" KDoc.
-			val nextHopOutcomes =
-				NextHopResolver.resolveAll(observation.snapshot.trainPositions.map { it.trainId }, observation)
+			val nextHopOutcomes = NextHopResolver.offeredNextHopOutcomes(observation)
 			// Ids only — deliberately no position. See "Never render a name the model cannot use"
 			// in this method's KDoc: TrainPositionReading.frontSectionName is a *block* name, and
 			// rendering it here got it copied straight back as a request_route endpoint. The NEXT
@@ -267,9 +266,9 @@ class KoogDispatchAgentImpl(
 	 *
 	 * ## Standing at a signal reads the same perception field the tool guard reads
 	 *
-	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool]'s own origin guard is
-	 * `velocity == 0.0 && signalAheadName != null` off
-	 * [cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading] — the same field read here — so the
+	 * [cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool]'s own origin guard and
+	 * this clause read one shared predicate, [standingAtSignalName] — `velocity == 0.0` and a
+	 * non-blank [cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading.signalAheadName] — so the
 	 * prompt's "standing at signal" clause and the tool's rejection can never disagree about
 	 * whether a train is stopped in front of a named signal.
 	 */
@@ -283,9 +282,7 @@ class KoogDispatchAgentImpl(
 		perception?.destinationInOutName?.takeIf { it.isNotBlank() }?.let {
 			clauses += "exit via \"$it\""
 		}
-		if (perception != null && perception.velocity == 0.0 && !perception.signalAheadName.isNullOrBlank()) {
-			clauses += "standing at signal \"${perception.signalAheadName}\" (STOP)"
-		}
+		perception?.standingAtSignalName()?.let { clauses += "standing at signal \"$it\" (STOP)" }
 		clauses += renderNextHopClause(nextHopOutcome)
 		return "- $trainId (active) -> ${clauses.joinToString("; ")}"
 	}

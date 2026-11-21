@@ -161,6 +161,20 @@ object NextHopResolver {
 	}
 
 	/**
+	 * The NEXT SECTION outcome for every active train of [observation], resolved together by a
+	 * single [resolveAll] call over the snapshot's train positions — the same-tick same-target
+	 * dedup included. This is the one map both prompt-facing readers derive their facts from: the
+	 * cycle message's NEXT SECTION lines (`KoogDispatchAgentImpl.buildUserPrompt`) and the skipped
+	 * offer count (`NextSectionOfferCounter.LIVE`) call it in the same cycle, so the hops the model
+	 * was shown and the hops the count names can never diverge.
+	 *
+	 * Pure and deterministic like [resolveAll]: the same [observation] always returns an
+	 * `==`-equal map, and the observation is not mutated.
+	 */
+	fun offeredNextHopOutcomes(observation: DispatchObservation): Map<String, NextHopOutcome> =
+		resolveAll(observation.snapshot.trainPositions.map { it.trainId }, observation)
+
+	/**
 	 * `true` when [input] qualifies as a forward-reservation candidate for its owner — the single
 	 * NEXT SECTION eligibility predicate. Also used by
 	 * [cz.vutbr.fit.interlockSim.dispatcher.NextSectionTargets] for the target its rejection names

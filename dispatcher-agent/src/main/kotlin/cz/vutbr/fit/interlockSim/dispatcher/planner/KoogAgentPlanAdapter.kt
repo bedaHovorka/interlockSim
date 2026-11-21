@@ -99,6 +99,9 @@ import kotlin.time.TimeSource
  *    **A failed cycle with a partial emission gets the same protection** (#1058 review round):
  *    the posted emissions are kept, no retry runs, the failure still feeds [circuitBreaker], and
  *    the tick is reported through the emission classification rather than [TickOutcome.RULE_FALLBACK].
+ *    Because the guard covers the whole cycle, an offered NEXT SECTION hop the LLM did not request
+ *    waits for a later cycle; these endings (and [TickOutcome.LLM_SILENT_ALL_MOVING]) count such
+ *    skipped offers on [TickRecord.nextSectionOffers] — reporting only (Issue #1302).
  * 2. LLM cycle completes, invoked no actuator tool, and the station is **idle** — no approved
  *    (active) trains and no unapproved (queued) trains (Issue #834) → do NOT fall back; report
  *    [TickOutcome.LLM_NO_OP]. There is nothing to dispatch, so a correctly-idle LLM cycle must not
@@ -201,6 +204,9 @@ import kotlin.time.TimeSource
  *                       previous stateless-per-cycle behaviour.
  * @param circuitBreaker Guards against sustained LLM overload — see "Overload handling" above.
  *                       Defaults to a fresh breaker with the class default threshold/cooldown.
+ * @param nextSectionOfferCounter Counts the NEXT SECTION offers a fallback-skipping cycle left
+ *                       unrequested, for [TickRecord.nextSectionOffers] only (Issue #1302 — see
+ *                       [countNextSectionOffers]). Defaults to [NextSectionOfferCounter.LIVE].
  */
 class KoogAgentPlanAdapter(
 	private val agentFactory: KoogAgentFactory,
@@ -210,7 +216,8 @@ class KoogAgentPlanAdapter(
 	private val commandQueue: ActuatorCommandQueue,
 	private val sinkHolder: SinkHolder,
 	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0),
-	val circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker()
+	val circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker(),
+	private val nextSectionOfferCounter: NextSectionOfferCounter = NextSectionOfferCounter.LIVE
 ) : DispatcherPlanner {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -561,7 +568,7 @@ class KoogAgentPlanAdapter(
 				"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
 				"(simTime=${observation.snapshot.simTime}); not falling back"
 		}
-		reportTick(outcome, observation.snapshot.simTime, latencyMs)
+		reportTick(outcome, observation.snapshot.simTime, latencyMs, countOffersFrom = observation)
 		return decisions
 	}
 
@@ -600,7 +607,12 @@ class KoogAgentPlanAdapter(
 				"trains move with a path ahead — reporting LLM_SILENT_ALL_MOVING, not falling back " +
 				"(simTime=${observation.snapshot.simTime})"
 		}
-		reportTick(TickOutcome.LLM_SILENT_ALL_MOVING, observation.snapshot.simTime, latencyMs)
+		reportTick(
+			TickOutcome.LLM_SILENT_ALL_MOVING,
+			observation.snapshot.simTime,
+			latencyMs,
+			countOffersFrom = observation
+		)
 		return emptyList()
 	}
 
@@ -671,7 +683,7 @@ class KoogAgentPlanAdapter(
 				"KoogAgentPlanAdapter: LLM cycle failed after a partial emission — keeping the " +
 					"emitted actions, suppressing retry and fallback (simTime=${observation.snapshot.simTime})"
 			}
-			reportTick(outcomeFromEmissions(), observation.snapshot.simTime, latencyMs)
+			reportTick(outcomeFromEmissions(), observation.snapshot.simTime, latencyMs, countOffersFrom = observation)
 			return emptyList()
 		}
 		return runFallback(
@@ -934,18 +946,80 @@ class KoogAgentPlanAdapter(
 	 *   its own timing).
 	 * @param silentNonIdleCycleIndex Forwarded to [TickRecord.silentNonIdleCycleIndex]: set only by
 	 *   [runFallback] for a silent cycle on a non-idle station (Issue #1365).
+	 * @param countOffersFrom The observation whose NEXT SECTION offers this ending skipped the
+	 *   rule-based fallback over — the three fallback-skipping endings ([reportActedCycle], the
+	 *   partial-emission arm of [recordFailureAndFallback], [reportAllMovingSilent]) pass it, and
+	 *   this method counts [TickRecord.nextSectionOffers] from it internally (Issue #1302, see
+	 *   [countNextSectionOffers]). Deliberately not part of [cycleHistory]: the history feeds
+	 *   later prompts, and this count is reporting only. `null` — every fallback ending — counts
+	 *   nothing and reports a plain not-measured `null` count, exactly the pre-#1302 fallback
+	 *   endings; the parameter carries the signal, so behaviour is never keyed on [outcome].
 	 */
 	private fun reportTick(
 		outcome: TickOutcome,
 		simTime: Double,
 		latencyMs: Long?,
-		silentNonIdleCycleIndex: Long? = null
+		silentNonIdleCycleIndex: Long? = null,
+		countOffersFrom: DispatchObservation? = null
 	) {
+		val (nextSectionOffers, nextSectionOffersFailed) = countNextSectionOffers(countOffersFrom)
 		tickListeners.onTick(
-			TickRecord(outcome, simTime, latencyMs = latencyMs, silentNonIdleCycleIndex = silentNonIdleCycleIndex)
+			TickRecord(
+				outcome,
+				simTime,
+				latencyMs = latencyMs,
+				silentNonIdleCycleIndex = silentNonIdleCycleIndex,
+				nextSectionOffers = nextSectionOffers,
+				nextSectionOffersFailed = nextSectionOffersFailed
+			)
 		)
 		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())
 	}
+
+	/**
+	 * Counts the NEXT SECTION hops [observation]'s cycle message offered and the LLM left without an
+	 * accepted `request_route` (Issue #1302, step 1 "record" of #992 F8) — see
+	 * [NextSectionOfferCount] for what "accepted" means. A `null` [observation] — every fallback
+	 * ending, where the fallback ran on the whole cycle so no offer is left behind by the guard —
+	 * yields the plain not-measured `null to false` pair without invoking the counter.
+	 *
+	 * Called only by [reportTick], for exactly the three cycle endings that skip the rule-based
+	 * fallback: [reportActedCycle], the partial-emission arm of [recordFailureAndFallback], and
+	 * [reportAllMovingSilent]. The count is reporting only: it never feeds a decision, the
+	 * emissions or [cycleHistory].
+	 *
+	 * Two endings worth knowing:
+	 * - [TickOutcome.LLM_SILENT_ALL_MOVING] is always (0, 0) by construction: the branch is taken only
+	 *   when no block input [needsPathExtension], and that predicate is a superset of
+	 *   `NextHopResolver.isEligible`, so no hop is offered. It is computed anyway, so a drift between
+	 *   the two predicates would show up as a non-zero count.
+	 * - On the defensive `decisions.isNotEmpty()` arm of [handleSuccess] (dead today, see
+	 *   [reportActedCycle]) the returned decisions are not in [SinkHolder.emittedActionsThisCycle],
+	 *   so their trains would count as skipped.
+	 *
+	 * Never throws: an exception out of [plan] would kill the driver thread for the rest of the run,
+	 * so a failing count logs WARN and its cycle reports [TickRecord.nextSectionOffersFailed] — the
+	 * count is *failed* and [DefaultDispatcherRunRecorder] publishes the run's whole offer group
+	 * absent over it; never a measured `0` (PR #1408 review round).
+	 *
+	 * @return [reportTick]'s nextSectionOffers paired with whether the counter was invoked and
+	 *   threw — the TickRecord.nextSectionOffersFailed flag (PR #1408 review round). Internal
+	 *   plumbing only; this pair never leaves the adapter.
+	 */
+	private fun countNextSectionOffers(observation: DispatchObservation?): Pair<NextSectionOfferCount?, Boolean> =
+		when (observation) {
+			null -> null to false
+			else ->
+				try {
+					nextSectionOfferCounter.count(observation, sinkHolder.emittedActionsThisCycle()) to false
+				} catch (e: Exception) {
+					logger.warn(e) {
+						"KoogAgentPlanAdapter: counting the skipped NEXT SECTION offers failed — recording the " +
+							"count as failed (simTime=${observation.snapshot.simTime})"
+					}
+					null to true
+				}
+		}
 
 	/**
 	 * Returns the cached [KoogDispatchAgent], creating it lazily on the first call.
