@@ -277,6 +277,7 @@ class RequestRouteTool(
 		}
 
 		queuedOriginError(resolvedTrainName, fromEndpointName)?.let { return it }
+		notYetEnteredOriginError(resolvedTrainName, fromEndpointName)?.let { return it }
 
 		// A route has to start where the train actually is. Only checked for a train standing
 		// still at a known signal — the case where the answer is unambiguous and the train is
@@ -462,6 +463,46 @@ class RequestRouteTool(
 				legalOrigins.joinToString(" or ") { "'$it'" } +
 				". A route reserved elsewhere locks track this train cannot reach and releases nobody. " +
 				"Do not retry with the same origin.",
+			rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
+		)
+	}
+
+	/**
+	 * Rejects a route for an **approved** train that has not entered the network yet, unless it
+	 * starts at the train's entry InOut or at the signal its entry route already reaches.
+	 *
+	 * `approve_train` takes the train out of the queue, so [queuedOriginError] no longer sees it, but
+	 * the train stays off the track until its entry InOut has set the entry route: no front section
+	 * and, before that route is set, no signal ahead — so [standingAtSignal] does not see it either.
+	 * In that window any origin was granted. The #1301 A/B campaign (2026-11-20) measured it: in 8 of
+	 * 10 `vyhybna` REVISED_STRUCTURAL runs the model reserved the worked example's `zA -> doB1` for a
+	 * train waiting at `B`, and `B`'s own entry route was then refused as non-contiguous with that
+	 * reservation every 2 simulated seconds for about 62 s, until the reservation expired.
+	 *
+	 * Unlike a queued train, an approved one carries its timetable in the snapshot, so its entry
+	 * InOut is known exactly, on any number of InOuts. Inert when the snapshot has no timetable for
+	 * the train or when the train has a front section (it is on the track; the rules above and below
+	 * govern it). Inertness is wider than that — the capture-cadence window: the snapshot is the
+	 * last sim-thread capture, so a train approved but not yet present in it is in neither of the
+	 * two lists [knownTrainIds] reads; the call fails closed as UNKNOWN_TRAIN there, and no wrong
+	 * reservation can be granted in that window.
+	 */
+	private fun notYetEnteredOriginError(
+		trainId: String,
+		fromEndpointName: String
+	): ToolResult.Error? {
+		val snapshot = perceptionPort?.snapshot() ?: return null
+		val perception = snapshot.trainPerception(trainId) ?: return null
+		if (perception.frontSectionName != null) return null
+		val entry = snapshot.trainTimetable(trainId)?.originInOutName?.takeIf { it.isNotBlank() } ?: return null
+		val signalAhead = perception.signalAheadName?.takeIf { it.isNotBlank() }
+		if (fromEndpointName == entry || fromEndpointName == signalAhead) return null
+		val legalOrigins = listOfNotNull(entry, signalAhead)
+		return ToolResult.Error(
+			"Train '$trainId' is approved but has not entered the network yet; it enters at '$entry'. " +
+				"Its route must start at " + legalOrigins.joinToString(" or ") { "'$it'" } +
+				", not at '$fromEndpointName'. A route reserved elsewhere locks track this train cannot " +
+				"reach and blocks its own entry. Do not retry with the same origin.",
 			rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
 		)
 	}

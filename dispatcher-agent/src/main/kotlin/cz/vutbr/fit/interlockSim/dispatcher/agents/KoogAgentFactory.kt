@@ -122,7 +122,17 @@ class KoogAgentFactory(
 	 * wiring layer declares it after this factory is resolved. `null` (the default, and every agent
 	 * built outside a run) falls back to the topology value — see [stationCapacityOf].
 	 */
-	private val stationCapacityProvider: () -> StationCapacity? = { null }
+	private val stationCapacityProvider: () -> StationCapacity? = { null },
+	/**
+	 * The structural worked example, computed before the run (Issue #1301; see
+	 * [PreparedEntryJourney]). Read only by [PromptVariant.REVISED_STRUCTURAL]. `null` — the default,
+	 * for every factory built outside a run, and a wiring defect for a live REVISED_STRUCTURAL run —
+	 * never computes the journey in [createAgent] (the reservation target query must not run on the
+	 * dispatcher thread): the fail-soft rule-only example is rendered instead and the mis-wiring
+	 * logged at ERROR level. The correct wiring computes it — the
+	 * [cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule] KoogAgentFactory binding.
+	 */
+	internal val preparedEntryJourney: PreparedEntryJourney? = null
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -169,7 +179,21 @@ class KoogAgentFactory(
 		): String =
 			when (variant) {
 				PromptVariant.BASELINE -> buildBaselineSystemPrompt(maxActions, stationCapacity)
-				PromptVariant.REVISED -> buildRevisedSystemPrompt(maxActions, stationCapacity)
+				PromptVariant.REVISED, PromptVariant.REVISED_STRUCTURAL ->
+					buildRevisedSystemPrompt(maxActions, stationCapacity)
+			}
+
+		/**
+		 * Where [variant]'s worked `request_route` examples come from (Issue #1301).
+		 *
+		 * The one variant-dependent input of the STATION TOPOLOGY block: [PromptVariant.BASELINE] and
+		 * [PromptVariant.REVISED] keep the alphabetical examples they were measured with, byte for
+		 * byte; [PromptVariant.REVISED_STRUCTURAL] differs from [PromptVariant.REVISED] only here.
+		 */
+		internal fun workedExampleSourceOf(variant: PromptVariant): WorkedExampleSource =
+			when (variant) {
+				PromptVariant.BASELINE, PromptVariant.REVISED -> WorkedExampleSource.ALPHABETICAL
+				PromptVariant.REVISED_STRUCTURAL -> WorkedExampleSource.STRUCTURAL
 			}
 
 		/**
@@ -556,7 +580,11 @@ class KoogAgentFactory(
 
 			// Static topology never changes during a run — read once at agent construction.
 			// The InOut/Signal names double as the valid-endpoint set request_route validates against.
-			val topology = StationTopologySerializer.describe(context)
+			// BASELINE and REVISED make no routing call here. REVISED_STRUCTURAL renders the journey
+			// prepared before the run (Issue #1301): this runs on the dispatcher thread while the
+			// simulation runs, and the reservation target query must not (see PreparedEntryJourney).
+			val examples = workedExampleSourceOf(promptVariant)
+			val topology = describeTopology(context, examples)
 			val validEndpointNames: Set<String> = (topology.inOuts + topology.signals.map { it.name }).toSet()
 			// The station's own admission cap, stated in the system prompt and in every cycle message.
 			val stationCapacity = stationCapacityOf(context, stationCapacityProvider()?.value)
@@ -607,11 +635,13 @@ class KoogAgentFactory(
 			val instrumentedTools = tools.map { tool -> RejectionRecordingTool(tool, ::recordRejection) }
 
 			// Serialize static topology into the system prompt once.
-			val topologyPrompt = StationTopologySerializer.toPromptText(topology)
+			val topologyPrompt = StationTopologySerializer.toPromptText(topology, examples)
 			// Budget is read from this factory's own sinkHolder, not a hardcoded literal — see
 			// buildSystemPrompt's KDoc for why that is safe. The topology half is variant-independent
-			// on purpose (#834 AC: StationTopologySerializer is untouched by the prompt rebuild), so
-			// only the instruction half varies between A/B arms.
+			// on purpose (#834 AC: StationTopologySerializer is untouched by the prompt rebuild) except
+			// for its one named parameter, the worked-example source (Issue #1301): BASELINE and
+			// REVISED render the alphabetical examples byte for byte, REVISED_STRUCTURAL the station's
+			// own journey with REVISED's instruction half.
 			val systemPrompt =
 				"${buildSystemPrompt(sinkHolder.maxActionsPerTick, promptVariant, stationCapacity)}\n\n$topologyPrompt"
 
@@ -635,6 +665,33 @@ class KoogAgentFactory(
 			logger.debug { "KoogAgentFactory: created agent with ${instrumentedTools.size} tools (SP2c.6 4-tool surface)" }
 			agent
 		}
+
+	/**
+	 * The static topology for [examples] (Issue #1301): the structural journey comes from
+	 * [preparedEntryJourney], prepared by the wiring before the run. An unprepared factory does not
+	 * degrade by computing it here: [PreparedEntryJourney.of] runs the reservation target query,
+	 * which mutates navigation state confined to the simulation thread, and [createAgent] runs on
+	 * the dispatcher thread while the simulation runs. The journey stays `null` — the serializer
+	 * renders its fail-soft rule-only example — and the mis-wiring is logged at ERROR level.
+	 */
+	private fun describeTopology(
+		context: DefaultSimulationContext,
+		examples: WorkedExampleSource
+	): StationTopology {
+		val topology = StationTopologySerializer.describe(context)
+		if (!examples.needsEntryJourney) return topology
+		val prepared = preparedEntryJourney
+		if (prepared == null) {
+			logger.error {
+				"KoogAgentFactory: a REVISED_STRUCTURAL factory was built without a prepared entry " +
+					"journey — the Koin binding should have prepared it before the run " +
+					"(PreparedEntryJourney.of). Rendering the rule-only worked example instead of " +
+					"computing it here: the reservation target query must not run on the dispatcher thread"
+			}
+			return topology
+		}
+		return topology.copy(entryJourney = prepared.journey)
+	}
 
 	/**
 	 * Records one coded in-turn tool rejection on the per-run recorder.

@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TimetableReading
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
@@ -76,11 +77,27 @@ class ToolRejectionCodeTest {
 		blockIds: List<String> = listOf("k1", "kA", "kB"),
 		activeDestination: String = "",
 		activeSignalAhead: String? = null,
-		activeVelocity: Double = 0.0
+		activeVelocity: Double = 0.0,
+		activeOrigin: String? = null,
+		activeFrontSection: String? = null
 	): NetworkPerceptionPort =
 		mockk<NetworkPerceptionPort>(relaxed = true).also { port ->
 			every { port.snapshot() } returns
 				SimulationSnapshot.EMPTY.copy(
+					// A timetable only when a test names the origin: without one the entry-InOut rule
+					// for an approved train that has not entered yet stays inert (Issue #1301 campaign).
+					timetables =
+						activeOrigin?.let { origin ->
+							activeTrains.map {
+								TimetableReading(
+									trainId = it,
+									originInOutName = origin,
+									destinationInOutName = activeDestination,
+									scheduledDepartureTime = 0.0,
+									scheduledArrivalTime = 0.0
+								)
+							}
+						} ?: emptyList(),
 					trainPerceptions =
 						activeTrains.map {
 							TrainPerceptionReading(
@@ -92,7 +109,7 @@ class ToolRejectionCodeTest {
 								velocity = activeVelocity,
 								acceleration = 0.0,
 								totalDistance = 0.0,
-								frontSectionName = null,
+								frontSectionName = activeFrontSection,
 								destinationInOutName = activeDestination,
 								scheduledArrivalTime = 0.0,
 								isDwelling = activeVelocity == 0.0
@@ -105,7 +122,7 @@ class ToolRejectionCodeTest {
 								velocity = activeVelocity,
 								acceleration = 0.0,
 								totalDistance = 0.0,
-								frontSectionName = null
+								frontSectionName = activeFrontSection
 							)
 						},
 					blocks =
@@ -130,7 +147,9 @@ class ToolRejectionCodeTest {
 		destination: String = "B",
 		activeDestination: String = "",
 		activeSignalAhead: String? = null,
-		activeVelocity: Double = 0.0
+		activeVelocity: Double = 0.0,
+		activeOrigin: String? = null,
+		activeFrontSection: String? = null
 	) = RequestRouteTool(
 		SinkHolder(),
 		endpoints,
@@ -138,7 +157,9 @@ class ToolRejectionCodeTest {
 			active,
 			activeDestination = activeDestination,
 			activeSignalAhead = activeSignalAhead,
-			activeVelocity = activeVelocity
+			activeVelocity = activeVelocity,
+			activeOrigin = activeOrigin,
+			activeFrontSection = activeFrontSection
 		),
 		sensorPort(queued, destination),
 		inOutNames = inOuts
@@ -378,6 +399,79 @@ class ToolRejectionCodeTest {
 					activeSignalAhead = "doB1",
 					activeVelocity = 0.0
 				).execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "A"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
+
+	/**
+	 * The window between `approve_train` and entry (Issue #1301 A/B campaign, 2026-11-20): an
+	 * approved train has left the queue, so [RequestRouteTool]'s queued-train rule no longer applies,
+	 * and it has no front section and no signal ahead yet, so the standing-at-signal rule does not
+	 * either. In 8 of 10 `vyhybna` REVISED_STRUCTURAL runs the model then reserved the worked
+	 * example's `zA -> doB1` for a train waiting at `B`; the reservation was granted, and `B`'s own
+	 * entry route was refused as non-contiguous every 2 simulated seconds for about 62 s until it
+	 * expired. Such a train can only start at its timetable origin InOut.
+	 */
+	@Test
+	@DisplayName("an approved train that has not entered yet must start at its entry InOut")
+	fun approvedTrainNotYetEnteredMustStartAtItsEntry() {
+		val result =
+			runBlocking {
+				requestRouteTool(active = listOf("Train #1"), activeDestination = "A", activeOrigin = "B")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doA1", "toEndpointName" to "doB1"))
+			}
+
+		val error = errorOf(result)
+		assertThat(error.rejection, "rejection code").isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+		assertThat(error.message, "message names the entry InOut").contains("'B'")
+	}
+
+	@Test
+	@DisplayName("an approved train that has not entered yet may start at its entry InOut")
+	fun approvedTrainNotYetEnteredMayStartAtItsEntry() {
+		val result =
+			runBlocking {
+				requestRouteTool(active = listOf("Train #1"), activeDestination = "A", activeOrigin = "B")
+					.execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "B", "toEndpointName" to "doB1"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
+
+	/**
+	 * Once the entry InOut has set the train's entry route, the train has a signal ahead before its
+	 * front moves onto the track; a route from that signal continues the train's own path.
+	 */
+	@Test
+	@DisplayName("an approved train with its entry route set may start at its signal ahead")
+	fun approvedTrainWithEntryRouteMayStartAtItsSignalAhead() {
+		val result =
+			runBlocking {
+				requestRouteTool(
+					active = listOf("Train #1"),
+					activeDestination = "A",
+					activeOrigin = "B",
+					activeSignalAhead = "doB1",
+					activeVelocity = 5.0
+				).execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doB1", "toEndpointName" to "A"))
+			}
+
+		assertThat(result).isInstanceOf(ToolResult.Success::class)
+	}
+
+	@Test
+	@DisplayName("a train on the track is not held to its entry InOut")
+	fun enteredTrainIsNotHeldToItsEntry() {
+		val result =
+			runBlocking {
+				requestRouteTool(
+					active = listOf("Train #1"),
+					activeDestination = "A",
+					activeOrigin = "B",
+					activeFrontSection = "k1",
+					activeVelocity = 12.0
+				).execute(mapOf("trainName" to "Train #1", "fromEndpointName" to "doA1", "toEndpointName" to "A"))
 			}
 
 		assertThat(result).isInstanceOf(ToolResult.Success::class)

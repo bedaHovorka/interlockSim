@@ -18,8 +18,12 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.sim.Station
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsOfType
+import io.github.oshai.kotlinlogging.KotlinLogging
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Static description of one switch (výhybka, turnout) in the controlled area.
@@ -47,6 +51,75 @@ data class RouteDescriptor(
 )
 
 /**
+ * One hop of an [EntryJourney]: a `request_route` from [from] to [to].
+ */
+data class JourneyHop(
+	val from: String,
+	val to: String
+)
+
+/**
+ * One real journey through the station, taken from its structure (Issue #1301): a train enters at
+ * [entry], its [homeSignal] reserves to [nextSignal], and [nextSignal] reserves on to [destination],
+ * the train's own exit.
+ *
+ * Every hop target is a candidate the interlocking offers from that hop's origin
+ * ([cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery.findReservationTargetCandidates],
+ * the same source a cycle message's NEXT SECTION line is built from), so the example never teaches a
+ * target that faces against the train or needs an illegal switch position. The second hop starts at
+ * [nextSignal] by construction — the type has no separate field for it.
+ *
+ * @property entry The InOut the train entered at. Named as the entry only, never as a route origin:
+ *   entry is by train approval.
+ * @property homeSignal The entry block's home signal, the origin of the first hop.
+ * @property nextSignal The first signal the home signal reserves to, or `null` on a one-signal
+ *   station whose home signal reserves straight to the exit.
+ * @property destination The exit InOut [nextSignal] (or, without it, [homeSignal]) reserves to, or
+ *   `null` when [nextSignal] offers no exit; then only the first hop is rendered.
+ */
+data class EntryJourney(
+	val entry: String,
+	val homeSignal: SignalId,
+	val nextSignal: SignalId?,
+	val destination: String?
+) {
+	init {
+		require(nextSignal != null || destination != null) {
+			"An entry journey needs a next signal or a destination after home signal ${homeSignal.name}"
+		}
+	}
+
+	/** The `request_route` hops of this journey, in journey order; the second starts where the first ends. */
+	val hops: List<JourneyHop>
+		get() =
+			when {
+				nextSignal == null -> listOf(JourneyHop(homeSignal.name, requireNotNull(destination)))
+				destination == null -> listOf(JourneyHop(homeSignal.name, nextSignal.name))
+				else -> listOf(JourneyHop(homeSignal.name, nextSignal.name), JourneyHop(nextSignal.name, destination))
+			}
+}
+
+/**
+ * Where the worked `request_route` examples of the STATION TOPOLOGY block come from (Issue #1301).
+ *
+ * The serializer never sees [PromptVariant]; [KoogAgentFactory.workedExampleSourceOf] maps a variant
+ * to its source, so the topology block stays variant-independent except for this one parameter.
+ */
+enum class WorkedExampleSource(
+	/**
+	 * Whether the source renders [StationTopology.entryJourney], which the wiring must prepare before
+	 * the run ([PreparedEntryJourney]) and the factory must then read.
+	 */
+	val needsEntryJourney: Boolean
+) {
+	/** The examples every variant rendered before Issue #1301: the first names of each list, byte for byte. */
+	ALPHABETICAL(needsEntryJourney = false),
+
+	/** One real journey of the station ([StationTopology.entryJourney]); never an alphabetical guess. */
+	STRUCTURAL(needsEntryJourney = true)
+}
+
+/**
  * Immutable, static snapshot of a controlled area's topology.
  *
  * Carries only the *static* structure — entry/exit points, signals, switches, block sections,
@@ -55,6 +128,9 @@ data class RouteDescriptor(
  * requests, signal aspects): those are reported per turn by the perception tools, which reference
  * elements by the same IDs used here.
  *
+ * @property entryJourney The station's structural worked example (Issue #1301), or `null` when no
+ *   InOut qualifies or the structure could not be derived; read only by
+ *   [WorkedExampleSource.STRUCTURAL].
  * @see StationTopologySerializer
  */
 data class StationTopology(
@@ -62,7 +138,8 @@ data class StationTopology(
 	val signals: List<SignalId>,
 	val switches: List<SwitchDescriptor>,
 	val blocks: List<BlockId>,
-	val routes: List<RouteDescriptor>
+	val routes: List<RouteDescriptor>,
+	val entryJourney: EntryJourney? = null
 )
 
 /**
@@ -127,7 +204,8 @@ object StationTopologySerializer {
 	 * Extracts the static [StationTopology] from a live simulation environment.
 	 *
 	 * Reads only static structure (grid cells and graph edges) and the purely topological route
-	 * finder, so it is safe to call at agent-construction time.
+	 * finder, so it is safe to call at agent-construction time. It makes no routing call and leaves
+	 * [StationTopology.entryJourney] empty.
 	 */
 	fun describe(env: SimulationEnvironment): StationTopology {
 		val grid = env.getRailWayNetGrid()
@@ -173,6 +251,18 @@ object StationTopologySerializer {
 	}
 
 	/**
+	 * Derives the [Station], or `null` with one WARN line when the network cannot be derived — the
+	 * structural example is optional, the rest of the topology is not.
+	 */
+	internal fun stationOrNull(env: SimulationEnvironment): Station? =
+		runCatching { Station.from(env) }
+			.onFailure {
+				logger.warn(
+					it
+				) { "StationTopologySerializer: no station derivation; no structural worked example" }
+			}.getOrNull()
+
+	/**
 	 * Renders the topology into a compact, ID-only text block suitable for a system prompt.
 	 *
 	 * ## Anti-hallucination formatting
@@ -205,7 +295,10 @@ object StationTopologySerializer {
 	 * rendered under one shared "valid request_route endpoint names" heading, still labelled by
 	 * kind, and the worked example shows a signal-to-signal hop alongside the end-to-end route.
 	 */
-	fun toPromptText(topology: StationTopology): String {
+	fun toPromptText(
+		topology: StationTopology,
+		examples: WorkedExampleSource = WorkedExampleSource.ALPHABETICAL
+	): String {
 		val sb = StringBuilder()
 		sb.append("=== STATION TOPOLOGY (static) ===\n")
 		sb.append("Copy names character-for-character from the lists below. A Block ID that looks ")
@@ -246,7 +339,10 @@ object StationTopologySerializer {
 		} else {
 			appendRoutesWithinBudget(sb, topology.routes)
 		}
-		appendWorkedExample(sb, topology)
+		when (examples) {
+			WorkedExampleSource.ALPHABETICAL -> appendWorkedExample(sb, topology)
+			WorkedExampleSource.STRUCTURAL -> appendStructuralWorkedExample(sb, topology)
+		}
 		return sb.toString()
 	}
 
@@ -285,9 +381,71 @@ object StationTopologySerializer {
 		if (entryTarget == null) {
 			appendFullSpanExample(sb, exampleFrom, exampleTo)
 		} else {
-			appendEntryRouteExample(sb, exampleFrom, exampleTo, entryTarget)
+			appendEntryRouteExample(sb, exampleFrom, exampleTo, exampleFrom, entryTarget)
 		}
 		appendSectionHopExample(sb, topology)
+		appendWrongBlockWarning(sb, topology)
+	}
+
+	/**
+	 * The [WorkedExampleSource.STRUCTURAL] worked examples (Issue #1301): the same sentences as
+	 * [appendWorkedExample], with the names of one real journey ([StationTopology.entryJourney]) —
+	 * the entry route from the home signal, then its continuation to the train's own destination.
+	 *
+	 * Rare shapes: a network without Signals keeps the whole-network example; a signalled network
+	 * without a journey renders only the rule sentence, never a guessed name. Like
+	 * [appendWorkedExample], nothing is rendered with fewer than two InOuts.
+	 */
+	private fun appendStructuralWorkedExample(
+		sb: StringBuilder,
+		topology: StationTopology
+	) {
+		if (topology.inOuts.size < 2) return
+		val journey = topology.entryJourney
+		when {
+			topology.signals.isEmpty() -> appendFullSpanExample(sb, topology.inOuts[0], topology.inOuts[1])
+			journey == null -> appendRuleOnly(sb)
+			else -> appendJourneyExample(sb, journey)
+		}
+		appendWrongBlockWarning(sb, topology)
+	}
+
+	private fun appendJourneyExample(
+		sb: StringBuilder,
+		journey: EntryJourney
+	) {
+		val firstHop = journey.hops.first()
+		appendEntryRouteExample(sb, journey.entry, journey.destination, firstHop.from, firstHop.to)
+		val continuation = journey.hops.getOrNull(1) ?: return
+		sb
+			.append(" EXAMPLE (next section — the same train continues; one section holds fewer blocks): ")
+			.append("request_route(trainName=")
+			.append(TRAIN_NAME_PLACEHOLDER)
+			.append(FROM_ENDPOINT_ARG)
+			.append(continuation.from)
+			.append(TO_ENDPOINT_ARG)
+			.append(continuation.to)
+			.append("\"), where \"")
+			.append(continuation.to)
+			.append("\" is that train's own destination.")
+	}
+
+	/** The structural fallback when no InOut qualifies: the rule, with no example names at all. */
+	private fun appendRuleOnly(sb: StringBuilder) {
+		sb
+			.append("\n\nRULE. Never invent a train name: use an id copied from the \"Queued\" or \"Active\" ")
+			.append("train list in this cycle's message. A route reserves ONE section at a time, never the whole ")
+			.append("station: request each train's next section from its NEXT SECTION line. A route whose two ")
+			.append("endpoints are BOTH entry/exit points is refused.")
+	}
+
+	/**
+	 * The closing warning of every worked example: a real Block ID is not an endpoint.
+	 */
+	private fun appendWrongBlockWarning(
+		sb: StringBuilder,
+		topology: StationTopology
+	) {
 		// Never a name that is also a valid endpoint: on Červený Újezd a block next to an unnamed
 		// switch takes its signal's name, and calling that a Block ID contradicted the Signals list.
 		val endpointNames = topology.inOuts.toSet() + topology.signals.map { it.name }
@@ -316,8 +474,9 @@ object StationTopologySerializer {
 	 */
 	private fun appendEntryRouteExample(
 		sb: StringBuilder,
-		exampleFrom: String,
-		destination: String,
+		entryName: String,
+		destination: String?,
+		originName: String,
 		entryTarget: String
 	) {
 		sb
@@ -326,13 +485,15 @@ object StationTopologySerializer {
 			.append(TRAIN_NAME_PLACEHOLDER)
 			.append(". A route reserves ONE section at a time, never the whole station: to start a ")
 			.append("train that entered at \"")
-			.append(exampleFrom)
-			.append("\" and is bound for \"")
-			.append(destination)
+			.append(entryName)
+		if (destination != null) {
+			sb.append("\" and is bound for \"").append(destination)
+		}
+		sb
 			.append("\", call request_route(trainName=")
 			.append(TRAIN_NAME_PLACEHOLDER)
 			.append(FROM_ENDPOINT_ARG)
-			.append(exampleFrom)
+			.append(originName)
 			.append(TO_ENDPOINT_ARG)
 			.append(entryTarget)
 			.append("\"), then keep reserving forward section by section as it advances. A route ")
