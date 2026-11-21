@@ -100,8 +100,11 @@ interface PathReservationService :
 	 * - **GeometricallyImpossible**: The request can never succeed as asked (Issue #903)
 	 * - **DivergesFromHeldRoute**: Every candidate leaves the route the train already holds (Issue #1066)
 	 *
-	 * [NoPathExists] means no candidate path (or, for `reservePathToAny`, no target) existed; once targets
-	 * were tried, the last failure is reported instead.
+	 * [NoPathExists] means no candidate path (or, for `reservePathToAny`, no target) existed. Once
+	 * targets were tried, `reservePathToAny` and `reservePathToAnyNextSemaphore` report a permanent class
+	 * ([GeometricallyImpossible], [DivergesFromHeldRoute], [NoPathExists]) only when every target was
+	 * refused permanently; a set with a merely blocked target ends as [AllPathsBlocked] (Issues #937,
+	 * #1401).
 	 */
 	sealed class ReservationResult {
 		/**
@@ -130,7 +133,9 @@ interface PathReservationService :
 		 *   [BlockedCandidate] per candidate refused on contention, in the order the candidates were
 		 *   tried. A candidate refused for a permanent reason (geometric, divergent) is not listed:
 		 *   no release can make it reservable. Filled by [reservePath]. [reservePathToAny] passes the
-		 *   last target's list through, so its indices are relative to that target's candidate list;
+		 *   last target's list through when that target was blocked, so its indices are relative to that
+		 *   target's candidate list; when a blocked target is followed by permanently refused ones, the
+		 *   permanence gate (Issue #1401) reports the target count as [attemptedPaths] and an empty list.
 		 *   [reservePathToAnyNextSemaphore] reports it empty. A request is
 		 *   granted once ANY listed candidate is free, and a candidate is free once ALL its
 		 *   blockers are gone (an OR of ANDs).
@@ -706,7 +711,9 @@ interface PathReservationService :
 	 * 1. Discover all potential targets (InOuts and semaphores) from the context
 	 * 2. For each target, attempt `reservePath(trainId, start, target)`
 	 * 3. Return Success with first available path
-	 * 4. If all targets fail, return `NoPathExists` when there was no target at all, else the last failure
+	 * 4. If all targets fail, return `NoPathExists` when there was no target at all; else a permanent
+	 *    class only when every target was refused permanently, `AllPathsBlocked` when at least one
+	 *    target was merely blocked (Issue #1401, the gate `reservePathToAnyNextSemaphore` applies)
 	 *
 	 * ## Use Case: Dispatcher Logic (ShuntingLoop)
 	 *
@@ -735,8 +742,11 @@ interface PathReservationService :
 	 *
 	 * ## Blocked-by result
 	 *
-	 * A [ReservationResult.AllPathsBlocked] result is the last target's [reservePath] result as it is,
-	 * so its `blockedBy` describes only that target's candidates (indices relative to that target).
+	 * When the last target was blocked, a [ReservationResult.AllPathsBlocked] result is that target's
+	 * [reservePath] result as it is, so its `attemptedPaths` is that target's candidate count and its
+	 * `blockedBy` describes only that target's candidates (indices relative to that target). When a blocked target is followed by permanently refused ones, the
+	 * permanence gate (Issue #1401) reports `AllPathsBlocked` with the target count and an empty
+	 * `blockedBy`.
 	 *
 	 * @param trainId Unique identifier for the train
 	 * @param start Starting path separator (typically a semaphore)

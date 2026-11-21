@@ -894,7 +894,9 @@ class DefaultPathReservationService(
 
 	/**
 	 * Final classification for [reservePathToAnyNextSemaphore] once every target semaphore has been
-	 * tried, applying Issue #937's permanence gate to the outer aggregation.
+	 * tried, and (Issue #1401) for [reservePathToAny] once every target has been tried, applying
+	 * Issue #937's permanence gate to the outer aggregation. [caller] names the calling method in the
+	 * DEBUG line; its default keeps the text the line had before Issue #1401.
 	 *
 	 * A permanent verdict — geometric, (Issue #1066) divergent from the held route, or (Issue #1385) no
 	 * switch-legal route at all — may stand
@@ -904,6 +906,11 @@ class DefaultPathReservationService(
 	 * [classifyExhaustedAttempt] applies to a single `reservePath`'s candidates, and its KDoc
 	 * carries the full rationale.
 	 *
+	 * A gated mix reports [attemptCount] and an empty `blockedBy`: the blocked target's own list is not
+	 * the last result, and the permanent targets have none. Any other exhausted set returns [lastResult]
+	 * unchanged — an all-permanent set its permanent class, a set ending on a blocked target that
+	 * target's own [PathReservationService.ReservationResult.AllPathsBlocked].
+	 *
 	 * Extracted so [reservePathToAnyNextSemaphore] stays within its method-length budget.
 	 * `internal` so tests can pin the all-divergent branch directly: since Issue #1188 no legal
 	 * (oriented, contiguous) origin on `vyhybna.xml` reaches it through the real scan.
@@ -911,10 +918,11 @@ class DefaultPathReservationService(
 	internal fun classifyExhaustedSemaphores(
 		lastResult: PathReservationService.ReservationResult?,
 		permanentAttempts: Int,
-		attemptCount: Int
+		attemptCount: Int,
+		caller: String = "reservePathToAnyNextSemaphore"
 	): PathReservationService.ReservationResult {
 		logger.debug {
-			"reservePathToAnyNextSemaphore: all $attemptCount path(s) exhausted " +
+			"$caller: all $attemptCount path(s) exhausted " +
 				"($permanentAttempts permanently refused)"
 		}
 		val permanentVerdict =
@@ -1026,7 +1034,12 @@ class DefaultPathReservationService(
 	 * - try each target in priority order and return the first Success;
 	 * - return immediately on Conflict (serious error) or NonContiguousStart (the start is
 	 *   unusable for every target);
-	 * - if all fail: NoPathExists when there was no target, else the last failure.
+	 * - if all fail: NoPathExists when there was no target, else the permanence gate
+	 *   [classifyExhaustedSemaphores] (Issue #1401): a permanent refusal (GeometricallyImpossible,
+	 *   DivergesFromHeldRoute, NoPathExists) stands only when every target was refused permanently;
+	 *   a set with a blocked target whose last result is permanent ends as AllPathsBlocked(target
+	 *   count) with an empty `blockedBy`; otherwise the last target's result as it is (an
+	 *   AllPathsBlocked then carries the last target's candidate count and `blockedBy`).
 	 *
 	 * Called rarely (when a train needs a new path, ~once per train per network traversal), so the
 	 * target list is recomputed per call rather than cached: each call's targets carry lazy path
@@ -1076,6 +1089,8 @@ class DefaultPathReservationService(
 		// - First success is guaranteed to be the best available option
 		// - Trying all paths to find "optimal" would be wasteful (dynamic state changes anyway)
 		var lastResult: PathReservationService.ReservationResult? = null
+		// Issue #1401: permanent refusals, counted for the shared permanence gate (classifyExhaustedSemaphores).
+		var permanentAttempts = 0
 
 		for (attempt in attempts) {
 			val target = attempt.target
@@ -1105,10 +1120,22 @@ class DefaultPathReservationService(
 					}
 					return result
 				}
-				else -> {
-					// Path not available (blocked, occupied, or no path exists)
-					// Try next target
-					logger.trace { "reservePathToAny: Path to $target not available, trying next target" }
+				is PathReservationService.ReservationResult.AllPathsBlocked -> {
+					// Contention: this target can clear, try the next one
+					// The race-condition pins in PathReservationMultiTrainRaceConditionsTest match this wording.
+					logger.trace { "reservePathToAny: Path to $target blocked, trying next target" }
+					lastResult = result
+				}
+				// Issue #1401: a permanent refusal of this target only (not of `start`), so keep trying;
+				// counted so the gate below can tell an all-permanent set from a mix with a blocked target.
+				is PathReservationService.ReservationResult.GeometricallyImpossible,
+				is PathReservationService.ReservationResult.DivergesFromHeldRoute,
+				PathReservationService.ReservationResult.NoPathExists -> {
+					// The race-condition pins in PathReservationMultiTrainRaceConditionsTest match this wording.
+					logger.trace {
+						"reservePathToAny: Path to $target permanently refused ($result), trying next target"
+					}
+					permanentAttempts++
 					lastResult = result
 				}
 			}
@@ -1128,8 +1155,8 @@ class DefaultPathReservationService(
 				"(tried ${attempts.size} targets, all blocked or unreachable)"
 		}
 
-		// Return last failure result (or AllPathsBlocked if no result available)
-		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attempts.size)
+		// Issue #1401: the same permanence gate as reservePathToAnyNextSemaphore
+		return classifyExhaustedSemaphores(lastResult, permanentAttempts, attempts.size, caller = "reservePathToAny")
 	}
 
 	// ========== Private helper methods ==========

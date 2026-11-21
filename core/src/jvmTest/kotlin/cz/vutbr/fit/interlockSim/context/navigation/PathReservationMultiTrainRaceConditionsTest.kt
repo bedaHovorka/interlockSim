@@ -18,12 +18,17 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
+import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 
 /**
  * Tests for multi-train race conditions in PathReservationService.
@@ -81,6 +86,56 @@ class PathReservationMultiTrainRaceConditionsTest : PathReservationServiceTestBa
 	}
 
 	/**
+	 * `reservePathToAny` with its per-target verdicts captured (Issue #1401): the attempt loop's TRACE
+	 * line for every target it tried, so a failing pin shows the whole set, not only the gated result.
+	 */
+	private fun reservePathToAnyWithTargetLog(
+		trainId: String,
+		start: DynamicRailSemaphore
+	): Pair<PathReservationService.ReservationResult, List<String>> {
+		val loggerName = DefaultPathReservationService::class.java.name
+		val serviceLogger = LoggerFactory.getLogger(loggerName) as Logger
+		val savedLevel = serviceLogger.level
+		serviceLogger.level = Level.TRACE
+		try {
+			lateinit var result: PathReservationService.ReservationResult
+			lateinit var targetLines: List<String>
+			withLogOf(loggerName) { log ->
+				result = service.reservePathToAny(trainId, start)
+				targetLines =
+					log.list
+						.map { it.formattedMessage }
+						.filter { it.startsWith("reservePathToAny: Path to ") }
+			}
+			return result to targetLines
+		} finally {
+			serviceLogger.level = savedLevel
+		}
+	}
+
+	/**
+	 * The verdict of train2's failed `reservePathToAny` from `zB` while train1 holds a route from `zA`
+	 * (Issue #1401). Both pins below run their failure branch on vyhybna.xml: of the seven targets,
+	 * `A`, `doA1` and `doA2` are blocked by train1's route, and `B`, `zA`, `doB2` and `doB1` are
+	 * geometrically impossible (they face away from `zB`'s direction of travel). The last target tried,
+	 * `doB1`, is geometric, so the result used to be `GeometricallyImpossible` (Issue #1385 re-pinned
+	 * it so); the permanence gate now turns this mixed set into `AllPathsBlocked` with the target count
+	 * and an empty `blockedBy`, because the blocked targets can clear once train1 releases its route.
+	 */
+	private fun assertGatedMixedSet(
+		result: PathReservationService.ReservationResult,
+		targetLines: List<String>
+	) {
+		val perTarget = "per-target verdicts: $targetLines"
+		assertThat(targetLines.count { it.endsWith(" blocked, trying next target") }, name = perTarget).isEqualTo(3)
+		assertThat(targetLines.count { "permanently refused" in it }, name = perTarget).isEqualTo(4)
+		assertThat(result, name = perTarget).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		val blocked = result as PathReservationService.ReservationResult.AllPathsBlocked
+		assertThat(blocked.attemptedPaths, name = perTarget).isEqualTo(7)
+		assertThat(blocked.blockedBy, name = perTarget).isEmpty()
+	}
+
+	/**
 	 * Tests concurrent reservation with trains using different network paths.
 	 *
 	 * **Scenario**:
@@ -119,7 +174,7 @@ class PathReservationMultiTrainRaceConditionsTest : PathReservationServiceTestBa
 		val train1Blocks = assertReservationSuccess(result1).reservedBlocks
 
 		// Act - Train2 reserves from zB (opposite direction)
-		val result2 = service.reservePathToAny("train2", zB)
+		val (result2, train2Targets) = reservePathToAnyWithTargetLog("train2", zB)
 
 		// Assert - Train2 may succeed or fail depending on path overlap
 		if (result2 is PathReservationService.ReservationResult.Success) {
@@ -141,10 +196,7 @@ class PathReservationMultiTrainRaceConditionsTest : PathReservationServiceTestBa
 			assertBlockOwnership("train2", train2Blocks)
 		} else {
 			// Train2 failed - verify it owns no blocks
-			// reservePathToAny reports the LAST target's verdict, a grid-order semaphore. Issue #1385: its
-			// switch-legal candidates are all geometric, so the verdict is GeometricallyImpossible (it was
-			// AllPathsBlocked while a blocked switch-blind phantom candidate was in the mix).
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+			assertGatedMixedSet(result2, train2Targets)
 			val train2Blocks = service.getReservedBlocks("train2")
 			assertThat(train2Blocks).isEmpty()
 
@@ -288,7 +340,7 @@ class PathReservationMultiTrainRaceConditionsTest : PathReservationServiceTestBa
 		val train1Blocks = assertReservationSuccess(result1).reservedBlocks.toSet()
 
 		// Act - Train2 attempts from zB (opposite direction)
-		val result2 = service.reservePathToAny("train2", zB)
+		val (result2, train2Targets) = reservePathToAnyWithTargetLog("train2", zB)
 
 		// Assert - Train2 may succeed or fail depending on path availability
 		if (result2 is PathReservationService.ReservationResult.Success) {
@@ -302,10 +354,7 @@ class PathReservationMultiTrainRaceConditionsTest : PathReservationServiceTestBa
 			assertBlockOwnership("train2", train2Blocks.toList())
 		} else {
 			// If train2 failed, verify it owns no blocks
-			// reservePathToAny reports the LAST target's verdict, a grid-order semaphore. Issue #1385: its
-			// switch-legal candidates are all geometric, so the verdict is GeometricallyImpossible (it was
-			// AllPathsBlocked while a blocked switch-blind phantom candidate was in the mix).
-			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+			assertGatedMixedSet(result2, train2Targets)
 			val train2Blocks = service.getReservedBlocks("train2")
 			assertThat(train2Blocks).isEmpty()
 		}
