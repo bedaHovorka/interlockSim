@@ -18,8 +18,12 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.sim.Station
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.cellsOfType
+import io.github.oshai.kotlinlogging.KotlinLogging
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Static description of one switch (výhybka, turnout) in the controlled area.
@@ -47,6 +51,75 @@ data class RouteDescriptor(
 )
 
 /**
+ * One hop of an [EntryJourney]: a `request_route` from [from] to [to].
+ */
+data class JourneyHop(
+	val from: String,
+	val to: String
+)
+
+/**
+ * One real journey through the station, taken from its structure (Issue #1301): a train enters at
+ * [entry], its [homeSignal] reserves to [nextSignal], and [nextSignal] reserves on to [destination],
+ * the train's own exit.
+ *
+ * Every hop target is a candidate the interlocking offers from that hop's origin
+ * ([cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery.findReservationTargetCandidates],
+ * the same source a cycle message's NEXT SECTION line is built from), so the example never teaches a
+ * target that faces against the train or needs an illegal switch position. The second hop starts at
+ * [nextSignal] by construction — the type has no separate field for it.
+ *
+ * @property entry The InOut the train entered at. Named as the entry only, never as a route origin:
+ *   entry is by train approval.
+ * @property homeSignal The entry block's home signal, the origin of the first hop.
+ * @property nextSignal The first signal the home signal reserves to, or `null` on a one-signal
+ *   station whose home signal reserves straight to the exit.
+ * @property destination The exit InOut [nextSignal] (or, without it, [homeSignal]) reserves to, or
+ *   `null` when [nextSignal] offers no exit; then only the first hop is rendered.
+ */
+data class EntryJourney(
+	val entry: String,
+	val homeSignal: SignalId,
+	val nextSignal: SignalId?,
+	val destination: String?
+) {
+	init {
+		require(nextSignal != null || destination != null) {
+			"An entry journey needs a next signal or a destination after home signal ${homeSignal.name}"
+		}
+	}
+
+	/** The `request_route` hops of this journey, in journey order; the second starts where the first ends. */
+	val hops: List<JourneyHop>
+		get() =
+			when {
+				nextSignal == null -> listOf(JourneyHop(homeSignal.name, requireNotNull(destination)))
+				destination == null -> listOf(JourneyHop(homeSignal.name, nextSignal.name))
+				else -> listOf(JourneyHop(homeSignal.name, nextSignal.name), JourneyHop(nextSignal.name, destination))
+			}
+}
+
+/**
+ * Where the worked `request_route` examples of the STATION TOPOLOGY block come from (Issue #1301).
+ *
+ * The serializer never sees [PromptVariant]; [KoogAgentFactory.workedExampleSourceOf] maps a variant
+ * to its source, so the topology block stays variant-independent except for this one parameter.
+ */
+enum class WorkedExampleSource(
+	/**
+	 * Whether the source renders [StationTopology.entryJourney], which the wiring must prepare before
+	 * the run ([PreparedEntryJourney]) and the factory must then read.
+	 */
+	val needsEntryJourney: Boolean
+) {
+	/** The examples every variant rendered before Issue #1301: the first names of each list, byte for byte. */
+	ALPHABETICAL(needsEntryJourney = false),
+
+	/** One real journey of the station ([StationTopology.entryJourney]); never an alphabetical guess. */
+	STRUCTURAL(needsEntryJourney = true)
+}
+
+/**
  * Immutable, static snapshot of a controlled area's topology.
  *
  * Carries only the *static* structure — entry/exit points, signals, switches, block sections,
@@ -55,6 +128,9 @@ data class RouteDescriptor(
  * requests, signal aspects): those are reported per turn by the perception tools, which reference
  * elements by the same IDs used here.
  *
+ * @property entryJourney The station's structural worked example (Issue #1301), or `null` when no
+ *   InOut qualifies or the structure could not be derived; read only by
+ *   [WorkedExampleSource.STRUCTURAL].
  * @see StationTopologySerializer
  */
 data class StationTopology(
@@ -62,7 +138,8 @@ data class StationTopology(
 	val signals: List<SignalId>,
 	val switches: List<SwitchDescriptor>,
 	val blocks: List<BlockId>,
-	val routes: List<RouteDescriptor>
+	val routes: List<RouteDescriptor>,
+	val entryJourney: EntryJourney? = null
 )
 
 /**
@@ -96,6 +173,21 @@ object StationTopologySerializer {
 	private const val MAX_ROUTES_PER_PAIR = 16
 
 	/**
+	 * Token budget of the "Routes" section, estimated with [PromptTokenEstimate] (Issue #1155). It is
+	 * an approximate budget — about 3,000 estimated tokens, not an exact bound: the closing
+	 * "more routes not shown" note is appended only after the budget check, so its own estimated
+	 * tokens are not counted and the rendered section ends up slightly above this value.
+	 *
+	 * The route list is path context only — every route request the model makes is copied from a
+	 * NEXT SECTION line of the cycle message — yet it is the one section that grows with the station:
+	 * unbounded, Praha hlavní nádraží's 216 routes cost about 28,700 Qwen2.5 tokens, almost twice the
+	 * whole 16,384-token context window ([cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig.contextWindowTokens]),
+	 * and Ollama trims an over-long prompt silently instead of rejecting it. vyhybna (4 routes) and
+	 * Červený Újezd (32 routes) stay far below this budget and render every route, unchanged.
+	 */
+	internal const val MAX_ROUTE_SECTION_TOKENS = 3_000
+
+	/**
 	 * Stand-in for the train-name argument in the worked examples.
 	 *
 	 * Deliberately shaped so it cannot be mistaken for, or copied as, a real train id: it is
@@ -112,7 +204,8 @@ object StationTopologySerializer {
 	 * Extracts the static [StationTopology] from a live simulation environment.
 	 *
 	 * Reads only static structure (grid cells and graph edges) and the purely topological route
-	 * finder, so it is safe to call at agent-construction time.
+	 * finder, so it is safe to call at agent-construction time. It makes no routing call and leaves
+	 * [StationTopology.entryJourney] empty.
 	 */
 	fun describe(env: SimulationEnvironment): StationTopology {
 		val grid = env.getRailWayNetGrid()
@@ -158,6 +251,18 @@ object StationTopologySerializer {
 	}
 
 	/**
+	 * Derives the [Station], or `null` with one WARN line when the network cannot be derived — the
+	 * structural example is optional, the rest of the topology is not.
+	 */
+	internal fun stationOrNull(env: SimulationEnvironment): Station? =
+		runCatching { Station.from(env) }
+			.onFailure {
+				logger.warn(
+					it
+				) { "StationTopologySerializer: no station derivation; no structural worked example" }
+			}.getOrNull()
+
+	/**
 	 * Renders the topology into a compact, ID-only text block suitable for a system prompt.
 	 *
 	 * ## Anti-hallucination formatting
@@ -167,7 +272,9 @@ object StationTopologySerializer {
 	 * `vyhybna.xml` where Block IDs are literally `"k" + <InOut name>`. Three changes address this
 	 * directly, rather than relying solely on the general instruction in the system prompt:
 	 * 1. The anti-hallucination warning is repeated here, at the point of use, naming the specific
-	 *    confusable pattern instead of only appearing once, upstream, in the system prompt.
+	 *    confusable pattern instead of only appearing once, upstream, in the system prompt. The pair
+	 *    it names is this network's own ([confusableBlockExample]); until Issue #1155 it was
+	 *    vyhybna's `"kA"` vs `"A"` on every station.
 	 * 2. Each name in the InOuts/Signals/Blocks lists is quoted ([joinQuoted]) so the model has an
 	 *    unambiguous boundary for "copy this exact string," instead of relying on comma-splitting.
 	 * 3. A worked example using this network's own (and specifically confusable, if any) names is
@@ -188,14 +295,29 @@ object StationTopologySerializer {
 	 * rendered under one shared "valid request_route endpoint names" heading, still labelled by
 	 * kind, and the worked example shows a signal-to-signal hop alongside the end-to-end route.
 	 */
-	fun toPromptText(topology: StationTopology): String {
+	fun toPromptText(
+		topology: StationTopology,
+		examples: WorkedExampleSource = WorkedExampleSource.ALPHABETICAL
+	): String {
 		val sb = StringBuilder()
 		sb.append("=== STATION TOPOLOGY (static) ===\n")
-		sb.append(
-			"Copy names character-for-character from the lists below. A Block ID that looks " +
-				"similar to an InOut name (e.g. \"kA\" vs InOut \"A\") is still NOT a valid " +
-				"request_route argument.\n"
-		)
+		sb.append("Copy names character-for-character from the lists below. A Block ID that looks ")
+		val confusable =
+			confusableBlockExample(
+				inOuts = topology.inOuts,
+				blocks = topology.blocks.map { it.name },
+				endpointNames = (topology.inOuts + topology.signals.map { it.name }).toSet()
+			)
+		sb.append("similar to an InOut name")
+		if (confusable?.inOut != null) {
+			sb
+				.append(" (e.g. \"")
+				.append(confusable.block)
+				.append("\" vs InOut \"")
+				.append(confusable.inOut)
+				.append("\")")
+		}
+		sb.append(" is still NOT a valid request_route argument.\n")
 		sb.append("Valid request_route endpoint names — BOTH lists below are accepted:\n")
 		sb.append("  InOuts (entry/exit): ").append(joinQuoted(topology.inOuts)).append('\n')
 		sb.append("  Signals (section boundaries): ").append(joinQuoted(topology.signals.map { it.name })).append('\n')
@@ -215,17 +337,12 @@ object StationTopologySerializer {
 		if (topology.routes.isEmpty()) {
 			sb.append(" none")
 		} else {
-			for (route in topology.routes) {
-				sb
-					.append("\n  ")
-					.append(route.from)
-					.append("->")
-					.append(route.to)
-					.append(": ")
-					.append(joinOrNone(route.blocks.map { it.name }))
-			}
+			appendRoutesWithinBudget(sb, topology.routes)
 		}
-		appendWorkedExample(sb, topology)
+		when (examples) {
+			WorkedExampleSource.ALPHABETICAL -> appendWorkedExample(sb, topology)
+			WorkedExampleSource.STRUCTURAL -> appendStructuralWorkedExample(sb, topology)
+		}
 		return sb.toString()
 	}
 
@@ -264,10 +381,75 @@ object StationTopologySerializer {
 		if (entryTarget == null) {
 			appendFullSpanExample(sb, exampleFrom, exampleTo)
 		} else {
-			appendEntryRouteExample(sb, exampleFrom, exampleTo, entryTarget)
+			appendEntryRouteExample(sb, exampleFrom, exampleTo, exampleFrom, entryTarget)
 		}
 		appendSectionHopExample(sb, topology)
-		val exampleWrongBlock = topology.blocks.firstOrNull { it.name != exampleFrom && it.name != exampleTo }
+		appendWrongBlockWarning(sb, topology)
+	}
+
+	/**
+	 * The [WorkedExampleSource.STRUCTURAL] worked examples (Issue #1301): the same sentences as
+	 * [appendWorkedExample], with the names of one real journey ([StationTopology.entryJourney]) —
+	 * the entry route from the home signal, then its continuation to the train's own destination.
+	 *
+	 * Rare shapes: a network without Signals keeps the whole-network example; a signalled network
+	 * without a journey renders only the rule sentence, never a guessed name. Like
+	 * [appendWorkedExample], nothing is rendered with fewer than two InOuts.
+	 */
+	private fun appendStructuralWorkedExample(
+		sb: StringBuilder,
+		topology: StationTopology
+	) {
+		if (topology.inOuts.size < 2) return
+		val journey = topology.entryJourney
+		when {
+			topology.signals.isEmpty() -> appendFullSpanExample(sb, topology.inOuts[0], topology.inOuts[1])
+			journey == null -> appendRuleOnly(sb)
+			else -> appendJourneyExample(sb, journey)
+		}
+		appendWrongBlockWarning(sb, topology)
+	}
+
+	private fun appendJourneyExample(
+		sb: StringBuilder,
+		journey: EntryJourney
+	) {
+		val firstHop = journey.hops.first()
+		appendEntryRouteExample(sb, journey.entry, journey.destination, firstHop.from, firstHop.to)
+		val continuation = journey.hops.getOrNull(1) ?: return
+		sb
+			.append(" EXAMPLE (next section — the same train continues; one section holds fewer blocks): ")
+			.append("request_route(trainName=")
+			.append(TRAIN_NAME_PLACEHOLDER)
+			.append(FROM_ENDPOINT_ARG)
+			.append(continuation.from)
+			.append(TO_ENDPOINT_ARG)
+			.append(continuation.to)
+			.append("\"), where \"")
+			.append(continuation.to)
+			.append("\" is that train's own destination.")
+	}
+
+	/** The structural fallback when no InOut qualifies: the rule, with no example names at all. */
+	private fun appendRuleOnly(sb: StringBuilder) {
+		sb
+			.append("\n\nRULE. Never invent a train name: use an id copied from the \"Queued\" or \"Active\" ")
+			.append("train list in this cycle's message. A route reserves ONE section at a time, never the whole ")
+			.append("station: request each train's next section from its NEXT SECTION line. A route whose two ")
+			.append("endpoints are BOTH entry/exit points is refused.")
+	}
+
+	/**
+	 * The closing warning of every worked example: a real Block ID is not an endpoint.
+	 */
+	private fun appendWrongBlockWarning(
+		sb: StringBuilder,
+		topology: StationTopology
+	) {
+		// Never a name that is also a valid endpoint: on Červený Újezd a block next to an unnamed
+		// switch takes its signal's name, and calling that a Block ID contradicted the Signals list.
+		val endpointNames = topology.inOuts.toSet() + topology.signals.map { it.name }
+		val exampleWrongBlock = topology.blocks.firstOrNull { it.name !in endpointNames }
 		if (exampleWrongBlock != null) {
 			sb
 				.append(" Do NOT pass \"")
@@ -292,8 +474,9 @@ object StationTopologySerializer {
 	 */
 	private fun appendEntryRouteExample(
 		sb: StringBuilder,
-		exampleFrom: String,
-		destination: String,
+		entryName: String,
+		destination: String?,
+		originName: String,
 		entryTarget: String
 	) {
 		sb
@@ -302,13 +485,15 @@ object StationTopologySerializer {
 			.append(TRAIN_NAME_PLACEHOLDER)
 			.append(". A route reserves ONE section at a time, never the whole station: to start a ")
 			.append("train that entered at \"")
-			.append(exampleFrom)
-			.append("\" and is bound for \"")
-			.append(destination)
+			.append(entryName)
+		if (destination != null) {
+			sb.append("\" and is bound for \"").append(destination)
+		}
+		sb
 			.append("\", call request_route(trainName=")
 			.append(TRAIN_NAME_PLACEHOLDER)
 			.append(FROM_ENDPOINT_ARG)
-			.append(exampleFrom)
+			.append(originName)
 			.append(TO_ENDPOINT_ARG)
 			.append(entryTarget)
 			.append("\"), then keep reserving forward section by section as it advances. A route ")
@@ -421,6 +606,97 @@ object StationTopologySerializer {
 			is DynamicTrackBlock -> BlockIdentity.stableBlockId(block)
 			else -> block.name?.takeIf { it.isNotBlank() } ?: "unknown"
 		}
+
+	/**
+	 * A Block ID to warn about, paired with the InOut name it is easiest to confuse with (Issue #1155).
+	 *
+	 * @property block A name from the Blocks list that is not itself a valid endpoint name.
+	 * @property inOut The InOut name [block] resembles, or `null` when no block resembles one.
+	 */
+	internal data class ConfusableBlock(
+		val block: String,
+		val inOut: String?
+	)
+
+	/**
+	 * Picks the Block ID the anti-hallucination warnings name, from this network's own lists — the
+	 * warnings used to carry vyhybna's literal `"kA"` (Issue #1155).
+	 *
+	 * A block whose name ends with an InOut name is the confusable pattern: `Station` names every
+	 * entry/exit block `k` + InOut name (`kA` for InOut `A`, `kN-Bypass` for `N-Bypass`). The pair with
+	 * the fewest extra characters wins, ties broken by InOut name and then block name, so vyhybna still
+	 * renders `"kA"` vs InOut `"A"`. A block that is also a valid endpoint name (on Červený Újezd a
+	 * block next to an unnamed switch takes its signal's name) is never offered as the wrong example.
+	 * Without any resembling block the first remaining block is returned with no InOut; without any
+	 * block at all the result is `null`.
+	 */
+	internal fun confusableBlockExample(
+		inOuts: Collection<String>,
+		blocks: Collection<String>,
+		endpointNames: Set<String>
+	): ConfusableBlock? {
+		val candidates = blocks.filter { it !in endpointNames }.distinct().sorted()
+		val pair =
+			inOuts
+				.distinct()
+				.sorted()
+				.flatMap { inOut ->
+					candidates
+						.filter { it != inOut && it.endsWith(inOut) }
+						.map { ConfusableBlock(it, inOut) }
+				}.minByOrNull { it.block.length - requireNotNull(it.inOut).length }
+		return pair ?: candidates.firstOrNull()?.let { ConfusableBlock(it, null) }
+	}
+
+	/**
+	 * Appends the route lines, bounded by [MAX_ROUTE_SECTION_TOKENS] (Issue #1155).
+	 *
+	 * When every route fits, the lines are appended in their original order, byte for byte as before
+	 * the budget existed. Otherwise every ordered InOut pair gets its first route before any pair gets
+	 * its second (a stable sort on the route's index within its pair), lines are appended while they
+	 * fit, and one closing line states how many routes were left out and where the requests come from.
+	 *
+	 * That makes the budget approximate rather than exact: the closing line is appended after the
+	 * budget check, so its own estimated tokens (roughly 30) are not counted and the section as
+	 * rendered ends up slightly above [MAX_ROUTE_SECTION_TOKENS].
+	 */
+	private fun appendRoutesWithinBudget(
+		sb: StringBuilder,
+		routes: List<RouteDescriptor>
+	) {
+		val lines = routes.map { routeLine(it) }
+		if (PromptTokenEstimate.of(lines.joinToString("")) <= MAX_ROUTE_SECTION_TOKENS) {
+			lines.forEach { sb.append(it) }
+			return
+		}
+		val rankInPair = mutableMapOf<Pair<String, String>, Int>()
+		val ranked =
+			routes
+				.map { route ->
+					val key = route.from to route.to
+					val rank = rankInPair.getOrDefault(key, 0)
+					rankInPair[key] = rank + 1
+					rank to routeLine(route)
+				}.sortedBy { it.first }
+				.map { it.second }
+		var spent = 0
+		var shown = 0
+		for (line in ranked) {
+			val cost = PromptTokenEstimate.of(line)
+			if (spent + cost > MAX_ROUTE_SECTION_TOKENS) break
+			sb.append(line)
+			spent += cost
+			shown++
+		}
+		sb
+			.append("\n  (")
+			.append(routes.size - shown)
+			.append(" more routes not shown, to keep this prompt within its token budget. Every route ")
+			.append("request a train needs is named on its NEXT SECTION line in the cycle message.)")
+	}
+
+	private fun routeLine(route: RouteDescriptor): String =
+		"\n  " + route.from + "->" + route.to + ": " + joinOrNone(route.blocks.map { it.name })
 
 	private fun joinOrNone(items: List<String>): String = if (items.isEmpty()) "none" else items.joinToString(", ")
 

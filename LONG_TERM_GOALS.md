@@ -42,8 +42,8 @@ to be. This document therefore names a later stage only after somebody decided i
 
 | Order | Stage | Why now |
 |---|---|---|
-| 1 | **Goal 1B** — highest priority | Closes Goal 1's unverified scale bar; everything else needs it |
-| 2 | **Goal 9B** | Specified *during* Goal 1B, built after it, from Goal 1B's findings |
+| 1 | ~~**Goal 1B**~~ ✅ complete 2026-11-21 | Closed Goal 1's unverified scale bar |
+| 2 | **Goal 9B** — now first | Specified *during* Goal 1B, built after it, from Goal 1B's findings |
 | 3 | **Goal 12** | New goal — inter-station tracks and several dispatcher agents |
 | 4 | **Goal 3B** | Collision detection on a separate thread, feeding the dispatcher |
 
@@ -60,7 +60,7 @@ several dispatcher agents. See "Goal Stages" above and "Implementation Strategy"
 | ID | Stage | Title | Category | Priority | Status | Estimate |
 |----|-------|-------|----------|----------|----------|----------|
 | 1 | — | Multi-Train Simulation | E: Advanced Simulation | Critical | ✅ Complete | 6 months |
-| 1 | **B** | Scale and Routing Test Scenarios | E: Advanced Simulation | **Critical (next)** | 🆕 Open (#591) | 4 months |
+| 1 | **B** | Scale and Routing Test Scenarios | E: Advanced Simulation | Critical | ✅ Complete (#1147) | 4 months |
 | 2 | — | Automatic Path Finding | E: Advanced Simulation | Critical | ✅ Complete | 3 months |
 | 3 | — | Collision Detection and Warning | J: Safety & Compliance | Critical | ✅ Complete | 2 months |
 | 3 | **B** | Snapshot Collision Detection on a Separate Thread | J: Safety & Compliance | High | 🆕 Planned | 2 months |
@@ -70,7 +70,7 @@ several dispatcher agents. See "Goal Stages" above and "Implementation Strategy"
 | 7 | — | Simulation Speed Control | I: System Operations | High | ✅ Complete | 1 month |
 | 8 | — | Pause and Single-Step Simulation | I: System Operations | High | ✅ Complete | 1 month |
 | 9 | — | Automatic Conflict Detection and Resolution | A: Intelligent Automation | Critical | ✅ Complete | 4 months |
-| 9 | **B** | Realistic Conflict Resolution and Command Threading | A: Intelligent Automation | **High (next)** | 🆕 Planned | 4 months |
+| 9 | **B** | Realistic Conflict Resolution and Command Threading | A: Intelligent Automation | **High (next)** | 🆕 Planned (unblocked by Goal 1B) | 4 months |
 | 10 | **A** | AI Dispatcher Routing | A: Intelligent Automation | **Critical** | ✅ Complete (#532) | 6 months |
 | 11 | — | Track Physics: Gradients and Curves *(redefined — old Goal 12 folded in)* | E: Advanced Simulation | **Very Low** | 🆕 Open (#664, #665) | 3 months |
 | 12 | — | Inter-station Tracks and Multiple Dispatcher Agents *(new goal)* | A: Intelligent Automation | High | 🆕 Open (#821) | 5 months |
@@ -83,7 +83,7 @@ several dispatcher agents. See "Goal Stages" above and "Implementation Strategy"
 | 19 | — | Czech Timetable Import | D: Data Integration | High | 🆕 Open (#670) | 4 months |
 | 20 | — | Comprehensive Accessibility | B: User Experience | Medium | 🆕 Open (#671) | 3 months |
 
-**Total Development Estimate: 71 months (23 months complete — Goals 1, 2, 3, 7, 8, 9, and Goal 10's first stage; 48 months remaining, including the newly named stages 1B, 9B, 3B and the new Goal 12)**
+**Total Development Estimate: 71 months (27 months complete — Goals 1, 1B, 2, 3, 7, 8, 9, and Goal 10's first stage; 44 months remaining, including the named stages 9B and 3B and the new Goal 12)**
 
 ---
 
@@ -571,9 +571,9 @@ order they will be worked, rather than beside their first stages. See "Goal Stag
 ### Goal 1B: Scale and Routing Test Scenarios
 
 **Category:** E: Advanced Simulation
-**Priority:** **Critical — the top-priority work as of 2026-08-23**
+**Priority:** Critical *(was the top-priority work from 2026-08-23 until completion)*
 **Development Estimate:** 4 months
-**Status:** 🆕 OPEN — GitHub milestone *Goal 1B*, currently holding #591
+**Status:** ✅ **COMPLETE (2026-11-21)** — parent issue #1147, GitHub milestone *Goal 1B*
 
 **Paramount example:** the **Praha hlavní nádraží 5-train scenario** (owner decision
 2026-07-11). Goal 10 keeps `vyhybna.xml` as its paramount example; the Praha scale scenario moves
@@ -582,7 +582,12 @@ here.
 **User Value:**
 The scale bar that Goal 1 left unverified is finally closed, with routing tested on real station layouts instead of a two-switch loop.
 
-**Scope.** Build a fresh task plan out of #591's test expectations, its `.md` documents, its code
+**Completed 2026-11-21.** Goal 1B is marked done. Goal 9B is now the next stage. The demands that
+Goal 1B wrote for Goal 9B stay in [docs/goal9b-demands/](docs/goal9b-demands/).
+
+**Progress (2026-10-29, historical).** The plan is written and tracked in #1147 (sub-issues SP1-SP13, #1148-#1160). ✅ Done: SP1 fail-fast harness (#1148), SP2 station abstraction (#1149), SP4 bounded route search (#1151), SP5 one target-selection path (#1152), SP9 kDisco review (#1156), SP12 routing decomposition (#1159). 🆕 Open: SP3 Červený Újezd (#1150), SP6 (#1153), SP7 (#1154), SP8 (#1155), SP10 (#1157), SP11 (#1158), SP13 (#1160), and #591 last. Per-task Goal 9B demands: [docs/goal9b-demands/](docs/goal9b-demands/).
+
+**Scope (as planned).** Build a fresh task plan out of #591's test expectations, its `.md` documents, its code
 comments, and the current state of the code. Note that **#591 is an issue, not a pull request**;
 its work lives on the branch `feat/issue-591-scale-validation`, where the 5-train case passes and
 the 20-train stress case livelocks. The plan must cover:
@@ -603,14 +608,14 @@ the 20-train stress case livelocks. The plan must cover:
 
 kDisco prerequisites known today: the package rename (kdisco#53) is consumed. kdisco#42/#43/#44 block
 Goal 5, not this goal. kdisco#83 (filed from #1112: unhandled process exceptions are absorbed instead of
-reaching the embedder) is open and is the kind of weak point the review above must classify as a
-prerequisite or not.
+reaching the embedder) was classified by SP9 (#1156); see section 4 of
+[docs/goal9b-demands/SP9-kdisco-review.md](docs/goal9b-demands/SP9-kdisco-review.md).
 
 **Exit condition:** #591's failing tests are green at the end of the whole plan. That issue is
 therefore created **last** in the plan. It runs with low traffic — long lambda times in the
 parameters, and a low maximum of concurrent trains.
 
-**Open questions to answer when the plan is written:**
+**Open questions (carried into #1147):**
 - Is each item already part of some goal or issue?
 - Does it depend on an existing open issue?
 - Is the multi-loop example only usable with an agent?
@@ -898,7 +903,7 @@ away from this phase.
 
 | Order | Goal | Title | Months | Rationale | Tracking |
 |-------|------|-------|--------|-----------|----------|
-| 1 | 1B | Scale and Routing Test Scenarios | 4 | **Top-priority work.** Closes #591; produces the routing cleanup and the kDisco review everything else needs | #591, milestone *Goal 1B* |
+| 1 | 1B | Scale and Routing Test Scenarios | 4 | ✅ **Complete 2026-11-21.** Closed #591; produced the routing cleanup and the kDisco review everything else needs | #1147 (parent), #591 (exit condition), milestone *Goal 1B* |
 | 2 | 9B | Realistic Conflict Resolution and Command Threading | 4 | Specified during Goal 1B, built from its findings | — |
 | 3 | 12 | Inter-station Tracks and Multiple Dispatcher Agents | 5 | Needs the Goal 10 dispatcher seam and Goal 1B's routing cleanup | #821 |
 | 4 | 3B | Snapshot Collision Detection on a Separate Thread | 2 | Feeds Goal 9B's resolution suggestions | — |
@@ -945,7 +950,7 @@ away from this phase.
 | Phase 1: High-Priority Enhancement | 30 months | ~16-18 months |
 | Phase 2: Medium-Priority Polish | 3 months | ~2 months (absorbed) |
 | **Total (all goals and named stages)** | **71 months** | **~46 months** |
-| **Remaining (excl. complete)** | **48 months** | **~33-35 months** |
+| **Remaining (excl. complete)** | **44 months** | **~30-32 months** |
 
 **Resource Options:**
 - 1 developer: Next Stages alone is a ~1.3-year commitment; full remaining scope ~4 years.
@@ -993,7 +998,7 @@ Goal 11 is Very Low priority and carries no schedule risk.
   - Order the models by difficulty: Červený Újezd first, Praha last
   - Run with low traffic first — long lambda times, low maximum of concurrent trains
   - Create the #591 closing task **last** in the plan, so the failing tests are the exit condition
-  - Research existing scanners before hand-auditing kDisco
+  - ✅ Research existing scanners before hand-auditing kDisco (done in SP9, #1156)
 
 **Goal 19: Czech Timetable Import**
 - **Risk:** GVD/KADR format may be undocumented, proprietary, or vary between sources; data quality inconsistencies

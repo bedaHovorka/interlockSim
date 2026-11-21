@@ -18,8 +18,15 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  *
  * ## KPI Definitions
  *
- * - **[conflictCount]** — Total reservation conflicts since simulation start.
- *   A conflict occurs when two trains attempt to reserve the same block.
+ * - **[conflictCount]** — Total reservation conflicts detected while the run was live.
+ *   A conflict occurs when two trains attempt to reserve the same block. Contentions still open
+ *   when the run ends are not counted here but in [unresolvedAtRunEndCount] (Issue #1280).
+ *
+ * - **[unresolvedAtRunEndCount]** — Blocked-path contentions (a train waiting for a block another
+ *   train holds) still open when the run ended, as reported by the end-of-run flush. Zero on a run
+ *   in which every waiting train got its route. Non-zero is the Issue #612 deadlock/starvation
+ *   indicator — or, on a run cut off at its end time with trains still on the network, ordinary
+ *   queueing the cutoff interrupted. Never a double-booking.
  *
  * - **[completedTrains]** — Number of trains that have fully released all their
  *   reserved blocks **and** physically occupied at least one block during their
@@ -48,7 +55,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  *   `occupiedBlocks / totalBlocks`. Zero when [totalBlocks] is zero.
  *
  * @param time Simulation time (seconds) at which this snapshot was captured.
- * @param conflictCount Total reservation conflicts detected since start.
+ * @param conflictCount Reservation conflicts detected while the run was live.
  * @param completedTrains Trains that fully released all reserved blocks after physically moving.
  * @param throughput Completed trains per simulation-second.
  * @param totalWaitSeconds Cumulative block-reservation wait time (seconds).
@@ -62,6 +69,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  *   and the blocks it holds were never returned to the network (Issue #936).
  * @param heldBlocks Number of block reservations outstanding across all trains, the block-level
  *   companion to [trainsHoldingReservations].
+ * @param unresolvedAtRunEndCount Contentions still open when the run ended (Issue #1280).
  *
  * @since Issue #672 (Goal 6 SP1)
  */
@@ -76,5 +84,6 @@ data class MetricsSnapshot(
 	val totalBlocks: Int,
 	val utilization: Double,
 	val trainsHoldingReservations: Int = 0,
-	val heldBlocks: Int = 0
+	val heldBlocks: Int = 0,
+	val unresolvedAtRunEndCount: Int = 0
 )

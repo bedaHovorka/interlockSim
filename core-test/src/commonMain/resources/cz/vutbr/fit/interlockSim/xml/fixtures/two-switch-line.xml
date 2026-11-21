@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<!--
+  Linear station line with two switches for the release/rollback switch-protection pins
+  (PR #1194 review round): route A→B is k1..k6.
+
+      A(5)  s1(9)   swX(12)   s3(16)   swY(20)   s5(24)   B(28)
+
+  A train spanning k1..k3 keeps switch swX strictly inside its kept head (the PathInfo trim
+  cuts at s3, a semaphore), while the freed tail k4..k6 contains swY, which the per-block
+  reclaim frees. One straight line, uniformly 24.0 m/s, keeps the expected lock state of both
+  switches manually traceable.
+-->
+<net X="100" Y="100">
+  <InOut X="5" Y="8" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+  <RailSemaphore X="9" Y="8" SpatialType="HORIZONTAL" orientation="false" name="s1"/>
+  <RailSwitch X="12" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="swX"/>
+  <RailSemaphore X="16" Y="8" SpatialType="HORIZONTAL" orientation="false" name="s3"/>
+  <RailSwitch X="20" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="swY"/>
+  <RailSemaphore X="24" Y="8" SpatialType="HORIZONTAL" orientation="true" name="s5"/>
+  <InOut X="28" Y="8" SpatialType="HORIZONTAL" orientation="true" name="B"/>
+  <SimpleTrackBlock fromX="5" fromY="8" toX="9" toY="8" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="9" fromY="8" toX="12" toY="8" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="12" fromY="8" toX="16" toY="8" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="16" fromY="8" toX="20" toY="8" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="20" fromY="8" toX="24" toY="8" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="24" fromY="8" toX="28" toY="8" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+</net>

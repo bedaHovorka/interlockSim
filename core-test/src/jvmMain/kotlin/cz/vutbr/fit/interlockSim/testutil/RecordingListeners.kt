@@ -11,7 +11,9 @@ package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 
 /**
  * A [BlockOccupancyListener] that records every event it receives, in arrival order.
@@ -24,6 +26,21 @@ class RecordingBlockOccupancyListener : BlockOccupancyListener {
 
 	override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
 		events.add(event)
+	}
+}
+
+/**
+ * A [BlockOccupancyListener] that records every `BLOCK_RELEASED` block and then throws: the
+ * throwing shape of the listener-containment regression tests (Issue #1202), shared the same
+ * way [RecordingBlockOccupancyListener] is.
+ */
+class ThrowingBlockReleaseListener : BlockOccupancyListener {
+	val announced = mutableListOf<DynamicTrackBlock>()
+
+	override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
+		if (event.type != BlockOccupancyEventType.BLOCK_RELEASED) return
+		announced += event.block
+		throw IllegalStateException("release listener failure (test)")
 	}
 }
 

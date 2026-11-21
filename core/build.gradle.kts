@@ -126,7 +126,9 @@ kotlin {
         }
     }
 
-    // linuxX64 target: runs native commonTest subset (NativeSanityTest).
+    // linuxX64 target: linuxX64Test runs every commonTest test natively, plus the native-only
+    // tests in src/nativeTest (the source set applyDefaultHierarchyTemplate() creates; today only
+    // the Goal 1B exit-calibration seed, Issue #1346); jvmTest stays JVM-only (Issue #1148 audit).
     // kDisco 0.5.0 ships a linuxX64 klib; kotlinx-coroutines-core, koin-core, assertk all have native variants.
     // Note: KMP automatically creates a debugTest binary for linuxX64 — no explicit binaries.test() needed.
     if (isLinuxHost) {
@@ -462,7 +464,14 @@ val sonarJavaLibraries by tasks.registering {
 // interlocksim.sonar-module convention plugin (buildSrc), which adds the cross-module aggregate.
 sonarModule {
     coverageReport.set(layout.buildDirectory.file("reports/jacoco/jvmTest/jacocoTestReport.xml"))
-    junitReportPaths.set(listOf("build/test-results/jvmTest", "build/test-results/integrationTest"))
+    junitReportPaths.set(
+        listOf(
+            "build/test-results/jvmTest",
+            "build/test-results/integrationTest",
+            "build/test-results/docLineAnchorCheck",
+            "build/test-results/dtMaxSingleSiteCheck",
+        ),
+    )
 }
 
 // :core declares its own Sonar paths. The root build.gradle.kts deliberately lists none,
@@ -535,6 +544,146 @@ val jacocoTestReport by tasks.registering(JacocoReport::class) {
 
 tasks.named("jvmTest") {
     finalizedBy(jacocoTestReport)
+}
+
+// ===========================================
+// Doc line-anchor tripwire task (Issue #1230)
+// ===========================================
+// DocLineAnchorTripwireTest reads every docs/**/*.md page and every *.kt file of the repository,
+// none of which is an input of :core:jvmTest, so a docs-only change or a .kt edit in another
+// module could reuse an UP-TO-DATE or FROM-CACHE jvmTest result and skip the tripwire. The test
+// therefore runs on its own task that declares both trees as inputs, and jvmTest leaves it out.
+// The directories neither side looks into are ONE list (anchorSkippedDirectories): it builds the
+// excludes below and is handed to the test as the system property anchorSkippedDirectories, where
+// DocLineAnchorTripwireTest compares it with its own SKIPPED_DIRECTORIES and fails on any difference.
+//
+// jvmTest is finalizedBy this task: every build that runs :core:jvmTest (root `test`, `build`,
+// a non-re-use `sonar`, jacocoAggregatedReport) runs the tripwire too, and `check` depends on
+// it explicitly.
+// The working directory stays the default (the project directory): the test finds the repository
+// root by walking up from there.
+
+val anchorSkippedDirectories =
+    listOf("build", ".git", ".gradle", ".kotlin", ".idea", ".worktrees", ".claude", "node_modules")
+
+val docLineAnchorCheck by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Run DocLineAnchorTripwireTest (Issue #1205) with the docs and .kt trees it scans as inputs"
+
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("*.DocLineAnchorTripwireTest")
+        isFailOnNoMatchingTests = true
+    }
+
+    testClassesDirs =
+        kotlin
+            .jvm()
+            .compilations["test"]
+            .output.classesDirs
+    classpath = kotlin.jvm().compilations["test"].runtimeDependencyFiles
+
+    inputs
+        .files(fileTree(rootDir.resolve("docs")) { include("**/*.md") })
+        .withPropertyName("anchorDocs")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs
+        .files(
+            fileTree(rootDir) {
+                include("**/*.kt")
+                exclude(anchorSkippedDirectories.map { "**/$it/**" })
+            },
+        ).withPropertyName("anchorSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    systemProperty("anchorSkippedDirectories", anchorSkippedDirectories.joinToString(","))
+
+    // Its coverage adds nothing; a separate .exec would only sit next to the jvmTest and
+    // integrationTest data the JaCoCo reports read.
+    extensions.configure<JacocoTaskExtension> { isEnabled = false }
+
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        showStandardStreams = false
+    }
+
+    reports {
+        junitXml.required.set(true)
+        junitXml.outputLocation.set(file("${layout.buildDirectory.get()}/test-results/docLineAnchorCheck"))
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/tests/docLineAnchorCheck"))
+    }
+}
+
+// ===========================================
+// dtMax single-site tripwire task (Issue #1377)
+// ===========================================
+// DtMaxSingleSiteTripwireTest greps the .kt files of every source set of every top-level module
+// (<module>/src/<sourceSet>/...) for a `dtMax = …` statement. Only core/src is an input of
+// :core:jvmTest, so a new override in desktop-ui or dispatcher-agent alone left jvmTest
+// UP-TO-DATE and the tripwire unchecked. Cloned from docLineAnchorCheck: the test runs on its own
+// task that declares the scanned trees as inputs, jvmTest leaves it out and is finalizedBy it,
+// and `check` depends on it. The excludes are top-level only (they keep Gradle from walking
+// .worktrees and the like); no scanned tree lies below them.
+
+val dtMaxSingleSiteCheck by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Run DtMaxSingleSiteTripwireTest (Issue #1160) with every module's src trees as inputs"
+
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("*.DtMaxSingleSiteTripwireTest")
+        isFailOnNoMatchingTests = true
+    }
+
+    testClassesDirs =
+        kotlin
+            .jvm()
+            .compilations["test"]
+            .output.classesDirs
+    classpath = kotlin.jvm().compilations["test"].runtimeDependencyFiles
+
+    inputs
+        .files(
+            fileTree(rootDir) {
+                include("*/src/**/*.kt")
+                exclude(anchorSkippedDirectories.map { "$it/**" })
+            },
+        ).withPropertyName("dtMaxScannedSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // Same reason as docLineAnchorCheck: its coverage adds nothing to the JaCoCo reports.
+    extensions.configure<JacocoTaskExtension> { isEnabled = false }
+
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        showStandardStreams = false
+    }
+
+    reports {
+        junitXml.required.set(true)
+        junitXml.outputLocation.set(file("${layout.buildDirectory.get()}/test-results/dtMaxSingleSiteCheck"))
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/tests/dtMaxSingleSiteCheck"))
+    }
+}
+
+tasks.named<Test>("jvmTest") {
+    filter.excludeTestsMatching("*.DocLineAnchorTripwireTest")
+    filter.excludeTestsMatching("*.DtMaxSingleSiteTripwireTest")
+    finalizedBy(docLineAnchorCheck, dtMaxSingleSiteCheck)
+}
+
+tasks.named("check") {
+    dependsOn(docLineAnchorCheck, dtMaxSingleSiteCheck)
 }
 
 // ===========================================

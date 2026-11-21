@@ -142,7 +142,7 @@ interface NetworkActuatorPort {
 	 *    forever. Treat `false` purely as **information** ("there was nothing here"), never as a
 	 *    **command to retry**.
 	 * 2. **`true` reports a registry/signal STATE CHANGE, not per-element success.** The
-	 *    reference implementation ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.releasePath])
+	 *    reference implementation ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.releasePathDetailed])
 	 *    catches, logs, and swallows individual element failures internally -- a block whose
 	 *    `cancelPathSetup` throws, or a switch whose `unlock` throws, is logged at WARN and
 	 *    skipped, never surfaced to the caller. `releaseRoute` still reports `true` in that case,
@@ -151,20 +151,45 @@ interface NetworkActuatorPort {
 	 *    and did I act on it", not "did every underlying element operation individually succeed".
 	 *
 	 * @param trainName Name of the train whose route should be released (non-blank).
-	 * @return `true` if at least one block or one cleared signal was released; `false` if the
-	 *   train held neither. Never a failure signal either way -- see the two guarantees above.
+	 * @return `true` if at least one block or one cleared signal was released, or a block was
+	 *   deferred (Issue #1050); `false` if the train held neither. Never a failure signal either way
+	 *   -- see the two guarantees above. Because a deferred release also returns `true`, a caller
+	 *   that must retry a partial release calls [releaseRouteDetailed] and reads
+	 *   [RouteRelease.deferredBlockIds] instead.
 	 * @throws IllegalArgumentException if [trainName] is blank.
 	 */
 	fun releaseRoute(trainName: String): Boolean
 
 	/**
-	 * [releaseRoute] that also reports a **deferred** (partial) release (Issue #1050).
+	 * [releaseRoute] that also reports a **deferred** (partial) release (Issue #1050). This is the
+	 * complete statement of the kept-block semantics; [RouteRelease], `InterlockingFacade.releaseRoute`
+	 * and the dispatcher's `cancel_route` result refer back to it.
 	 *
-	 * When a governing signal of a reserved, unoccupied block shows a proceed aspect, a train may be
-	 * committed to that block (it books it a second after reading the aspect). The release drops the
-	 * signal to STOP but keeps the block reserved, and lists it in [RouteRelease.deferredBlockIds].
-	 * The caller should retry: the next call finds the signal at STOP and frees the block, unless
-	 * the train booked it meanwhile, in which case it is occupied and stays.
+	 * ## Kept blocks
+	 *
+	 * The release goes through the approach lock (Issue #974). A block stays registered to the train,
+	 * and is listed in [RouteRelease.deferredBlockIds], when
+	 * - the train stands on it (it stays OCCUPIED);
+	 * - a governing signal of the reserved, unoccupied block shows a proceed aspect, so a train may be
+	 *   committed to it (it books the block a second after reading the aspect): the signal drops to
+	 *   STOP, the block stays RESERVED; or
+	 * - the booking window of such an earlier deferral is still open.
+	 *
+	 * Every other block and the train's switches are freed, provided the route can be cut right after
+	 * the kept blocks; a switch next to a kept block stays locked until that block is released too.
+	 *
+	 * ## Retry
+	 *
+	 * A repeated call frees a kept block only after the train has left it or its booking window has
+	 * closed: the next call finds the signal at STOP and frees the block, unless the train booked it
+	 * meanwhile, in which case it is occupied and stays until the train has left it.
+	 *
+	 * ## Refused release
+	 *
+	 * A release is **refused** instead when the route cannot be cut even right after the blocks the
+	 * train stands on (a switch or rear-facing signal there, Issue #1242): then no signal changes and
+	 * nothing is freed, every block is listed as deferred, and a retry is refused the same way until
+	 * the head reaches a block the route can be cut after.
 	 *
 	 * The default delegates to [releaseRoute] and reports nothing deferred.
 	 *
@@ -253,15 +278,19 @@ interface NetworkActuatorPort {
  * Result of a [NetworkActuatorPort.releaseRouteDetailed] call.
  *
  * @property anyReleased same meaning as the [NetworkActuatorPort.releaseRoute] return value
- * @property deferredBlockIds stable ids of blocks approach locking kept reserved; non-empty means
- *   the release is partial and the caller should retry
+ * @property deferredBlockIds stable ids of blocks kept reserved; non-empty means the release is
+ *   not complete: a refused release (Issue #1242) lists the whole route, an approach-lock deferral
+ *   or a partial release lists the blocks it kept (see [NetworkActuatorPort.releaseRouteDetailed])
  * @since Issue #1050
  */
 data class RouteRelease(
 	val anyReleased: Boolean,
 	val deferredBlockIds: List<String>
 ) {
-	/** `true` when part of the route was kept back and a retry is needed. */
+	/**
+	 * `true` when part of the route was kept back; see [NetworkActuatorPort.releaseRouteDetailed]
+	 * for which blocks are kept and when a repeated call frees them.
+	 */
 	val deferred: Boolean get() = deferredBlockIds.isNotEmpty()
 }
 
@@ -419,11 +448,10 @@ sealed class RouteRequestResult {
 	) : RouteRequestResult()
 
 	/**
-	 * The candidate that came closest was **permanently** impossible, not merely busy: a
-	 * candidate's START semaphore faced away from the requested direction of travel (G4), or a
-	 * switch along a candidate could not be set to the position the route required. Maps from
-	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible]
-	 * via
+	 * The request was **permanently** impossible, not merely busy; the impossibility classes are
+	 * listed on
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible],
+	 * which this maps from via
 	 * [cz.vutbr.fit.interlockSim.sim.InterlockingFacade.RouteResponse.DenialCause.GeometricallyImpossible].
 	 *
 	 * Distinct from [AllPathsBlocked] on purpose, exactly as [OriginNotContiguous] is: retrying

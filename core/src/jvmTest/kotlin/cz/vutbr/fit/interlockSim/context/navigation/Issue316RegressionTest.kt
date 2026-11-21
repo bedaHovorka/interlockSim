@@ -16,23 +16,16 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Regression tests for Issue #316: 8+ trains on circular route cause deadlock.
@@ -57,14 +50,7 @@ import org.koin.test.inject
  *   a separator) and that the registry never stores a malformed/truncated result.
  */
 @DisplayName("Issue #316 Regression: Cycle Detection Abort Strategy")
-class Issue316RegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var navigator: TopologyNavigator
-
+class Issue316RegressionTest : PathReservationServiceTestBase() {
 	// Separators from vyhybna.xml (circular shunting loop)
 	private lateinit var inOutB: DynamicPathSeparator // InOut at (30,8)
 	private lateinit var semaphoreZB: DynamicPathSeparator // Semaphore zB at (27,8)
@@ -82,12 +68,7 @@ class Issue316RegressionTest : KoinTestBase() {
 	private lateinit var trackZAtoA: DynamicTrackBlock
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-
-		registry = simulationContext.scope.get()
-		navigator = simulationContext.scope.get()
-
+	fun setUpFixtures() {
 		val grid = simulationContext.getRailWayNetGrid()
 		val inOuts = simulationContext.getInOuts().toList()
 
@@ -159,11 +140,6 @@ class Issue316RegressionTest : KoinTestBase() {
 			.filterIsInstance<DynamicTrackBlock>()
 			.firstOrNull()
 			?: throw IllegalStateException("No track block zA→A")
-	}
-
-	@AfterEach
-	fun tearDown() {
-		simulationContext.close()
 	}
 
 	@Test

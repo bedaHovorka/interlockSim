@@ -1,11 +1,11 @@
 # Interlocking Scope Limitations
 
-**Last Updated:** 2026-08-09
+**Last Updated:** 2026-10-29
 **Related Issue:** #893 (path-reservation review, Phase 6)
 
 ## Purpose
 
-This document records the deliberate abstraction-level simplifications in the simulator's interlocking model versus real ESA-11 / SŽ (Správa železnic) interlocking practice. It exists so future readers know what is **intentionally not modelled**, why each omission is still safe in this simulator, and where the abstraction would have to grow to match a real installation. It is the doc-only companion to the Phase 5 code fixes (F1/F2/F3, commit `d99862bc`) and the G1–G7 signal-clearing invariants documented in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) v1.2 §5.
+This document records the deliberate abstraction-level simplifications in the simulator's interlocking model versus real ESA-11 / SŽ (Správa železnic) interlocking practice. It exists so future readers know what is **intentionally not modelled**, why each omission is still safe in this simulator, and where the abstraction would have to grow to match a real installation. It is the doc-only companion to the Phase 5 code fixes (F1/F2/F3, PR #901, squash `0d348f2b`) and the G1–G7 signal-clearing invariants documented in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) §5.
 
 The findings F4 (simplifications) and F5 (revisiting-route caveat) are gemma4 Phase-4 rulings: SIMPLIFICATION-ACCEPTABLE with a fail-safe caveat.
 
@@ -18,19 +18,19 @@ Real railways distinguish two operationally distinct release concepts:
 - **storno** (cancel *before* occupancy): a dispatcher command. The signal goes to **Stop first**, then a mandatory **time-release timer** must elapse before the *závěr* (route lock) frees — SŽ čj. 51861/2024-SŽ-GŘ-O14 prescribes 180 s (non-ETCS) / 202 s (ETCS L2) for train routes, 60 s for shunt routes. The timer protects against a train already approaching the signal on a sighted (now-cancelled) proceed aspect from overrunning into the newly-freed route.
 - **uvolnění** (release *after* occupancy): automatic / progressive / sectional release behind the train as it clears each section.
 
-The simulator has **one** release path (the six call sites in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) §6) and **no approach-locking timer**. The distinction between *storno* and *uvolnění* is conflated into a single "free the blocks" operation.
+The simulator has **one** release path (the nine release paths in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) §6) and **no approach-locking timer**. The distinction between *storno* and *uvolnění* is conflated into a single "free the blocks" operation.
 
 ### Why this is acceptable (the actual structural reason)
 
 **Admission is gated on reservation, and every signal is re-read live at its boundary.** Two distinct mechanisms are at play, and only the second one carries safety *after* a route is changed:
 
 1. **Entry gate** — a train is admitted to the network only once the interlocking has reserved the blocks ahead AND cleared the START signal. There is no sighting/visibility predicate anywhere in the admission gate:
-   - `InOutWorker.kt:50-64` — `pathFree` is a `Condition` polling `isPathToAnyNextSemaphoreAvailable(inOut, next)`.
-   - `InOutWorker.kt:72` — `waitUntil(pathFree)`: the train waits until a free path exists.
-   - `InOutWorker.kt:93-95` — `reservePathToAnyNextSemaphore(trainId, inOut, next)`; only on `Success` (`:99-106`) does the train proceed.
+   - `InOutWorker.pathFree` is a `Condition` polling `isPathToAnyNextSemaphoreAvailable(inOut, next)`.
+   - `InOutWorker` calls `waitUntil(pathFree)`: the train waits until a free path exists.
+   - `InOutWorker` then calls `reservePathToAnyNextSemaphore(trainId, inOut, next)`; only on `Success` does the train proceed.
 
    This covers the *admission* hazard: a train is never given proceed authority over unreserved track at entry.
-2. **Live-aspect re-read at every semaphore** — the train's `Front` consults the signal when it reaches the semaphore's decision point (`Train.kt` ~:440-461): on `Signal.STOP` it halts and suspends in `waitUntil(allowingSignal(...))`. The aspect consulted is the live one, not one sighted earlier and acted upon past the decision point, and the kinematics stop the train exactly at the signal boundary (no overrun physics — see §B3).
+2. **Live-aspect re-read at every semaphore** — the train's `Front` consults the signal when it reaches the semaphore's decision point (the `Signal.STOP` check in `Train.Front`): on `Signal.STOP` it halts and suspends in `waitUntil(allowingSignal(...))`. The aspect consulted is the live one, not one sighted earlier and acted upon past the decision point, and the kinematics stop the train exactly at the signal boundary (no overrun physics — see §B3).
 
 The *storno* time-release timer is a real-world defence against a human driver who has already sighted a (soon-cancelled) proceed aspect and can no longer be stopped short of the signal. This simulator has no such driver: a cancellation reverts the aspect to STOP, and a train approaching the now-cancelled boundary reads STOP and halts there. Note precisely which mechanism the absence of the timer rests on: **the release has no stopped-train/velocity guard of its own — its guard is the approach lock (a block that is approach-locked, occupied or inside the deferral window is kept reserved, Issues #1050 and #974), and once a cancellation does remove a reservation, reservation gating alone no longer protects a train that was previously cleared.** Safety therefore rides on the live-aspect re-read plus the ideal stop at the boundary, not on "reservation before clear" alone. (gemma4 Phase 4 Q2 ruling: SIMPLIFICATION-ACCEPTABLE.)
 
@@ -38,16 +38,16 @@ The *storno* time-release timer is a real-world defence against a human driver w
 
 A grep of `core/src/commonMain` and `dispatcher-agent/src/main` confirms that "storno" and "sighting" appear nowhere in the production source — the concepts are absent by design, not by oversight.
 
-### The "cancelled between clearance and first movement" edge case — measured (#834, SP2c.11)
+### The "cancelled between clearance and first movement" edge case — measured (#834, SP2c.11; behaviour changed by #905)
 
-The one moment the release's missing velocity guard (noted above) could bite hardest is the narrowest one: after `Train.actions()`'s admission gate (`waitUntil { isPathReservedForTrain(...) }`) has passed but before the `Front` has moved a metre. The `Front`'s first loop iteration sits at the entry `InOut` with `current == null`, and `Train.kt`'s `if (path == null || next == null) { if (where is DynamicInOut) break }` makes a missing route there an immediate exit from the movement loop rather than the wait-for-dispatcher branch every later position takes.
+The one moment the release's missing velocity guard (noted above) could bite hardest is the narrowest one: after `Train.actions()`'s admission gate (`isPathReservedForTrain`) has passed but before the `Front` has moved a metre. The `Front`'s first loop iteration sits at the entry `InOut` with `current == null`. Since Issue #905 (PR #918) a missing route there no longer ends the movement loop: the `Front` takes the same wait-for-dispatcher branch as every later position (`waitForPathOrReportStall` for an ownership conflict, `holdOrStopAtOriginWithoutPath` when the network offers no topological continuation).
 
 Two things were established about it, and neither required a `core/` change:
 
 - **It is not currently reachable by cancelling a route.** Every releaser — `DispatchDecisionApplier` applying `cancel_route`/`ReleaseRoute`, and `OrphanReservationSweeper.sweep` — runs synchronously inside `ShuntingLoop.iteration()`, before the loop's `hold()`. The admission chain (`InOutWorker` reserving → `Train.actions()` resuming → `Process.activate(front)` → the `Front`'s first query) runs strictly afterwards in the same simulated instant on the single kDisco scheduler thread, with no releaser interleaved. `CancelRouteTool` only emits a `DispatchAction` for that same sim thread, so the agent thread cannot short-circuit it. `isPathReservedForTrain` is implemented on top of `findReservedPathForTrain`, so the gate and the `Front`'s query are the same predicate over the same state.
-- **If the state is produced anyway, it does not inflate any counter.** Forced deterministically (`EntryRouteLossAccountingTest`, `:dispatcher-agent`), the `Front` breaks with zero movement, but `Train.actions()` stays parked forever in `waitUntilCrossing { (getLength() - dtMin) - front.getTotalDistance() }` — a distance the train will never cover — so the `Train` process never terminates and `ShuntingLoop`'s `trainsExitedCount`, which counts only terminated trains, never credits it. The exited counter under-reports here; it does not over-report.
+- **If the state is produced anyway, it does not inflate any counter.** Forced deterministically (`EntryRouteLossAccountingTest`, `:dispatcher-agent`), the `Front` now waits in the origin branch instead of exiting, so the `Train` process never terminates and `ShuntingLoop`'s `trainsExitedCount`, which counts only terminated trains, never credits it. The exited counter under-reports here; it does not over-report.
 
-What it *does* cost is a permanent stall: the train holds its admission slot and the head of its `InOutWorker` queue for the rest of the run, and `Front.separatorAction` throws a FATAL `SimulationException` ("Path to semaphore first element must match current position: null") on the `Front`'s own coroutine on the way out, where it is reported but does not stop the run. Making the entry case take the wait-for-dispatcher branch instead of `break` is a `core/` behaviour change and needs a traffic-simulation-expert ruling; it is recorded here rather than made.
+What it *does* cost is a stall, now bounded: the train holds its admission slot and the head of its `InOutWorker` queue until the dispatcher reserves a path. An ownership-conflict wait logs one WARN after `OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS` (60 s of simulated time) and stops the run through `errorStop` at `OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS` (180 s, Issue #943); a missing topological path stops it after `MAX_ORIGIN_NO_PATH_RETRIES` (Issue #905).
 
 ---
 
@@ -55,19 +55,19 @@ What it *does* cost is a permanent stall: the train holds its admission slot and
 
 `PathReservationService` locks **only on-route (running) switches**, NOT flank-protection (*odvratné*) switches/derailers:
 
-- `extractUniqueSwitches` (`DefaultPathReservationService.kt:2171`) derives switches solely from `pathInfo.reservedPath` — the running path.
-- `configureAndRegisterSwitches` (`:3143`) → `registry.registerSwitches` (`:3158`) locks each on-route switch. No flank switches are provisioned or locked.
+- `SwitchConfigurator.extractUniqueSwitches` derives switches solely from `pathInfo.reservedPath` — the running path.
+- `CandidateCommitter.configureAndRegisterSwitches` → `SwitchConfigurator.registerSwitches` → `registry.registerSwitches` locks each on-route switch. No flank switches are provisioned or locked.
 - Since Issue #1065, that lock is now HONOURED by the reservation path itself, not only by the legacy facade below: `DynamicRailSwitch.setUpPath` refuses to move a switch a live route already holds locked in a different position (safety property SI-5, `changeConf` already honoured it; `setUpPath` did not). Before #1065, `configureSwitchesInPath` silently re-threw an on-route switch already locked for a DIFFERENT train's live route.
 
 Flank protection is a concept of the **legacy `InterlockingFacade` path only**:
 
-- `InterlockingFacade.kt:24-30` — ESA-11 condition 2: "All flank-protection switches (odvratné výhybky) are in their required (safe) position."
-- `TrainRoute.flank` (`lang/vocab/TrainRoute.kt:22` KDoc, `:33` field) — `val flank: List<SwitchSetting> = emptyList()`.
-- `DefaultInterlockingFacade.kt:150` (condition-2 check), `:181` (lock count), `:326` (condition-2 method), `:340` (`for (switchSetting in route.flank)`), `:374` (`route.running + route.flank` locked).
+- The `InterlockingFacade` class KDoc — ESA-11 condition 2: "All flank-protection switches (odvratné výhybky) are in their required (safe) position."
+- `TrainRoute.flank` (`lang/vocab/TrainRoute.kt`, the `flank` property and its `@property` KDoc) — `val flank: List<SwitchSetting> = emptyList()`.
+- `DefaultInterlockingFacade`: the condition-2 call `checkSwitchPositions(route)` in `requestRoute`, the granted-route log's switch count (`route.running.size + route.flank.size`), the `checkSwitchPositions` method itself, its `for (switchSetting in route.flank)` loop, and `lockSwitches(trainId, runningSwitches, flankSwitches)` (the `running + flank` switches locked).
 
 **Known scope limitation:** the reservation-service path does not provision flank protection. It relies on the route's running switches being sufficient, or on the facade path for flank-sensitive layouts. A topology that requires flank-protection switches to be locked for safety, accessed only through the reservation-service path, would not have them locked.
 
-**Consequence for Issues #1065/#1076/#1103's stale-lock reclamation:** `PathReservationRegistry.reclaimStaleSwitchOwnership` -- run by `unregisterBlock` for the freed block's ends on every per-block release path since Issue #1103 (whole-route teardown goes through `registry.unregister`, which releases the switch claims wholesale itself), and by `DefaultPathReservationService.reclaimStaleForeignSwitchOwnership` for a candidate's switches (Step 2e.5, Issue #1076) -- releases a switch once its owner holds no BLOCK adjacent to it. That predicate assumes a switch protects only the route(s) it is physically adjacent to. Facade flank grants are the exception — a flank switch protects a route it is NOT adjacent to — so since the Issue #1076 review round the registry marks them: `lockRouteAtomic` registers pure flank switches through `PathReservationRegistry.registerFlankSwitches`, and `PathReservationRegistry.isStaleSwitchOwnership` -- the one staleness rule BOTH reclamation call sites use -- never reports a marked switch as stale while its registration stands (the marker is cleared by `unregisterSwitch`/`unregisterSwitches` on release). A future reservation-service flank provisioning (F4) must use the same marker, or extend the reclamation predicates, or both.
+**Consequence for Issues #1065/#1076/#1103's stale-lock reclamation:** `PathReservationRegistry.reclaimStaleSwitchOwnership` -- run by `unregisterBlock` for the freed block's ends on every per-block release path since Issue #1103 (whole-route teardown goes through `registry.unregister`, which releases the switch claims wholesale itself), and by `SwitchConfigurator.reclaimStaleForeignSwitchOwnership` for a candidate's switches (Step 2e.5, Issue #1076) -- releases a switch once its owner holds no BLOCK adjacent to it. That predicate assumes a switch protects only the route(s) it is physically adjacent to. Facade flank grants are the exception — a flank switch protects a route it is NOT adjacent to — so since the Issue #1076 review round the registry marks them: `lockRouteAtomic` registers pure flank switches through `PathReservationRegistry.registerFlankSwitches`, and `PathReservationRegistry.isStaleSwitchOwnership` -- the one staleness rule BOTH reclamation call sites use -- never reports a marked switch as stale while its registration stands (the marker is cleared by `unregisterSwitch`/`unregisterSwitches` on release). A future reservation-service flank provisioning (F4) must use the same marker, or extend the reclamation predicates, or both.
 
 ---
 
@@ -106,13 +106,7 @@ The conflation is a **known simplification**: the simulator does not distinguish
 
 ## B5. Revisiting / Circular-Route Partial-Release Caveat (F5)
 
-`resetSemaphoresForReleasedBlocks` is **fail-safe but not proven-safe** for a revisiting / circular route. Per the interface KDoc (`PathReservationService.kt:693-706`):
-
-> This is proven safe for **suffix / rearmost releases on a non-revisiting route**: the un-travelled tail of a route the train will never traverse again. It is NOT proven safe for an arbitrary mid-route subset of `blocks` — the semaphore governing a released block can also be the one a DIFFERENT, still-reserved downstream block on the same route depends on. A route that loops back and becomes adjacent to a released block again has the same exposure: the semaphore this call resets may be the one that governs re-entry into the loop.
-
-**Failure direction is fail-safe** — `Signal.STOP` authorises nothing, so the worst case is a stalled train, never an unauthorized opposing movement. The caller is responsible for staying within the proven-safe scope (`DefaultPathReservationService.kt:2717-2719`): the impl performs no route-position validation of its own.
-
-Cross-reference: the same caveat appears in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) v1.2 §5 (Proven-Safe Scope).
+`resetSemaphoresForReleasedBlocks` is **fail-safe but not proven-safe** for a revisiting / circular route: it is proven safe only for suffix / rearmost releases on a non-revisiting route, and the semaphore it resets may govern a still-reserved downstream block, or re-entry into a loop. The failure direction is fail-safe (`Signal.STOP` authorises nothing, so the worst case is a stalled train), and the caller is responsible for staying within the proven-safe scope. The full statement and the interface KDoc quote are in [PATH_RESERVATION_ARCHITECTURE.md](PATH_RESERVATION_ARCHITECTURE.md) §5 (Proven-Safe Scope).
 
 ---
 

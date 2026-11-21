@@ -110,7 +110,7 @@ TSE opened by establishing the meeting's scope: "Round 1 determined that continu
 
 ### Coupling Point 5: Passivation vs Continuous Integration (Issue #291)
 
-**What it does:** `passivate()` suspends the discrete process but does NOT stop continuous integration (Issue #291 bug). The Motor's ODE solver keeps running, causing train drift. The workaround is `hold(5.0)` polling (Train.kt:197).
+**What it does:** `passivate()` suspends the discrete process but does NOT stop continuous integration (Issue #291 bug). The Motor's ODE solver keeps running, causing train drift. The workaround is `hold(5.0)` polling (`Train`, the `hold(5.0)` calls).
 
 **TSE:** "This is the coupling point that ALREADY has a known bug. Road 1 eliminates it by replacing continuous integration with analytical kinematics. Road 2 carries the bug through Step 1 (same jDisco backend), fixes it in Step 2 (Kalasim backend), and removes the workaround in Step 3."
 

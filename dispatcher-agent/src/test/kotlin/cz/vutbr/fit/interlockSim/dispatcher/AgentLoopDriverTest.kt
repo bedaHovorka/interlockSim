@@ -22,9 +22,17 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.CONTROL_STEP
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.SelfPacedSimClock
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.SleepingPacingRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.SpeedDroppingPacingRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.SpeedDroppingSimClock
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.assertThrottleArgsWithinBound
+import cz.vutbr.fit.interlockSim.dispatcher.testutil.runProcessedCycles
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -33,6 +41,7 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -370,7 +379,10 @@ class AgentLoopDriverTest {
 			val sensorPort =
 				DefaultDispatchLoopSensorPort {
 					callCount++
-					ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
+					// A publishable record (non-EMPTY snapshot), like its sibling test — a record
+					// whose snapshot is the EMPTY sentinel would short-circuit before DECIDE and
+					// silently re-pin this test to the short-circuit path instead of a full cycle.
+					ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList(), tick = 1L, snapshot = emptySnapshot(0.0))
 				}
 			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, sensorPort)
 
@@ -408,7 +420,9 @@ class AgentLoopDriverTest {
 								pathSetUpTowardThisInput = false,
 								pathAlreadyExtendedBeyond = false
 							)
-						)
+						),
+					tick = 1L,
+					snapshot = emptySnapshot(0.0)
 				)
 			// A second, distinguishable tick — if the driver ever split its reads across two
 			// provider calls, some fields would come from tickB instead of tickA.
@@ -434,6 +448,86 @@ class AgentLoopDriverTest {
 			assertThat(capturedObs.captured.unapprovedTrains).isSameInstanceAs(tickA.queuedTrains)
 			assertThat(capturedObs.captured.innerBlockInputs).isSameInstanceAs(tickA.innerBlockInputs)
 			assertThat(capturedObs.captured.outerBlockInputs).isSameInstanceAs(tickA.outerBlockInputs)
+		}
+
+		/**
+		 * Issue #1354: the snapshot and the queue come from one tick-stamped record. The perception
+		 * port already holds a newer snapshot (tick 6) than the record (tick 5) — the torn state a
+		 * second read could pair with tick 5's queue. The planner must get tick 5's snapshot with
+		 * tick 5's queue, and the perception port must not be touched at all.
+		 */
+		@Test
+		@DisplayName("the planner gets the snapshot and the queue of one tick-stamped record")
+		fun snapshotAndQueueComeFromOneRecord() {
+			val snapshot5 = emptySnapshot(10.0)
+			val queue5 = listOf(QueuedTrainObservation("T5", "OUT5"))
+			val record5 =
+				ShuntingLoop.TickObservation(
+					queuedTrains = queue5,
+					innerBlockInputs = emptyList(),
+					outerBlockInputs = emptyList(),
+					tick = 5L,
+					snapshot = snapshot5
+				)
+			val strictPerceptionPort = mockk<NetworkPerceptionPort>()
+			every { strictPerceptionPort.snapshot() } returns emptySnapshot(12.0)
+			val driver =
+				AgentLoopDriver(
+					strictPerceptionPort,
+					planner,
+					commandQueue,
+					controller,
+					DefaultDispatchLoopSensorPort { record5 }
+				)
+			val capturedObs = slot<DispatchObservation>()
+			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+
+			runBlocking { driver.runCycle() }
+
+			assertThat(capturedObs.captured.snapshot).isSameInstanceAs(snapshot5)
+			assertThat(capturedObs.captured.unapprovedTrains).isSameInstanceAs(queue5)
+			confirmVerified(strictPerceptionPort)
+		}
+
+		/**
+		 * Issue #1354, perception-only wiring: a driver built without an explicit sensor port
+		 * senses the default port, whose provider pairs an empty dispatch bundle with
+		 * [perceptionPort]'s published snapshot — the planner still gets the perception state of
+		 * a run with no dispatch loop, and the port is read through the record, not alongside it.
+		 */
+		@Test
+		@DisplayName("the default sensor port pairs the perception snapshot with empty dispatch inputs")
+		fun defaultSensorPortPairsPerceptionSnapshotWithEmptyInputs() {
+			val wired = emptySnapshot(3.0)
+			every { perceptionPort.snapshot() } returns wired
+			val driver = makeDriver()
+			val capturedObs = slot<DispatchObservation>()
+			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+
+			val ran = runBlocking { driver.runCycle() }
+
+			assertThat(ran).isTrue()
+			assertThat(capturedObs.captured.snapshot).isSameInstanceAs(wired)
+			assertThat(capturedObs.captured.unapprovedTrains).isEmpty()
+			assertThat(capturedObs.captured.innerBlockInputs).isEmpty()
+			assertThat(capturedObs.captured.outerBlockInputs).isEmpty()
+			verify(exactly = 1) { perceptionPort.snapshot() }
+			confirmVerified(perceptionPort)
+		}
+
+		/** The EMPTY short-circuit is decided by the record's snapshot field, not a second read. */
+		@Test
+		@DisplayName("the default sensor port's EMPTY snapshot still short-circuits the cycle")
+		fun defaultSensorPortEmptySnapshotShortCircuits() {
+			every { perceptionPort.snapshot() } returns SimulationSnapshot.EMPTY
+			val driver = makeDriver()
+
+			val ran = runBlocking { driver.runCycle() }
+
+			assertThat(ran).isFalse()
+			coVerify(exactly = 0) { planner.plan(any()) }
+			verify(exactly = 1) { perceptionPort.snapshot() }
+			confirmVerified(perceptionPort)
 		}
 	}
 
@@ -540,6 +634,99 @@ class AgentLoopDriverTest {
 
 			assertThat(controller.throttleCalls).isEqualTo(1)
 			assertThat(controller.lastThrottleDelta).isEqualTo(0.0)
+		}
+	}
+
+	// ── Pacing after one long cycle (Issue #1340) ────────────────────────────────
+
+	@Nested
+	@DisplayName("Pacing recovers within one cycle after one long plan() (Issue #1340)")
+	inner class PacingAfterLongCycle {
+		/**
+		 * The #1301 campaign shape: the sim thread paces itself on the same controller, so it keeps
+		 * running while one `plan()` call is stuck (a 30 s LLM timeout at speed 2 = about 60 sim s).
+		 * The next snapshot is then about 60 sim s ahead, but that sim time has already passed on the
+		 * wall clock, so PACE must not sleep for it again. Before the fix it did: it subtracted only
+		 * the wall time spent inside `plan()`, slept the rest, the sim ran on meanwhile, and every
+		 * later cycle saw the same 60 sim s gap — the period ratcheted to the longest `plan()` for
+		 * the rest of the run (Červený Újezd run r02: dispatcher actions exactly 58 sim s apart).
+		 *
+		 * Speed 20 instead of the production 2.0 keeps the test short (a 60 sim s gap is 3 s of wall
+		 * clock, not 30 s); the defect does not depend on the speed. The pins are sim-time and cycle
+		 * counts that no machine load can move: every throttle argument after the long cycle is at
+		 * most one control step, and so their sum is at most one step per cycle (the old code gives
+		 * about 60 per cycle). The sim-time period between cycles includes real wall time, so it is
+		 * only printed, never asserted (the [cz.vutbr.fit.interlockSim.dispatcher.planner.OllamaTimeoutAbortTest]
+		 * ruling: counts, never wall clock).
+		 */
+		@Test
+		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@DisplayName("throttle never re-sleeps sim time that already passed during a long plan()")
+		fun throttleDoesNotResleepElapsedSimTime() {
+			val clock = SelfPacedSimClock(speedMultiplier = PACE_TEST_SPEED, controlStepSeconds = CONTROL_STEP)
+			val pacing = SleepingPacingRecorder(PACE_TEST_SPEED)
+
+			pacedRunOfCyclesAfterOneLongPlan("driver pacing", { clock.simTime() }, pacing, pacing.throttleDeltas)
+		}
+
+		/**
+		 * The other side of the #1340 fix: sim time NOT yet matched on the wall clock is still slept
+		 * for. A sim that ran 10 sim s ahead between two instant cycles (an unpaced sim thread) gets
+		 * nearly the whole 10 s as the second throttle argument, so the fix is not "never throttle".
+		 * At speed 0.1 the 10 sim s are 100 s of wall clock, so the `> 5.0` floor holds unless the
+		 * two cycles are 50 s apart: load-proof.
+		 */
+		@Test
+		@DisplayName("sim time not yet matched on the wall clock is still throttled on a later cycle")
+		fun simTimeAheadOfWallClockIsStillThrottled() {
+			controller.speedMultiplier = 0.1
+			every { perceptionPort.snapshot() } returnsMany listOf(emptySnapshot(2.0), emptySnapshot(12.0))
+			val driver = makeDriver()
+
+			runBlocking {
+				driver.runCycle()
+				driver.runCycle()
+			}
+
+			assertThat(controller.throttleCalls).isEqualTo(2)
+			assertThat(controller.lastThrottleDelta).isLessThanOrEqualTo(10.0)
+			assertThat(controller.lastThrottleDelta).isGreaterThan(5.0)
+		}
+
+		/**
+		 * The operator-side half of the same shape: the speed decrease lands while a long inference is
+		 * blocking the driver, so PACE afterwards sees a fresh, slower multiplier for an interval the
+		 * sim matched mostly at the old, fast rate. Pricing that whole interval at the new, slower rate
+		 * made `throttle()` ask for minutes of sleep again (2.0 → 0.1 after one 60 sim s cycle leaves
+		 * about 57 sim s to be slept at the new speed: about 570 s of wall clock). PACE therefore
+		 * prices every interval at the faster of its two endpoint speed multipliers — the previous
+		 * PACE's and the controller's current one — so the shift interval is priced at the rate it
+		 * actually mostly ran at.
+		 *
+		 * The pins are the same sim-time bounds as [throttleDoesNotResleepElapsedSimTime]: every
+		 * throttle argument beyond the long cycle stays within one control step, as does their sum
+		 * (the pre-fix code gives about 60 for cycle 2 — that is this test's RED). Cycle periods are
+		 * printed, never asserted, per the
+		 * [cz.vutbr.fit.interlockSim.dispatcher.planner.OllamaTimeoutAbortTest] ruling (counts and
+		 * sim-time bounds, never wall clock). The recorder never sleeps — a sleeping one would stall
+		 * this run inside exactly the minutes-long sleep the defect describes — and the sim clock
+		 * ([SpeedDroppingSimClock]) drops its speed with the controller, because the sim thread paces
+		 * itself on the same shared controller the operator's speed change reaches; it advances
+		 * continuously rather than in whole control steps, since the instant test plans give the
+		 * dropped speed no wall time to fill a whole control step with (a production inference costs
+		 * tens of seconds per cycle) and the pricing under test does not depend on the floor.
+		 */
+		@Test
+		@Timeout(value = 60, unit = TimeUnit.SECONDS)
+		@DisplayName("a speed drop after a long plan() never re-prices the interval at the slow rate")
+		fun speedDropAfterLongCycleNeverRepricesTheInterval() {
+			val droppedSpeed = 0.1
+			val clock = SpeedDroppingSimClock(PACE_TEST_SPEED, droppedSpeed)
+			val pacing = SpeedDroppingPacingRecorder(PACE_TEST_SPEED, droppedSpeed) { clock.drop() }
+
+			pacedRunOfCyclesAfterOneLongPlan("speed drop", { clock.simTime() }, pacing, pacing.throttleDeltas) {
+				assertThat(pacing.speedDropped, "operator speed drop landed during the run").isTrue()
+			}
 		}
 	}
 
@@ -687,6 +874,55 @@ class AgentLoopDriverTest {
 			assertThat(controller.awaitCalls).isEqualTo(1)
 			assertThat(controller.throttleCalls).isEqualTo(1)
 		}
+	}
+
+	private companion object {
+		/** The long cycle: a 30 s LLM timeout at the production speed 2.0. */
+		const val LONG_CYCLE_SIM_SECONDS = 60.0
+		const val CYCLES = 6
+
+		/**
+		 * The sim speed of the pacing tests: 20 instead of the production 2.0 keeps the long cycle
+		 * at 3 s of wall clock (a 60 sim s gap is 3 s, not 30 s), and the defect does not depend on
+		 * the speed ([PacingAfterLongCycle]'s KDoc).
+		 */
+		const val PACE_TEST_SPEED = 20.0
+	}
+
+	/**
+	 * The shared scenario of [PacingAfterLongCycle]'s two tests: a sim thread that paces itself on
+	 * the wall clock per [simTime], a [pacing] controller recording every throttle argument
+	 * ([throttleDeltas]), a one-shot long first `plan()` ([LONG_CYCLE_SIM_SECONDS] at
+	 * [PACE_TEST_SPEED] — the 30 s LLM shape) and [CYCLES] processed cycles, then the printed
+	 * measurement, whatever only one test pins as [extraAssertions], and the shared pins: the
+	 * processed-cycle count, the long cycle's sim-time gap, and the throttle-argument bound
+	 * ([assertThrottleArgsWithinBound] at one control step).
+	 */
+	private fun pacedRunOfCyclesAfterOneLongPlan(
+		scenario: String,
+		simTime: () -> Double,
+		pacing: SimulationController,
+		throttleDeltas: List<Double>,
+		extraAssertions: () -> Unit = {}
+	) {
+		every { perceptionPort.snapshot() } answers { emptySnapshot(simTime()) }
+		val decidedAt = mutableListOf<Double>()
+		coEvery { planner.plan(any()) } coAnswers {
+			decidedAt += firstArg<DispatchObservation>().snapshot.simTime
+			if (decidedAt.size == 1) Thread.sleep((LONG_CYCLE_SIM_SECONDS / PACE_TEST_SPEED * 1_000).toLong())
+			listOf(DispatchDecision.NoAction)
+		}
+		val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, pacing)
+
+		runProcessedCycles(driver, CYCLES)
+
+		val periods = decidedAt.zipWithNext { a, b -> b - a }
+		println("Issue #1340 $scenario: decidedAt=$decidedAt periods=$periods throttle=$throttleDeltas")
+		extraAssertions()
+		assertThat(decidedAt.size, "processed cycles").isEqualTo(CYCLES)
+		// Cycle 2 sees the long cycle's gap; that gap is the cost of the long cycle itself.
+		assertThat(periods[0], "sim time the long cycle took").isGreaterThan(LONG_CYCLE_SIM_SECONDS / 2)
+		assertThrottleArgsWithinBound(throttleDeltas, CONTROL_STEP, 1)
 	}
 
 	// ── Helper: RecordingSimulationController ──────────────────────────────────

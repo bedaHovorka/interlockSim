@@ -13,24 +13,18 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -43,15 +37,8 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("findReservationTargetCandidates (Issue #970)")
 @Timeout(10, unit = TimeUnit.SECONDS)
-class ReservationTargetCandidatesTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
+class ReservationTargetCandidatesTest : PathReservationServiceTestBase() {
 	private lateinit var query: ReservationTargetQuery
-
-	/** Same instance as [query]; the pick oracle the candidate list is cross-checked against. */
-	private lateinit var service: PathReservationService
 
 	private lateinit var semaphoreZA: OrientedPathSeparator // zA at (14,8), faces vA
 	private lateinit var semaphoreDoA1: DynamicPathSeparator // doA1 at (16,8), k1 A-side
@@ -59,11 +46,8 @@ class ReservationTargetCandidatesTest : KoinTestBase() {
 	private lateinit var semaphoreDoB2: DynamicPathSeparator // doB2 at (24,9), k2 B-side
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
+	fun setUpFixtures() {
 		query = simulationContext.getRoutingServices().getReservationTargetQuery()
-		service = simulationContext.getRoutingServices().getPathReservationService()
 
 		semaphoreZA = simulationContext.separatorAt(14, 8) as OrientedPathSeparator
 		semaphoreDoA1 = simulationContext.separatorAt(16, 8)

@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -45,5 +46,28 @@ class SemaphoreFacingTest {
 	@Test
 	fun `an unresolvable segment fails open`() {
 		assertThat(semaphoreFacesNextBlock(contextResolving(null), semaphore, nextBlock)).isTrue()
+	}
+
+	/**
+	 * [semaphoreFacesNextBlockOrOpen]'s fail-open-twice contract (Issue #1378): the START screen and
+	 * the G4 checks share this one rule, so its arms are pinned here like the base rule's above.
+	 */
+	@Test
+	fun `an environment that is not a SimulationContext fails open`() {
+		assertThat(semaphoreFacesNextBlockOrOpen(mockk<SimulationEnvironment>(), semaphore, nextBlock)).isTrue()
+	}
+
+	@Test
+	fun `an adjacency lookup that throws fails open`() {
+		val throwingContext =
+			mockk<SimulationContext> { every { getSegment(semaphore, nextBlock, null) } throws RuntimeException("not adjacent") }
+
+		assertThat(semaphoreFacesNextBlockOrOpen(throwingContext, semaphore, nextBlock)).isTrue()
+	}
+
+	@Test
+	fun `a resolvable pair resolves like the base rule`() {
+		assertThat(semaphoreFacesNextBlockOrOpen(contextResolving(Cell.Segment.F), semaphore, nextBlock)).isTrue()
+		assertThat(semaphoreFacesNextBlockOrOpen(contextResolving(Cell.Segment.A), semaphore, nextBlock)).isFalse()
 	}
 }

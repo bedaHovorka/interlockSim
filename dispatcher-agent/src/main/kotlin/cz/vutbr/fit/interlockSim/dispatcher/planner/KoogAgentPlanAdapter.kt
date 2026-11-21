@@ -99,6 +99,9 @@ import kotlin.time.TimeSource
  *    **A failed cycle with a partial emission gets the same protection** (#1058 review round):
  *    the posted emissions are kept, no retry runs, the failure still feeds [circuitBreaker], and
  *    the tick is reported through the emission classification rather than [TickOutcome.RULE_FALLBACK].
+ *    Because the guard covers the whole cycle, an offered NEXT SECTION hop the LLM did not request
+ *    waits for a later cycle; these endings (and [TickOutcome.LLM_SILENT_ALL_MOVING]) count such
+ *    skipped offers on [TickRecord.nextSectionOffers] — reporting only (Issue #1302).
  * 2. LLM cycle completes, invoked no actuator tool, and the station is **idle** — no approved
  *    (active) trains and no unapproved (queued) trains (Issue #834) → do NOT fall back; report
  *    [TickOutcome.LLM_NO_OP]. There is nothing to dispatch, so a correctly-idle LLM cycle must not
@@ -122,6 +125,28 @@ import kotlin.time.TimeSource
  *    [TickOutcome.LLM_SILENT_ALL_MOVING], an LLM success.
  * 4. LLM times out → fall back to [fallbackDispatcher]
  * 5. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
+ *
+ * ## Fallback decision input (Issue #1343)
+ *
+ * The fallback always decides on ONE whole observation, never on fields of one combined with
+ * fields of another. Which one depends on how long the simulation ran since the cycle's own
+ * observation was taken:
+ *
+ * | Fallback cause | Decides on | Why |
+ * |---|---|---|
+ * | timeout (4) | latest published state | the simulation ran for the whole inference window |
+ * | exception (5) | latest published state | the same, for as long as the attempt(s) ran |
+ * | agent-creation failure | latest published state | `OllamaModelPrewarmer.warmUp` can take seconds on a cold model |
+ * | circuit-breaker skip | the cycle's own observation | no delay: no LLM call is made |
+ * | silent cycle on a non-idle station (3) | the cycle's own observation | judged on the state the LLM was shown |
+ * | failure after a partial emission | nothing (no fallback runs) | the emitted actions stand |
+ *
+ * "Latest published state" is what [latestObservationReader] returns when it is at least as new as
+ * the cycle's own observation; otherwise (no reader, nothing published yet, an older state) the
+ * cycle's own observation is used whole — see [latestObservationOr]. The read never requests or
+ * awaits a sim-thread capture (constraint C3, see [LatestObservationReader]). The reported tick and
+ * the circuit breaker keep the cycle's own sim time: they account for this cycle, which started
+ * then.
  *
  * ## How "the LLM acted via tools" is detected
  *
@@ -163,6 +188,7 @@ import kotlin.time.TimeSource
  *                       topology serialization and snapshot tooling.
  * @param fallbackDispatcher Deterministic rule-based fallback invoked when the LLM cannot
  *                       produce valid decisions (typically [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher]).
+ *                       Readable so wiring tests can pin its admission cap (Issue #1303).
  * @param inferenceTimeout Maximum wall-clock time to wait for a single LLM response before
  *                       invoking the fallback. Defaults to 30 seconds (matches
  *                       [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig.DEFAULT_INFERENCE_TIMEOUT]).
@@ -178,16 +204,20 @@ import kotlin.time.TimeSource
  *                       previous stateless-per-cycle behaviour.
  * @param circuitBreaker Guards against sustained LLM overload — see "Overload handling" above.
  *                       Defaults to a fresh breaker with the class default threshold/cooldown.
+ * @param nextSectionOfferCounter Counts the NEXT SECTION offers a fallback-skipping cycle left
+ *                       unrequested, for [TickRecord.nextSectionOffers] only (Issue #1302 — see
+ *                       [countNextSectionOffers]). Defaults to [NextSectionOfferCounter.LIVE].
  */
 class KoogAgentPlanAdapter(
 	private val agentFactory: KoogAgentFactory,
 	private val context: DefaultSimulationContext,
-	private val fallbackDispatcher: Dispatcher,
+	val fallbackDispatcher: Dispatcher,
 	private val inferenceTimeout: Duration = Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS),
 	private val commandQueue: ActuatorCommandQueue,
 	private val sinkHolder: SinkHolder,
 	private val cycleHistory: CycleHistory = CycleHistory(capacity = 0),
-	val circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker()
+	val circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker(),
+	private val nextSectionOfferCounter: NextSectionOfferCounter = NextSectionOfferCounter.LIVE
 ) : DispatcherPlanner {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -260,6 +290,27 @@ class KoogAgentPlanAdapter(
 	 */
 	@Volatile
 	private var lastWarnedOpenCount: Long = 0L
+
+	/**
+	 * Source of the latest published state for the fallback after a failed cycle (Issue #1343).
+	 *
+	 * When a cycle times out, throws, or fails to create its agent, the simulation has kept running
+	 * meanwhile — up to [inferenceTimeout] for an inference, longer with the retry, seconds for a
+	 * cold model warm-up — so the cycle's own observation is that much out of date. On 2026-11-01
+	 * the fallback asked `zB → doA1` for a train that had already left `kB`, and the interlocking
+	 * refused it as a non-contiguous origin. Those fallbacks therefore decide on the observation
+	 * this reader returns instead — see the class KDoc's "Fallback decision input" table for every
+	 * cause.
+	 *
+	 * Installed after construction by the [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver]
+	 * this adapter is handed to as `plannerTickSource`, over the driver's own sensor port
+	 * ([LatestObservationReader.fromPorts]); a property rather than a constructor parameter, like
+	 * [addTickListener], so the constructor stays as it is. `null` (the default, e.g. for an
+	 * adapter no driver drives) keeps the pre-#1343 behaviour: the fallback decides on the cycle's
+	 * own observation.
+	 */
+	@Volatile
+	var latestObservationReader: LatestObservationReader? = null
 
 	/** Outcome of one attempt at [KoogDispatchAgent.decideAsync], wrapped for [attemptInference]'s callers. */
 	private sealed class InferenceAttempt {
@@ -369,10 +420,13 @@ class KoogAgentPlanAdapter(
 			} catch (e: CancellationException) {
 				throw e
 			} catch (e: Exception) {
+				// Issue #1343 (TSE ruling on PR #1353): a cold warm-up can take seconds while the
+				// simulation runs, so this fallback decides on the latest published state too.
 				return runFallback(
 					observation = observation,
 					latencyMs = null,
-					outcomeFromFallbackOracle = false
+					outcomeFromFallbackOracle = false,
+					decisionInput = { latestObservationOr(observation) }
 				) {
 					logger.warn(e) {
 						"KoogAgentPlanAdapter: LLM call failed — applying rule-based fallback " +
@@ -514,7 +568,7 @@ class KoogAgentPlanAdapter(
 				"(emitted=${sinkHolder.actedThisCycle()}, returned=${decisions.size}) " +
 				"(simTime=${observation.snapshot.simTime}); not falling back"
 		}
-		reportTick(outcome, observation.snapshot.simTime, latencyMs)
+		reportTick(outcome, observation.snapshot.simTime, latencyMs, countOffersFrom = observation)
 		return decisions
 	}
 
@@ -553,7 +607,12 @@ class KoogAgentPlanAdapter(
 				"trains move with a path ahead — reporting LLM_SILENT_ALL_MOVING, not falling back " +
 				"(simTime=${observation.snapshot.simTime})"
 		}
-		reportTick(TickOutcome.LLM_SILENT_ALL_MOVING, observation.snapshot.simTime, latencyMs)
+		reportTick(
+			TickOutcome.LLM_SILENT_ALL_MOVING,
+			observation.snapshot.simTime,
+			latencyMs,
+			countOffersFrom = observation
+		)
 		return emptyList()
 	}
 
@@ -592,9 +651,20 @@ class KoogAgentPlanAdapter(
 	 * the tick is reported through the emission classification ([outcomeFromEmissions]) rather
 	 * than [TickOutcome.RULE_FALLBACK]: the LLM did act this cycle.
 	 *
+	 * ## Decision input (Issue #1343)
+	 *
+	 * Both endings that reach this function — timeout and exception — come after an inference
+	 * window during which the simulation kept running, so [fallbackDispatcher] decides on
+	 * [latestObservationOr]'s result, not on [observation] — see the class KDoc's "Fallback
+	 * decision input" table for every fallback cause. The read happens inside [runFallback]'s
+	 * decide step, after the tick has been reported, so a throwing read is accounted exactly like
+	 * a throwing fallback. The circuit-breaker failure and the reported tick keep [observation]'s
+	 * sim time.
+	 *
 	 * @param latencyMs Elapsed time of the failed attempt, from [attemptInference]'s mark — for a
 	 *   timeout, the elapsed time IS the deadline (see [plan]'s "Latency measurement" KDoc).
-	 * @param observation Read-only snapshot: feeds the fallback and carries the cycle's sim time.
+	 * @param observation The cycle's own observation: carries the cycle's sim time, and feeds the
+	 *   fallback only when no newer published state is available (see "Decision input").
 	 * @param exception The failure's exception, or `null` for a timeout — the helper attaches it
 	 *   to whichever warn line this cycle logs, so a real failure's stack trace is never lost.
 	 * @param fallbackWarnMessage Branch-specific warn message, logged only on the fallback path
@@ -613,15 +683,27 @@ class KoogAgentPlanAdapter(
 				"KoogAgentPlanAdapter: LLM cycle failed after a partial emission — keeping the " +
 					"emitted actions, suppressing retry and fallback (simTime=${observation.snapshot.simTime})"
 			}
-			reportTick(outcomeFromEmissions(), observation.snapshot.simTime, latencyMs)
+			reportTick(outcomeFromEmissions(), observation.snapshot.simTime, latencyMs, countOffersFrom = observation)
 			return emptyList()
 		}
 		return runFallback(
 			observation = observation,
 			latencyMs = latencyMs,
 			outcomeFromFallbackOracle = false,
+			decisionInput = { latestObservationOr(observation) },
 			logAction = { logger.warn(exception) { fallbackWarnMessage() } }
 		)
+	}
+
+	/**
+	 * The latest published observation from [latestObservationReader] when it is at least as new
+	 * as [cycleObservation], otherwise [cycleObservation] — always one whole observation, never a
+	 * combination of the two. A defensively ignored older state, no reader and nothing published
+	 * yet all mean [cycleObservation]. See the class KDoc's "Fallback decision input".
+	 */
+	private fun latestObservationOr(cycleObservation: DispatchObservation): DispatchObservation {
+		val latest = latestObservationReader?.read() ?: return cycleObservation
+		return if (latest.snapshot.simTime < cycleObservation.snapshot.simTime) cycleObservation else latest
 	}
 
 	/**
@@ -714,32 +796,41 @@ class KoogAgentPlanAdapter(
 	 *   reported outcome — the silent-cycle case, where the dispatcher is consulted as an oracle
 	 *   and finding nothing actionable means [TickOutcome.LLM_SILENT_NONACTIONABLE]. `false` to
 	 *   report [TickOutcome.RULE_FALLBACK] unconditionally, because the LLM path itself failed.
+	 * @param decisionInput What [fallbackDispatcher] decides on — [observation] itself unless the
+	 *   caller supplies another whole observation ([recordFailureAndFallback] and the
+	 *   agent-creation failure in [plan], Issue #1343).
+	 *   [observation] still carries the reported sim time.
 	 */
 	private fun runFallback(
 		observation: DispatchObservation,
 		latencyMs: Long?,
 		outcomeFromFallbackOracle: Boolean,
+		decisionInput: () -> DispatchObservation = { observation },
 		logAction: () -> Unit
 	): List<DispatchDecision> {
 		logAction()
 		// The oracle does not select the outcome (timeout/exception): always RULE_FALLBACK. Report
-		// the tick BEFORE consulting the fallback so a throwing fallback cannot drop it from
-		// accounting.
+		// the tick BEFORE consulting the fallback — and before building its input — so a throwing
+		// fallback or input read cannot drop it from accounting.
 		if (!outcomeFromFallbackOracle) {
 			reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
-			return fallbackDispatcher.decide(observation)
+			return fallbackDispatcher.decide(decisionInput())
 		}
 		// Oracle-selected: the outcome depends on what the fallback oracle finds, so decide()
 		// must run before the tick is reported. If decide() throws, report a degraded
 		// RULE_FALLBACK before propagating — the cycle is still accounted for exactly once,
 		// never silently dropped (#1058 review round restores the #927/#999 invariant).
+		// Only the silent non-idle cycle consults the oracle, so its tick names its correlation
+		// cycle: the decisions posted for it are the fallback's, computed on the kept cycle
+		// observation (Issue #1365 counts their stale-origin refusals). Reporting only.
+		val silentCycleIndex = commandQueue.currentCorrelationCycle()
 		val decisions =
 			try {
-				fallbackDispatcher.decide(observation)
+				fallbackDispatcher.decide(decisionInput())
 			} catch (e: CancellationException) {
 				throw e
 			} catch (e: Exception) {
-				reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs)
+				reportTick(TickOutcome.RULE_FALLBACK, observation.snapshot.simTime, latencyMs, silentCycleIndex)
 				throw e
 			}
 		// The Dispatcher contract guarantees decide() never returns empty (it returns
@@ -752,7 +843,7 @@ class KoogAgentPlanAdapter(
 			} else {
 				TickOutcome.RULE_FALLBACK
 			}
-		reportTick(outcome, observation.snapshot.simTime, latencyMs)
+		reportTick(outcome, observation.snapshot.simTime, latencyMs, silentCycleIndex)
 		return decisions
 	}
 
@@ -818,12 +909,16 @@ class KoogAgentPlanAdapter(
 	/**
 	 * Whether the rule-based fallback would reserve a forward path from [input]. Mirrors the state
 	 * conditions of `RuleBasedDispatcher.checkInput` (it does not model the same-tick separator
-	 * claim or a missing next separator, so it may say `true` where the dispatcher would defer,
-	 * which only keeps the fallback and is therefore safe):
+	 * claim, a missing next separator, or the Issue #1244 guard that skips an awaiting input whose
+	 * pick is the end of the route it already holds, so it may say `true` where the dispatcher
+	 * would defer, which only keeps the fallback and is therefore safe):
 	 * - OCCUPIED: the train approaches this input and either the path is not yet extended beyond it
 	 *   or the route extension is awaited;
 	 * - RESERVED: a path is set up toward this input and is not yet extended beyond it;
 	 * - FREE: never.
+	 *
+	 * `NextHopResolver` does apply the same held-end guard, so the model is not offered that hop
+	 * either.
 	 */
 	private fun needsPathExtension(input: BlockInputObservation): Boolean =
 		when (input.state) {
@@ -849,15 +944,82 @@ class KoogAgentPlanAdapter(
 	 *   `null` when this cycle never reached the measured window. Forwarded to
 	 *   [TickRecord.latencyMs]; not part of [cycleHistory] (the model's own memory does not need
 	 *   its own timing).
+	 * @param silentNonIdleCycleIndex Forwarded to [TickRecord.silentNonIdleCycleIndex]: set only by
+	 *   [runFallback] for a silent cycle on a non-idle station (Issue #1365).
+	 * @param countOffersFrom The observation whose NEXT SECTION offers this ending skipped the
+	 *   rule-based fallback over — the three fallback-skipping endings ([reportActedCycle], the
+	 *   partial-emission arm of [recordFailureAndFallback], [reportAllMovingSilent]) pass it, and
+	 *   this method counts [TickRecord.nextSectionOffers] from it internally (Issue #1302, see
+	 *   [countNextSectionOffers]). Deliberately not part of [cycleHistory]: the history feeds
+	 *   later prompts, and this count is reporting only. `null` — every fallback ending — counts
+	 *   nothing and reports a plain not-measured `null` count, exactly the pre-#1302 fallback
+	 *   endings; the parameter carries the signal, so behaviour is never keyed on [outcome].
 	 */
 	private fun reportTick(
 		outcome: TickOutcome,
 		simTime: Double,
-		latencyMs: Long?
+		latencyMs: Long?,
+		silentNonIdleCycleIndex: Long? = null,
+		countOffersFrom: DispatchObservation? = null
 	) {
-		tickListeners.onTick(TickRecord(outcome, simTime, latencyMs = latencyMs))
+		val (nextSectionOffers, nextSectionOffersFailed) = countNextSectionOffers(countOffersFrom)
+		tickListeners.onTick(
+			TickRecord(
+				outcome,
+				simTime,
+				latencyMs = latencyMs,
+				silentNonIdleCycleIndex = silentNonIdleCycleIndex,
+				nextSectionOffers = nextSectionOffers,
+				nextSectionOffersFailed = nextSectionOffersFailed
+			)
+		)
 		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())
 	}
+
+	/**
+	 * Counts the NEXT SECTION hops [observation]'s cycle message offered and the LLM left without an
+	 * accepted `request_route` (Issue #1302, step 1 "record" of #992 F8) — see
+	 * [NextSectionOfferCount] for what "accepted" means. A `null` [observation] — every fallback
+	 * ending, where the fallback ran on the whole cycle so no offer is left behind by the guard —
+	 * yields the plain not-measured `null to false` pair without invoking the counter.
+	 *
+	 * Called only by [reportTick], for exactly the three cycle endings that skip the rule-based
+	 * fallback: [reportActedCycle], the partial-emission arm of [recordFailureAndFallback], and
+	 * [reportAllMovingSilent]. The count is reporting only: it never feeds a decision, the
+	 * emissions or [cycleHistory].
+	 *
+	 * Two endings worth knowing:
+	 * - [TickOutcome.LLM_SILENT_ALL_MOVING] is always (0, 0) by construction: the branch is taken only
+	 *   when no block input [needsPathExtension], and that predicate is a superset of
+	 *   `NextHopResolver.isEligible`, so no hop is offered. It is computed anyway, so a drift between
+	 *   the two predicates would show up as a non-zero count.
+	 * - On the defensive `decisions.isNotEmpty()` arm of [handleSuccess] (dead today, see
+	 *   [reportActedCycle]) the returned decisions are not in [SinkHolder.emittedActionsThisCycle],
+	 *   so their trains would count as skipped.
+	 *
+	 * Never throws: an exception out of [plan] would kill the driver thread for the rest of the run,
+	 * so a failing count logs WARN and its cycle reports [TickRecord.nextSectionOffersFailed] — the
+	 * count is *failed* and [DefaultDispatcherRunRecorder] publishes the run's whole offer group
+	 * absent over it; never a measured `0` (PR #1408 review round).
+	 *
+	 * @return [reportTick]'s nextSectionOffers paired with whether the counter was invoked and
+	 *   threw — the TickRecord.nextSectionOffersFailed flag (PR #1408 review round). Internal
+	 *   plumbing only; this pair never leaves the adapter.
+	 */
+	private fun countNextSectionOffers(observation: DispatchObservation?): Pair<NextSectionOfferCount?, Boolean> =
+		when (observation) {
+			null -> null to false
+			else ->
+				try {
+					nextSectionOfferCounter.count(observation, sinkHolder.emittedActionsThisCycle()) to false
+				} catch (e: Exception) {
+					logger.warn(e) {
+						"KoogAgentPlanAdapter: counting the skipped NEXT SECTION offers failed — recording the " +
+							"count as failed (simTime=${observation.snapshot.simTime})"
+					}
+					null to true
+				}
+		}
 
 	/**
 	 * Returns the cached [KoogDispatchAgent], creating it lazily on the first call.

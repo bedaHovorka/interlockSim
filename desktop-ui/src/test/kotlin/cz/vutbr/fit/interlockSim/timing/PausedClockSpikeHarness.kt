@@ -261,8 +261,7 @@ class PausedClockSpikeHarness private constructor(
 			// Same composite hook production uses (ExampleRegistry.wireDispatcherAgent): refresh the
 			// perception snapshot first, then project on the same sim thread.
 			loop.snapshotCaptureHook = {
-				perceptionPort.captureSnapshot()
-				projector.captureOnSimThread()
+				perceptionPort.captureSnapshot().also { projector.captureOnSimThread() }
 			}
 
 			val runner = SimulationRunner(context).apply { this.speedMultiplier = speedMultiplier }

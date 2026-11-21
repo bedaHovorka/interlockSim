@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.testutil.LiftedStackFixture
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
+import cz.vutbr.fit.interlockSim.testutil.ORIGIN_NO_PATH_FRAGMENT
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -114,7 +115,7 @@ class Issue905OriginNoPathErrorStopTest : DispatcherKoinTestBase() {
 		val error = capturedError[0]
 		assertThat(error, name = "captured errorStop throwable").isNotNull()
 		val message = error!!.message ?: ""
-		assertThat(message, name = "errorStop message").contains("No topological path from origin InOut")
+		assertThat(message, name = "errorStop message").contains(ORIGIN_NO_PATH_FRAGMENT)
 		// The misconfigured origin InOut is named (quoted) in the message — not elided.  The
 		// message format is "...origin InOut 'NAME' after N retries...", so one of the network's
 		// InOut names must appear quoted.

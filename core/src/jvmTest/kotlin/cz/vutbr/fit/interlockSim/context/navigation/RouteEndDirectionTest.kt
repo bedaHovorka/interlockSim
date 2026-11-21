@@ -15,26 +15,17 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
-import org.koin.test.inject
 
 /**
  * G8 (Issue #1064): a route must END at a signal that faces the train.
@@ -48,27 +39,12 @@ import org.koin.test.inject
  * `request_route(from, to)` does, so the interlocking must refuse it — permanently, before it
  * touches any block, switch or signal, and naming the ends that would work.
  *
- * G4 (Issue #903) is the START-side twin of this rule; see `PathReservationServiceTest.StartDirectionTests`.
+ * G4 (Issue #903) is the START-side twin of this rule; see `PathReservationStartDirectionTest`.
  */
 @Tag("integration-test")
 @DisplayName("G8 — a route must end at a signal facing the direction of travel")
-class RouteEndDirectionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var service: PathReservationService
-
+class RouteEndDirectionTest : PathReservationServiceTestBase() {
 	private val trainId = "endTrain"
-
-	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-		service = simulationContext.getRoutingServices().getPathReservationService()
-		registry = simulationContext.scope.get()
-	}
 
 	@ParameterizedTest(name = "{0} -> {1} is refused")
 	@CsvSource(
@@ -186,12 +162,11 @@ class RouteEndDirectionTest : KoinTestBase() {
 
 		val result = service.reservePath(trainId, separatorNamed("zA"), separatorNamed(ownTrackEnd))
 
-		// Issue #1066: of the two candidates, one ends rear-facing (G8, screened) and the other does
-		// not continue the held A -> B route, so it is skipped before it touches anything. The
-		// request is refused as DivergesFromHeldRoute (previously GeometricallyImpossible, because
-		// the second candidate was only rejected later, after it had reserved and thrown switches).
+		// Issue #1385: the one switch-legal candidate ends rear-facing (G8, screened), so the request is
+		// refused as GeometricallyImpossible. The divergent second candidate of Issue #1066 (refused as
+		// DivergesFromHeldRoute until then) was a switch-blind phantom and is no longer enumerated.
 		assertThat(result, "result of zA -> $ownTrackEnd for a train holding A -> B")
-			.isInstanceOf<PathReservationService.ReservationResult.DivergesFromHeldRoute>()
+			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 		assertThat(registry.getBlocks(trainId), "blocks held after the refusal").isEqualTo(heldBefore)
 	}
 
@@ -214,18 +189,4 @@ class RouteEndDirectionTest : KoinTestBase() {
 			.values()
 			.filterIsInstance<DynamicTrackBlock>()
 			.distinct()
-
-	private fun nameOf(separator: PathSeparator): String? =
-		when (separator) {
-			is DynamicRailSemaphore -> separator.name
-			is DynamicRailSwitch -> separator.name
-			is DynamicInOut -> separator.name
-			else -> null
-		}
-
-	private fun blockBetween(
-		first: String,
-		second: String
-	): DynamicTrackBlock =
-		allBlocks().first { block -> block.ends().mapNotNull { nameOf(it) }.toSet() == setOf(first, second) }
 }

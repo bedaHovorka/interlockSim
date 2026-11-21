@@ -4,18 +4,10 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Integration tests for parallel path discovery in [DefaultPathReservationService].
@@ -39,49 +31,27 @@ import org.koin.test.inject
  * - **Fix**: Removed `currentSep == start` condition to explore ALL branches at EVERY junction
  * - **Result**: Trains can now discover parallel paths in multi-layer switch networks
  */
-class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var context: DefaultSimulationContext
-	private lateinit var editingContext: EditingContext
-	private lateinit var pathReservationService: PathReservationService
-	private lateinit var navigator: TopologyNavigator
+class DefaultPathReservationServiceParallelPathTest : PathReservationServiceTestBase() {
 	private lateinit var inOutA: DynamicPathSeparator
 	private lateinit var inOutB: DynamicPathSeparator
 	private lateinit var nextFromA: cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 	private lateinit var nextFromB: cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 
 	@BeforeEach
-	fun setUp() {
-		// Load the shunting loop network from XML (with proper resource management)
-		editingContext = TestFixtures.loadShuntingEditingContext(editingContextFactory)
-		context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-
-		pathReservationService = context.getRoutingServices().getPathReservationService()
-		navigator = context.getRoutingServices().getTopologyNavigator()
-
+	fun setUpFixtures() {
 		// Get InOut elements (there are exactly 2 in vyhybna.xml)
-		val inOuts = context.getInOuts().toList()
+		val inOuts = simulationContext.getInOuts().toList()
 		require(inOuts.size == 2) { "Expected 2 InOuts, found ${inOuts.size}" }
 
 		// Get by index (order from XML: [0]=B at X=30, [1]=A at X=11)
-		inOutA = context.toDynamic(inOuts[1]) // InOut A
-		inOutB = context.toDynamic(inOuts[0]) // InOut B
+		inOutA = simulationContext.toDynamic(inOuts[1]) // InOut A
+		inOutB = simulationContext.toDynamic(inOuts[0]) // InOut B
 
 		// Get next track sections (like InOutWorker does)
 		nextFromA = navigator.getNextTrackSection(inOutA, null)
 			?: throw IllegalStateException("InOut A has no next section")
 		nextFromB = navigator.getNextTrackSection(inOutB, null)
 			?: throw IllegalStateException("InOut B has no next section")
-	}
-
-	@AfterEach
-	fun tearDown() {
-		context.close()
-		if (::editingContext.isInitialized) {
-			editingContext.close()
-		}
 	}
 
 	/**
@@ -105,7 +75,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	fun `second train blocked when first train occupies shared entry from InOut A`() {
 		// Act: Train1 reserves to next semaphore via Block 9
 		val train1Result =
-			pathReservationService.reservePathToAnyNextSemaphore(
+			service.reservePathToAnyNextSemaphore(
 				trainId = "train1",
 				start = inOutA,
 				next = nextFromA
@@ -120,7 +90,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 
 		// Act: Train2 tries to reserve to next semaphore - should fail because shared entry blocked
 		val train2Result =
-			pathReservationService.reservePathToAnyNextSemaphore(
+			service.reservePathToAnyNextSemaphore(
 				trainId = "train2",
 				start = inOutA,
 				next = nextFromA
@@ -152,7 +122,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	fun `path can be reserved after proper release`() {
 		// Reserve path for Train1
 		val train1Result =
-			pathReservationService.reservePathToAnyNextSemaphore(
+			service.reservePathToAnyNextSemaphore(
 				"train1",
 				inOutA,
 				nextFromA
@@ -163,7 +133,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 
 		// Verify Train2 is blocked (shared entry occupied)
 		val train2BlockedResult =
-			pathReservationService.reservePathToAnyNextSemaphore(
+			service.reservePathToAnyNextSemaphore(
 				"train2",
 				inOutA,
 				nextFromA
@@ -171,11 +141,11 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 		assertThat(train2BlockedResult).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 
 		// Release Train1's reservation properly
-		pathReservationService.releasePath("train1")
+		service.releasePath("train1")
 
 		// Now Train2 should succeed
 		val train2Result =
-			pathReservationService.reservePathToAnyNextSemaphore(
+			service.reservePathToAnyNextSemaphore(
 				"train2",
 				inOutA,
 				nextFromA
@@ -195,7 +165,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	fun `trains from opposite directions can reserve independently`() {
 		// Act: Train1 from InOut A → next semaphore
 		val train1Result =
-			pathReservationService.reservePathToAnyNextSemaphore(
+			service.reservePathToAnyNextSemaphore(
 				"train1",
 				inOutA,
 				nextFromA
@@ -203,7 +173,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 
 		// Act: Train2 from InOut B → next semaphore (opposite direction)
 		val train2Result =
-			pathReservationService.reservePathToAnyNextSemaphore(
+			service.reservePathToAnyNextSemaphore(
 				"train2",
 				inOutB,
 				nextFromB

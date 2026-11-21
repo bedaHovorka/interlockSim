@@ -59,7 +59,7 @@ class PromptVariantTest {
 	private fun promptFor(
 		variant: PromptVariant,
 		maxActions: Int = 3
-	): String = KoogAgentFactory.buildSystemPrompt(maxActions, variant)
+	): String = KoogAgentFactory.buildSystemPrompt(maxActions, variant, cap)
 
 	@Nested
 	@DisplayName("PromptVariant.parse")
@@ -81,6 +81,14 @@ class PromptVariantTest {
 		fun parsingIsForgivingAboutCaseAndPadding() {
 			assertThat(PromptVariant.parse("revised")).isEqualTo(PromptVariant.REVISED)
 			assertThat(PromptVariant.parse("  BaseLine  ")).isEqualTo(PromptVariant.BASELINE)
+		}
+
+		/** Issue #1301: the structural-examples arm is reachable through the same `-D` / grid parse path. */
+		@Test
+		@DisplayName("REVISED_STRUCTURAL parses from its name in any case")
+		fun revisedStructuralParses() {
+			assertThat(PromptVariant.parse("REVISED_STRUCTURAL")).isEqualTo(PromptVariant.REVISED_STRUCTURAL)
+			assertThat(PromptVariant.parse(" revised_structural ")).isEqualTo(PromptVariant.REVISED_STRUCTURAL)
 		}
 
 		/**

@@ -17,23 +17,16 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 
 /**
  * Comprehensive tests for PathReservationRegistry PathInfo merging logic.
@@ -83,14 +76,7 @@ import org.koin.test.inject
  * @since Code Quality Plan 2026-02-02 (Phase 2); abort semantics from Issue #834 (SP2c.11)
  */
 @DisplayName("PathReservationRegistry PathInfo Merging Tests")
-class PathReservationRegistryMergingTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var navigator: TopologyNavigator
-
+class PathReservationRegistryMergingTest : PathReservationServiceTestBase() {
 	// Test network elements from vyhybna.xml (extracted by name for strong assertions)
 	// Network: B (30,8) → zB (27,8) → vB (26,8) → doB1 (25,8) → ... → vA (15,8) → zA (14,8) → A (11,8)
 	private lateinit var inOutB: DynamicPathSeparator // InOut at (30, 8)
@@ -107,14 +93,7 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 	private lateinit var trackVBtoDoB1: DynamicTrackBlock // vB → doB1
 
 	@BeforeEach
-	fun setUp() {
-		// Load vyhybna.xml from resources
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-
-		// Get registry and navigator from context scope
-		registry = simulationContext.scope.get()
-		navigator = simulationContext.scope.get()
-
+	fun setUpFixtures() {
 		// Get InOut elements by name (vyhybna.xml has "A" and "B")
 		val inOuts = simulationContext.getInOuts().toList()
 		inOutB = inOuts.find { it.name == "B" } as? DynamicPathSeparator
@@ -174,11 +153,6 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			.map { it.getTrackBlock() }
 			.filterIsInstance<DynamicTrackBlock>()
 			.firstOrNull() ?: throw IllegalStateException("No track block from vB to doB1")
-	}
-
-	@AfterEach
-	fun tearDown() {
-		simulationContext.close()
 	}
 
 	@Nested

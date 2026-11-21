@@ -3,6 +3,7 @@ package cz.vutbr.fit.interlockSim.xml
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -16,6 +17,12 @@ import cz.vutbr.fit.interlockSim.util.Point
  *
  * Produces railway network XML conforming to data.xsd, identically
  * to the existing JVM serializer.
+ *
+ * A semaphore whose name is the [GeneratedSemaphoreName] of its own position is written without
+ * a `name` attribute, so a loaded network saves back without names the user never wrote
+ * (Issue #1273); the next load regenerates the same name. The exception is a name that another
+ * node also carries: omitting it there would make the next load regenerate a name that then
+ * clashes, so the attribute is kept.
  *
  * @since 2026-03 (KMP Task 2d)
  */
@@ -41,9 +48,10 @@ class XmlContextWriter {
 	fun generate(context: DefaultEditingContext): String {
 		val railwayNetGrid = context.getRailWayNetGrid()
 		val builder = StringBuilder()
+		val writtenNames = namesWrittenByNodes(context, railwayNetGrid)
 
 		writeHeader(builder, context)
-		writeNodes(builder, context, railwayNetGrid)
+		writeNodes(builder, context, railwayNetGrid, writtenNames)
 		writeEdges(builder, context)
 		writeFooter(builder)
 
@@ -92,15 +100,41 @@ class XmlContextWriter {
 		return allNodes
 	}
 
+	/**
+	 * Names that [writeNodes] will emit: the non-empty names of the nodes it writes, without the
+	 * ones a semaphore omits as its own position's [GeneratedSemaphoreName]. The writer may drop
+	 * a generated-form name only when it is absent here — if another node writes the same name,
+	 * keeping the attribute is the only way the saved file reloads.
+	 */
+	private fun namesWrittenByNodes(
+		context: DefaultEditingContext,
+		railwayNetGrid: RailwayNetGrid<*>
+	): Set<String> {
+		val names = mutableSetOf<String>()
+		for (point in collectNodes(context, railwayNetGrid)) {
+			val cell = railwayNetGrid[point]
+			if (cell !is NodeCell) continue
+			val name = cell.getName()
+			if (name.isEmpty()) continue
+			// The same rule writeNodeCell applies, without the kept-name check: a candidate cell
+			// contributes nothing, and candidates at different grid positions generate different
+			// names, so one pass is the fixed point.
+			if (cell is RailSemaphore && name == GeneratedSemaphoreName.at(point)) continue
+			names.add(name)
+		}
+		return names
+	}
+
 	private fun writeNodes(
 		builder: StringBuilder,
 		context: DefaultEditingContext,
-		railwayNetGrid: RailwayNetGrid<*>
+		railwayNetGrid: RailwayNetGrid<*>,
+		writtenNames: Set<String>
 	) {
 		for (point in collectNodes(context, railwayNetGrid)) {
 			val cell = railwayNetGrid[point]
 			if (cell is NodeCell) {
-				writeNodeCell(builder, point, cell)
+				writeNodeCell(builder, point, cell, writtenNames)
 			}
 		}
 	}
@@ -121,7 +155,8 @@ class XmlContextWriter {
 	private fun writeNodeCell(
 		builder: StringBuilder,
 		point: Point,
-		cell: NodeCell
+		cell: NodeCell,
+		writtenNames: Set<String>
 	) {
 		builder.append('\t')
 		builder.append('<').append(NodeCellFactory.tagNameFor(cell)).append(' ')
@@ -141,7 +176,9 @@ class XmlContextWriter {
 			appendEnumAttribute(builder, "Type", cell.type)
 		}
 		val name = cell.getName()
-		if (name.isNotEmpty()) {
+		val generated =
+			cell is RailSemaphore && name == GeneratedSemaphoreName.at(point) && name !in writtenNames
+		if (name.isNotEmpty() && !generated) {
 			appendAttribute(builder, NAME, name)
 		}
 		builder.append("/>\n")

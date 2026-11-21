@@ -21,6 +21,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.ReservationView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
+import cz.vutbr.fit.interlockSim.sim.CandidateTarget
+import cz.vutbr.fit.interlockSim.sim.SeparatorKind
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -216,6 +219,29 @@ class ActionValidatorTableTest {
 						obs(
 							trains = listOf(trainView("T1", TrainPhase.RUNNING, destinationInOutName = "B")), // dest B, not C
 							activeCount = 1
+						)
+				),
+				// Section hop sigA -> sigB, but T1's input facing sigA lists only B one section ahead:
+				// sigB is behind the train or further away (Issue #1378).
+				RejectionCode.TARGET_NOT_NEXT_SECTION to (
+					DispatchAction.RequestRoute("T1", "sigA", "sigB", RouteScope.Section) to
+						obs(
+							trains = listOf(trainView("T1", TrainPhase.RUNNING, destinationInOutName = "B")),
+							activeCount = 1
+						).copy(
+							innerBlockInputs =
+								listOf(
+									BlockInputObservation(
+										blockId = "kA",
+										towardSemaphoreName = "sigA",
+										state = TrackFacility.State.OCCUPIED,
+										ownerTrainId = "T1",
+										isApproachingThisInput = true,
+										pathSetUpTowardThisInput = false,
+										pathAlreadyExtendedBeyond = false,
+										candidateTargets = listOf(CandidateTarget("B", SeparatorKind.IN_OUT, available = true))
+									)
+								)
 						)
 				),
 				// T1 is HELD at sigA, but fromEndpointName = sigB (wrong origin)

@@ -227,7 +227,7 @@ class MainArgumentParsingTest {
 			val isExampleMode =
 				output.contains("Available examples") ||
 					output.contains("example") ||
-					output.contains("shuntingLoop")
+					output.contains(ExampleNames.SHUNTING_LOOP)
 			assertThat(isExampleMode).isTrue()
 		}
 
@@ -283,7 +283,7 @@ class MainArgumentParsingTest {
 			val hasExampleList =
 				output.contains("Available examples") ||
 					output.contains("example") ||
-					output.contains("shuntingLoop")
+					output.contains(ExampleNames.SHUNTING_LOOP)
 			assertThat(hasExampleList).isTrue()
 		}
 
@@ -291,7 +291,7 @@ class MainArgumentParsingTest {
 		fun `example mode accepts optional end time parameter`() {
 			// Arrange
 			// Use very short simulation time (1 second) to avoid test timeout
-			val args = arrayOf("example", "shuntingLoop", "1")
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP, "1")
 
 			// Act
 			try {
@@ -481,7 +481,7 @@ class MainArgumentParsingTest {
 		@Test
 		fun `example mode with non-numeric end time`() {
 			// Arrange
-			val args = arrayOf("example", "shuntingLoop", "notanumber")
+			val args = arrayOf("example", ExampleNames.SHUNTING_LOOP, "notanumber")
 
 			// Act
 			main(args)

@@ -371,8 +371,8 @@ class AppliedOutcomeChannelSp2c17Test {
 		}
 
 		@Test
-		@DisplayName("a deferred cancel_route (approach lock) renders as PARTIAL and lists the kept blocks (Issue #1050)")
-		fun releaseRouteDeferredRenderedPartial() {
+		@DisplayName("a deferred cancel_route (approach lock) renders as KEPT and lists the kept blocks (Issue #1050)")
+		fun releaseRouteDeferredRenderedKept() {
 			every { networkActuator.releaseRouteDetailed("T-087") } returns RouteRelease(true, listOf("k1"))
 
 			// The deferred log is INFO, and the test config keeps the root logger at WARN: raise the
@@ -396,7 +396,10 @@ class AppliedOutcomeChannelSp2c17Test {
 				assertThat(outcome.deferredBlockIds).isEqualTo(listOf("k1"))
 				val rendered =
 					CompactTextRenderer().render(buildRenderContext(DispatcherObservation.EMPTY.copy(appliedOutcomes = outcomes)))
-				assertThat(rendered).contains("cancel_route T-087 : PARTIAL")
+				assertThat(rendered).contains("cancel_route T-087 : KEPT (k1; the train stands on or may still enter")
+				assertThat(rendered).contains("cannot yet cut the route past them")
+				assertThat(rendered).contains("extend the route")
+				assertThat(rendered).contains("once the train has moved on or their booking windows close")
 				val deferredLog = appender.list.map { it.formattedMessage }.single { "only partly released" in it }
 				assertThat(deferredLog).contains("k1")
 			} finally {

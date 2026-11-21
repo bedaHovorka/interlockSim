@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.MID_JOURNEY_NO_PATH_FRAGMENT
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -129,7 +130,7 @@ class MidJourneyNoPathErrorStopTest : DispatcherKoinTestBase() {
 		val error = capturedError[0]
 		assertThat(error, name = "captured errorStop throwable").isNotNull()
 		assertThat(error!!.message ?: "", name = "errorStop message")
-			.contains("navigation reports no usable path")
+			.contains(MID_JOURNEY_NO_PATH_FRAGMENT)
 	}
 
 	private companion object {

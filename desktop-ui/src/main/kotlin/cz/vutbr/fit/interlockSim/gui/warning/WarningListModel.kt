@@ -19,17 +19,23 @@ import javax.swing.SwingUtilities
  * Wraps [DefaultListModel]`<`[CollisionWarning]`>` and provides:
  * - EDT-safe [addWarning] and [clearWarnings] helpers that dispatch to the
  *   Event Dispatch Thread when called from a background thread.
- * - [hasCriticalWarning] query used by [cz.vutbr.fit.interlockSim.gui.StatusBar]
- *   to decide whether the warning indicator should be shown.
+ * - [hasCriticalWarning] query: `true` only when an unacknowledged
+ *   [CollisionWarning.Severity.CRITICAL] entry is in the list (Issue #1331: advisory WARNING
+ *   entries do not count). The alarm paths that consume this read [CollisionWarning.severity]
+ *   directly from their listeners rather than through this query.
  *
  * ## Severity mapping
  *
- * All [CollisionWarning] subtypes are treated as **CRITICAL** in the current
- * implementation because each causes the simulation to pause and represents
- * a safety-critical situation:
+ * The model follows [CollisionWarning.severity]. Every subtype is
+ * [CollisionWarning.Severity.CRITICAL] by default, because each pauses the simulation
+ * and represents a safety-critical situation:
  * - [CollisionWarning.ReservationConflict] — double-reservation
  * - [CollisionWarning.BlockEntryViolation] — train entered a foreign block
  * - [CollisionWarning.PredictiveCollision] — pre-emptive head-on warning
+ *
+ * The one [CollisionWarning.Severity.WARNING] today is a [CollisionWarning.ReservationConflict]
+ * for a train still queued when the run stopped (Issue #1331): it is listed, but it is no
+ * critical warning.
  *
  * @since Issue #616 (Goal 3 SP6)
  */
@@ -62,13 +68,11 @@ class WarningListModel : DefaultListModel<CollisionWarning>() {
 	}
 
 	/**
-	 * Returns `true` when the model contains at least one unacknowledged warning.
-	 *
-	 * In the current implementation every warning is treated as CRITICAL, so this
-	 * is equivalent to `!isEmpty`.  The method name is kept intention-revealing for
-	 * future sub-phasing where severity tiers may differ.
+	 * Returns `true` when the model contains at least one unacknowledged
+	 * [CollisionWarning.Severity.CRITICAL] warning; advisory WARNING entries do not count
+	 * (Issue #1331).
 	 *
 	 * **Must be called from EDT** (reads Swing model state).
 	 */
-	fun hasCriticalWarning(): Boolean = !isEmpty
+	fun hasCriticalWarning(): Boolean = elements().asSequence().any { it.severity == CollisionWarning.Severity.CRITICAL }
 }
