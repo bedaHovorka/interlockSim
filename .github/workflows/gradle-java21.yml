@@ -399,7 +399,7 @@ jobs:
         VERSION=$("$BINARY" --version)
         echo "Binary version: $VERSION"
         if ! echo "$VERSION" | grep -q 'fast-sim'; then
-          echo "ERROR: --version output does not contain 'fast-sim'. Actual output: '$VERSION'"
+          echo "ERROR: --version output does not contain 'fast-sim'. Actual output: '$VERSION'" >&2
           exit 1
         fi
 
