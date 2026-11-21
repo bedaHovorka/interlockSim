@@ -46,9 +46,9 @@ import kotlin.time.TimeSource
  *    [DispatchDecisionApplier] drains and applies them on the kDisco thread
  * 4. **PACE**: calls [SimulationController.awaitIfPaused] to honour pause/step
  *    requests, then [SimulationController.throttle] with the simulation-time delta
- *    since the previous cycle, minus the wall-clock time already spent inside
- *    [DispatcherPlanner.plan] (converted to sim-time units) — see [runCycle]'s KDoc
- *    and Issue #926 for why that subtraction is necessary
+ *    since the previous cycle, minus the wall-clock time already elapsed since the previous
+ *    cycle sensed its snapshot (converted to sim-time units) — see [runCycle]'s KDoc and
+ *    Issues #926 and #1340 for why that subtraction is necessary
  *
  * ## Threading
  *
@@ -101,7 +101,9 @@ import kotlin.time.TimeSource
  *   previous tick's observation.
  *   `null` by default: preserves the original polling behaviour for callers that do
  *   not supply a signal (e.g. tests exercising [runCycle] directly against a mocked
- *   [perceptionPort] with no real sim thread to signal from).
+ *   [perceptionPort] with no real sim thread to signal from). In polling mode (used only by
+ *   tests; production wires a signal) the driver's idle time between ticks moves from
+ *   [SimulationController.throttle] to the 1 ms stale-guard poll since Issue #1340.
  */
 class AgentLoopDriver(
 	perceptionPort: NetworkPerceptionPort,
@@ -205,6 +207,29 @@ class AgentLoopDriver(
 	private var hasProcessedSnapshot: Boolean = false
 
 	/**
+	 * Wall clock just before the most recently processed cycle read its snapshot (the record whose
+	 * sim time is [prevSimTime]), or `null` before the first processed cycle. PACE measures the
+	 * wall time elapsed since this mark (Issue #1340). Driver-thread-confined, like [prevSimTime].
+	 */
+	private var prevSenseMark: TimeSource.Monotonic.ValueTimeMark? = null
+
+	/**
+	 * The controller's speed multiplier as the most recently processed cycle's PACE step read it, or
+	 * `null` before the first processed cycle. PACE prices the whole simDelta interval at the faster
+	 * of this and the current multiplier (Issue #1340): a speed decrease the operator makes while a
+	 * long inference blocks the driver must not price the interval at the new, slower rate — the sim
+	 * matched that interval's sim time mostly at the pre-shift rate. Driver-thread-confined, like
+	 * [prevSimTime].
+	 */
+	private var prevPaceSpeed: Double? = null
+
+	/** A sensed record and the wall clock just before it was read. */
+	private class SensedRecord(
+		val record: DispatchLoopSnapshot,
+		val sensedAt: TimeSource.Monotonic.ValueTimeMark
+	)
+
+	/**
 	 * Wall clock at the end of the most recently completed cycle, or `null` before the first.
 	 * Driver-thread-confined, like [prevSimTime].
 	 */
@@ -267,20 +292,27 @@ class AgentLoopDriver(
 	 * Both modes read [dispatchLoopSensorPort] exactly once; the guards test the record's
 	 * [DispatchLoopSnapshot.snapshot] (Issue #1354).
 	 *
-	 * @return the fresh tick-stamped record to process this cycle, or `null` if this call
-	 *   should short-circuit (see [runCycle]'s return-value contract).
+	 * The wall clock is marked just before the read (Issue #1340: PACE measures from it). The mark is
+	 * taken before the read; it may lag the publish by up to the driver's wake-up delay, which
+	 * over-throttles the next cycle by at most that lag (under one control step) and never
+	 * accumulates.
+	 *
+	 * @return the fresh tick-stamped record to process this cycle with its read mark, or `null`
+	 *   if this call should short-circuit (see [runCycle]'s return-value contract).
 	 */
-	private suspend fun awaitFreshSnapshot(): DispatchLoopSnapshot? {
+	private suspend fun awaitFreshSnapshot(): SensedRecord? {
 		if (snapshotSignal != null) {
 			if (!snapshotSignal.await()) {
 				controller.awaitIfPaused()
 				return null
 			}
+			val sensedAt = TimeSource.Monotonic.markNow()
 			val record = dispatchLoopSensorPort.snapshot()
 			logger.debug { "AgentLoopDriver: sensed tick ${record.tick} at simTime=${record.snapshot.simTime}" }
-			return record
+			return SensedRecord(record, sensedAt)
 		}
 
+		val sensedAt = TimeSource.Monotonic.markNow()
 		val record = dispatchLoopSensorPort.snapshot()
 		val snapshot = record.snapshot
 		logger.debug { "AgentLoopDriver: sensed tick ${record.tick} at simTime=${snapshot.simTime}" }
@@ -301,7 +333,7 @@ class AgentLoopDriver(
 			pauseUntilNextSnapshot()
 			return null
 		}
-		return record
+		return SensedRecord(record, sensedAt)
 	}
 
 	/**
@@ -351,6 +383,25 @@ class AgentLoopDriver(
 	 * clamped at `0.0` (never negative) when `plan()` alone already consumed more wall-clock
 	 * time than the tick's sim-time budget allows.
 	 *
+	 * ## No re-sleep of sim time already passed (Issue #1340)
+	 *
+	 * From the second processed cycle on, the subtracted wall time is everything since the previous
+	 * cycle read its snapshot — its `plan()`, its own PACE sleep, any [tickPeriodMs] hold and this
+	 * cycle's wait and `plan()` — not this cycle's `plan()` alone. The simulation-time delta spans
+	 * exactly that interval (from the previous record's sim time to this one's), and the sim thread
+	 * paces itself on the same controller, so that sim time has already been matched on the wall
+	 * clock. Subtracting only `plan()` slept the previous cycle's sleep a second time: after one
+	 * long cycle (a 30 s LLM timeout = about 60 sim s at speed 2) every later cycle saw the same
+	 * gap and slept it again, so the cycle period ratcheted to the longest `plan()` for the rest
+	 * of the run (Červený Újezd #1301 campaign run r02: dispatcher actions exactly 58 sim s apart
+	 * after one timeout, then a 180 s stall). Now PACE sleeps only for sim time not yet matched on
+	 * the wall clock: when the sim runs at the controller's speed that is at most the part of a
+	 * control step not yet elapsed, and when the sim ran ahead of the wall clock (an unpaced sim
+	 * thread) the driver still waits for the difference. A pause is honoured as before by
+	 * [SimulationController.awaitIfPaused]; time spent paused only lowers the sleep, it never
+	 * raises it. The first processed cycle has no previous read and keeps the #926 measure
+	 * (`plan()` only) against the loop's start baseline.
+	 *
 	 * @return `true` if a full cycle actually ran (a decision batch — possibly empty —
 	 *   was computed and posted, and [SimulationController.throttle] was called);
 	 *   `false` if no decision batch was posted: either a no-op short-circuit before
@@ -369,7 +420,8 @@ class AgentLoopDriver(
 	suspend fun runCycle(): Boolean {
 		// 0. WAIT + 1. SENSE — see awaitFreshSnapshot's KDoc for the polling-vs-signal-based
 		// pacing contract (this is the single seam where that branch is decided).
-		val record = awaitFreshSnapshot() ?: return false
+		val sensed = awaitFreshSnapshot() ?: return false
+		val record = sensed.record
 		val snapshot = record.snapshot
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
@@ -379,7 +431,6 @@ class AgentLoopDriver(
 		val observation = record.toDispatchObservation()
 		val planStart = TimeSource.Monotonic.markNow()
 		val decisions = planner.plan(observation)
-		val planWallElapsed = planStart.elapsedNow()
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
 
 		// #1032: plan() may have blocked (up to the LLM inference timeout) long enough for the
@@ -424,8 +475,8 @@ class AgentLoopDriver(
 
 		// 4. PACE — honour pause/step requests, then throttle wall-clock time.
 		//
-		// #926: the raw simDelta must not be thrown at throttle() unadjusted — planner.plan()
-		// above may have blocked on real (async LLM) inference for a while, and that wall-clock
+		// First processed cycle (#926): the raw simDelta must not be thrown at throttle()
+		// unadjusted — planner.plan() above may have blocked on real (async LLM) inference for a while, and that wall-clock
 		// time was already "spent" from the operator's point of view. Passing the full simDelta
 		// to throttle() on top of that would double-count it, sleeping again for time that has
 		// already elapsed. wallElapsedInSimUnits converts the wall time actually spent inside
@@ -433,14 +484,31 @@ class AgentLoopDriver(
 		// multiplier — the same conversion throttle() itself applies internally, just inverted),
 		// so it can be subtracted before throttling. Clamped at 0.0: if plan() alone took longer
 		// than the sim-time budget for this tick, there is no throttling left to do — a negative
-		// duration would be meaningless.
+		// duration would be meaningless. The clamp applies to every cycle.
+		//
+		// Every later cycle (#1340): the wall time is measured from the previous cycle's snapshot
+		// read, not from this plan() call — simDelta spans that whole interval, and the sim already
+		// matched it on the wall clock; see runCycle's KDoc. The interval is priced at the faster of
+		// its two endpoint speed multipliers — the previous PACE's, kept in prevPaceSpeed, and the
+		// controller's current one — so a down-shift the operator makes while a long inference is
+		// blocking the driver prices the interval at the rate it actually mostly ran at, not at the
+		// new, slower one (2.0 → 0.1 after one 60 sim s cycle priced the whole pre-shift interval at
+		// 0.1 and made throttle() sleep again: about 570 s of wall clock). Residual: a speed that
+		// flips up and back down INSIDE one interval still under-subtracts — both endpoints are then
+		// the slow rate while the sim partly matched the fast mid-rate, so that one cycle sleeps
+		// again. Pricing the interval segment by segment needs speed-change events, which the
+		// controller does not offer.
 		controller.awaitIfPaused()
 		val simDelta = snapshot.simTime - prevSimTime
-		val wallElapsedInSimUnits =
-			planWallElapsed.toDouble(DurationUnit.SECONDS) * controller.currentSpeedMultiplier()
+		val wallElapsed = (prevSenseMark ?: planStart).elapsedNow()
+		val paceSpeed = controller.currentSpeedMultiplier()
+		val pricedSpeed = max(paceSpeed, prevPaceSpeed ?: paceSpeed)
+		val wallElapsedInSimUnits = wallElapsed.toDouble(DurationUnit.SECONDS) * pricedSpeed
 		controller.throttle(max(0.0, simDelta - wallElapsedInSimUnits))
 		awaitMinimumCyclePeriod()
 		prevSimTime = snapshot.simTime
+		prevSenseMark = sensed.sensedAt
+		prevPaceSpeed = paceSpeed
 		hasProcessedSnapshot = true
 		return true
 	}
