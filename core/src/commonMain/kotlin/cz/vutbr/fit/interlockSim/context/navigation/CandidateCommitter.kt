@@ -348,12 +348,13 @@ internal class CandidateCommitter(
 				"reserved path has ${mergeCandidate.reservedPath.length()} elements"
 		}
 
+		// Resolved -- this train is no longer contending for any block. Cleared before the events below, so
+		// their listeners (the Issue #1305 capacity-pressure sample) never see the resolved contention as open.
+		contention.clearBlockedTracking(trainId)
+
 		// Emit BlockReserved only for the blocks THIS call newly reserved (Issue #1081);
 		// the full rationale moved with the code into [emitForwardBlockReservedEvents].
 		emitForwardBlockReservedEvents(trainId, forwardBlocks)
-
-		// Resolved -- this train is no longer contending for any block.
-		contention.clearBlockedTracking(trainId)
 
 		return PathReservationService.ReservationResult.Success(blocks)
 	}

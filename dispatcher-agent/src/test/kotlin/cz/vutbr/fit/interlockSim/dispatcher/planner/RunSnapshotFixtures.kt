@@ -54,7 +54,9 @@ internal fun runSnapshot(
 	offeredNextSectionHops: Long? = null,
 	skippedNextSectionOffersStandingAtSignal: Long? = null,
 	longestSkippedOfferStreakCycles: Long? = null,
-	longestSkippedOfferStreakSimSeconds: Double? = null
+	longestSkippedOfferStreakSimSeconds: Double? = null,
+	example: String? = null,
+	processWallSeconds: Double? = null
 ): DispatcherRunSnapshot {
 	val outcomes = TickOutcome.entries.associate { it.name to 0L }.toMutableMap()
 	outcomes[TickOutcome.LLM_ACTIONS.name] = 1L
@@ -108,6 +110,8 @@ internal fun runSnapshot(
 		offeredNextSectionHops = offeredNextSectionHops,
 		skippedNextSectionOffersStandingAtSignal = skippedNextSectionOffersStandingAtSignal,
 		longestSkippedOfferStreakCycles = longestSkippedOfferStreakCycles,
-		longestSkippedOfferStreakSimSeconds = longestSkippedOfferStreakSimSeconds
+		longestSkippedOfferStreakSimSeconds = longestSkippedOfferStreakSimSeconds,
+		example = example,
+		processWallSeconds = processWallSeconds
 	)
 }

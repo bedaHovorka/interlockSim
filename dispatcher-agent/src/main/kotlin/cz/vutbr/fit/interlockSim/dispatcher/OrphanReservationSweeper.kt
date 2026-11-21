@@ -14,6 +14,9 @@ import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
+import cz.vutbr.fit.interlockSim.sim.SweeperReleaseKind
+import cz.vutbr.fit.interlockSim.sim.emitRunAccountingEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -122,6 +125,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * state and owning train id, [DispatchLoopSensorPort.getQueuedTrains] the admission queue, and
  * [NetworkActuatorPort.releaseRoute] performs the same cancel-and-unregister that `cancel_route`
  * does. PR #891's zero-`core/`-changes property is preserved.
+ *
+ * ## Run-end accounting (Issue #1304)
+ *
+ * Every counted stale or partial release is also announced as a
+ * [RunAccountingEvent.SweeperReleased], so the metrics service counts `staleReleaseCount` and
+ * `partialReleaseCount` from events without reading this sweeper. The announcement is a no-op when
+ * [sweep] runs outside a simulation (unit tests).
  *
  * ## Threading
  *
@@ -321,6 +331,8 @@ class OrphanReservationSweeper(
 		val release = actuatorPort.releaseRouteDetailed(owner)
 		if (release.anyReleased) {
 			staleReleaseCount++
+			// Issue #1304: the same release for the metrics' run-end accounting; record only.
+			emitRunAccountingEvent(RunAccountingEvent.SweeperReleased(owner, SweeperReleaseKind.STALE, simTime))
 		}
 		if (release.deferred) {
 			// Issue #1050: approach locking kept part of the route reserved (a proceed aspect stood at
@@ -399,6 +411,7 @@ class OrphanReservationSweeper(
 		val released = outcome.released
 		if (released.isNotEmpty()) {
 			partialReleaseCount++
+			emitRunAccountingEvent(RunAccountingEvent.SweeperReleased(owner, SweeperReleaseKind.PARTIAL, simTime))
 			logger.warn {
 				"OrphanReservationSweeper: reclaimed ${released.joinToString(", ")} from '$owner'"
 			}

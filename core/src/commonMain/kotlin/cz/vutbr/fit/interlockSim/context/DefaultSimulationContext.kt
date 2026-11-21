@@ -45,6 +45,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
+import cz.vutbr.fit.interlockSim.sim.RunEnded
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
@@ -59,6 +61,7 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.monotonicNanosKMP
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
@@ -262,6 +265,9 @@ open class DefaultSimulationContext(
 	final override var lastRunEndTime: Double? = null
 		private set
 
+	/** Whether the main loop announced its end time in the current run (Issue #1304). */
+	private var endTimeReachedThisRun: Boolean = false
+
 	/** Collision warning listeners registered before run(); wired into the service at run() time. */
 	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
 
@@ -301,8 +307,18 @@ open class DefaultSimulationContext(
 	 * init{} block so KPI counters are active for the full simulation run.
 	 */
 	private val metricsCollectionServiceInstance: MetricsCollectionService by lazy {
-		scope.get<MetricsCollectionService>()
+		val firstOwn = pendingSimEventListeners.size
+		scope.get<MetricsCollectionService>().also {
+			metricsListenerIndices = firstOwn until pendingSimEventListeners.size
+		}
 	}
+
+	/**
+	 * Where in [pendingSimEventListeners] the metrics service registered its own listeners. The service is
+	 * built lazily, so an observer registered earlier sits before them; [deliverRunEnded] hands
+	 * [RunEnded] to them first, so that an observer reading the run-end summary sees it finished.
+	 */
+	private var metricsListenerIndices: IntRange = IntRange.EMPTY
 
 	/**
 	 * Grouped performance-metrics services facade for this simulation context.
@@ -404,6 +420,9 @@ open class DefaultSimulationContext(
 		 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
 		 */
 		private val simulationLogger = KotlinLogging.logger("cz.vutbr.fit.interlockSim.simulation")
+
+		/** Nanoseconds per second, for the wall time of a run (Issue #1306). */
+		private const val NANOS_PER_SECOND: Double = 1_000_000_000.0
 
 		/**
 		 * Factory method to create SimulationContext from EditingContext.
@@ -1398,10 +1417,14 @@ open class DefaultSimulationContext(
 				Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
 			}
 		simulation = sim
+		endTimeReachedThisRun = false
+		sim.onEvent(::noteEndTimeReached) // Issue #1304
 		// Wire pre-registered listeners into kdisco simulation
 		pendingSimEventListeners.forEach { sim.onEvent(it) }
 		wireCustomEventListeners(sim, pendingBlockEventListeners)
 		wireCustomEventListeners(sim, pendingConflictEventListeners)
+		// Issue #1306 (Goal 6 SP8): the one wall clock of every harness, read around the kernel run.
+		val kernelStartNanos = monotonicNanosKMP()
 		try {
 			var stepState = StepControlState(prevTime = 0.0)
 			runBlocking {
@@ -1413,11 +1436,17 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
+			val wallSeconds = (monotonicNanosKMP() - kernelStartNanos) / NANOS_PER_SECOND
 			val kernelEndTime = sim.time()
-			flushUnresolvedReservationConflicts(kernelEndTime)
-			lastRunEndTime = kernelEndTime
-			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
-			currentController = null
+			try {
+				flushUnresolvedReservationConflicts(kernelEndTime)
+				// An Error from a run-end subscriber propagates, but never skips the cleanup below.
+				deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
+			} finally {
+				lastRunEndTime = kernelEndTime
+				simulation = null // Release reference once sim.run() returns (natural end or stop() called)
+				currentController = null
+			}
 		}
 	}
 
@@ -1435,6 +1464,39 @@ open class DefaultSimulationContext(
 		runCatching { pathReservationServiceInstance.flushUnresolvedConflicts(simulationEndTime) }
 			.onSuccess { events -> events.forEach { event -> pendingBlockEventListeners.forEach { it(event) } } }
 			.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
+	}
+
+	/**
+	 * Remember that the main loop announced [RunAccountingEvent.EndTimeReached] in this run
+	 * (Issue #1304), so [deliverRunEnded] can tell an end-time stop from an early one.
+	 */
+	private fun noteEndTimeReached(event: KDiscoSimulationEvent) {
+		if ((event as? KDiscoSimulationEvent.Custom)?.payload is RunAccountingEvent.EndTimeReached) {
+			endTimeReachedThisRun = true
+		}
+	}
+
+	/**
+	 * Deliver [runEnded] to the raw listeners registered before [run] (Issue #1304, Goal 6 SP6), as a
+	 * `SimulationEvent.Custom` payload so that [onRunEnded][cz.vutbr.fit.interlockSim.sim.onRunEnded]
+	 * filters it like any other payload. The metrics service's own listeners come first, so an observer finds
+	 * the run-end accounting finished. Delivered directly, after the contention flush, for the same
+	 * reason as [flushUnresolvedReservationConflicts]: the kernel has stopped and `emitCustom` is a
+	 * no-op. A listener that throws an [Exception] is logged at WARN and the ones after it still
+	 * receive the event; an [Error] is never caught.
+	 */
+	private fun deliverRunEnded(runEnded: RunEnded) {
+		val event = KDiscoSimulationEvent.Custom(runEnded.time, runEnded)
+		val inOrder =
+			metricsListenerIndices.map { pendingSimEventListeners[it] } +
+				pendingSimEventListeners.filterIndexed { index, _ -> index !in metricsListenerIndices }
+		inOrder.forEach { listener ->
+			try {
+				listener(event)
+			} catch (e: Exception) {
+				logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
+			}
+		}
 	}
 
 	/**
