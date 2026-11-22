@@ -21,7 +21,10 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  *   reports every block of the route, successes and failures alike.
  * @property deferred blocks kept RESERVED and registered -- by approach locking, because the
  *   train occupies them, or because the deferral window is still open; non-empty means the
- *   release is partial and must be retried
+ *   release is not complete: a refused release (Issue #1242) lists the whole route, an
+ *   approach-lock deferral lists the blocks it kept, a partial release lists the blocks it kept
+ *   back. A repeated call frees a kept block only after the train has left it or its booking
+ *   window has closed, so retrying while the train stands on it changes nothing
  * @since Issue #1050
  */
 data class PathRelease(
@@ -51,10 +54,10 @@ fun interface ApproachLockedPathRelease {
 	 *
 	 * For each block owned by the train:
 	 * - Block state transitions from RESERVED to FREE
-	 * - Block.trainId set to null
+	 * - `DynamicTrackBlock.trainName` set to null
 	 * - Ownership removed from registry
 	 *
-	 * Signals first, always: every semaphore this service recorded as cleared for [trainId] is
+	 * Signals first, always: every semaphore the reservation service recorded as cleared for [trainId] is
 	 * returned to STOP BEFORE any of its blocks becomes available — a block must never become
 	 * reserveable while the aspect authorising entry to it still shows proceed. This reset runs
 	 * even when the train owns no blocks (a partial release may have reclaimed them earlier),
@@ -73,32 +76,34 @@ fun interface ApproachLockedPathRelease {
 
 	/**
 	 * `releasePath` with approach locking, reporting what it kept back (Issue #1050). Plain
-	 * `releasePath` stays unconditional (teardown, tests); the production release goes through here.
+	 * `releasePath` stays unconditional and is used by tests only; the production release goes through
+	 * here. This KDoc is the single home of the approach-lock contract; the time window it relies on
+	 * is documented at `RouteReleaser.approachLockDeferredUntil`.
 	 *
 	 * A RESERVED, unoccupied block whose governing signal shows a proceed aspect may have a train
 	 * committed to it: `Train.Front` reads the aspect, moves, and books the block only after
 	 * `hold(1.0)`. Freeing it inside that second kills the train's process at `enter`. Such a
 	 * block is therefore **kept reserved and registered** (its signals drop to STOP) and reported
 	 * in [PathRelease.deferred]. The caller retries: the retry frees the block once the booking
-	 * window (`hold(1.0)`) has certainly closed -- the train has either booked it, in which case
-	 * it stays occupied and registered until the train leaves, or lost interest, the signal
-	 * reading STOP. A deferral is therefore time-based as well as signal-based, so no caller
-	 * cadence (a second `cancel_route` in the same emission batch, whose sim clock never
-	 * advanced) can free a block mid-booking.
+	 * window has certainly closed -- the train has either booked it, in which case it stays
+	 * occupied and registered until the train leaves, or lost interest, the signal reading STOP.
+	 * A deferral is therefore time-based as well as signal-based, so no caller cadence (a second
+	 * `cancel_route` in the same emission batch, whose sim clock never advanced) can free a block
+	 * mid-booking.
 	 *
 	 * Once the deferred train books its block it occupies track again, so any later partial
 	 * release of that route goes through the occupying-train arm of the sweeper (the Issue
 	 * #1025 approach lock on tail releases) -- the two mechanisms hand over exactly there.
 	 *
-	 * Caveat: only signals recorded in the reservation service's cleared-signal ledger are
+	 * Caveat: only signals recorded in the `ClearedSignalLedger` are
 	 * reset to STOP. A proceed aspect that reached the boundary semaphore outside the ledger
 	 * keeps authorising entry, so every retry defers again until some other cause clears it.
 	 * Every aspect writer in production records into the ledger today.
 	 *
 	 * The default here is a plain, unconditional wrap of [releasePath] (no deferral) --
-	 * [DefaultPathReservationService] overrides it with the real approach-locked logic; any other
-	 * implementation gets a safe, non-deferring fallback instead of a forced abstract member
-	 * (Copilot review round, PR #1080).
+	 * [DefaultPathReservationService] delegates it to `RouteReleaser.releasePathDetailed`, the real
+	 * approach-locked logic; any other implementation gets a safe, non-deferring fallback instead of a
+	 * forced abstract member (Copilot review round, PR #1080).
 	 *
 	 * @since Issue #1050
 	 */

@@ -265,6 +265,23 @@ class SweepGridTest {
 			.isEqualTo("REVISED")
 	}
 
+	/** Issue #1301: the structural-examples A/B arm is a legal value of the aiSweep promptVariant axis. */
+	@Test
+	@DisplayName("the promptVariant axis accepts REVISED_STRUCTURAL next to REVISED")
+	fun promptVariantAxisAcceptsRevisedStructural() {
+		val cells =
+			SweepGrid
+				.load(gridFile("""{ "repeat": 1, "axes": { "promptVariant": ["REVISED", "REVISED_STRUCTURAL"] } }"""))
+				.axes
+				.cells()
+
+		assertThat(cells.map { it.promptVariant }.toSet())
+			.isEqualTo(setOf(PromptVariant.REVISED, PromptVariant.REVISED_STRUCTURAL))
+		val structural = cells.single { it.promptVariant == PromptVariant.REVISED_STRUCTURAL }
+		assertThat(structural.systemProperties("run-1", "out")["interlocksim.dispatcher.promptVariant"])
+			.isEqualTo("REVISED_STRUCTURAL")
+	}
+
 	@Test
 	@DisplayName("promptVariant axis names are matched case-insensitively")
 	fun promptVariantAxisIsCaseInsensitive() {

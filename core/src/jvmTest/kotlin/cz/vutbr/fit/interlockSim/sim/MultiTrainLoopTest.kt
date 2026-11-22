@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
@@ -258,5 +259,25 @@ class MultiTrainLoopTest : KoinTestBase() {
 
 		assertThat(process.violationEmitted).isTrue()
 		assertThat(process.velocityImmediatelyAfterHalt).isEqualTo(0.0)
+	}
+
+	// Issue #1297: the real-time flag is a read-only property, as on ShuntingLoop (#1277).
+
+	@Test
+	fun `constructor with enableRealTimeSync true reports real-time sync`() {
+		val process = MultiTrainLoop(loadLinearContext(), endTime = 60L, enableRealTimeSync = true)
+		assertThat(process.enableRealTimeSync).isTrue()
+	}
+
+	@Test
+	fun `constructor with enableRealTimeSync false reports no real-time sync`() {
+		val process = MultiTrainLoop(loadLinearContext(), endTime = 60L, enableRealTimeSync = false)
+		assertThat(process.enableRealTimeSync).isFalse()
+	}
+
+	@Test
+	fun `constructor default reports no real-time sync`() {
+		val process = MultiTrainLoop(loadLinearContext(), endTime = 60L)
+		assertThat(process.enableRealTimeSync).isFalse()
 	}
 }

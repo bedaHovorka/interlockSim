@@ -18,22 +18,15 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.cellsOfType
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -63,16 +56,20 @@ import java.util.concurrent.TimeUnit
  * candidate / return AllPathsBlocked. The train then simply WAITS at its current semaphore
  * and the through route is reserved at a future simulation time once it frees — partial
  * paths plus wait-then-extend are the correct railway semantics.
+ *
+ * ## Since Issue #1385
+ *
+ * No switch-legal route joins doB1 to doB2 or to doA2, so the public `reservePath` lists no candidate
+ * for either diversion and answers the equally permanent `NoPathExists` before anything is touched
+ * ([impossibleDiversionIsRejectedCleanly] pins doB2). The rollback tests below feed the switch-blind
+ * candidates of `doB1 → doA2` through [reservePathOverSwitchBlindCandidates]. Unlike `doB1 → doB2`,
+ * whose candidates the Step 1.4 and G8 screens refuse before anything is reserved, its one candidate
+ * starts and ends facing the train, reserves `doB1 → vB` and is then rejected at the unconfigurable
+ * `vB` join, so [CandidateCommitter.rollbackUnconfigurableCandidate] really runs (disabling it fails
+ * all three tests). Defence in depth for a candidate the public API no longer produces.
  */
 @DisplayName("Issue #742 Regression: impossible sibling-branch diversion must not reserve")
-class Issue742RegressionTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var service: PathReservationService
-
+class Issue742RegressionTest : PathReservationServiceTestBase() {
 	// Elements from vyhybna.xml (parallel branches k1 at row 8, k2 at row 9)
 	private lateinit var inOutB: DynamicPathSeparator // InOut B at (30,8)
 	private lateinit var semaphoreZA: DynamicPathSeparator // zA at (14,8)
@@ -84,12 +81,7 @@ class Issue742RegressionTest : KoinTestBase() {
 	private lateinit var switchVB: DynamicRailSwitch // vB at (26,8)
 
 	@BeforeEach
-	fun setUp() {
-		simulationContext = TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory)
-
-		registry = simulationContext.scope.get()
-		service = simulationContext.getRoutingServices().getPathReservationService()
-
+	fun setUpFixtures() {
 		val grid = simulationContext.getRailWayNetGrid()
 		val inOuts = simulationContext.getInOuts().toList()
 
@@ -108,11 +100,6 @@ class Issue742RegressionTest : KoinTestBase() {
 
 	/** Collect every [DynamicRailSwitch] present in the loaded vyhybna grid. */
 	private fun collectSwitches(): List<DynamicRailSwitch> = simulationContext.cellsOfType<DynamicRailSwitch>()
-
-	@AfterEach
-	fun tearDown() {
-		simulationContext.close()
-	}
 
 	@Test
 	@Timeout(10, unit = TimeUnit.SECONDS)
@@ -135,8 +122,9 @@ class Issue742RegressionTest : KoinTestBase() {
 		// The reservation must FAIL — the train has to wait for its through route instead.
 		// Issue #903: an unconfigurable switch is a permanent geometric impossibility, not
 		// ordinary contention -- it must not be reported as AllPathsBlocked.
+		// The public request lists no switch-legal candidate (Issue #1385, see the class KDoc).
 		assertThat(diversion)
-			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
+			.isInstanceOf<PathReservationService.ReservationResult.NoPathExists>()
 
 		// No blocks may leak from the failed candidate (k2 / junction blocks stay free).
 		assertThat(registry.getBlocks(trainId)).isEqualTo(blocksAfterEntry)
@@ -232,11 +220,12 @@ class Issue742RegressionTest : KoinTestBase() {
 		val blocksBeforeAttempt = registry.getBlocks(trainId).toSet()
 		val switchesBeforeAttempt = registry.getSwitches(trainId).toSet()
 
-		// Attempt the impossible diversion doB1 → doB2.
-		// Issue #1064 (G8): doB2 faces away from a train leaving doB1 eastward, so G8 refuses the direct
-		// candidate before any block or switch is touched, and the loop-around candidate fails G4. The
-		// assertions below still pin that the refused diversion leaves nothing behind.
-		val impossible = service.reservePath(trainId, semaphoreDoB1, semaphoreDoB2)
+		// Attempt the impossible diversion doB1 → doA2 over the switch-blind candidates (see the class
+		// KDoc): it reserves doB1 → vB, then no vB configuration joins k1 to k2, and the rollback runs.
+		// The public request lists no candidate for it.
+		assertThat(service.reservePath(trainId, semaphoreDoB1, semaphoreDoA2), name = "public request")
+			.isInstanceOf<PathReservationService.ReservationResult.NoPathExists>()
+		val impossible = reservePathOverSwitchBlindCandidates(trainId, semaphoreDoB1, semaphoreDoA2)
 
 		// Must fail cleanly. Issue #903: an unconfigurable switch is a permanent geometric
 		// impossibility, not ordinary contention -- it must not be reported as AllPathsBlocked.
@@ -310,11 +299,11 @@ class Issue742RegressionTest : KoinTestBase() {
 		// Snapshot phase1 blocks
 		val blocksPhase1 = registry.getBlocks(trainId).toSet()
 
-		// Phase 2: Attempt impossible extension that would lock vB
+		// Phase 2: Attempt impossible extension doB1 → doA2 that would lock vB (switch-blind candidates)
 		// (rollbackUnconfigurableCandidate should filter vB out, not unlocking vA)
 		// Issue #903: an unconfigurable switch is a permanent geometric impossibility, not
 		// ordinary contention -- it must not be reported as AllPathsBlocked.
-		val phase2 = service.reservePath(trainId, semaphoreDoB1, semaphoreDoB2)
+		val phase2 = reservePathOverSwitchBlindCandidates(trainId, semaphoreDoB1, semaphoreDoA2)
 		assertThat(phase2)
 			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 
@@ -345,13 +334,11 @@ class Issue742RegressionTest : KoinTestBase() {
 		val initialBlocks = registry.getBlocks(trainId).toSet()
 		assertThat(initialBlocks.size).isGreaterThanOrEqualTo(1)
 
-		// Attempt the impossible extension doB1 → doB2.
-		// Issue #1064 (G8): doB2 faces away from a train leaving doB1 eastward, so G8 refuses the direct
-		// candidate before any block or switch is touched, and the loop-around candidate fails G4. The
-		// assertions below still pin that the refused diversion leaves nothing behind.
+		// Attempt the impossible extension doB1 → doA2 over the switch-blind candidates (see the class
+		// KDoc): it reserves doB1 → vB before the unconfigurable vB join rejects it.
 		// Issue #903: an unconfigurable switch is a permanent geometric impossibility, not
 		// ordinary contention -- it must not be reported as AllPathsBlocked.
-		val impossible = service.reservePath(trainId, semaphoreDoB1, semaphoreDoB2)
+		val impossible = reservePathOverSwitchBlindCandidates(trainId, semaphoreDoB1, semaphoreDoA2)
 		assertThat(impossible)
 			.isInstanceOf<PathReservationService.ReservationResult.GeometricallyImpossible>()
 

@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -186,6 +187,36 @@ class DefaultRunSnapshotStoreTest {
 		assertThat(legacy.latencyP50Ms).isEqualTo(100L)
 		assertThat(legacy.latencyP95Ms).isEqualTo(200L)
 		assertThat(legacy.latencyMaxMs).isEqualTo(300L)
+	}
+
+	/**
+	 * A run record written before [cz.vutbr.fit.interlockSim.dispatcher.RejectionCode.TARGET_NOT_NEXT_SECTION]
+	 * existed (Issue #1378) carries no key for it. It must still load, and the aggregator must zero-fill
+	 * the new code rather than drop the run or fail the report — the same holds for any code added later.
+	 */
+	@Test
+	fun `a record without the TARGET_NOT_NEXT_SECTION key loads and aggregates the code as zero`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val armDir = tmpDir.resolve("llm_tool_calling")
+		Files.createDirectories(armDir)
+		val preIssue1378 =
+			SCHEMA_V1_JSON.replaceFirst(
+				"\"rejectionsByCode\": {}",
+				"\"rejectionsByCode\": {\"TARGET_NOT_TRAIN_DESTINATION\": 4}"
+			)
+		check(preIssue1378 != SCHEMA_V1_JSON) { "fixture edit did not apply" }
+		Files.writeString(armDir.resolve("pre-1378.json"), preIssue1378)
+
+		val results = store.readAll(tmpDir)
+
+		assertThat(results).hasSize(1)
+		val typed = results.first().rejectionsByCodeTyped()
+		assertThat(typed[RejectionCode.TARGET_NOT_TRAIN_DESTINATION]).isEqualTo(4L)
+		val report = RunReportAggregator(store).aggregate(results)
+		assertThat(report.rejectionCounts[RejectionCode.TARGET_NOT_NEXT_SECTION]).isEqualTo(0L)
+		assertThat(report.rejectionCounts[RejectionCode.TARGET_NOT_TRAIN_DESTINATION]).isEqualTo(4L)
 	}
 
 	/**

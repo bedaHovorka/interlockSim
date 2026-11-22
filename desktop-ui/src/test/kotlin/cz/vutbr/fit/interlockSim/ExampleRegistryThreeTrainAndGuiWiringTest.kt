@@ -31,25 +31,23 @@ import org.koin.test.get
  * Wiring tests for the four [ExampleRegistry] factories that no other test class reaches:
  * [ExampleRegistry.createShuntingLoopGuiExample], [ExampleRegistry.createThreeTrainLoopExample],
  * [ExampleRegistry.createMultiTrainLoopGuiExample], and
- * [ExampleRegistry.createThreeTrainLoopGuiExample].
+ * [ExampleRegistry.createThreeTrainLoopGuiExample], plus the real-time flag of the console
+ * [ExampleRegistry.createMultiTrainLoopExample].
  *
- * Follows the same reflection technique as [ExampleRegistryCollisionWiringTest].
+ * Invokes the private factories with the same reflection technique as
+ * [ExampleRegistryCollisionWiringTest]. The real-time flag is read through the public
+ * [MultiTrainLoop.enableRealTimeSync] property (Issue #1297), not by reflection.
  */
 @DisplayName("ExampleRegistry wiring — untested factory methods")
 class ExampleRegistryThreeTrainAndGuiWiringTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
 
-	private fun enableRealTimeSync(loop: MultiTrainLoop): Boolean {
-		val field = MultiTrainLoop::class.java.getDeclaredField("enableRealTimeSync")
-		field.isAccessible = true
-		return field.getBoolean(loop)
-	}
-
 	@Test
 	@DisplayName("createShuntingLoopGuiExample wires the scoped DelegatingSimulationController")
 	fun shuntingLoopGuiExampleWiresDelegatingController() {
 		val registry = get<ExampleRegistry>()
-		val context = createExampleContext(registry, get(), "createShuntingLoopGuiExample", "shuntingLoop", "60")
+		val context =
+			createExampleContext(registry, get(), "createShuntingLoopGuiExample", ExampleNames.SHUNTING_LOOP, "60")
 
 		assertThat(context.mainProcess).isNotNull().isInstanceOf<ShuntingLoop>()
 		assertThat(context.scope.get<DelegatingSimulationController>()).isNotNull()
@@ -59,10 +57,11 @@ class ExampleRegistryThreeTrainAndGuiWiringTest : KoinTestBase() {
 	@DisplayName("createThreeTrainLoopExample wires the predictive TTC snapshot provider into the collision service")
 	fun threeTrainLoopExampleWiresSnapshotProvider() {
 		val registry = get<ExampleRegistry>()
-		val context = createExampleContext(registry, get(), "createThreeTrainLoopExample", "threeTrainLoop", "60")
+		val context =
+			createExampleContext(registry, get(), "createThreeTrainLoopExample", ExampleNames.THREE_TRAIN_LOOP, "60")
 		val mainProcess = context.mainProcess as ThreeTrainLoop
 
-		assertThat(enableRealTimeSync(mainProcess)).isFalse()
+		assertThat(mainProcess.enableRealTimeSync).isFalse()
 		val detectionService =
 			context.getCollisionServices().getCollisionDetectionService() as DefaultCollisionDetectionService
 		val snapshotProviderField = DefaultCollisionDetectionService::class.java.getDeclaredField("snapshotProvider")
@@ -74,19 +73,32 @@ class ExampleRegistryThreeTrainAndGuiWiringTest : KoinTestBase() {
 	@DisplayName("createMultiTrainLoopGuiExample builds a real-time-synced MultiTrainLoop")
 	fun multiTrainLoopGuiExampleEnablesRealTimeSync() {
 		val registry = get<ExampleRegistry>()
-		val context = createExampleContext(registry, get(), "createMultiTrainLoopGuiExample", "multiTrainLoop", "60")
+		val context =
+			createExampleContext(registry, get(), "createMultiTrainLoopGuiExample", ExampleNames.MULTI_TRAIN_LOOP, "60")
 		val mainProcess = context.mainProcess as MultiTrainLoop
 
-		assertThat(enableRealTimeSync(mainProcess)).isTrue()
+		assertThat(mainProcess.enableRealTimeSync).isTrue()
+	}
+
+	@Test
+	@DisplayName("createMultiTrainLoopExample builds a MultiTrainLoop without real-time sync")
+	fun multiTrainLoopConsoleExampleDisablesRealTimeSync() {
+		val registry = get<ExampleRegistry>()
+		val context =
+			createExampleContext(registry, get(), "createMultiTrainLoopExample", ExampleNames.MULTI_TRAIN_LOOP, "60")
+		val mainProcess = context.mainProcess as MultiTrainLoop
+
+		assertThat(mainProcess.enableRealTimeSync).isFalse()
 	}
 
 	@Test
 	@DisplayName("createThreeTrainLoopGuiExample builds a real-time-synced ThreeTrainLoop")
 	fun threeTrainLoopGuiExampleEnablesRealTimeSync() {
 		val registry = get<ExampleRegistry>()
-		val context = createExampleContext(registry, get(), "createThreeTrainLoopGuiExample", "threeTrainLoop", "60")
+		val context =
+			createExampleContext(registry, get(), "createThreeTrainLoopGuiExample", ExampleNames.THREE_TRAIN_LOOP, "60")
 		val mainProcess = context.mainProcess as ThreeTrainLoop
 
-		assertThat(enableRealTimeSync(mainProcess)).isTrue()
+		assertThat(mainProcess.enableRealTimeSync).isTrue()
 	}
 }

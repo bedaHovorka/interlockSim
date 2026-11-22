@@ -10,13 +10,16 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.NextSectionTargets
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.RouteScope
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationTopologySerializer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
+import cz.vutbr.fit.interlockSim.dispatcher.agents.standingAtSignalName
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
@@ -68,7 +71,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param perceptionPort Optional off-thread-safe perception port supplying currently active
  *   trains for the [trainName] pre-check; `null` skips the pre-check.
  * @param sensorPort Optional dispatch-loop sensor port supplying trains queued for admission for
- *   the [trainName] pre-check; `null` skips the pre-check.
+ *   the [trainName] pre-check and the block inputs for the next-section check below; `null` skips
+ *   both.
  * ## Direction validation (the backwards-route defect)
  *
  * A live `exampleGui shuntingLoopAI 333` run had the model request the **reverse** of every
@@ -83,8 +87,18 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * [RejectionCode.TARGET_NOT_TRAIN_DESTINATION], but it is reached only from
  * `DispatchTickLoop`, which is never constructed in production. [execute] therefore applies the
  * check here, on the live path: a [toEndpointName] that names an **InOut** other than the train's
- * declared destination is rejected. Signal targets are left alone — those are section hops, which
- * this tool's own description recommends, and they say nothing about where the train finishes.
+ * declared destination is rejected.
+ *
+ * ## Next-section validation for Signal targets (Issue #1378)
+ *
+ * A Signal target is a section hop, which this tool's own description recommends, and it says
+ * nothing about where the train finishes — the destination rule above therefore does not apply to
+ * it. Instead it must lie **one section ahead** of the train, and [execute] refuses a target that
+ * is not, with [RejectionCode.TARGET_NOT_NEXT_SECTION] and a reply naming the train's NEXT
+ * SECTION. The rule is [NextSectionTargets], shared with
+ * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator]; the behind-the-train Praha stall it
+ * closes and the exact inertness contract are told once in [NextSectionTargets]'s KDoc, and the
+ * block inputs come from [sensorPort].
  *
  * @param blockIds Static Block IDs of this network, used only to classify a rejected endpoint as
  *   [RejectionCode.ENDPOINT_IS_BLOCK_ID] rather than [RejectionCode.UNKNOWN_ENDPOINT]. Static
@@ -122,6 +136,18 @@ class RequestRouteTool(
 
 	override val name: String = "request_route"
 
+	/**
+	 * The `, such as "<block>"` clause of the two endpoint descriptions, naming one of this network's
+	 * own Block IDs — the one [StationTopologySerializer.confusableBlockExample] picks for the STATION
+	 * TOPOLOGY warning, so both name the same block. Empty when [blockIds] is empty. Before Issue #1155
+	 * both descriptions carried vyhybna's literal `"kA"` on every station.
+	 */
+	private val blockIdExample: String =
+		StationTopologySerializer
+			.confusableBlockExample(inOutNames, blockIds, validEndpointNames)
+			?.let { ", such as \"${it.block}\"" }
+			.orEmpty()
+
 	override val description: String =
 		"Request the interlocking to find and atomically reserve a free path for a named train, between " +
 			"any two endpoints from the InOuts or Signals lists. Reserve ONE section at a time: at least " +
@@ -151,7 +177,7 @@ class RequestRouteTool(
 						"Signals list in the STATION TOPOLOGY section of your system prompt. Do not " +
 						"abbreviate, translate, or invent a name — if the name you want isn't listed " +
 						"there, do not call this tool. Do NOT pass a Block ID (e.g. a name from the " +
-						"Blocks list, such as \"kA\") — a Block ID names a piece of track, not an endpoint.",
+						"Blocks list$blockIdExample) — a Block ID names a piece of track, not an endpoint.",
 				type = DomainToolParameterType.String,
 				required = true
 			),
@@ -167,7 +193,7 @@ class RequestRouteTool(
 						"the train itself. Exact name, copied verbatim from the InOuts or Signals list in " +
 						"the STATION TOPOLOGY section of your system prompt. Do not abbreviate, translate, " +
 						"or invent a name — if the name you want isn't listed there, do not call this " +
-						"tool. Do NOT pass a Block ID (e.g. a name from the Blocks list, such as \"kA\") — " +
+						"tool. Do NOT pass a Block ID (e.g. a name from the Blocks list$blockIdExample) — " +
 						"a Block ID names a piece of track, not an endpoint.",
 				type = DomainToolParameterType.String,
 				required = true
@@ -251,6 +277,7 @@ class RequestRouteTool(
 		}
 
 		queuedOriginError(resolvedTrainName, fromEndpointName)?.let { return it }
+		notYetEnteredOriginError(resolvedTrainName, fromEndpointName)?.let { return it }
 
 		// A route has to start where the train actually is. Only checked for a train standing
 		// still at a known signal — the case where the answer is unambiguous and the train is
@@ -269,6 +296,8 @@ class RequestRouteTool(
 				)
 			}
 		}
+
+		nextSectionError(resolvedTrainName, fromEndpointName, toEndpointName)?.let { return it }
 
 		// A Signal target (not an InOut) is a section hop toward the destination, not the
 		// end-to-end route -- mirror RuleBasedEmissionStrategy's scope so ActionValidator, if ever
@@ -308,6 +337,34 @@ class RequestRouteTool(
 				?.firstOrNull { it.trainId == trainId }
 				?.destinationInOutName
 		return (queued ?: activePerceptionOf(trainId)?.destinationInOutName)?.takeIf { it.isNotBlank() }
+	}
+
+	/**
+	 * Refuses a Signal target that is not one section ahead of the train (Issue #1378) — see
+	 * [NextSectionTargets] for the rule and the Praha stall it closes, and
+	 * [RejectionCode.TARGET_NOT_NEXT_SECTION] for the code.
+	 *
+	 * Reads the block inputs from one [DispatchLoopSensorPort.snapshot] call, so all inputs come from
+	 * the same tick. Inert when [inOutNames] is empty (every target would look like a Signal), when
+	 * [toEndpointName] is an InOut (the #944 destination rule above governs those), and when no
+	 * [sensorPort] is wired.
+	 */
+	private fun nextSectionError(
+		trainId: String,
+		fromEndpointName: String,
+		toEndpointName: String
+	): ToolResult.Error? {
+		if (inOutNames.isEmpty() || toEndpointName in inOutNames) return null
+		val snapshot = sensorPort?.snapshot() ?: return null
+		val refusal =
+			NextSectionTargets.refusal(
+				snapshot.innerBlockInputs,
+				snapshot.outerBlockInputs,
+				trainId,
+				fromEndpointName,
+				toEndpointName
+			) ?: return null
+		return ToolResult.Error(refusal, rejection = RejectionCode.TARGET_NOT_NEXT_SECTION)
 	}
 
 	/**
@@ -373,7 +430,8 @@ class RequestRouteTool(
 	 * may be added for it. The enforceable rule is therefore
 	 * the weaker "a queued train's origin must be an InOut, not a Signal". Combined with the
 	 * existing "cannot depart FROM the destination" rule this pins the origin exactly on a
-	 * two-InOut network such as `vyhybna.xml`, and is a strict improvement on larger ones. This is
+	 * two-InOut network such as `vyhybna.xml`. On a larger one it does not, so there every route
+	 * for a queued train is refused ([ambiguousEntryError], Issue #1155). This is
 	 * the only guard for a queued train (its footprint is empty, so the kernel's contiguity check
 	 * passes vacuously); see the table at
 	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.NonContiguousStart]
@@ -388,11 +446,16 @@ class RequestRouteTool(
 		fromEndpointName: String
 	): ToolResult.Error? {
 		if (inOutNames.isEmpty()) return null
-		if (fromEndpointName in inOutNames) return null
 		val isQueued = sensorPort?.getQueuedTrains()?.any { it.trainId == trainId } ?: false
 		if (!isQueued || activePerceptionOf(trainId) != null) return null
 		val destination = declaredDestinationOf(trainId)
 		val candidateOrigins = inOutNames.filter { it != destination }.sorted()
+		// More than two InOuts: the entry is not pinned. `inOutNames.size > 2` is the deciding
+		// condition — it already implies `candidateOrigins.size > 1` (candidates >= size - 1 >= 2),
+		// and the second conjunct is kept purely defensively. Two InOuts (vyhybna) keep the rule
+		// below unchanged, including when the destination is unknown.
+		if (inOutNames.size > 2 && candidateOrigins.size > 1) return ambiguousEntryError(trainId)
+		if (fromEndpointName in inOutNames) return null
 		val legalOrigins = if (candidateOrigins.isEmpty()) inOutNames.sorted() else candidateOrigins
 		return ToolResult.Error(
 			"Train '$trainId' has not entered the network yet, so its route must start at its entry " +
@@ -403,6 +466,64 @@ class RequestRouteTool(
 			rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
 		)
 	}
+
+	/**
+	 * Rejects a route for an **approved** train that has not entered the network yet, unless it
+	 * starts at the train's entry InOut or at the signal its entry route already reaches.
+	 *
+	 * `approve_train` takes the train out of the queue, so [queuedOriginError] no longer sees it, but
+	 * the train stays off the track until its entry InOut has set the entry route: no front section
+	 * and, before that route is set, no signal ahead — so [standingAtSignal] does not see it either.
+	 * In that window any origin was granted. The #1301 A/B campaign (2026-11-20) measured it: in 8 of
+	 * 10 `vyhybna` REVISED_STRUCTURAL runs the model reserved the worked example's `zA -> doB1` for a
+	 * train waiting at `B`, and `B`'s own entry route was then refused as non-contiguous with that
+	 * reservation every 2 simulated seconds for about 62 s, until the reservation expired.
+	 *
+	 * Unlike a queued train, an approved one carries its timetable in the snapshot, so its entry
+	 * InOut is known exactly, on any number of InOuts. Inert when the snapshot has no timetable for
+	 * the train or when the train has a front section (it is on the track; the rules above and below
+	 * govern it). Inertness is wider than that — the capture-cadence window: the snapshot is the
+	 * last sim-thread capture, so a train approved but not yet present in it is in neither of the
+	 * two lists [knownTrainIds] reads; the call fails closed as UNKNOWN_TRAIN there, and no wrong
+	 * reservation can be granted in that window.
+	 */
+	private fun notYetEnteredOriginError(
+		trainId: String,
+		fromEndpointName: String
+	): ToolResult.Error? {
+		val snapshot = perceptionPort?.snapshot() ?: return null
+		val perception = snapshot.trainPerception(trainId) ?: return null
+		if (perception.frontSectionName != null) return null
+		val entry = snapshot.trainTimetable(trainId)?.originInOutName?.takeIf { it.isNotBlank() } ?: return null
+		val signalAhead = perception.signalAheadName?.takeIf { it.isNotBlank() }
+		if (fromEndpointName == entry || fromEndpointName == signalAhead) return null
+		val legalOrigins = listOfNotNull(entry, signalAhead)
+		return ToolResult.Error(
+			"Train '$trainId' is approved but has not entered the network yet; it enters at '$entry'. " +
+				"Its route must start at " + legalOrigins.joinToString(" or ") { "'$it'" } +
+				", not at '$fromEndpointName'. A route reserved elsewhere locks track this train cannot " +
+				"reach and blocks its own entry. Do not retry with the same origin.",
+			rejection = RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION
+		)
+	}
+
+	/**
+	 * Refuses any route for a queued train whose entry point this tool cannot pin (Issue #1155).
+	 *
+	 * "An InOut other than the destination" pins the entry only on a two-InOut station. With more
+	 * InOuts (Červený Újezd has four) a route from the wrong one is accepted, the train later enters
+	 * at its real InOut holding blocks elsewhere, and its own path setup fails as non-contiguous —
+	 * the cause of all 6 early terminations in the #1276 Červený Újezd baseline. The cycle message
+	 * already tells the model a queued train "needs approve_train only"; its first route is offered
+	 * on its NEXT SECTION line once it runs, so refusing here loses nothing.
+	 */
+	private fun ambiguousEntryError(trainId: String): ToolResult.Error =
+		ToolResult.Error(
+			"Train '$trainId' has not entered the network yet and this station has several entry " +
+				"points, so no route can be placed for it now. Call approve_train for it; its first " +
+				"route is named on its NEXT SECTION line once it is running. Do not retry this request.",
+			rejection = RejectionCode.TRAIN_NOT_ADMITTED
+		)
 
 	/**
 	 * This train's last captured first-person perception, or `null` if it is not active.
@@ -416,7 +537,9 @@ class RequestRouteTool(
 		perceptionPort?.snapshot()?.trainPerception(trainId)
 
 	/**
-	 * The signal this train is stopped at, or `null` if it is moving or has no signal ahead.
+	 * The signal this train is stopped at, or `null` if it is moving or has no signal ahead — the
+	 * cycle message's shared [standingAtSignalName] predicate over the same perception this tool
+	 * reads.
 	 *
 	 * "Stopped" is `velocity == 0.0`, the observable form of the `TrainPhase.HELD`/`DWELLING`
 	 * condition `ActionValidator` gates its own origin rule on. A train at a stand in front of a
@@ -424,11 +547,7 @@ class RequestRouteTool(
 	 * origin is a dispatcher error, and a costly one: the reservation succeeds, holds blocks, and
 	 * releases nobody until the orphan sweeper reclaims it 60 simulated seconds later.
 	 */
-	private fun standingAtSignal(trainId: String): String? =
-		activePerceptionOf(trainId)
-			?.takeIf { it.velocity == 0.0 }
-			?.signalAheadName
-			?.takeIf { it.isNotBlank() }
+	private fun standingAtSignal(trainId: String): String? = activePerceptionOf(trainId)?.standingAtSignalName()
 
 	/**
 	 * Every train name the model may legitimately pass this cycle: those queued for admission plus

@@ -20,7 +20,7 @@ import cz.vutbr.fit.interlockSim.util.Point
  * Uses BFS to traverse the track graph and verify connectivity.
  *
  * PR #1043 review round: the three private copies in the XMLContextFactory test
- * suite (parse / rudyUjezd, complex-station, Prague bypass) are collapsed into
+ * suite (parse / cerveny_ujezd, complex-station, Prague bypass) are collapsed into
  * this one function. It owns no lifecycle — the caller keeps ownership of [context].
  */
 fun existPath(

@@ -16,8 +16,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  *
  * Internal to `:core` on purpose (PR #1115 review): a rollback publishes no release event and resets
  * no signal, so a caller outside the reservation machinery could free a block that was announced as
- * reserved and leave the event counters unbalanced (Issue #1081). The callers are the candidate and
- * bypass rollbacks in [DefaultPathReservationService] and the interlocking facade's rollback.
+ * reserved and leave the event counters unbalanced (Issue #1081). The callers are the candidate
+ * rollback in [CandidateCommitter] (through [RouteReleaser.rollbackBlock]), the bypass rollback that
+ * stays in [DefaultPathReservationService] and the interlocking facade's rollback.
  *
  * @since Issue #961
  */

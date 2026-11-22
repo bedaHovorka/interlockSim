@@ -252,11 +252,13 @@ fun createMockBlockedTrack(
  *
  * Extracted from DefaultRailWayNetGridTest.
  *
+ * @param blockName Block name the mock reports (default `null` — the fixtures' blocks are unnamed,
+ *   and a `null` block name is what the canvas warning-highlight scan treats as "no block")
  * @return MockK instance of TrackBlock
  */
-fun createMockTrackBlock(): TrackBlock =
+fun createMockTrackBlock(blockName: String? = null): TrackBlock =
 	mockk<TrackBlock>(relaxed = true) {
-		every { name } returns null
+		every { name } returns blockName
 		every { getNextTrackSection(any(), any()) } returns null
 		every { isInnerElement(any()) } returns false
 		every { getJoin(any(), any()) } returns Cell.Segment.A

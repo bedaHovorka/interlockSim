@@ -18,16 +18,12 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isSameInstanceAs
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
-import cz.vutbr.fit.interlockSim.context.RouteFinder
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.separatorAt
 import cz.vutbr.fit.interlockSim.util.Point
@@ -36,37 +32,18 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
+import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
 /**
  * Pins the work [DefaultPathReservationService.reservePathToAny] no longer repeats:
- * the semaphore grid scan (Issue #965) and the second topological path enumeration per InOut
- * target (Issue #966).
+ * the semaphore grid scan (Issue #965, [ReservationTargetDiscovery]'s since SP12.5) and the
+ * second candidate path enumeration per InOut target (Issue #966; switch-constrained since Issue #1385).
  */
 @DisplayName("reservePathToAny de-duplication")
-class ReservePathToAnyDedupTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
-	private lateinit var simulationContext: DefaultSimulationContext
-	private lateinit var navigator: TopologyNavigator
-	private lateinit var registry: PathReservationRegistry
-	private lateinit var pathInfoBuilder: PathInfoBuilder
-	private lateinit var routeFinder: RouteFinder
-
-	@BeforeEach
-	fun setUp() {
-		simulationContext =
-			TestFixtures.loadShuntingSimulationContext(simulationContextFactory, editingContextFactory).tracked()
-		navigator = simulationContext.scope.get()
-		registry = simulationContext.scope.get()
-		pathInfoBuilder = simulationContext.scope.get()
-		routeFinder = simulationContext.scope.get()
-	}
-
+class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 	private fun newService(navigator: TopologyNavigator = this.navigator): DefaultPathReservationService =
-		DefaultPathReservationService(navigator, simulationContext, registry, pathInfoBuilder, routeFinder)
+		serviceOf(navigator)
 
 	/**
 	 * The grid scan the service used to run on every call: column by column, top to bottom.
@@ -88,41 +65,39 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 	@Nested
 	@DisplayName("semaphore cache (Issue #965)")
 	inner class SemaphoreCache {
+		private lateinit var discovery: ReservationTargetDiscovery
+
+		@BeforeEach
+		fun setUp() {
+			// The Issue #965 cache moved into the discovery class (SP12.5); the reach pins it there.
+			discovery = ReservationTargetDiscovery(navigator, simulationContext)
+		}
+
 		@Test
 		fun `cached semaphores equal a fresh grid scan in the same order`() {
 			val expected = freshSemaphoreScan()
 			assertThat(expected).isNotEmpty()
 
-			assertThat(newService().allSemaphores()).containsExactly(*expected.toTypedArray())
+			// At TRACE the cache's own grid-scan log line runs, too (it is otherwise below DEBUG).
+			val discoveryLogger = LoggerFactory.getLogger(ReservationTargetDiscovery::class.java.name) as Logger
+			val savedLevel = discoveryLogger.level
+			discoveryLogger.level = Level.TRACE
+			try {
+				assertThat(discovery.allSemaphores()).containsExactly(*expected.toTypedArray())
+			} finally {
+				discoveryLogger.level = savedLevel
+			}
 		}
 
 		@Test
-		fun `the semaphore list is computed once and reused across reservePathToAny calls`() {
-			val service = newService()
-			val first = service.allSemaphores()
+		fun `the semaphore list is computed once and reused across target-order calls`() {
+			val first = discovery.allSemaphores()
 
 			val zA = simulationContext.separatorAt(14, 8) as DynamicRailSemaphore
-			service.reservePathToAny("train1", zA)
-			service.releasePath("train1")
-			service.reservePathToAny("train1", zA)
+			discovery.reservePathToAnyTargets(zA)
+			discovery.reservePathToAnyTargets(zA)
 
-			assertThat(service.allSemaphores()).isSameInstanceAs(first)
-		}
-	}
-
-	/** Counts [findAllTopologicalPaths] calls per (start, target) pair. */
-	private class CountingNavigator(
-		private val real: TopologyNavigator
-	) : TopologyNavigator by real {
-		val calls = mutableMapOf<Pair<PathSeparator, PathSeparator>, Int>()
-
-		override fun findAllTopologicalPaths(
-			start: PathSeparator,
-			target: PathSeparator,
-			maxDepth: Int
-		): List<List<TrackSection>> {
-			calls.merge(start to target, 1, Int::plus)
-			return real.findAllTopologicalPaths(start, target, maxDepth)
+			assertThat(discovery.allSemaphores()).isSameInstanceAs(first)
 		}
 	}
 
@@ -136,14 +111,14 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 			val zA = semaphoreZA()
 			// Order from XML: [0]=B at X=30, [1]=A at X=11; zA faces towards B
 			val inOutB = simulationContext.toDynamic(simulationContext.getInOuts().toList()[0])
-			val counting = CountingNavigator(navigator)
+			val counting = RecordingNavigator(navigator)
 			val service = newService(counting)
 
 			val viaPublic = service.reservePath("train1", zA, inOutB)
 			val publicBlocks = (viaPublic as PathReservationService.ReservationResult.Success).reservedBlocks
 			service.releasePath("train1")
 
-			val precomputed = navigator.findAllTopologicalPaths(zA, inOutB)
+			val precomputed = navigator.findAllSwitchConstrainedPaths(zA, inOutB)
 			counting.calls.clear()
 			val viaOverload = service.reservePath("train1", zA, inOutB, 100, lazyOf(precomputed))
 
@@ -155,7 +130,7 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 
 		@Test
 		fun `reservePathToAny enumerates each InOut target at most once on vyhybna`() {
-			val counting = CountingNavigator(navigator)
+			val counting = RecordingNavigator(navigator)
 			val service = newService(counting)
 
 			service.reservePathToAny("train1", semaphoreZA())
@@ -164,30 +139,31 @@ class ReservePathToAnyDedupTest : KoinTestBase() {
 		}
 
 		/**
-		 * On rudyUjezd.xml the semaphore at (11,31) has two InOuts in one orientation partition, so
+		 * On cerveny_ujezd.xml the semaphore at (11,31) has two InOuts in one orientation partition, so
 		 * the sort key is evaluated for both of them. Before Issue #966 every InOut the loop then
 		 * tried was enumerated a second time inside reservePath; now each pair is enumerated once.
 		 */
 		@Test
 		@Timeout(10, unit = TimeUnit.SECONDS)
 		fun `reservePathToAny enumerates every sorted InOut target exactly once`() {
-			val rudyUjezd =
+			val cervenyUjezd =
 				TestFixtures
-					.loadRudyUjezdXml()
+					.loadCervenyUjezdXml()
 					.use { simulationContextFactory.createContext(it) }
 					.let { it as DefaultSimulationContext }
 					.tracked()
-			val counting = CountingNavigator(rudyUjezd.scope.get())
+			val counting = RecordingNavigator(cervenyUjezd.scope.get())
 			val service =
 				DefaultPathReservationService(
 					counting,
-					rudyUjezd,
-					rudyUjezd.scope.get(),
-					rudyUjezd.scope.get(),
-					rudyUjezd.scope.get()
+					cervenyUjezd,
+					cervenyUjezd.scope.get(),
+					cervenyUjezd.scope.get(),
+					cervenyUjezd.scope.get()
 				)
-			val start = rudyUjezd.getRailWayNetGrid()[Point(11, 31)] as DynamicRailSemaphore
-			val inOuts = rudyUjezd.getInOuts().map { rudyUjezd.toDynamic(it) as DynamicInOut }
+
+			val start = cervenyUjezd.getRailWayNetGrid()[Point(11, 31)] as DynamicRailSemaphore
+			val inOuts = cervenyUjezd.getInOuts().map { cervenyUjezd.toDynamic(it) as DynamicInOut }
 			val oppositeSide = inOuts.filter { it.getOrientation() != start.getOrientation() }
 			assertThat(oppositeSide.size, name = "InOuts sorted together").isGreaterThan(1)
 

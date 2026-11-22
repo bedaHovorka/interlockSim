@@ -49,8 +49,7 @@ Measured (`PausedClockCaptureHookTest`, `PausedClockFreshCaptureDeadlockTest`):
 | Same tick using only the immutable `obs0` it was handed | **completes normally**, ~400 ms emission |
 
 `DispatchTickLoop` is already safe: it reads `obs0` once before `emit`
-(`dispatcher-agent/.../DispatchTickLoop.kt:192`) and re-validates via `applyOptimistically`
-(`:341`), which is pure in-process work and never touches the sim thread.
+(`DispatchTickLoop`, in `dispatcher-agent`) and re-validates via `applyOptimistically`, which is pure in-process work and never touches the sim thread.
 
 ---
 

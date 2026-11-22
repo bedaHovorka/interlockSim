@@ -48,7 +48,13 @@ internal fun runSnapshot(
 	railwayOutcome: RailwayOutcome = RailwayOutcome.UNMEASURED,
 	ruleFallbackTicks: Long = 0L,
 	loggedFatalSimExceptionCount: Long? = null,
-	loggedFatalSimExceptionFirstMessage: String? = null
+	loggedFatalSimExceptionFirstMessage: String? = null,
+	staleOriginRefusalsAfterSilentCycle: Long? = null,
+	skippedNextSectionOffers: Long? = null,
+	offeredNextSectionHops: Long? = null,
+	skippedNextSectionOffersStandingAtSignal: Long? = null,
+	longestSkippedOfferStreakCycles: Long? = null,
+	longestSkippedOfferStreakSimSeconds: Double? = null
 ): DispatcherRunSnapshot {
 	val outcomes = TickOutcome.entries.associate { it.name to 0L }.toMutableMap()
 	outcomes[TickOutcome.LLM_ACTIONS.name] = 1L
@@ -96,6 +102,12 @@ internal fun runSnapshot(
 		endCause = if (completedNaturally) RunEndCause.NATURAL_COMPLETION else RunEndCause.TERMINATED_EARLY,
 		railwayOutcome = railwayOutcome,
 		loggedFatalSimExceptionCount = loggedFatalSimExceptionCount,
-		loggedFatalSimExceptionFirstMessage = loggedFatalSimExceptionFirstMessage
+		loggedFatalSimExceptionFirstMessage = loggedFatalSimExceptionFirstMessage,
+		staleOriginRefusalsAfterSilentCycle = staleOriginRefusalsAfterSilentCycle,
+		skippedNextSectionOffers = skippedNextSectionOffers,
+		offeredNextSectionHops = offeredNextSectionHops,
+		skippedNextSectionOffersStandingAtSignal = skippedNextSectionOffersStandingAtSignal,
+		longestSkippedOfferStreakCycles = longestSkippedOfferStreakCycles,
+		longestSkippedOfferStreakSimSeconds = longestSkippedOfferStreakSimSeconds
 	)
 }

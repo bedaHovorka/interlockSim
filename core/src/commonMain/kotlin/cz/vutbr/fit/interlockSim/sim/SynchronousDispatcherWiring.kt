@@ -67,25 +67,29 @@ private val logger = KotlinLogging.logger {}
  * @param env The simulation environment backing the ports
  * @param loop The loop to wire; its [ShuntingLoop.snapshotCaptureHook] and
  *   [ShuntingLoop.controlStepListener] are overwritten
- * @param maxConcurrentTrains Admission cap, defaults to production's
- *   [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS]
+ * @param maxConcurrentTrains Admission cap, defaults to the loop's station capacity
+ *   ([ShuntingLoop.stationCapacity]: 2 on `vyhybna.xml`, the topology value elsewhere — the
+ *   vyhybna default [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS] does not leak into other
+ *   stations, Issue #1162)
  * @param interlockingFacade SP3.5 (Issue #573): when non-null, [DefaultNetworkActuatorPort.requestRoute]
  *   is routed through the interlocking safety kernel as the single chokepoint.
  *   Pass `null` (default) for `:fast-sim` native binary and legacy test wiring that runs
- *   without Koin DI; those callers fall back to the direct [PathReservationService] path.
+ *   without Koin DI; those callers fall back to the direct
+ *   [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService] path.
  * @param trainDecisionPolicy SP4.3 (Issue #565): per-train reactive acceleration policy,
  *   applied once per approved train after dispatcher decisions.  Defaults to
  *   [AlgorithmicTrainDecisionPolicy].  Pass a custom implementation to spy on or
  *   replace the algorithmic acceleration logic in tests.
+ * @return the wired dispatcher (Issue #1162: lets a caller read the admission cap it got)
  * @since Issue #733 / #742 follow-up (SP0.11 green-up); SP4.3 (#565) adds [trainDecisionPolicy]
  */
 fun wireSynchronousDispatcher(
 	env: SimulationEnvironment,
 	loop: ShuntingLoop,
-	maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
+	maxConcurrentTrains: Int = loop.stationCapacity,
 	interlockingFacade: InterlockingFacade? = null,
 	trainDecisionPolicy: TrainDecisionPolicy = AlgorithmicTrainDecisionPolicy()
-) {
+): RuleBasedDispatcher {
 	val perceptionPort =
 		DefaultNetworkPerceptionPort(
 			env = env,
@@ -124,6 +128,7 @@ fun wireSynchronousDispatcher(
 			// admission/reservation this tick are visible.
 			applyTrainDecisions(loop, perceptionPort, trainDecisionPolicy)
 		}
+	return dispatcher
 }
 
 /**
@@ -164,7 +169,7 @@ internal fun applyDecision(
 			actuatorPort.requestRoute(
 				decision.trainId,
 				decision.fromSemaphoreName,
-				decision.toSeparatorName
+				decision.toTargetName
 			)
 		when (result) {
 			is RouteRequestResult.Reserved -> loop.incrementBlockTransition(decision.trainId)
@@ -172,7 +177,7 @@ internal fun applyDecision(
 				// Blocked/conflict outcomes are routine "wait and retry next tick" contention.
 				logger.debug {
 					"wireSynchronousDispatcher: ReservePath ${decision.fromSemaphoreName} → " +
-						"${decision.toSeparatorName} for ${decision.trainId} not applied: $result"
+						"${decision.toTargetName} for ${decision.trainId} not applied: $result"
 				}
 				loop.incrementFailedReservation()
 			}

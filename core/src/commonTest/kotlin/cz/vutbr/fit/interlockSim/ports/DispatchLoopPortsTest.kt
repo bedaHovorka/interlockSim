@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.ProvidesDispatchLoopObservation
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -158,6 +159,25 @@ class DispatchLoopPortsTest {
 		assertThat(empty.outerBlockInputs).isEmpty()
 	}
 
+	// ── Issue #1354: tick stamp + snapshot passthrough ────────────────────────
+
+	@Test
+	fun `snapshot carries the observation tick and snapshot unchanged`() {
+		// The mirroring pairs the provider's tick stamp and perception snapshot with the three
+		// lists of that observation, by reference. A regression that drops either field or fills
+		// in a default instead shows up as tick 0 or the EMPTY sentinel here.
+		val hookSnapshot = emptySnapshot(42.0)
+		val queued = listOf(QueuedTrainObservation("T1", "A"))
+		val port =
+			DefaultDispatchLoopSensorPort { makeObservation(queuedTrains = queued, tick = 7L, snapshot = hookSnapshot) }
+
+		val s = port.snapshot()
+
+		assertThat(s.tick).isEqualTo(7L)
+		assertThat(s.snapshot).isSameInstanceAs(hookSnapshot)
+		assertThat(s.queuedTrains).isSameInstanceAs(queued)
+	}
+
 	// ── ProvidesDispatchLoopObservation SAM conversion ────────────────────────
 
 	@Test
@@ -197,8 +217,11 @@ class DispatchLoopPortsTest {
 	private fun makeObservation(
 		queuedTrains: List<QueuedTrainObservation> = emptyList(),
 		innerBlockInputs: List<BlockInputObservation> = emptyList(),
-		outerBlockInputs: List<BlockInputObservation> = emptyList()
-	): ShuntingLoop.TickObservation = ShuntingLoop.TickObservation(queuedTrains, innerBlockInputs, outerBlockInputs)
+		outerBlockInputs: List<BlockInputObservation> = emptyList(),
+		tick: Long = 0L,
+		snapshot: SimulationSnapshot = SimulationSnapshot.EMPTY
+	): ShuntingLoop.TickObservation =
+		ShuntingLoop.TickObservation(queuedTrains, innerBlockInputs, outerBlockInputs, tick, snapshot)
 
 	private fun makeBlockInput(
 		blockId: String,
@@ -207,7 +230,6 @@ class DispatchLoopPortsTest {
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = semaphoreName,
-			toSeparatorName = null,
 			state = TrackFacility.State.FREE,
 			ownerTrainId = null,
 			isApproachingThisInput = false,

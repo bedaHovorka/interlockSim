@@ -35,7 +35,14 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import org.koin.test.inject
+import kotlin.time.Duration
 import kotlin.time.measureTime
+
+/** Stage count of the cheaper reference network in the findAllPaths perf tripwire (#1199). */
+private const val REFERENCE_STAGE_COUNT = 12
+
+/** Expected 15-stage / 12-stage time ratio is 2^3 = 8 and measured about 10; 40 leaves about 4x margin. */
+private const val MAX_TIME_RATIO = 40.0
 
 @DisplayName("DefaultAutomaticPathFindingService")
 class DefaultAutomaticPathFindingServiceTest : KoinTestBase() {
@@ -469,7 +476,7 @@ class DefaultAutomaticPathFindingServiceTest : KoinTestBase() {
 		/**
 		 * Verifies that [findAllPaths] on a switch-rich branchy network
 		 * (a) respects the [maxPaths] cap after full BFS enumeration, and
-		 * (b) completes within an acceptable wall-clock budget.
+		 * (b) does not grow faster than the expected exponential enumeration cost.
 		 *
 		 * **Network composition:** [TestTopologies.branchySwitchChain] with 15 binary-switch
 		 * bypass stages creates exactly 2^15 = 32 768 switch-constrained paths from "A" to
@@ -478,35 +485,70 @@ class DefaultAutomaticPathFindingServiceTest : KoinTestBase() {
 		 * and will catch regressions that make [findAllSwitchConstrainedPaths] unexpectedly
 		 * slower on branchy networks.
 		 *
-		 * **Time budget (5 000 ms):** Generous to survive CI variance; typical JVM execution
-		 * for 32 768 enumerated paths is well under 1 s.
+		 * **Why a relative check (#1199):** one 15-stage call takes about 1 s on a developer
+		 * machine but 5-7 s on the CI runners (an absolute 5 000 ms budget failed there with
+		 * 5 599 ms and 5 277 ms), so no absolute budget is both meaningful and stable. The test
+		 * instead compares the 15-stage cost with the 12-stage cost measured in the same JVM:
+		 * the enumeration cost is proportional to the path count, so the 8x more paths
+		 * (2^15 / 2^12) should cost roughly 8x more time (measured locally: about 10x, because
+		 * of GC and cache effects). The check bounds that ratio at [MAX_TIME_RATIO] = 40, about
+		 * 4x above the measured value. A complexity regression, such as a quadratic cost per
+		 * path, pushes the ratio towards 64 or beyond and fails the check; a uniformly slower or
+		 * noisier machine scales both measurements and does not. The best of several runs is
+		 * taken on each side to discard one-off stalls.
+		 *
+		 * This is a tripwire only; the `hasSize(maxPaths)` assertion is the correctness part.
 		 */
 		@Test
 		fun `findAllPaths on 15-stage branchy network respects maxPaths cap and completes within time budget`() {
-			// 15 binary-switch bypass stages → 2^15 = 32 768 switch-constrained paths.
+			val maxPaths = 10
+
+			// Reference: 12 binary-switch bypass stages → 2^12 = 4 096 paths. The first runs also
+			// serve as the JIT warm-up for the 15-stage measurement below.
+			val referenceTimes = timeFindAllPaths(stageCount = REFERENCE_STAGE_COUNT, runs = 5, maxPaths = maxPaths)
+
+			// Target: 15 binary-switch bypass stages → 2^15 = 32 768 paths.
 			val ctx = TestTopologies.branchySwitchChain(stageCount = 15).also { context = it }
 			val svc = ctx.getAutomaticPathFindingService()
 			val inOuts = ctx.getInOuts()
 			val a = inOuts.single { it.getName() == "A" }
 			val b = inOuts.single { it.getName() == "B" }
 
-			val maxPaths = 10
-
-			// Warm-up to reduce JVM JIT noise before the timed measurement.
-			repeat(5) { svc.findAllPaths(a, b, maxPaths = maxPaths) }
-
-			val duration =
-				measureTime {
-					svc.findAllPaths(a, b, maxPaths = maxPaths)
+			lateinit var result: List<*>
+			val targetTimes =
+				List(2) {
+					measureTime { result = svc.findAllPaths(a, b, maxPaths = maxPaths) }
 				}
 
-			// Time budget: full BFS enumeration of 32 768 paths must finish in under 5 s.
-			assertThat(duration.inWholeMilliseconds).isLessThan(5000L)
+			val referenceNanos = referenceTimes.min().inWholeNanoseconds.coerceAtLeast(1L)
+			val targetNanos = targetTimes.min().inWholeNanoseconds
+			val ratio = targetNanos.toDouble() / referenceNanos
+
+			// Time budget, relative: 8x more paths must not cost much more than ~8x the time.
+			val label = "time(15 stages) / time(12 stages); reference=$referenceTimes, target=$targetTimes"
+			assertThat(ratio, name = label).isLessThan(MAX_TIME_RATIO)
 
 			// Correctness: the maxPaths cap is applied after enumeration and must be respected.
 			// 32 768 available paths >> maxPaths=10, so the cap is saturated.
-			val result = svc.findAllPaths(a, b, maxPaths = maxPaths)
 			assertThat(result).hasSize(maxPaths)
+		}
+
+		/** Times [runs] consecutive `findAllPaths` calls on a fresh [stageCount]-stage branchy network. */
+		private fun timeFindAllPaths(
+			stageCount: Int,
+			runs: Int,
+			maxPaths: Int
+		): List<Duration> {
+			val ctx = TestTopologies.branchySwitchChain(stageCount = stageCount)
+			try {
+				val svc = ctx.getAutomaticPathFindingService()
+				val inOuts = ctx.getInOuts()
+				val a = inOuts.single { it.getName() == "A" }
+				val b = inOuts.single { it.getName() == "B" }
+				return List(runs) { measureTime { svc.findAllPaths(a, b, maxPaths = maxPaths) } }
+			} finally {
+				(ctx as? DefaultEditingContext)?.close()
+			}
 		}
 	}
 }

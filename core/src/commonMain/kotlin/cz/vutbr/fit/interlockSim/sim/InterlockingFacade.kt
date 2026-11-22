@@ -51,9 +51,8 @@ import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
  * ## Release Contract
  *
  * [releaseRoute] releases the whole route in one call, through the approach lock (Issue #974):
- * - Every block and switch reserved for the train is released, except blocks that are
- *   approach-locked, occupied or inside the deferral window; those stay reserved and are
- *   reported as deferred by the underlying release
+ * - Every block and switch reserved for the train is released, except the kept (deferred) blocks
+ *   defined at [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRouteDetailed]
  * - The entry signal the kernel cleared is reset to STOP
  * - There is no progressive, block-by-block release in this facade
  *
@@ -159,11 +158,10 @@ interface InterlockingFacade {
 			data object NonContiguousStart : DenialCause
 
 			/**
-			 * The candidate that came closest was **permanently** impossible, not merely busy: a
-			 * candidate's START semaphore faced away from the requested direction of travel (G4),
-			 * or a switch along a candidate could not be set to the position the route required.
-			 * Maps from
-			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible].
+			 * The request was **permanently** impossible, not merely busy; the impossibility classes
+			 * are listed on
+			 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.GeometricallyImpossible],
+			 * which this maps from.
 			 *
 			 * Deliberately distinct from [AllPathsBlocked]: that one is ordinary contention and
 			 * clears on its own; this one will not, while the network topology and signal facings
@@ -375,12 +373,11 @@ interface InterlockingFacade {
 	 *
 	 * **Whole-route release with the approach lock (Issue #974):** every block and switch
 	 * reserved for [trainId] is released in one call, through the same approach-locked release
-	 * the production port uses ([cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRouteDetailed]).
-	 * A block that is approach-locked, occupied by the train, or inside the deferral window is
-	 * **kept** (deferred) rather than freed, so calling this mid-traverse cannot free a block the
-	 * train still needs; the kept blocks stay registered until a later release or the orphan sweep
-	 * reclaims them. The call does not release locks section-by-section as the
-	 * train clears blocks. Production code releases through the port, not through this method.
+	 * the production port uses. Kept (deferred) blocks, defined at
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRouteDetailed], stay registered
+	 * until a later release or the orphan sweep reclaims them, so calling this mid-traverse cannot
+	 * free a block the train still needs. The call does not release locks section-by-section as
+	 * the train clears blocks. Production code releases through the port, not through this method.
 	 *
 	 * **Signal reset (C4/I4):** The kernel tracks which entry signal it cleared for [trainId]
 	 * during [requestRoute]. [exitSignal] is **for logging/audit only** and is NOT used to select
@@ -390,11 +387,9 @@ interface InterlockingFacade {
 	 *
 	 * **On invocation:**
 	 * - Blocks reserved for [trainId] are released (RESERVED → FREE), except the kept ones, which
-	 *   stay registered to [trainId] with their state unchanged: an occupied block stays OCCUPIED, an
-	 *   approach-locked or deferral-window block stays RESERVED.
-	 * - On a full release, switches locked for [trainId] are unlocked. On a partial (deferred) release
-	 *   only switches left stale are reclaimed: a switch next to a kept block stays locked until that
-	 *   block is released too.
+	 *   stay registered to [trainId] with their state unchanged.
+	 * - On a full release, switches locked for [trainId] are unlocked; on a deferred release only
+	 *   stale switches are reclaimed.
 	 * - The entry signal the kernel cleared for [trainId] is reset to STOP (safe aspect).
 	 * - If [trainId] has no active route, the call succeeds silently (idempotent).
 	 *

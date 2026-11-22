@@ -30,14 +30,13 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
-import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
-import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -72,76 +71,12 @@ class KoogAgentPlanAdapterTest {
 			outerBlockInputs = emptyList()
 		)
 
-	private fun adapter(
-		koogAgent: KoogDispatchAgent,
-		fallback: Dispatcher,
-		inferenceTimeout: Duration = Duration.ofSeconds(30),
-		commandQueue: ActuatorCommandQueue = ActuatorCommandQueue(),
-		sinkHolder: SinkHolder = SinkHolder(),
-		cycleHistory: CycleHistory = CycleHistory(capacity = 0),
-		circuitBreaker: LlmCircuitBreaker = LlmCircuitBreaker()
-	): KoogAgentPlanAdapter {
-		val agentFactory = mockk<KoogAgentFactory>()
-		coEvery { agentFactory.createAgent(any()) } returns koogAgent
-		val context = mockk<DefaultSimulationContext>()
-		return KoogAgentPlanAdapter(
-			agentFactory,
-			context,
-			fallback,
-			inferenceTimeout,
-			commandQueue,
-			sinkHolder,
-			cycleHistory,
-			circuitBreaker = circuitBreaker
-		)
-	}
-
 	private fun observationAt(simTime: Double): DispatchObservation =
 		DispatchObservation(
 			snapshot = SimulationSnapshot.EMPTY.copy(simTime = simTime),
 			unapprovedTrains = emptyList(),
 			innerBlockInputs = emptyList(),
 			outerBlockInputs = emptyList()
-		)
-
-	/**
-	 * One [TrainPositionReading] for [trainId] at [velocity] — shared by the
-	 * observation builders so the reading's default fields cannot drift apart (#1113 review round).
-	 */
-	private fun createTrainPosition(
-		trainId: String,
-		velocity: Double
-	): TrainPositionReading =
-		TrainPositionReading(
-			trainId = trainId,
-			velocity = velocity,
-			acceleration = 0.0,
-			totalDistance = 0.0,
-			frontSectionName = null
-		)
-
-	/**
-	 * One [TrainPerceptionReading] for [trainId] at [velocity], with a signal ahead named
-	 * [signalAheadName] (or none). Shared by the observation builders like [createTrainPosition].
-	 */
-	private fun createTrainPerception(
-		trainId: String,
-		velocity: Double,
-		signalAheadName: String?
-	): TrainPerceptionReading =
-		TrainPerceptionReading(
-			trainId = trainId,
-			signalAheadName = signalAheadName,
-			signalAheadAspect = null,
-			distanceToSignalAheadMetres = 100.0,
-			currentSpeedLimitMps = 20.0,
-			velocity = velocity,
-			acceleration = 0.0,
-			totalDistance = 0.0,
-			frontSectionName = null,
-			destinationInOutName = "B",
-			scheduledArrivalTime = 0.0,
-			isDwelling = false
 		)
 
 	private fun observationWithQueue(
@@ -153,7 +88,7 @@ class KoogAgentPlanAdapterTest {
 				SimulationSnapshot.EMPTY.copy(
 					trainPositions =
 						List(approvedTrainCount) { index ->
-							createTrainPosition(trainId = "active-$index", velocity = 0.0)
+							trainPosition(trainId = "active-$index", velocity = 0.0)
 						}
 				),
 			unapprovedTrains = unapprovedTrains,
@@ -163,7 +98,7 @@ class KoogAgentPlanAdapterTest {
 
 	/**
 	 * Builds an observation with one train per entry of [trains] (id to velocity), each carrying a
-	 * [TrainPerceptionReading] unless it is listed in [withoutPerception]. A train has a path ahead
+	 * `TrainPerceptionReading` unless it is listed in [withoutPerception]. A train has a path ahead
 	 * (a `signalAheadName`) unless it is listed in [withoutSignalAhead].
 	 */
 	private fun observationWithPerceptions(
@@ -177,12 +112,12 @@ class KoogAgentPlanAdapterTest {
 		DispatchObservation(
 			snapshot =
 				SimulationSnapshot.EMPTY.copy(
-					trainPositions = trains.map { (id, velocity) -> createTrainPosition(id, velocity) },
+					trainPositions = trains.map { (id, velocity) -> trainPosition(id, velocity) },
 					trainPerceptions =
 						trains
 							.filterKeys { it !in withoutPerception }
 							.map { (id, velocity) ->
-								createTrainPerception(
+								trainPerception(
 									trainId = id,
 									velocity = velocity,
 									signalAheadName = if (id in withoutSignalAhead) null else "S-$id"
@@ -237,7 +172,7 @@ class KoogAgentPlanAdapterTest {
 	) = BlockInputObservation(
 		blockId = "b1",
 		towardSemaphoreName = "S-t1",
-		toSeparatorName = "sep",
+		candidateTargets = semaphoreCandidates("sep"),
 		state = state,
 		ownerTrainId = "t1",
 		isApproachingThisInput = approaching,

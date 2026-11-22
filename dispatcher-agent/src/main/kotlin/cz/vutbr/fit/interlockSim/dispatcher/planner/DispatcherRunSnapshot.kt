@@ -24,13 +24,16 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing. Current version: **9** (version 2 added
+ * handle old JSON files without crashing. Current version: **12** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
  * version 7 added [RunEndCause.STARVED], Issue #930; version 8 added circuit-breaker end
  * state, Issue #1074; version 9 added [TickOutcome.LLM_SILENT_ALL_MOVING] to the outcome
- * vocabulary, Issue #988).
+ * vocabulary, Issue #988; version 10 split [RailwayOutcome.unresolvedAtRunEnd] out of
+ * [RailwayOutcome.conflicts], Issue #1280; version 11 added
+ * [staleOriginRefusalsAfterSilentCycle], Issue #1365; version 12 added the skipped NEXT SECTION
+ * offer figures from [skippedNextSectionOffers] to [longestSkippedOfferStreakSimSeconds], Issue #1302).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -155,6 +158,44 @@ import kotlinx.serialization.Serializable
  * @property circuitBreakerOpenCount Number of times the circuit breaker opened; `null` when the
  *   breaker was not measured — see [circuitBreakerState]'s `TIMEOUT_ABORT` / `CRASH` caveat, which
  *   applies here identically (never read `null` as `0`).
+ * @property staleOriginRefusalsAfterSilentCycle Number of [ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS]
+ *   apply failures of decisions emitted by a silent LLM cycle on a non-idle station (Issue #1365,
+ *   part 1 of #1355). Such a cycle emits the rule-based fallback's decisions, computed on the kept
+ *   cycle observation, which can be up to one inference window old; this counts how often the
+ *   interlocking then refused one as a non-contiguous origin. **"Follows" means the refused decision
+ *   was posted by the silent cycle itself** (its correlation tick index is that cycle's), not by any
+ *   later cycle: only those decisions were computed on the kept observation, so only their refusals
+ *   are attributable to it. A refusal of a decision the next cycle emitted on a fresh observation
+ *   says nothing about the kept one. See [DefaultDispatcherRunRecorder] for how the attribution is
+ *   made. A count, not a verdict: a refusal can also have another cause the counter cannot see.
+ *   `null` means *not measured* — a run JSON written before this field existed, or a synthetic
+ *   `TIMEOUT_ABORT` / `CRASH` snapshot whose child JVM never reported it; `0` is a measured none.
+ * @property skippedNextSectionOffers Offered NEXT SECTION hops the LLM left without an accepted
+ *   `request_route` on the cycles that skipped the rule-based fallback — an acting cycle (one `no_op`
+ *   is enough), a failure after a partial emission, and [TickOutcome.LLM_SILENT_ALL_MOVING]
+ *   (Issue #1302, step 1 "record" of #992 F8). "Accepted" means the `request_route` tool emitted a
+ *   request for that train, with any target, whatever the later apply outcome; a request the tool
+ *   refused counts as skipped. See [NextSectionOfferCount]. A count, not a verdict: no decision
+ *   depends on it. An LLM run is measured unless a count failed — one whose cycles all fell back
+ *   skipped nothing and records `0`, but one whose count attempt threw ([TickRecord.nextSectionOffersFailed])
+ *   leaves the whole group absent, and later successful counts do not rehabilitate it (PR #1408
+ *   review round). `null` means *not measured* — a rule-based run, a run whose count attempt
+ *   threw, a run JSON written before this field existed, or a synthetic `TIMEOUT_ABORT` / `CRASH`
+ *   snapshot.
+ * @property offeredNextSectionHops The NEXT SECTION hops those same cycles offered, the
+ *   denominator of [skippedNextSectionOffers]; `null` exactly when it is.
+ * @property skippedNextSectionOffersStandingAtSignal The part of [skippedNextSectionOffers] whose
+ *   train stood at a signal (stopped, with a named signal ahead — the cycle message's "standing at
+ *   signal" clause); `null` exactly when [skippedNextSectionOffers] is.
+ * @property longestSkippedOfferStreakCycles The longest run of consecutive cycles in which one train's
+ *   offered hop was skipped. Any cycle that does not skip that train ends the run, a fallback cycle
+ *   included. Tells one train left at a STOP signal for many cycles (the #895 stall shape #992 F8
+ *   names) from many trains skipped once each, which the totals cannot. `null` exactly when
+ *   [skippedNextSectionOffers] is.
+ * @property longestSkippedOfferStreakSimSeconds The longest such run in simulation seconds: last
+ *   minus first tick sim time of the streak (a one-cycle streak is `0.0`). The longest by seconds
+ *   and the longest by cycles need not be the same streak. `null` exactly when
+ *   [skippedNextSectionOffers] is.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -207,7 +248,13 @@ data class DispatcherRunSnapshot(
 	val loggedFatalSimExceptionFirstMessage: String? = null,
 	val circuitBreakerState: LlmCircuitBreaker.State? = null,
 	val circuitBreakerTotalSkips: Long? = null,
-	val circuitBreakerOpenCount: Long? = null
+	val circuitBreakerOpenCount: Long? = null,
+	val staleOriginRefusalsAfterSilentCycle: Long? = null,
+	val skippedNextSectionOffers: Long? = null,
+	val offeredNextSectionHops: Long? = null,
+	val skippedNextSectionOffersStandingAtSignal: Long? = null,
+	val longestSkippedOfferStreakCycles: Long? = null,
+	val longestSkippedOfferStreakSimSeconds: Double? = null
 ) {
 	companion object {
 		/**
@@ -255,8 +302,21 @@ data class DispatcherRunSnapshot(
 		 *   runs scored the same ticks as [TickOutcome.LLM_SILENT_NONACTIONABLE]
 		 *   (the only outcome possible with `RuleBasedDispatcher` as the fallback), so their rates
 		 *   are not comparable.
+		 * - **10** — Issue #1280, added [RailwayOutcome.unresolvedAtRunEnd] and took the
+		 *   contentions still open at run end out of [RailwayOutcome.conflicts], which now counts
+		 *   only the double-bookings caught while the run was live. The new field defaults to
+		 *   `null`, so every version 1-9 file still decodes, with the figure absent. Their
+		 *   `conflicts` counted both and is kept as stored: on a run cut off at its end time with
+		 *   trains still queued it is higher than a version-10 run's for the same railway, so the
+		 *   two are not comparable on that column.
+		 * - **11** — Issue #1365, added [staleOriginRefusalsAfterSilentCycle]. It defaults to
+		 *   `null`, so every version 1-10 file still decodes, with the count absent (not measured).
+		 * - **12** — Issue #1302, added [skippedNextSectionOffers], [offeredNextSectionHops],
+		 *   [skippedNextSectionOffersStandingAtSignal], [longestSkippedOfferStreakCycles] and
+		 *   [longestSkippedOfferStreakSimSeconds]. All default to `null`, so every version 1-11 file
+		 *   still decodes, with the figures absent.
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 9
+		const val CURRENT_SCHEMA_VERSION: Int = 12
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

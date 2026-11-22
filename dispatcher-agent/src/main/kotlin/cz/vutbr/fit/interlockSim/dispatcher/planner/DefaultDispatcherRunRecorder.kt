@@ -41,7 +41,10 @@ import java.util.concurrent.atomic.AtomicReference
  * [onTick] is called on the dispatcher-agent-driver thread; [onActionOutcome] on the kDisco
  * simulation thread. All counters use [AtomicLong] or [ConcurrentHashMap] with pre-populated
  * [AtomicLong] values, and latency samples use a [java.util.concurrent.ConcurrentLinkedQueue].
- * [snapshot] and [finish] may be called from any thread.
+ * [snapshot] and [finish] may be called from any thread. The skipped NEXT SECTION offer group is
+ * the one counter set [snapshot] reads under a lock ([offerStateLock]): its sums, its measured
+ * flag, its failure counter and its streaks move together, so a snapshot copies the whole group
+ * atomically and cannot observe one member updated and the others lagging (PR #1408 review round).
  *
  * ## Latency percentiles (Issue #834, SP2c.11)
  *
@@ -60,6 +63,42 @@ import java.util.concurrent.atomic.AtomicReference
  * for runs where nobody calls it at all), the snapshot reports [RailwayOutcome.UNMEASURED], whose
  * every figure is `null`. That is deliberate: `null` means *not measured* and `0` means *measured
  * as none*, and a sweep that cannot tell them apart cannot rank on either.
+ *
+ * ## Stale-origin refusals after a silent non-idle cycle (Issue #1365)
+ *
+ * [onTick] remembers the correlation tick index of every silent LLM cycle on a non-idle station
+ * ([TickRecord.silentNonIdleCycleIndex]); [onActionOutcome] counts an
+ * [ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS] apply failure into
+ * [DispatcherRunSnapshot.staleOriginRefusalsAfterSilentCycle] when its decision carries one of those
+ * indices ([AuthoredAction.tickIndex]) — that is, when the refused decision was **posted by the
+ * silent cycle itself**. Those are the rule-based fallback's decisions computed on the kept cycle
+ * observation, so their refusals are the ones attributable to it; a refusal of a later cycle's
+ * decision is not counted. The index is reported inside `plan()`, before `AgentLoopDriver` posts the
+ * cycle's decisions, so the queue's post/drain hand-off orders it before the outcome it attributes.
+ *
+ * ## Skipped NEXT SECTION offers (Issue #1302)
+ *
+ * [onTick] sums [TickRecord.nextSectionOffers] — present only on the LLM cycle endings that skip
+ * the rule-based fallback — into [DispatcherRunSnapshot.skippedNextSectionOffers],
+ * [DispatcherRunSnapshot.offeredNextSectionHops] and
+ * [DispatcherRunSnapshot.skippedNextSectionOffersStandingAtSignal]. It also keeps one streak per
+ * train: consecutive ticks whose count names the train in
+ * [NextSectionOfferCount.skippedTrainIds]. Any other tick ends the train's streak — one that
+ * counts offers without skipping it, and one without a count at all (the fallback ran that cycle,
+ * so the train was not left behind by the acted-cycle guard). The longest streak, in cycles and
+ * in simulation seconds (last minus first [TickRecord.simTime] of the streak), separates one train
+ * skipped for many cycles at a STOP signal — the #895 stall shape F8 names — from many trains
+ * skipped once each, which the totals cannot.
+ *
+ * Measured or not (PR #1408 review round): an LLM run is measured unless a count failed — a run
+ * whose cycles all fell back skipped nothing and measures `0`, but a run whose count attempt
+ * threw ([TickRecord.nextSectionOffersFailed]) publishes the whole five-figure group absent, and
+ * later successful counts do not rehabilitate it because the rule is run-level
+ * (`offerCountFailures == 0`). Only a rule-based run with no count reports `null`; `null` still
+ * means *not measured*, never *measured as none*. The whole group — sums, measured flag, failure
+ * counter and streaks — moves under one lock ([offerStateLock]), so snapshots and the frozen
+ * [finish] copy it atomically: no observer ever sees offered hops without their skipped offers,
+ * or the flag flipped while the sums lag.
  *
  * @param runId Opaque unique identifier (typically a UUID or `yyyyMMdd-HHmmss-<short-uuid>`).
  * @param arm Which dispatcher implementation arm is active.
@@ -116,6 +155,58 @@ class DefaultDispatcherRunRecorder(
 
 	private val unattributedApplies = AtomicLong(0L)
 
+	// Correlation tick indices of the silent non-idle cycles (Issue #1365): written on the driver
+	// thread by onTick, read on the sim thread by onActionOutcome. One entry per such cycle.
+	private val silentNonIdleCycleIndices: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
+	private val staleOriginRefusalsAfterSilentCycle = AtomicLong(0L)
+
+	// Issue #1302: sums of TickRecord.nextSectionOffers; nextSectionOffersMeasured tells a measured
+	// zero from "no tick carried a count" (absent is not zero), and offerCountFailures counts the
+	// count attempts that threw (TickRecord.nextSectionOffersFailed) — one failure makes the whole
+	// offer group unmeasured (PR #1408 review round). The sums, the flag, the failure counter and
+	// the streak state below share ONE lock, so buildSnapshot copies the whole group atomically and
+	// can never observe a torn group (one sum updated, the others not).
+	private val skippedNextSectionOffers = AtomicLong(0L)
+
+	private val offeredNextSectionHops = AtomicLong(0L)
+
+	private val skippedStandingAtSignal = AtomicLong(0L)
+
+	private val offerCountFailures = AtomicLong(0L)
+
+	@Volatile
+	private var nextSectionOffersMeasured = false
+
+	// onTick runs on the driver thread and buildSnapshot/snapshot/finish on any thread, so the whole
+	// offer group above (and the per-train skip streaks of Issue #1302) is guarded by one lock —
+	// the PR #1408 review round widened the former streak-only lock to the whole group.
+	private val offerStateLock = Any()
+
+	private val openStreaks = mutableMapOf<String, SkipStreak>()
+
+	private var longestStreakCycles = 0L
+
+	private var longestStreakSimSeconds = 0.0
+
+	/** One train's run of consecutive skipped-offer ticks: how many, and the first and last sim time. */
+	private data class SkipStreak(
+		val cycles: Long,
+		val firstSimTime: Double,
+		val lastSimTime: Double
+	)
+
+	/** Point-in-time copy of the whole offer state group, taken under [offerStateLock]. */
+	private data class OfferState(
+		val measuredByCount: Boolean,
+		val skippedSum: Long,
+		val offeredSum: Long,
+		val standingSum: Long,
+		val countFailures: Long,
+		val streakCycles: Long,
+		val streakSimSeconds: Double
+	)
+
 	// ── Railway outcome (Issue #834, SP2c.11) ────────────────────────────────
 
 	// Not an accumulator: the recorder has no view of the railway, so the figures arrive whole
@@ -135,6 +226,41 @@ class DefaultDispatcherRunRecorder(
 		ticksByOutcome.getValue(record.outcome.name).incrementAndGet()
 		record.timeoutNoOpCause?.let { cause -> timeoutNoOpByCause.getValue(cause.name).incrementAndGet() }
 		record.latencyMs?.let { latencySamplesMs.add(it) }
+		record.silentNonIdleCycleIndex?.let { silentNonIdleCycleIndices.add(it) }
+		updateOfferState(record)
+	}
+
+	/**
+	 * Applies [record]'s whole NEXT SECTION offer state inside one [offerStateLock] critical
+	 * section — the three sums and the measured flag (Issue #1302), the failure count of a count
+	 * attempt that threw ([TickRecord.nextSectionOffersFailed], PR #1408 review round), and the
+	 * per-train skip streaks — so a snapshot concurrent with this tick sees either the tick's
+	 * whole effect on the group or none of it. See the class KDoc, Issue #1302.
+	 */
+	private fun updateOfferState(record: TickRecord) {
+		synchronized(offerStateLock) {
+			record.nextSectionOffers?.let { count ->
+				skippedNextSectionOffers.addAndGet(count.skipped.toLong())
+				offeredNextSectionHops.addAndGet(count.offered.toLong())
+				skippedStandingAtSignal.addAndGet(count.skippedStandingAtSignal.toLong())
+				nextSectionOffersMeasured = true
+			}
+			if (record.nextSectionOffersFailed) offerCountFailures.incrementAndGet()
+			// Extends the streak of every train [record] names as skipped and ends every other open
+			// streak — also on a tick with no count (the fallback ran). See the class KDoc, Issue
+			// #1302.
+			val skipped = record.nextSectionOffers?.skippedTrainIds ?: emptySet()
+			openStreaks.keys.retainAll(skipped)
+			for (trainId in skipped) {
+				val previous = openStreaks[trainId]
+				val streak =
+					previous?.copy(cycles = previous.cycles + 1, lastSimTime = record.simTime)
+						?: SkipStreak(cycles = 1L, firstSimTime = record.simTime, lastSimTime = record.simTime)
+				openStreaks[trainId] = streak
+				longestStreakCycles = maxOf(longestStreakCycles, streak.cycles)
+				longestStreakSimSeconds = maxOf(longestStreakSimSeconds, streak.lastSimTime - streak.firstSimTime)
+			}
+		}
 	}
 
 	override fun onActionOutcome(outcome: ActionOutcome) {
@@ -155,6 +281,13 @@ class DefaultDispatcherRunRecorder(
 		// Unattributed applies: tickIndex == -1 means the correlation map had no entry
 		if (outcome.authored.tickIndex == -1L) {
 			unattributedApplies.incrementAndGet()
+		}
+
+		// Issue #1365: a non-contiguous-origin refusal of a decision the silent cycle posted
+		if (outcome.applyFailure == ApplyFailureCode.ORIGIN_NOT_CONTIGUOUS &&
+			outcome.authored.tickIndex in silentNonIdleCycleIndices
+		) {
+			staleOriginRefusalsAfterSilentCycle.incrementAndGet()
 		}
 	}
 
@@ -204,11 +337,21 @@ class DefaultDispatcherRunRecorder(
 				"blockTransitions=${formatFigure(railway.blockTransitions)} " +
 				"conflicts=${formatFigure(railway.conflicts)} " +
 				"failedReservations=${formatFigure(railway.failedReservations)} " +
+				// Issue #1280: contentions still open at run end, apart from the mid-run `conflicts`.
+				"unresolvedAtRunEnd=${formatFigure(railway.unresolvedAtRunEnd)} " +
 				// Issue #1074: the breaker figures, so one run is readable without opening the
 				// JSON — same reasoning as the railway figures above (#834).
 				"circuitBreakerState=${snap.circuitBreakerState ?: "n/a"} " +
 				"circuitBreakerTotalSkips=${formatFigure(snap.circuitBreakerTotalSkips)} " +
-				"circuitBreakerOpenCount=${formatFigure(snap.circuitBreakerOpenCount)}"
+				"circuitBreakerOpenCount=${formatFigure(snap.circuitBreakerOpenCount)} " +
+				// Issue #1302: offered NEXT SECTION hops the LLM left without an accepted request
+				// on cycles that skipped the fallback; `n/a` when no such cycle was counted.
+				"skippedNextSectionOffers=${formatFigure(snap.skippedNextSectionOffers)} " +
+				"offeredNextSectionHops=${formatFigure(snap.offeredNextSectionHops)} " +
+				"skippedNextSectionOffersStandingAtSignal=" +
+				"${formatFigure(snap.skippedNextSectionOffersStandingAtSignal)} " +
+				"longestSkippedOfferStreakCycles=${formatFigure(snap.longestSkippedOfferStreakCycles)} " +
+				"longestSkippedOfferStreakSimSeconds=${formatFigure(snap.longestSkippedOfferStreakSimSeconds)}"
 		}
 		// Issue #834 review finding #6: llmSuccessRate above is reclassified in #834 (idle ticks
 		// moved RULE_FALLBACK -> LLM_NO_OP, and REVISED's cap-full no_op turns former fallback ticks
@@ -296,6 +439,29 @@ class DefaultDispatcherRunRecorder(
 		// reads could persist `OPEN` with the pre-transition `openCount` if a `plan()` thread is
 		// mid-`recordFailure` while this snapshot is built.
 		val breaker = circuitBreaker?.metricsSnapshot()
+		// One atomic offer-group reading (PR #1408 review round): the measured flag, the three
+		// sums, the failure count and the streak maxima are copied in ONE [offerStateLock] critical
+		// section — separate reads could persist a torn group (offered hops without their skipped
+		// offers, or the measured flag flipped while the sums still lag) while an onTick is
+		// mid-update. Same reasoning as the breaker reading above.
+		val (measuredByCount, skippedSum, offeredSum, standingSum, countFailures, streakCycles, streakSimSeconds) =
+			synchronized(offerStateLock) {
+				OfferState(
+					measuredByCount = nextSectionOffersMeasured,
+					skippedSum = skippedNextSectionOffers.get(),
+					offeredSum = offeredNextSectionHops.get(),
+					standingSum = skippedStandingAtSignal.get(),
+					countFailures = offerCountFailures.get(),
+					streakCycles = longestStreakCycles,
+					streakSimSeconds = longestStreakSimSeconds
+				)
+			}
+		// Issue #1302: an LLM run is measured even when every cycle fell back (0/0); only a
+		// rule-based run that never carried a count leaves the figures absent. One failed count
+		// drops the WHOLE five-figure group (PR #1408 review round): a figure the recorder cannot
+		// vouch for is not a measurement, and post-failure successes do not rehabilitate the run —
+		// the rule is run-level (countFailures == 0), not per-cycle.
+		val offersMeasured = (measuredByCount || arm != DispatcherArm.RULE_BASED) && countFailures == 0L
 
 		return DispatcherRunSnapshot(
 			runId = runId,
@@ -328,7 +494,13 @@ class DefaultDispatcherRunRecorder(
 			railwayOutcome = railwayOutcome.get(),
 			circuitBreakerState = breaker?.state,
 			circuitBreakerTotalSkips = breaker?.totalSkips,
-			circuitBreakerOpenCount = breaker?.openCount
+			circuitBreakerOpenCount = breaker?.openCount,
+			staleOriginRefusalsAfterSilentCycle = staleOriginRefusalsAfterSilentCycle.get(),
+			skippedNextSectionOffers = if (offersMeasured) skippedSum else null,
+			offeredNextSectionHops = if (offersMeasured) offeredSum else null,
+			skippedNextSectionOffersStandingAtSignal = if (offersMeasured) standingSum else null,
+			longestSkippedOfferStreakCycles = if (offersMeasured) streakCycles else null,
+			longestSkippedOfferStreakSimSeconds = if (offersMeasured) streakSimSeconds else null
 		)
 	}
 
@@ -339,4 +511,14 @@ class DefaultDispatcherRunRecorder(
 	 * which is a different claim from "nothing measured it". See [RailwayOutcome].
 	 */
 	private fun formatFigure(value: Long?): String = value?.toString() ?: "n/a"
+
+	/**
+	 * Renders one simulation-seconds figure, printing `n/a` for a figure nobody measured — the
+	 * [Double] form of the [Long] overload above, so the offer-streak seconds figure renders its
+	 * absence through the same shared mechanism as every other figure on this line.
+	 *
+	 * Deliberately not `?: 0`: a zero in this line would be read as "no train ever waited at an
+	 * offered signal", which is a different claim from "nothing measured it". See [RailwayOutcome].
+	 */
+	private fun formatFigure(value: Double?): String = value?.toString() ?: "n/a"
 }

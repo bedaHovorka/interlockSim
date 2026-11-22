@@ -3,7 +3,10 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isSameInstanceAs
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.emptySnapshot
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -96,4 +99,130 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 		// only happen via approveQueuedTrain -> moved to approwedTrains.
 		assertThat(maxConcurrent).isGreaterThanOrEqualTo(1)
 	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	fun `approveQueuedTrain refuses trains while the station is at capacity`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		// SP2.2 review (Issue #1162): the hard capacity gate in approveQueuedTrain. The
+		// rule-based dispatcher never over-approves, so this listener over-approves instead: it
+		// offers every queued train each tick. With the override at 1, every offer after the
+		// first must hit the gate and keep the train queued. The refusal is observed from state,
+		// not logs: a train offered in one tick that is still queued in the next tick was
+		// refused, because approveQueuedTrain is the only thing that leaves the queue.
+		var previouslyQueued: Set<String> = emptySet()
+		var refusalCount = 0
+		val shuntingLoop = ShuntingLoop(context, endTime = 120L, maxConcurrentTrains = 1)
+		shuntingLoop.controlStepListener =
+			ControlStepListener {
+				val queued = shuntingLoop.getQueuedTrains().map { it.trainId }.toSet()
+				refusalCount += queued.intersect(previouslyQueued).size
+				previouslyQueued = queued
+				queued.forEach { name -> shuntingLoop.approveQueuedTrain(name) }
+			}
+		context.setMainProcess(shuntingLoop)
+		context.run()
+
+		val entered = shuntingLoop.getTrainsEntered()
+		val maxConcurrent = shuntingLoop.getMaxConcurrentTrains()
+		logger.info { "entered=$entered, maxConcurrent=$maxConcurrent, refusals=$refusalCount" }
+
+		// The generator queued at least two trains...
+		assertThat(entered).isGreaterThanOrEqualTo(2)
+		// ...so with the override at 1 every offer after the first hit the gate...
+		assertThat(refusalCount).isGreaterThanOrEqualTo(1)
+		// ...and at no tick did more than the cap get approved.
+		assertThat(maxConcurrent).isEqualTo(1)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `each control step publishes its own hook snapshot in the tick-stamped observation`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		// Issue #1354: the tick observation and the perception snapshot are one record. The hook
+		// returns a new snapshot instance on every call; after the publish (controlStepListener
+		// runs on the sim thread after it) the record must carry exactly this tick's instance, and
+		// its tick stamp must rise by one per control step, starting at 1.
+		var hookCalls = 0
+		var lastHookResult: SimulationSnapshot? = null
+		val stamps = mutableListOf<Long>()
+		var mismatches = 0
+		val shuntingLoop = ShuntingLoop(context, endTime = 20L)
+		shuntingLoop.snapshotCaptureHook = {
+			hookCalls++
+			emptySnapshot(hookCalls.toDouble()).also { lastHookResult = it }
+		}
+		shuntingLoop.controlStepListener =
+			ControlStepListener {
+				val record = shuntingLoop.getLatestObservation()
+				if (record.snapshot !== lastHookResult) mismatches++
+				stamps += record.tick
+			}
+		context.setMainProcess(shuntingLoop)
+		context.run()
+
+		logger.info { "hookCalls=$hookCalls, stamps=$stamps, mismatches=$mismatches" }
+		assertThat(mismatches).isEqualTo(0)
+		assertThat(stamps).isEqualTo((1L..hookCalls.toLong()).toList())
+		assertThat(shuntingLoop.getLatestObservation().snapshot).isSameInstanceAs(lastHookResult)
+		assertThat(hookCalls).isEqualTo(11)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `latestDispatchLoopSnapshot mirrors the published tick-stamped record`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		// Issue #1354: with endTime = 0L exactly one control step runs. Whatever the
+		// ShuntingLoop's own latestDispatchLoopSnapshot() reports must be the published record
+		// itself: the same list references and the same tick stamp and snapshot instance,
+		// not a second read. (That the record carries the hook's own instance per tick is
+		// pinned by the sibling test above.)
+		val shuntingLoop = ShuntingLoop(context, endTime = 0L)
+		shuntingLoop.snapshotCaptureHook = { emptySnapshot(7.0) }
+		context.setMainProcess(shuntingLoop)
+		context.run()
+
+		val record = shuntingLoop.getLatestObservation()
+		val mirrored = shuntingLoop.latestDispatchLoopSnapshot()
+		assertThat(mirrored.tick).isEqualTo(1L)
+		assertThat(mirrored.snapshot).isSameInstanceAs(record.snapshot)
+		assertThat(mirrored.queuedTrains).isSameInstanceAs(record.queuedTrains)
+		assertThat(mirrored.innerBlockInputs).isSameInstanceAs(record.innerBlockInputs)
+		assertThat(mirrored.outerBlockInputs).isSameInstanceAs(record.outerBlockInputs)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `a hook-less loop publishes a tick-1 record whose snapshot is the EMPTY sentinel`() {
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+
+		// Issue #1354, ruling #1354-a: without a hook the record still publishes each control
+		// step, its snapshot being the EMPTY sentinel. A reader (LatestObservationReader) treats
+		// an EMPTY record snapshot as nothing-published and keeps the cycle's own observation.
+		val shuntingLoop = ShuntingLoop(context, endTime = 0L)
+
+		// Nothing published yet: the initial record's stamp is 0.
+		assertThat(shuntingLoop.getLatestObservation().tick).isEqualTo(0L)
+		assertThat(shuntingLoop.getLatestObservation().snapshot).isSameInstanceAs(SimulationSnapshot.EMPTY)
+
+		context.setMainProcess(shuntingLoop)
+		context.run()
+
+		val record = shuntingLoop.getLatestObservation()
+		assertThat(record.tick).isEqualTo(1L)
+		assertThat(record.snapshot).isSameInstanceAs(SimulationSnapshot.EMPTY)
+		assertThat(shuntingLoop.latestDispatchLoopSnapshot().tick).isEqualTo(1L)
+	}
+
+	// Note: no test drives a THROWING snapshotCaptureHook — kDisco has no handler for a raw
+	// main-process exception, so a live run wedges instead of surfacing the throw (observed
+	// 2026-11-08). The "a throw aborts before the publish, previous record stays intact"
+	// property stays structural (ruling #1354-c, record write strictly after the hook call).
 }

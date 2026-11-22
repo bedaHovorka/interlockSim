@@ -9,19 +9,27 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.di
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.hasSize
+import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isNotSameInstanceAs
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
+import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
+import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import org.junit.jupiter.api.Test
+import org.koin.core.context.GlobalContext
 import org.koin.core.module.Module
+import org.koin.core.parameter.parametersOf
 import org.koin.java.KoinJavaComponent.inject
 
 /**
@@ -31,7 +39,8 @@ import org.koin.java.KoinJavaComponent.inject
  * Tests that the module correctly wires:
  * - Singleton [OllamaExecutorConfig]
  * - Singleton [ToolGroupRegistry]
- * - Singleton [DispatcherPlanner] (SP3.6, default [RuleBasedPlanAdapter])
+ * - [DispatcherPlanner] factory (SP3.6, default [RuleBasedPlanAdapter]) and [Dispatcher] factory, both
+ *   built with the [StationCapacity] the caller passes (Issue #1303)
  * - Per-context [KoogAgentFactory] (SP1.4 updated to accept ports)
  * - Per-context [NetworkPerceptionPort] (SP1.4)
  * - Per-context [NetworkActuatorPort] (SP1.4)
@@ -82,26 +91,47 @@ class DispatcherAgentModuleTest : DispatcherKoinTestBase() {
 		assertThat(service).isNotNull()
 	}
 
-	@Test
-	fun `DispatcherPlanner is provided as singleton (SP3_6)`() {
-		val planner: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+	private fun plannerFor(capacity: Int): DispatcherPlanner =
+		GlobalContext.get().get<DispatcherPlanner> { parametersOf(StationCapacity(capacity)) }
 
-		assertThat(planner).isNotNull()
-	}
-
-	@Test
-	fun `DispatcherPlanner default is RuleBasedPlanAdapter (SP3_6)`() {
-		val planner: DispatcherPlanner by inject(DispatcherPlanner::class.java)
-
+	private fun capOf(planner: DispatcherPlanner): Int {
 		assertThat(planner).isInstanceOf(RuleBasedPlanAdapter::class)
+		val dispatcher = (planner as RuleBasedPlanAdapter).dispatcher
+		assertThat(dispatcher).isInstanceOf(RuleBasedDispatcher::class)
+		return (dispatcher as RuleBasedDispatcher).maxConcurrentTrains
 	}
 
 	@Test
-	fun `DispatcherPlanner is reused as singleton (SP3_6)`() {
-		val planner1: DispatcherPlanner by inject(DispatcherPlanner::class.java)
-		val planner2: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+	fun `DispatcherPlanner default is RuleBasedPlanAdapter with the station capacity it is given (SP3_6, #1303)`() {
+		assertThat(capOf(plannerFor(FOUR_TRACKS))).isEqualTo(FOUR_TRACKS)
+	}
 
-		assert(planner1 === planner2) { "DispatcherPlanner should be a singleton" }
+	@Test
+	fun `each DispatcherPlanner resolution keeps its own station capacity (#1303)`() {
+		val fourTracks = plannerFor(FOUR_TRACKS)
+		val twoTracks = plannerFor(TWO_TRACKS)
+
+		assertThat(fourTracks).isNotSameInstanceAs(twoTracks)
+		assertThat(capOf(fourTracks), "four-track planner").isEqualTo(FOUR_TRACKS)
+		assertThat(capOf(twoTracks), "two-track planner").isEqualTo(TWO_TRACKS)
+	}
+
+	@Test
+	fun `Dispatcher is a RuleBasedDispatcher with the station capacity it is given (#1303)`() {
+		val dispatcher = GlobalContext.get().get<Dispatcher> { parametersOf(StationCapacity(FOUR_TRACKS)) }
+
+		assertThat(dispatcher).isInstanceOf(RuleBasedDispatcher::class)
+		assertThat((dispatcher as RuleBasedDispatcher).maxConcurrentTrains).isEqualTo(FOUR_TRACKS)
+	}
+
+	/**
+	 * No silent vyhybna default: a caller that forgets the station capacity gets an error, not a
+	 * dispatcher capped at [RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS].
+	 */
+	@Test
+	fun `DispatcherPlanner and Dispatcher cannot be resolved without a station capacity (#1303)`() {
+		assertFailure { GlobalContext.get().get<DispatcherPlanner>() }
+		assertFailure { GlobalContext.get().get<Dispatcher>() }
 	}
 
 	@Test
@@ -131,5 +161,10 @@ class DispatcherAgentModuleTest : DispatcherKoinTestBase() {
 		val allTools = registry.assembleAllTools(emptySet(), sinkHolder)
 
 		assertThat(allTools).hasSize(4)
+	}
+
+	private companion object {
+		const val TWO_TRACKS = 2
+		const val FOUR_TRACKS = 4
 	}
 }

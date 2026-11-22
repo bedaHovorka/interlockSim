@@ -101,7 +101,8 @@ class Issue1050WholeRouteReleaseApproachLockTest : DispatcherKoinTestBase() {
 
 	/**
 	 * The process that catches a train at a proceed aspect, releases its route there, and after the
-	 * train books the deferred block repeats the release (the retry the PARTIAL outcome message asks for).
+	 * train books the deferred block repeats the release (the repeat a dispatcher may still issue after the
+	 * KEPT outcome).
 	 */
 	private fun releaseInjector(
 		actuator: DefaultNetworkActuatorPort,

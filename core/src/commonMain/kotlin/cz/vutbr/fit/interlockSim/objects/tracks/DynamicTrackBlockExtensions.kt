@@ -149,8 +149,14 @@ fun List<DynamicTrackBlock>.countOccupied(): Int = count { it.getState() == Trac
  * @param trainId The train identifier to check ownership
  * @return true if ALL blocks are FREE or owned by this train, false if any is owned by another train
  */
-fun List<DynamicTrackBlock>.areAllFreeOrOwnedBy(trainId: String): Boolean =
-	all { block ->
-		block.getState() == TrackFacility.State.FREE ||
-			block.trainName == trainId
-	}
+fun List<DynamicTrackBlock>.areAllFreeOrOwnedBy(trainId: String): Boolean = all { it.isFreeOrOwnedBy(trainId) }
+
+/**
+ * Whether [block] can carry a reservation of [trainId]: FREE, or already owned by [trainId].
+ *
+ * The per-block form of [areAllFreeOrOwnedBy] and its single source: the negated predicate is
+ * what [cz.vutbr.fit.interlockSim.context.navigation.ReservationContentionTracker]
+ * uses to find the block a train is contending for.
+ */
+fun DynamicTrackBlock.isFreeOrOwnedBy(trainId: String): Boolean =
+	getState() == TrackFacility.State.FREE || trainName == trainId
