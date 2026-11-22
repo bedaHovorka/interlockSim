@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.isProcessControl
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
@@ -683,6 +684,7 @@ fun main(args: Array<String>) {
 					"\tsimgui [file]     - Run simulation from XML file with animated GUI\n" +
 					"\tedit [file]       - Launch graphical editor\n" +
 					"\texample <name> <endTime> - Run console-based example\n" +
+					"\t    (with -D${DispatcherRunConfig.PROP_RUNS_ROOT}=<dir> it writes its run JSON under <dir>)\n" +
 					"\texampleGui <name> <endTime> - Run GUI-based animated example"
 			}
 	}

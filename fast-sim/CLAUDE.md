@@ -35,6 +35,13 @@ NEVER depend on `:dispatcher-agent` (no LLM dependencies in the native binary).
 These are root-level convenience tasks (`build.gradle.kts` in the repo root),
 registered only on a Linux host.
 
+**Run JSON (Issue #1327):** `fast-sim example <name> <endTime> --runs-root=<dir>` writes
+the run JSON the JVM writes for the same run to `<dir>/<arm>/<yyyyMMdd-HHmmss>-<run id>.json`
+(`:core`'s `RunRecordJsonWriter`, read back by `DefaultRunSnapshotStore.readAll`). The flag is
+one token, removed from the positional arguments like the other flags; stdout stays as it is
+without it, and the written path goes to stderr. `sim` mode rejects the flag (the JVM `sim`
+mode persists nothing either). A SIGINT-interrupted run is not persisted.
+
 Tests use `kotlin.test` only — no JUnit, no test tags. Benchmarking:
 `benchmark/benchmark.sh` and [../docs/FAST_SIM_BENCHMARK.md](../docs/FAST_SIM_BENCHMARK.md).
 

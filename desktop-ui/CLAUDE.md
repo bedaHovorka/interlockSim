@@ -17,6 +17,15 @@ The `aiSweep` mode is documented in
 [dispatcher-agent/CLAUDE.md](../dispatcher-agent/CLAUDE.md) — it is manual-only
 and never runs in CI.
 
+**Run JSON of an `example` run (Issue #1327):** with
+`-Dinterlocksim.dispatcher.runsRoot=<dir>` (`DispatcherRunConfig.PROP_RUNS_ROOT`) an
+`example` run writes its run JSON to `<dir>/<arm>/`, whatever its wiring, for example
+`java -Dinterlocksim.dispatcher.runsRoot=build/runs -jar desktop-ui/build/libs/interlockSim.jar example cervenyUjezd 600`.
+Without the property only a run with a dispatcher agent writes one, to
+`build/reports/dispatcher-runs/`. The native `fast-sim` writes the same JSON with
+`--runs-root=<dir>` (see [fast-sim/CLAUDE.md](../fast-sim/CLAUDE.md));
+`RunRecordJsonReadBackTest` holds the two equal.
+
 ## Run and Package Tasks
 
 ```bash

@@ -45,6 +45,15 @@ deliberately live in `:core` to avoid a dependency cycle. Which
   module (`:core-test` and `:fast-sim` set `isSkipProject`; Issue #762 — the root Sonar
   config lists no module paths, so no module is indexed twice). Keep it here.
 
+## Run JSON schema changes
+
+A change to the run JSON (`DispatcherRunSnapshot`, `RunParameters`, `RailwayOutcome`, or an enum
+vocabulary they store) bumps `DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION` and its KDoc history,
+and the `:core` writer: `RunRecordJsonWriter` (`:core` `commonMain`, package `persistence`) writes
+the same JSON for a run without an LLM dispatcher (the native `fast-sim --runs-root`, Issue #1327)
+and spells every key and the schema number as strings. `RunRecordJsonReadBackTest` in
+`:desktop-ui` fails until the writer matches the JVM file again.
+
 ## Configuration
 
 `src/main/resources/cz/vutbr/fit/interlockSim/dispatcher/dispatcher-defaults.properties`

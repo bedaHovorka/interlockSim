@@ -7,17 +7,41 @@ import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
 /**
- * Cross-platform tests for [readTextFile], [writeTextFile], and [deleteFile].
+ * Cross-platform tests for [readTextFile], [writeTextFile], [deleteFile], [createDirectories] and
+ * [directoryExists].
  *
  * These tests run on JVM (jvmTest) and linuxX64 (nativeTest) via commonTest.
  */
 class PlatformIOTest {
 	private val testFiles = mutableListOf<String>()
 
+	/**
+	 * Directories a test may create, parents first; removed deepest first with [deleteFile] (POSIX
+	 * `remove` and `Files.deleteIfExists` both remove an empty directory).
+	 */
+	private val testDirectories = mutableListOf<String>()
+
 	@AfterTest
 	fun cleanUp() {
 		testFiles.forEach { deleteFile(it) }
 		testFiles.clear()
+		testDirectories.reversed().forEach { deleteFile(it) }
+		testDirectories.clear()
+	}
+
+	/** A fresh directory path [depth] levels below a new temp directory, every level registered for clean-up. */
+	private fun tempDirectoryPath(
+		suffix: String,
+		depth: Int = 1
+	): String {
+		val base = "${tempDirectory().trimEnd('/', '\\')}/interlockSim-platform-io-dir-$suffix-${currentTimeMillisKMP()}"
+		var path = base
+		testDirectories += path
+		repeat(depth - 1) { level ->
+			path = "$path/level$level"
+			testDirectories += path
+		}
+		return path
 	}
 
 	private fun tempPath(suffix: String): String {
@@ -95,5 +119,54 @@ class PlatformIOTest {
 		val content = "A".repeat(1_500_000)
 		writeTextFile(path, content)
 		assertThat(readTextFile(path)).isEqualTo(content)
+	}
+
+	@Test
+	fun `createDirectories creates every missing parent`() {
+		val path = tempDirectoryPath("nested", depth = 3)
+		assertThat(directoryExists(path)).isEqualTo(false)
+
+		createDirectories(path)
+
+		assertThat(directoryExists(path)).isEqualTo(true)
+	}
+
+	@Test
+	fun `createDirectories accepts a directory that already exists`() {
+		val path = tempDirectoryPath("existing")
+		createDirectories(path)
+
+		createDirectories(path)
+
+		assertThat(directoryExists(path)).isEqualTo(true)
+	}
+
+	@Test
+	fun `a file written into a created directory can be read back`() {
+		val dir = tempDirectoryPath("with-file", depth = 2)
+		createDirectories(dir)
+		val path = "$dir/run.json"
+		testFiles += path
+
+		writeTextFile(path, "{}")
+
+		assertThat(readTextFile(path)).isEqualTo("{}")
+	}
+
+	@Test
+	fun `directoryExists is false for a regular file and for a missing path`() {
+		val file = tempPath("not-a-dir")
+		writeTextFile(file, "content")
+
+		assertThat(directoryExists(file)).isEqualTo(false)
+		assertThat(directoryExists("$file-missing")).isEqualTo(false)
+	}
+
+	@Test
+	fun `createDirectories fails when a path component is a regular file`() {
+		val file = tempPath("blocking-file")
+		writeTextFile(file, "content")
+
+		assertFailsWith<IllegalStateException> { createDirectories("$file/child") }
 	}
 }

@@ -35,3 +35,16 @@ actual fun deleteFile(path: String) {
 actual fun fileExists(path: String): Boolean = java.io.File(path).exists()
 
 actual fun tempDirectory(): String = System.getProperty("java.io.tmpdir")?.takeIf { it.isNotBlank() } ?: "/tmp"
+
+actual fun createDirectories(path: String) {
+	try {
+		java.nio.file.Files.createDirectories(
+			java.nio.file.Paths
+				.get(path)
+		)
+	} catch (e: java.io.IOException) {
+		throw IllegalStateException("Cannot create directory: $path (${e.message})", e)
+	}
+}
+
+actual fun directoryExists(path: String): Boolean = java.io.File(path).isDirectory
