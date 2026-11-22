@@ -56,8 +56,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Run-end accounting (Issue #1304, Goal 6 SP6)
  *
- * A [RunEndAccounting] collaborator counts the run-end figures and classifies how the run ended,
- * from events alone; [runEndSummary] reads it, [recordCapacity] feeds it at wiring time.
+ * A [RunEndAccounting] collaborator counts the run-end figures from events and the two expiry totals
+ * from the expiry's own counters (Issue #1360), and classifies how the run ended; [runEndSummary]
+ * reads it, [recordCapacity] feeds it at wiring time.
  * When the run ends the service keeps the finished [RunRecord] of that moment, read through
  * [runRecord] (Issue #676, Goal 6 SP5).
  *

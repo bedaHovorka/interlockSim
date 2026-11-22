@@ -18,7 +18,8 @@ package cz.vutbr.fit.interlockSim.context.navigation
  *
  * The totals are raised before each [ReservationExpired] is announced, so they do not depend on the
  * delivery of that event: a raw `onSimulationEvent` subscriber that throws ends the bus's delivery to
- * the subscribers after it, but cannot change these counts. Reading them changes nothing.
+ * the subscribers after it on a bare kDisco bus (in a context run the Issue #1361 delivery guard
+ * contains the failure), but it cannot change these counts. Reading them changes nothing.
  *
  * **Thread rules:** like the service, single-threaded: read on the simulation thread or after the run.
  * Until #1326 the dashboard's worker thread also reads them after a natural stop, when the simulation
