@@ -21,6 +21,8 @@ package cz.vutbr.fit.interlockSim.context.navigation
  * the subscribers after it, but cannot change these counts. Reading them changes nothing.
  *
  * **Thread rules:** like the service, single-threaded: read on the simulation thread or after the run.
+ * Until #1326 the dashboard's worker thread also reads them after a natural stop, when the simulation
+ * thread has ended.
  *
  * @since Issue #1360
  */

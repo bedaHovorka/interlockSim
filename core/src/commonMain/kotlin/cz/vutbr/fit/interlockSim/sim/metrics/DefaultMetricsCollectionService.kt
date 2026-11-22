@@ -86,7 +86,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Constructor
  *
- * @param env The simulation environment used to subscribe to block and journey events.
+ * @param env The simulation environment used to subscribe to block and journey events, and to read
+ *   the reservation expiry's totals when the run-end summary is built (Issue #1360).
  *   Pass `null` only in unit tests that drive [handleBlockEvent] directly.
  * @param history Buffer the published snapshots are appended to; defaults to a
  *   [MetricsHistory] with its default caps (Issue #673).
@@ -195,9 +196,10 @@ class DefaultMetricsCollectionService(
 
 	/**
 	 * Run-end counters and the end-cause classification (Issue #1304): the CORE group, always on. It
-	 * subscribes to the journey events itself, so it works with [MetricGroup.JOURNEYS] off.
+	 * subscribes to the journey events itself, so it works with [MetricGroup.JOURNEYS] off. The expiry
+	 * totals it reads from the expiry's own counters (Issue #1360).
 	 */
-	internal val runEndAccounting = RunEndAccounting()
+	internal val runEndAccounting = RunEndAccounting { env?.getRoutingServices()?.getExpiryTotalsQuery() }
 
 	/** Per-train wait figures and capacity pressure (Issue #1305): exists only with [MetricGroup.TRAIN_WAIT] on. */
 	internal val trainWait: TrainWaitAccounting? =
