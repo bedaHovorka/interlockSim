@@ -701,6 +701,14 @@ class DefaultPathReservationService(
 	/** Delegates to [ReservationContentionTracker.blockedSeconds] (Issue #1305). */
 	override fun blockedSeconds(now: Double): Map<String, Double> = contention.blockedSeconds(now)
 
+	/** The total of [DefaultReservationExpiry.expiredHoldingCount] (Issue #1360). */
+	override val expiredHoldingCount: Int
+		get() = expiry.expiredHoldingCount
+
+	/** The total of [DefaultReservationExpiry.expiredTailCount] (Issue #1360). */
+	override val expiredTailCount: Int
+		get() = expiry.expiredTailCount
+
 	/** Delegates to [ReservationContentionTracker.flushUnresolvedConflicts] (Issue #612, #1167). */
 	override fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected> =
 		contention.flushUnresolvedConflicts(simulationEndTime)
