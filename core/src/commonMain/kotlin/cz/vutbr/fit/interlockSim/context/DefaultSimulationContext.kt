@@ -1525,8 +1525,13 @@ open class DefaultSimulationContext(
 			// the metrics record (Issue #1304).
 			endTimeReachedThisRun = false
 			// Flag first, kernel stop last (Issue #1032): the dispatcher driver's next poll must
-			// already see the stopped run. A no-op for a non-ShuntingLoop main process.
-			(mainProcess as? ShuntingLoop)?.signalStopped()
+			// already see the stopped run. `is` check, not an `as?` cast: Sonar's S6530 flags the
+			// cast as one that can never succeed, although ShuntingLoop IS-A LoopProcess via
+			// Interlocking (on the local `main`, a `var` property cannot be smart-cast). A no-op
+			// for a non-ShuntingLoop main process.
+			if (main is ShuntingLoop) {
+				main.signalStopped()
+			}
 			simulation?.stop()
 		}
 	}
