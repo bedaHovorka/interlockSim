@@ -101,7 +101,7 @@ internal object ExitPassBars {
 			ExampleNames.SHUNTING_LOOP_SYNC to
 				ExitPassBar(
 					BAR_SHUNTING_LOOP_SYNC,
-					measured1315("no_dispatcher arm: 15/14/1 entered/exited/unfinished, 0 wrong exits; ceil(14 / 2) = 7")
+					measured1315("rule_based arm: 15/14/1 entered/exited/unfinished, 0 wrong exits; ceil(14 / 2) = 7")
 				),
 			ExampleNames.CERVENY_UJEZD to
 				ExitPassBar(
@@ -111,7 +111,7 @@ internal object ExitPassBars {
 			ExampleNames.CERVENY_UJEZD_SYNC to
 				ExitPassBar(
 					BAR_CERVENY_UJEZD_SYNC,
-					measured1315("no_dispatcher arm: 19/16/3 entered/exited/unfinished, 0 wrong exits; ceil(16 / 2) = 8")
+					measured1315("rule_based arm: 19/16/3 entered/exited/unfinished, 0 wrong exits; ceil(16 / 2) = 8")
 				),
 			ExampleNames.PRAHA_HLAVNI_NADRAZI to
 				ExitPassBar(
