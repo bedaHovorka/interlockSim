@@ -203,6 +203,9 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 			// throw escapes context.run() entirely — the exact gap SimulationRunner.kt's thread
 			// body left open: its `catch (t: Throwable)` only logged such a failure, so
 			// `signalStopped()` was never reached and the flag stayed `true` forever.
+			// The context's delivery guard (#1361) contains a failure on a Custom payload only;
+			// the built-in kDisco events this listener also throws on stay unguarded, so the
+			// failure still escapes.
 			it.onSimulationEvent { _ ->
 				if (loop.isSimActive()) {
 					flagWasObservedActive.set(true)
