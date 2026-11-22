@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricGroup
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
-import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
+import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
 import java.awt.FlowLayout
@@ -46,15 +46,16 @@ internal data class ContentionLine(
 
 /**
  * Everything one poll of the dashboard read from the metrics service: the last published snapshot,
- * the last published open contentions and -- on the final poll after the run ended -- the run-end
- * summary.
+ * the last published open contentions and -- on the final poll -- the run record, when the run has
+ * reached `RunEnded` (Issue #1326).
  *
+ * @property stoppedManually the final poll found no record: the run was stopped before it ended
  * @since Issue #675 (Goal 6 SP3)
  */
 internal data class DashboardReading(
 	val snapshot: MetricsSnapshot,
 	val contentions: List<ContentionLine>,
-	val runEnd: RunEndSummary? = null,
+	val runEnd: RunRecord? = null,
 	val stoppedManually: Boolean = false,
 	val trainWaitEnabled: Boolean = true
 )
@@ -62,11 +63,10 @@ internal data class DashboardReading(
 /**
  * The texts of the dashboard, computed from a [DashboardReading] -- pure formatting, no Swing.
  *
- * The stall and the end cause come from [RunEndSummary], which may only be read once the run has
- * ended; until then they show a dash. With the train-wait metric group off the capacity-pressure
- * figures (queued, blocked, open contentions) are not collected and show a dash, never a misleading
- * zero. After a manual stop the summary is not read at all (the
- * simulation thread may still be finishing), so the end cause reads "stopped manually".
+ * The stall and the end cause come from the [RunRecord] the final poll read; until then they show a
+ * dash. With the train-wait metric group off the capacity-pressure figures (queued, blocked, open
+ * contentions) are not collected and show a dash, never a misleading zero. When the final poll found
+ * no record (a manual stop before `RunEnded`), the end cause reads "stopped manually" (Issue #1326).
  *
  * @since Issue #675 (Goal 6 SP3)
  */
@@ -147,14 +147,14 @@ internal data class DashboardText(
 					"${it.trainId} $owner since ${fixed(it.since, 1)} s"
 				}
 
-		private fun stallText(summary: RunEndSummary?): String =
-			if (summary == null) {
+		private fun stallText(record: RunRecord?): String =
+			if (record == null) {
 				"Stall: $NONE"
 			} else {
-				summary.stall?.let { "Stall: yes (${it.knot.sorted().joinToString(", ")})" } ?: "Stall: none"
+				record.stall?.let { "Stall: yes (${it.knot.sorted().joinToString(", ")})" } ?: "Stall: none"
 			}
 
-		private fun endCauseText(summary: RunEndSummary?): String = "End: ${summary?.classification?.name ?: NONE}"
+		private fun endCauseText(record: RunRecord?): String = "End: ${record?.classification?.name ?: NONE}"
 	}
 }
 
@@ -167,13 +167,15 @@ internal data class DashboardText(
  *
  * ## Threading
  *
- * The panel reads only [MetricsCollectionService.latestSnapshot] and
- * [MetricsCollectionService.latestOpenContentions], the two calls that are safe from any thread
- * (one immutable value behind a volatile reference), never an object of the simulation thread.
+ * The panel reads only [MetricsCollectionService.latestSnapshot],
+ * [MetricsCollectionService.latestOpenContentions] and [MetricsCollectionService.runRecord], the
+ * calls that are safe from any thread (one immutable value behind a volatile reference), never an
+ * object of the simulation thread.
  * A [Timer] ticks on the EDT; each tick starts a [SwingWorker] that does the reads off the EDT and
  * hands the result to `done()` on the EDT (the pattern of `PathPreviewPanel`). At most one poll runs
- * at a time. [stop] makes one last poll that also reads the run-end summary -- the one read that is
- * only valid after the run ended -- and then ends the polling.
+ * at a time. [stop] makes one last poll that also reads the run record -- set at `RunEnded`, so it
+ * is there after a natural end and after a manual stop that came after `RunEnded` -- and then ends
+ * the polling (Issue #1326).
  *
  * All public methods must be called from the EDT.
  *
@@ -210,7 +212,6 @@ class MetricsDashboardPanel : JPanel() {
 	) {
 		var inFlight = false
 		var finalPending = false
-		var finalSummaryValid = true
 	}
 
 	private var run: Run? = null
@@ -261,19 +262,18 @@ class MetricsDashboardPanel : JPanel() {
 	}
 
 	/**
-	 * End the polling after the run ended: one last poll, then the service is released. The last
-	 * figures stay on screen. No-op when not polling.
+	 * End the polling after the run stopped, naturally or manually: one last poll, then the service is
+	 * released. The last figures stay on screen. No-op when not polling.
 	 *
-	 * @param summaryValid `true` after a natural completion, when the simulation thread has ended and
-	 *   the last poll may also read the run-end summary. `false` after a manual stop: the stop only
-	 *   interrupts the simulation thread and reports STOPPED at once, so the summary would race it;
-	 *   the last poll is then a plain snapshot poll and the end cause reads "stopped manually".
+	 * The last poll reads the volatile run record: the stall and the end cause come from it whenever
+	 * the run reached `RunEnded`. Without a record (a manual stop before `RunEnded`) the end cause reads
+	 * "stopped manually" (Issue #1326).
+	 *
 	 * @since Issue #675 (Goal 6 SP3)
 	 */
-	fun stop(summaryValid: Boolean) {
+	fun stop() {
 		timer.stop()
 		val current = run ?: return
-		current.finalSummaryValid = summaryValid
 		poll(current, final = true)
 	}
 
@@ -309,18 +309,19 @@ class MetricsDashboardPanel : JPanel() {
 		}
 		current.inFlight = true
 		val metrics = current.service
-		val summaryValid = current.finalSummaryValid
 		object : SwingWorker<DashboardReading, Void>() {
-			// Background thread: only the two cross-thread-safe reads (plus the summary once ended).
-			override fun doInBackground(): DashboardReading =
-				DashboardReading(
+			// Background thread: only the cross-thread-safe reads (plus the run record on the final poll).
+			override fun doInBackground(): DashboardReading {
+				val record = if (final) metrics.runRecord() else null
+				return DashboardReading(
 					snapshot = metrics.latestSnapshot(),
 					contentions =
 						metrics.latestOpenContentions().map { ContentionLine(it.trainId, it.owner, it.since) },
-					runEnd = if (final && summaryValid) metrics.runEndSummary() else null,
-					stoppedManually = final && !summaryValid,
+					runEnd = record,
+					stoppedManually = final && record == null,
 					trainWaitEnabled = current.trainWaitEnabled
 				)
+			}
 
 			// EDT.
 			override fun done() {

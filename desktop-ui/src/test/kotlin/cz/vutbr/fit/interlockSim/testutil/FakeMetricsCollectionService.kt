@@ -104,17 +104,13 @@ class FakeMetricsCollectionService(
 
 	override fun journeys(): List<TrainJourneyRecord> = emptyList()
 
-	/** What [runEndSummary] returns when set; the zero summary otherwise (Issue #675). */
-	@Volatile
-	var runEnd: RunEndSummary? = null
-
-	/** How often [runEndSummary] was read (Issue #675). */
+	/** How often [runEndSummary] was read (Issue #675); the dashboard never reads it (Issue #1326). */
 	val runEndSummaryReads: AtomicInteger = AtomicInteger()
 
-	/** [runEnd] when set, else the snapshot's figures (Issue #1304). */
+	/** The snapshot's figures (Issue #1304); the dashboard reads [runRecord] instead (Issue #1326). */
 	override fun runEndSummary(): RunEndSummary {
 		runEndSummaryReads.incrementAndGet()
-		return runEnd ?: zeroSummary()
+		return zeroSummary()
 	}
 
 	/**
@@ -164,6 +160,7 @@ class FakeMetricsCollectionService(
 	 * What [runRecord] returns; `null` (the run has not ended) unless a test sets it. Overridden so
 	 * no read of the record goes through [runEndSummary] by way of the interface default.
 	 */
+	@Volatile
 	var record: RunRecord? = null
 
 	override fun runRecord(): RunRecord? = record

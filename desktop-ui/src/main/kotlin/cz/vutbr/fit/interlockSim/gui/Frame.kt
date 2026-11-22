@@ -307,10 +307,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// ensureAnimationRunning().
 							stopAnimationUpdates()
 							railwayNetGridCanvas.captureFinalFrameAndPause()
-							// Issue #675: one last dashboard poll, then stop. The run-end summary is read only
-							// after a natural completion; a manual stop reports STOPPED before the simulation
-							// thread has finished, so reading it then would race that thread.
-							metricsDashboardPanel.stop(summaryValid = runEndCause == RunEndCause.NATURAL_COMPLETION)
+							// Issue #675: one last dashboard poll, then stop. It reads the volatile run record
+							// after any stop (Issue #1326); a manual stop before RunEnded has no record yet and
+							// reads "stopped manually".
+							metricsDashboardPanel.stop()
 							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
 							// ended (captured at RUNNING time above). Null for every example except
 							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).

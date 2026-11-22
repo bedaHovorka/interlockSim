@@ -67,9 +67,11 @@ and [../docs/SIMULATION_SPEED_CONTROL.md](../docs/SIMULATION_SPEED_CONTROL.md).
 
 `MetricsDashboardPanel` is docked in `Frame`'s south panel in simulation mode. It polls only
 `MetricsCollectionService.latestSnapshot()` and `latestOpenContentions()` (cross-thread safe) from a
-`SwingWorker` driven by a `javax.swing.Timer`, never simulation-thread objects. `stop(summaryValid)` at STOPPED
-makes one last poll; it also reads `runEndSummary()` only after a natural completion (a manual stop reports
-STOPPED before the simulation thread has finished, so the end cause then reads "stopped manually").
+`SwingWorker` driven by a `javax.swing.Timer`, never simulation-thread objects. `stop()` at STOPPED, after
+any stop (natural or manual), makes one last poll that also reads the volatile `runRecord()` (set at
+`RunEnded`) for the stall and the end cause; only when no record exists yet (a manual stop before `RunEnded`)
+does the end cause read "stopped manually" (#1326). With `MetricGroup.TRAIN_WAIT` off, Queued, Blocked and
+Open contentions show "–" (not measured).
 
 ## Verification and Benchmark Tasks
 
