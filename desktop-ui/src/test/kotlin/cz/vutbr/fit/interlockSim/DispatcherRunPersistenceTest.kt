@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
 import cz.vutbr.fit.interlockSim.sim.metrics.toRunRecord
@@ -292,6 +293,10 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 * simulation thread may still write the two maps the leak gauge copies. Without a record the gauge
 	 * must not be read at all; the outcome comes from the thread-safe snapshot alone. The stand-in
 	 * gauge throws when called, as the real one can on a concurrent write.
+	 *
+	 * The snapshot read is pinned too: the fake's published figure set differs from its fixed
+	 * `getSnapshot()` fallback, so a regression back to the racy record-less read — the exact hazard
+	 * #1325 removes — fails on the figures instead of passing on identical content.
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
@@ -299,13 +304,27 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	fun railwayOutcomeFromManualStopSkipsLeakGauge() {
 		val context = createAiContext()
 		val service = FakeMetricsCollectionService(completedTrains = 3, conflictCount = 1)
+		service.published =
+			MetricsSnapshot(
+				time = 0.0,
+				conflictCount = 5,
+				completedTrains = 9,
+				throughput = 0.0,
+				totalWaitSeconds = 0.0,
+				averageWaitSeconds = 0.0,
+				occupiedBlocks = 0,
+				totalBlocks = 0,
+				utilization = 0.0,
+				unresolvedAtRunEndCount = 2
+			)
 		service.leakGaugeFailure = ConcurrentModificationException("leak gauge read during a manual stop")
 		context.scope.declare<MetricsCollectionService>(service)
 
 		val outcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
 
-		assertThat(outcome.journeysCompleted, "journeys completed").isEqualTo(3L)
-		assertThat(outcome.conflicts, "conflicts").isEqualTo(1L)
+		assertThat(outcome.journeysCompleted, "journeys completed").isEqualTo(9L)
+		assertThat(outcome.conflicts, "conflicts").isEqualTo(5L)
+		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isEqualTo(2L)
 		assertThat(outcome.trainsExited, "trains exited").isNull()
 		assertThat(service.reportUnreleasedReservationsInvoked, "leak gauge invoked").isFalse()
 	}
