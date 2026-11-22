@@ -16,6 +16,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
@@ -472,7 +473,7 @@ class RunReportAggregatorTest {
 
 		assertThat(md).transform("Arm Comparison shows correctAt1") { md.contains("| 0.750 |") }.isTrue()
 		val hygieneCells = tableRowCells(hygieneSection(md), DispatcherArm.RULE_BASED.name)
-		assertThat(hygieneCells[19]).isEqualTo("0.750")
+		assertThat(hygieneCells[20]).isEqualTo("0.750")
 	}
 
 	@Test
@@ -623,26 +624,26 @@ class RunReportAggregatorTest {
 		assertThat(hygieneCells[8]).isEqualTo("v2")
 		assertThat(hygieneCells[9]).isEqualTo("5")
 		assertThat(hygieneCells[10]).isEqualTo("45.0")
-		assertThat(hygieneCells[14]).isEqualTo("0.750")
+		assertThat(hygieneCells[15]).isEqualTo("0.750")
 		// Invalid-action rate = 3 rejected / 10 emitted actions = 0.300 (action-scoped, not tick-scoped).
-		assertThat(hygieneCells[15]).isEqualTo("0.300")
-		assertThat(hygieneCells[16]).isEqualTo("0.200")
-		assertThat(hygieneCells[17]).isEqualTo("0.100")
-		assertThat(hygieneCells[20]).isEqualTo("150")
-		assertThat(hygieneCells[21]).isEqualTo("250")
-		assertThat(hygieneCells[22]).isEqualTo("yes")
-		assertThat(hygieneCells[23]).isEqualTo("2")
+		assertThat(hygieneCells[16]).isEqualTo("0.300")
+		assertThat(hygieneCells[17]).isEqualTo("0.200")
+		assertThat(hygieneCells[18]).isEqualTo("0.100")
+		assertThat(hygieneCells[21]).isEqualTo("150")
+		assertThat(hygieneCells[22]).isEqualTo("250")
+		assertThat(hygieneCells[23]).isEqualTo("yes")
+		assertThat(hygieneCells[24]).isEqualTo("2")
 
 		val outcomeCells = tableRowCells(outcomesSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
-		assertThat(outcomeCells[12]).isEqualTo("5")
-		assertThat(outcomeCells[13]).isEqualTo("6")
-		assertThat(outcomeCells[14]).isEqualTo("4")
-		assertThat(outcomeCells[15]).isEqualTo("3")
-		assertThat(outcomeCells[16]).isEqualTo("20")
-		assertThat(outcomeCells[17]).isEqualTo("1")
-		assertThat(outcomeCells[18]).isEqualTo("2")
+		assertThat(outcomeCells[13]).isEqualTo("5")
+		assertThat(outcomeCells[14]).isEqualTo("6")
+		assertThat(outcomeCells[15]).isEqualTo("4")
+		assertThat(outcomeCells[16]).isEqualTo("3")
+		assertThat(outcomeCells[17]).isEqualTo("20")
+		assertThat(outcomeCells[18]).isEqualTo("1")
+		assertThat(outcomeCells[19]).isEqualTo("2")
 		// Issue #1280: the run-end contentions are appended as the last column, so no existing column moves.
-		assertThat(outcomeCells[19]).isEqualTo("3")
+		assertThat(outcomeCells[20]).isEqualTo("3")
 	}
 
 	@Test
@@ -662,7 +663,7 @@ class RunReportAggregatorTest {
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val cells = tableRowCells(hygieneSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
-		assertThat(cells[15]).isEqualTo("0.250")
+		assertThat(cells[16]).isEqualTo("0.250")
 	}
 
 	@Test
@@ -672,7 +673,7 @@ class RunReportAggregatorTest {
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val cells = tableRowCells(hygieneSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
-		assertThat(cells[15]).isEqualTo("n/a")
+		assertThat(cells[16]).isEqualTo("n/a")
 	}
 
 	@Test
@@ -738,9 +739,10 @@ class RunReportAggregatorTest {
 		val md = aggregator.renderMarkdown(listOf(report))
 
 		val cells = tableRowCells(outcomesSection(md), DispatcherArm.LLM_TOOL_CALLING.name)
-		// Indices 12..18: journeysCompleted, trainsEntered, trainsExited, maxConcurrentTrains,
+		// Indices 13..19: journeysCompleted, trainsEntered, trainsExited, maxConcurrentTrains,
 		// blockTransitions, conflicts, failedReservations — RailwayOutcome.UNMEASURED, all null.
-		(12..18).forEach { idx -> assertThat(cells[idx]).isEqualTo("n/a") }
+		// (Index 11 is the Example column, Issue #1333; 12 is Runs.)
+		(13..19).forEach { idx -> assertThat(cells[idx]).isEqualTo("n/a") }
 	}
 
 	// ── Logged FATAL simulation exceptions (measurement-integrity fix for #834's C2 condition, renamed #913) ──
@@ -1035,6 +1037,79 @@ class RunReportAggregatorTest {
 		assertThat(md).transform("railway figures fall back to n/a") { outcomesSection(md).contains("n/a") }.isTrue()
 	}
 
+	// ── Issue #1333: one cell per (parameters, example) ─────────────────────────
+
+	@Test
+	fun `two examples with equal parameters give two rows in Decision Hygiene and Railway Outcomes`() {
+		val shunting =
+			listOf(
+				runSnapshot(
+					runId = "s1",
+					example = ExampleNames.SHUNTING_LOOP,
+					railwayOutcome = RailwayOutcome(trainsExited = 11L)
+				),
+				runSnapshot(runId = "s2", example = ExampleNames.SHUNTING_LOOP, railwayOutcome = RailwayOutcome(trainsExited = 11L))
+			)
+		val cerveny =
+			runSnapshot(runId = "c1", example = ExampleNames.CERVENY_UJEZD, railwayOutcome = RailwayOutcome(trainsExited = 17L))
+		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(shunting + cerveny)))
+
+		for ((table, section) in listOf("hygiene" to hygieneSection(md), "outcomes" to outcomesSection(md))) {
+			val rows = section.lines().filter { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+			assertThat(rows.size, "$table rows").isEqualTo(2)
+			val byExample = rows.map { row -> rowCells(row) }.associateBy { it[EXAMPLE_COLUMN] }
+			assertThat(byExample.keys, "$table examples")
+				.isEqualTo(setOf(ExampleNames.SHUNTING_LOOP, ExampleNames.CERVENY_UJEZD))
+			assertThat(byExample.getValue(ExampleNames.SHUNTING_LOOP)[EXAMPLE_COLUMN + 1], "$table shuntingLoop runs")
+				.isEqualTo("2")
+			assertThat(byExample.getValue(ExampleNames.CERVENY_UJEZD)[EXAMPLE_COLUMN + 1], "$table cervenyUjezd runs")
+				.isEqualTo("1")
+		}
+		// Each cell is ranked by its own trainsExited sum: shuntingLoop's 22 (2 x 11) above cervenyUjezd's 17.
+		val outcomeRows = outcomesSection(md).lines().filter { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+		assertThat(rowCells(outcomeRows.first())[EXAMPLE_COLUMN]).isEqualTo(ExampleNames.SHUNTING_LOOP)
+	}
+
+	@Test
+	fun `the Example column follows the parameter columns in both sweep tables`() {
+		val md =
+			aggregator.renderMarkdown(
+				listOf(aggregator.aggregate(listOf(runSnapshot(example = ExampleNames.SHUNTING_LOOP))))
+			)
+
+		for (section in listOf(hygieneSection(md), outcomesSection(md))) {
+			val header = section.lines().first { it.startsWith("| Arm ") }
+			assertThat(rowCells(header)[EXAMPLE_COLUMN]).isEqualTo("Example")
+		}
+	}
+
+	@Test
+	fun `a run without an example reads as unnamed in the sweep tables`() {
+		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(listOf(runSnapshot(example = null)))))
+
+		val cells = tableRowCells(outcomesSection(md), DispatcherArm.RULE_BASED.name)
+		assertThat(cells[EXAMPLE_COLUMN]).isEqualTo("(unnamed)")
+	}
+
+	@Test
+	fun `Arm Comparison still pools the examples of an arm`() {
+		val runs =
+			listOf(
+				runSnapshot(runId = "s1", example = ExampleNames.SHUNTING_LOOP),
+				runSnapshot(runId = "c1", example = ExampleNames.CERVENY_UJEZD)
+			)
+		val reports = aggregator.aggregateByArm(runs)
+		val md = aggregator.renderMarkdown(reports)
+
+		val armRow =
+			md
+				.substringAfter("## Arm Comparison")
+				.substringBefore("## ")
+				.lines()
+				.first { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+		assertThat(rowCells(armRow)[1], "pooled run count").isEqualTo("2")
+	}
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	/**
@@ -1047,12 +1122,16 @@ class RunReportAggregatorTest {
 		armPrefix: String
 	): List<String> {
 		val line = section.lines().first { it.startsWith("| $armPrefix ") }
-		return line
+		return rowCells(line)
+	}
+
+	/** The trimmed cells of one Markdown table [line], without the empty cells of its outer `|`. */
+	private fun rowCells(line: String): List<String> =
+		line
 			.split("|")
 			.drop(1)
 			.dropLast(1)
 			.map { it.trim() }
-	}
 
 	private fun hygieneSection(md: String): String =
 		md.substringAfter("### Decision Hygiene").substringBefore("### Railway Outcomes")
@@ -1060,4 +1139,9 @@ class RunReportAggregatorTest {
 	/** The Railway Outcomes table alone: the Performance table (Issue #1306) follows it. */
 	private fun outcomesSection(md: String): String =
 		md.substringAfter("### Railway Outcomes").substringBefore("### Performance")
+
+	private companion object {
+		/** Index of the Example cell (Issue #1333): it follows the 11 parameter-identity cells. */
+		const val EXAMPLE_COLUMN = 11
+	}
 }

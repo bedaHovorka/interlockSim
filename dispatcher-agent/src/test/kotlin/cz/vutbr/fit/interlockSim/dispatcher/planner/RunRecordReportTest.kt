@@ -74,10 +74,10 @@ class RunRecordReportTest {
 		val header = md.substringAfter("### Railway Outcomes").lines().first { it.startsWith("| Arm ") }
 		assertThat(header).contains("| Unresolved at run end | Wrong exits | Cutoff runs |")
 		val cells = outcomeCells(md, DispatcherArm.RULE_BASED)
-		assertThat(cells.size, "column count").isEqualTo(22)
-		assertThat(cells[19], "unresolved at run end, unmoved").isEqualTo("0")
-		assertThat(cells[20], "wrong exits summed").isEqualTo("10")
-		assertThat(cells[21], "cutoff runs counted").isEqualTo("1")
+		assertThat(cells.size, "column count").isEqualTo(23)
+		assertThat(cells[20], "unresolved at run end, unmoved").isEqualTo("0")
+		assertThat(cells[21], "wrong exits summed").isEqualTo("10")
+		assertThat(cells[22], "cutoff runs counted").isEqualTo("1")
 		assertThat(md).contains("- **Wrong exits / Cutoff runs (issue #676)**")
 	}
 
@@ -87,8 +87,8 @@ class RunRecordReportTest {
 
 		val cells = outcomeCells(aggregator.renderMarkdown(listOf(aggregator.aggregate(runs))), DispatcherArm.RULE_BASED)
 
-		assertThat(cells[20], "wrong exits").isEqualTo("n/a")
-		assertThat(cells[21], "cutoff runs").isEqualTo("n/a")
+		assertThat(cells[21], "wrong exits").isEqualTo("n/a")
+		assertThat(cells[22], "cutoff runs").isEqualTo("n/a")
 	}
 
 	@Test
