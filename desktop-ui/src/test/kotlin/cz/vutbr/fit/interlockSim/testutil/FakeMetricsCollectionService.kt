@@ -163,7 +163,13 @@ class FakeMetricsCollectionService(
 	@Volatile
 	var record: RunRecord? = null
 
-	override fun runRecord(): RunRecord? = record
+	/** How often [runRecord] was read (Issue #1326). */
+	val runRecordReads: AtomicInteger = AtomicInteger()
+
+	override fun runRecord(): RunRecord? {
+		runRecordReads.incrementAndGet()
+		return record
+	}
 
 	private companion object {
 		const val GATE_TIMEOUT_SECONDS = 10L

@@ -49,7 +49,8 @@ internal data class ContentionLine(
  * the last published open contentions and -- on the final poll -- the run record, when the run has
  * reached `RunEnded` (Issue #1326).
  *
- * @property stoppedManually the final poll found no record: the run was stopped before it ended
+ * @property stoppedManually the run was stopped manually and the final poll found no record, even after
+ *   its bounded retries: the run was stopped before it ended
  * @since Issue #675 (Goal 6 SP3)
  */
 internal data class DashboardReading(
@@ -65,8 +66,9 @@ internal data class DashboardReading(
  *
  * The stall and the end cause come from the [RunRecord] the final poll read; until then they show a
  * dash. With the train-wait metric group off the capacity-pressure figures (queued, blocked, open
- * contentions) are not collected and show a dash, never a misleading zero. When the final poll found
- * no record (a manual stop before `RunEnded`), the end cause reads "stopped manually" (Issue #1326).
+ * contentions) are not collected and show a dash, never a misleading zero. When a manual stop's final
+ * poll found no record, the end cause reads "stopped manually"; a natural stop without a record shows a
+ * dash (Issue #1326).
  *
  * @since Issue #675 (Goal 6 SP3)
  */
@@ -168,14 +170,18 @@ internal data class DashboardText(
  * ## Threading
  *
  * The panel reads only [MetricsCollectionService.latestSnapshot],
- * [MetricsCollectionService.latestOpenContentions] and [MetricsCollectionService.runRecord], the
- * calls that are safe from any thread (one immutable value behind a volatile reference), never an
- * object of the simulation thread.
+ * [MetricsCollectionService.latestOpenContentions] and [MetricsCollectionService.runRecord], never an
+ * object of the simulation thread. The first two are safe from any thread in every service (one
+ * immutable value behind a volatile reference). [MetricsCollectionService.runRecord] is safe from
+ * any thread only where it is overridden as such a read -- `DefaultMetricsCollectionService`, the
+ * service of every run -- because the interface default rebuilds the record from
+ * [MetricsCollectionService.runEndSummary], which is not thread-safe.
  * A [Timer] ticks on the EDT; each tick starts a [SwingWorker] that does the reads off the EDT and
  * hands the result to `done()` on the EDT (the pattern of `PathPreviewPanel`). At most one poll runs
- * at a time. [stop] makes one last poll that also reads the run record -- set at `RunEnded`, so it
- * is there after a natural end and after a manual stop that came after `RunEnded` -- and then ends
- * the polling (Issue #1326).
+ * at a time. [stop] makes one last poll that also reads the run record, set at `RunEnded`, and then
+ * ends the polling. A manual stop reports STOPPED before the simulation thread delivers `RunEnded`,
+ * so a final poll without a record reads it again from a one-shot [Timer], up to [RECORD_RETRIES]
+ * times [RECORD_RETRY_MS] apart, before it gives up (Issue #1326).
  *
  * All public methods must be called from the EDT.
  *
@@ -212,6 +218,9 @@ class MetricsDashboardPanel : JPanel() {
 	) {
 		var inFlight = false
 		var finalPending = false
+		var manualStop = false
+		var recordRetriesLeft = RECORD_RETRIES
+		var retryTimer: Timer? = null
 	}
 
 	private var run: Run? = null
@@ -265,15 +274,19 @@ class MetricsDashboardPanel : JPanel() {
 	 * End the polling after the run stopped, naturally or manually: one last poll, then the service is
 	 * released. The last figures stay on screen. No-op when not polling.
 	 *
-	 * The last poll reads the volatile run record: the stall and the end cause come from it whenever
-	 * the run reached `RunEnded`. Without a record (a manual stop before `RunEnded`) the end cause reads
-	 * "stopped manually" (Issue #1326).
+	 * The last poll reads the run record after every stop: the stall and the end cause come from it
+	 * whenever the run reached `RunEnded`. A final poll without a record retries the read (both stop
+	 * kinds; [stop] runs before the simulation thread has delivered `RunEnded` after a manual stop).
+	 * Without a record after the retries, the end cause reads "stopped manually" after a manual stop
+	 * and a dash otherwise (Issue #1326).
 	 *
+	 * @param manual whether the user stopped the run; it only chooses the label when no record exists
 	 * @since Issue #675 (Goal 6 SP3)
 	 */
-	fun stop() {
+	fun stop(manual: Boolean) {
 		timer.stop()
 		val current = run ?: return
+		current.manualStop = manual
 		poll(current, final = true)
 	}
 
@@ -284,6 +297,7 @@ class MetricsDashboardPanel : JPanel() {
 	 */
 	fun detach() {
 		timer.stop()
+		run?.retryTimer?.stop()
 		run = null
 		show(DashboardText.EMPTY)
 	}
@@ -318,7 +332,6 @@ class MetricsDashboardPanel : JPanel() {
 					contentions =
 						metrics.latestOpenContentions().map { ContentionLine(it.trainId, it.owner, it.since) },
 					runEnd = record,
-					stoppedManually = final && record == null,
 					trainWaitEnabled = current.trainWaitEnabled
 				)
 			}
@@ -328,10 +341,26 @@ class MetricsDashboardPanel : JPanel() {
 				current.inFlight = false
 				val reading = readOrNull(this)
 				if (run !== current) return // detached or restarted while this poll ran
-				reading?.let { show(DashboardText.of(it)) }
+				if (final && reading?.runEnd == null && current.recordRetriesLeft > 0) {
+					reading?.let { show(DashboardText.of(it)) }
+					retryRecord(current)
+					return
+				}
+				val shown = if (final) reading?.copy(stoppedManually = current.manualStop && reading.runEnd == null) else reading
+				shown?.let { show(DashboardText.of(it)) }
 				afterPoll(current, final)
 			}
 		}.execute()
+	}
+
+	/** Read the run record again after [RECORD_RETRY_MS], unless the run was detached or restarted. */
+	private fun retryRecord(current: Run) {
+		current.recordRetriesLeft--
+		current.retryTimer =
+			Timer(RECORD_RETRY_MS) { if (run === current) poll(current, final = true) }.apply {
+				isRepeats = false
+				start()
+			}
 	}
 
 	/** The finished worker's reading, or `null` when the poll failed or was interrupted. */
@@ -379,6 +408,12 @@ class MetricsDashboardPanel : JPanel() {
 	companion object {
 		private const val POLL_INTERVAL_MS = 500
 		private const val GAP = 16
+
+		/** How often a final poll without a run record reads it again (Issue #1326). */
+		internal const val RECORD_RETRIES = 10
+
+		/** The pause between two reads of a missing run record, in milliseconds (Issue #1326). */
+		private const val RECORD_RETRY_MS = 100
 		const val PANEL_NAME = "metricsDashboardPanel"
 		const val SCROLL_NAME = "metricsDashboardScroll"
 		const val AVERAGE_WAIT_NAME = "dashboardAverageWait"
