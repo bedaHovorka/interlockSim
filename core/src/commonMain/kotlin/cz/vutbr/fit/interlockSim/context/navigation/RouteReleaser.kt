@@ -578,7 +578,8 @@ internal class RouteReleaser(
 	 * Announce the switch claims [unregister] released (Issue #1271): a flank claim can outlive the
 	 * train's last block, so no `BlockReleased` of this teardown may carry its release. Emitted for any
 	 * released claim, after the block events, through the guarded emit (Issue #1361): a plain failure of a
-	 * raw subscriber is contained there, while kDisco's process control leaves the teardown.
+	 * raw or typed subscriber is contained with WARN, while kDisco's process control (a cancellation, a
+	 * terminated process) always leaves the teardown -- typed subscribers included.
 	 * [releaseAllBlocks] needs no such announcement: [release] reaches it only for a train that still
 	 * holds blocks, whose `BlockReleased` events go out in the same call.
 	 */

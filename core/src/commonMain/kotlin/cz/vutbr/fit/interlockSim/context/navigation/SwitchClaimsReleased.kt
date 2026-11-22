@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.sim.rethrowProcessControl
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -48,7 +49,9 @@ private val logger = KotlinLogging.logger {}
  * Subscribe to [SwitchClaimsReleased] (Issue #1271). Sugar over
  * [SimulationEnvironment.onSimulationEvent], with its contract: register before `run()`, delivered
  * synchronously on the simulation thread. A [listener] that throws is logged at WARN and the event
- * still reaches the subscribers after it, as for [onReservationExpired].
+ * still reaches the subscribers after it, as for [onReservationExpired] -- except kDisco's process
+ * control (a `CancellationException`, a listener terminating the running process), which
+ * [rethrowProcessControl] rethrows (Issue #1361).
  */
 internal fun SimulationEnvironment.onSwitchClaimsReleased(listener: (SwitchClaimsReleased) -> Unit) =
 	onSimulationEvent { event ->
@@ -57,6 +60,7 @@ internal fun SimulationEnvironment.onSwitchClaimsReleased(listener: (SwitchClaim
 			try {
 				listener(payload)
 			} catch (e: Exception) {
+				rethrowProcessControl(e)
 				logger.warn(e) { "A SwitchClaimsReleased listener failed for '${payload.trainId}' (Issue #1271)" }
 			}
 		}
