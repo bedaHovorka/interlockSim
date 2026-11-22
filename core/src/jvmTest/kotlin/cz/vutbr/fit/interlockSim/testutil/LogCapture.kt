@@ -38,6 +38,26 @@ fun withLogOf(
 	}
 }
 
+/**
+ * [withLogOf] with the logger set to [level] for the duration of [body] only; its configured level
+ * comes back in `finally`. For a logger whose DEBUG lines fire on every simulation event, where a
+ * suite-wide DEBUG pin in `logback-test.xml` would evaluate them in every run (Issue #1330).
+ */
+fun withLogOf(
+	loggerName: String,
+	level: Level,
+	body: (ListAppender<ILoggingEvent>) -> Unit
+) {
+	val logger = LoggerFactory.getLogger(loggerName) as Logger
+	val configuredLevel = logger.level
+	logger.level = level
+	try {
+		withLogOf(loggerName, body)
+	} finally {
+		logger.level = configuredLevel
+	}
+}
+
 /** The formatted messages of the WARN events [this] captured, in capture order. */
 fun ListAppender<ILoggingEvent>.warnMessages(): List<String> =
 	list.filter { it.level == Level.WARN }.map { it.formattedMessage }
