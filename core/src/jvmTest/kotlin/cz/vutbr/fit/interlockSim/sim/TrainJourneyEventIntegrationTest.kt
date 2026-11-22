@@ -127,7 +127,7 @@ class TrainJourneyEventIntegrationTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun `every train reports queued, admitted and exited in that order despite a failing subscriber`() {
-		val context = newContext()
+		val context = newContext().tracked()
 		val loop = prepareShuntingLoop(context, END_TIME)
 		var failingCalls = 0
 		context.onTrainJourneyEvent {
