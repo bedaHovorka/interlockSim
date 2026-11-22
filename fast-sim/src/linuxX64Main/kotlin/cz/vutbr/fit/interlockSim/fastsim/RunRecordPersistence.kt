@@ -30,6 +30,9 @@ import platform.posix.tm
 /** The flag that makes `example` mode write its run JSON: `--runs-root=<dir>`, one token (Issue #1327). */
 internal const val CMD_RUNS_ROOT_PREFIX = "--runs-root="
 
+/** The flag name without its value; given alone (`--runs-root <dir>`) it is an argument error. */
+private const val CMD_RUNS_ROOT = "--runs-root"
+
 /** `strftime` pattern of the run JSON file name, `yyyyMMdd-HHmmss` as `DefaultRunSnapshotStore` writes it. */
 private const val TIMESTAMP_PATTERN = "%Y%m%d-%H%M%S"
 
@@ -39,9 +42,13 @@ private const val TIMESTAMP_BUFFER_SIZE = 32
 /**
  * The directory of the `--runs-root=<dir>` flag in [args], or `null` when the flag is absent.
  *
- * @throws IllegalArgumentException if the flag names no directory.
+ * @throws IllegalArgumentException if the flag names no directory, or is given as two tokens
+ *   (`--runs-root <dir>`), which would leave the directory among the positional arguments.
  */
 internal fun parseRunsRoot(args: Array<String>): String? {
+	require(
+		CMD_RUNS_ROOT !in args
+	) { "$CMD_RUNS_ROOT takes its directory in the same token: ${CMD_RUNS_ROOT_PREFIX}<dir>" }
 	val flag = args.lastOrNull { it.startsWith(CMD_RUNS_ROOT_PREFIX) } ?: return null
 	val directory = flag.removePrefix(CMD_RUNS_ROOT_PREFIX)
 	require(directory.isNotEmpty()) {
@@ -73,21 +80,26 @@ internal fun localTimestamp(): String =
  * - **file name**: `<runsRoot>/<arm>/<local yyyyMMdd-HHmmss>-<run id>.json` ([localTimestamp]);
  * - **end cause, completedNaturally, arm, params**: decided by the writer from the record, [endTime] and
  *   whether the main process died, by the JVM's rules;
- * - **example**: the native example name as given on the command line ([example]).
+ * - **example**: the JVM example the native one equals ([NativeExampleRegistry.jvmTwinOf]), so the
+ *   report files the run with its JVM twin and not with the dispatcher-agent runs of the plain name;
+ * - **SIGINT**: an interrupted run is not persisted ([PersistOutcome.Interrupted]): it is not a measured
+ *   run, and the JVM has no such path.
  *
  * @property runsRoot The directory of the `--runs-root` flag.
  * @property example The example name the run was started with.
  * @property endTime The requested horizon in simulated seconds.
+ * @property interrupted Whether the process received SIGINT; [isInterrupted] by default.
  */
 internal class RunRecordPersistence(
 	private val runsRoot: String,
 	private val example: String,
-	private val endTime: Long
+	private val endTime: Long,
+	private val interrupted: () -> Boolean = ::isInterrupted
 ) {
 	/**
 	 * Writes the run JSON of [env]'s ended run.
 	 *
-	 * @return the path written, or `null` when the run has no record (it has not ended).
+	 * @return what was done: the path written, or why nothing was.
 	 * @throws IllegalStateException if a directory or the file cannot be written.
 	 */
 	fun persist(
@@ -95,9 +107,30 @@ internal class RunRecordPersistence(
 		mainProcessFailed: Boolean,
 		runId: String = RunRecordJsonWriter.newRunId(),
 		timestamp: String = localTimestamp()
-	): String? {
-		val record = env.getMetricsServices().getRunRecordSource().runRecord() ?: return null
-		val run = RecordedRun(record, runId, example, endTime.toDouble(), mainProcessFailed)
-		return RunRecordJsonWriter.write(runsRoot, run, timestamp)
+	): PersistOutcome {
+		val record = env.getMetricsServices().getRunRecordSource().runRecord()
+		return when {
+			interrupted() -> PersistOutcome.Interrupted
+			record == null -> PersistOutcome.NoRecord
+			else -> {
+				val twin = NativeExampleRegistry.jvmTwinOf(example)
+				val run = RecordedRun(record, runId, twin, endTime.toDouble(), mainProcessFailed)
+				PersistOutcome.Written(RunRecordJsonWriter.write(runsRoot, run, timestamp))
+			}
+		}
 	}
+}
+
+/** What [RunRecordPersistence.persist] did. */
+internal sealed interface PersistOutcome {
+	/** The run JSON was written to [path]. */
+	data class Written(
+		val path: String
+	) : PersistOutcome
+
+	/** Nothing was written: the run has no record, it has not ended. */
+	data object NoRecord : PersistOutcome
+
+	/** Nothing was written: the run was interrupted (SIGINT), so it is not a measured run. */
+	data object Interrupted : PersistOutcome
 }

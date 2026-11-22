@@ -48,3 +48,21 @@ actual fun createDirectories(path: String) {
 }
 
 actual fun directoryExists(path: String): Boolean = java.io.File(path).isDirectory
+
+actual fun renameFile(
+	from: String,
+	to: String
+) {
+	try {
+		java.nio.file.Files.move(
+			java.nio.file.Paths
+				.get(from),
+			java.nio.file.Paths
+				.get(to),
+			java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+			java.nio.file.StandardCopyOption.ATOMIC_MOVE
+		)
+	} catch (e: java.io.IOException) {
+		throw IllegalStateException("Cannot rename file: $from to $to (${e.message})", e)
+	}
+}

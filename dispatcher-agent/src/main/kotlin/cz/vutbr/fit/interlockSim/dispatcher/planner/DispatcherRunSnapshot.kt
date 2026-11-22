@@ -348,6 +348,8 @@ data class DispatcherRunSnapshot(
 		 *   [processWallSeconds]. Every new field
 		 *   defaults to `null`, so every version 1-12 file still decodes, with them absent; no existing
 		 *   field changed meaning.
+		 *
+		 * A bump also changes `RunRecordJsonWriter.SCHEMA_VERSION` (`:core`) and its keys (Issue #1327).
 		 */
 		const val CURRENT_SCHEMA_VERSION: Int = 13
 

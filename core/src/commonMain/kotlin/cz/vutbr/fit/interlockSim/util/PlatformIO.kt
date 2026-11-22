@@ -77,3 +77,18 @@ expect fun createDirectories(path: String)
  * @return true if [path] names an existing directory, false otherwise (also for a regular file)
  */
 expect fun directoryExists(path: String): Boolean
+
+/**
+ * Renames the file [from] to [to] in one step, replacing [to] if it exists.
+ *
+ * Both paths must be on the same file system. Used by the run JSON writer (`RunRecordJsonWriter`) to
+ * write through a temporary file, so a reader never sees a half-written JSON (Issue #1327).
+ *
+ * KMP expect/actual: JVM uses [java.nio.file.Files.move] with an atomic move; native uses POSIX rename.
+ *
+ * @throws IllegalStateException if the file cannot be renamed
+ */
+expect fun renameFile(
+	from: String,
+	to: String
+)

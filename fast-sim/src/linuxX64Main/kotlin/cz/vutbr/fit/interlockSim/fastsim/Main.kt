@@ -350,14 +350,20 @@ private fun persistAndReport(
 	env: SimulationEnvironment,
 	mainProcessFailed: Boolean
 ) {
-	val path =
+	val outcome =
 		try {
 			persistence.persist(env, mainProcessFailed)
 		} catch (e: IllegalStateException) {
 			eprintln("Error: run record not written: ${e.message}")
 			return
 		}
-	eprintln(if (path != null) "Run record written: $path" else "Run record not written: the run has not ended")
+	eprintln(
+		when (outcome) {
+			is PersistOutcome.Written -> "Run record written: ${outcome.path}"
+			PersistOutcome.NoRecord -> "Run record not written: the run has not ended"
+			PersistOutcome.Interrupted -> "Run record not written: the run was interrupted"
+		}
+	)
 }
 
 /** Prints the reporter's summary line, the run record line (Issue #676) and its performance row (Issue #1306). */

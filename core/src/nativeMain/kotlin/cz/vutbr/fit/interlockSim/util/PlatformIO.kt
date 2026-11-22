@@ -26,6 +26,7 @@ import platform.posix.ftell
 import platform.posix.fwrite
 import platform.posix.mkdir
 import platform.posix.remove
+import platform.posix.rename
 import platform.posix.stat
 
 actual fun readTextFile(path: String): String =
@@ -65,9 +66,12 @@ actual fun writeTextFile(
 				"Failed to write all bytes to file: $path (wrote ${written.toInt()} of ${bytes.size})"
 			}
 		}
-	} finally {
+	} catch (e: IllegalStateException) {
 		fclose(file)
+		throw e
 	}
+	// fclose flushes the buffered data: a failure here (a full disk, for one) is a failed write.
+	check(fclose(file) == 0) { "Failed to flush file: $path (errno $errno)" }
 }
 
 actual fun deleteFile(path: String) {
@@ -80,8 +84,8 @@ actual fun fileExists(path: String): Boolean = platform.posix.access(path, platf
 
 actual fun tempDirectory(): String = "/tmp"
 
-/** Permission bits of a directory [createDirectories] makes (octal 0755, narrowed by the umask as by `mkdir -p`). */
-private const val DIRECTORY_MODE: UInt = 493u
+/** Permission bits [createDirectories] asks for: octal 0777, narrowed by the umask, as `mkdir -p` and the JVM do. */
+private const val DIRECTORY_MODE: UInt = 511u
 
 actual fun createDirectories(path: String) {
 	check(path.isNotEmpty()) { "Cannot create directory: empty path" }
@@ -103,3 +107,12 @@ actual fun directoryExists(path: String): Boolean =
 		val status = alloc<stat>()
 		stat(path, status.ptr) == 0 && (status.st_mode and S_IFMT.toUInt()) == S_IFDIR.toUInt()
 	}
+
+actual fun renameFile(
+	from: String,
+	to: String
+) {
+	if (rename(from, to) != 0) {
+		error("Cannot rename file: $from to $to (errno $errno)")
+	}
+}

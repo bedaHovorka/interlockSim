@@ -169,4 +169,35 @@ class PlatformIOTest {
 
 		assertFailsWith<IllegalStateException> { createDirectories("$file/child") }
 	}
+
+	@Test
+	fun `renameFile moves the content to the new path`() {
+		val from = tempPath("rename-from")
+		val to = tempPath("rename-to")
+		writeTextFile(from, "moved")
+
+		renameFile(from, to)
+
+		assertThat(fileExists(from)).isEqualTo(false)
+		assertThat(readTextFile(to)).isEqualTo("moved")
+	}
+
+	@Test
+	fun `renameFile replaces an existing target`() {
+		val from = tempPath("replace-from")
+		val to = tempPath("replace-to")
+		writeTextFile(to, "old")
+		writeTextFile(from, "new")
+
+		renameFile(from, to)
+
+		assertThat(readTextFile(to)).isEqualTo("new")
+	}
+
+	@Test
+	fun `renameFile fails for a missing source`() {
+		val from = tempPath("rename-missing")
+
+		assertFailsWith<IllegalStateException> { renameFile(from, "$from-target") }
+	}
 }

@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.persistence.RecordedRun
 import cz.vutbr.fit.interlockSim.persistence.RunRecordJsonWriter
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.deleteFile
+import cz.vutbr.fit.interlockSim.util.directoryExists
 import cz.vutbr.fit.interlockSim.util.readTextFile
 import cz.vutbr.fit.interlockSim.util.tempDirectory
 import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
@@ -30,6 +31,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 
 /**
@@ -93,6 +95,30 @@ class RunRecordPersistenceTest {
 	}
 
 	@Test
+	fun `a bare runs root flag without the equals sign is an argument error`() {
+		// "--runs-root <dir>" would leave <dir> among the positional arguments and move them.
+		assertFailsWith<IllegalArgumentException> {
+			parseRunsRoot(arrayOf(CMD_EXAMPLE_FOR_TEST, ExampleNames.CERVENY_UJEZD, "600", "--runs-root", "/tmp/runs"))
+		}
+	}
+
+	// ---- the example name the JSON is filed under ----
+
+	@Test
+	fun `every native example is filed under the JVM example it equals`() {
+		// The native examples are the synchronous builds; the JVM names without the suffix run the
+		// dispatcher-agent stack, so their runs must not pool with native ones (#1327 review round).
+		val twins = NativeExampleRegistry.AVAILABLE.associateWith { NativeExampleRegistry.jvmTwinOf(it) }
+
+		assertThat(twins).isEqualTo(
+			mapOf(
+				ExampleNames.SHUNTING_LOOP to ExampleNames.SHUNTING_LOOP_SYNC,
+				ExampleNames.CERVENY_UJEZD to ExampleNames.CERVENY_UJEZD_SYNC
+			)
+		)
+	}
+
+	@Test
 	fun `the local timestamp has the file-name format of the JVM store`() {
 		assertThat(localTimestamp()).matches(Regex("""\d{8}-\d{6}"""))
 	}
@@ -107,17 +133,17 @@ class RunRecordPersistenceTest {
 		NativeExampleRegistry.create(ExampleNames.CERVENY_UJEZD, END_TIME, NativeContextFactory()).use { ctx ->
 			ctx.run()
 
-			val path =
+			val outcome =
 				RunRecordPersistence(root, ExampleNames.CERVENY_UJEZD, END_TIME)
 					.persist(ctx, mainProcessFailed = false, runId = RUN_ID, timestamp = TIMESTAMP)
-			assertNotNull(path, "written path")
+			val path = assertIs<PersistOutcome.Written>(outcome, "outcome").path
 			createdPaths += path
 
 			assertThat(path).isEqualTo("$armDirectory/$TIMESTAMP-$RUN_ID.json")
 			val record = assertNotNull(ctx.getMetricsServices().getRunRecordSource().runRecord(), "run record")
 			val expected =
 				RunRecordJsonWriter.snapshotJson(
-					RecordedRun(record, RUN_ID, ExampleNames.CERVENY_UJEZD, END_TIME.toDouble())
+					RecordedRun(record, RUN_ID, ExampleNames.CERVENY_UJEZD_SYNC, END_TIME.toDouble())
 				)
 			assertThat(readTextFile(path)).isEqualTo(expected)
 		}
@@ -127,11 +153,26 @@ class RunRecordPersistenceTest {
 	fun `a run that has not ended has no record to persist`() {
 		val root = "${tempDirectory().trimEnd('/')}/fast-sim-runs-unended-${currentTimeMillisKMP()}"
 		NativeExampleRegistry.create(ExampleNames.SHUNTING_LOOP, END_TIME, NativeContextFactory()).use { ctx ->
-			val path =
+			val outcome =
 				RunRecordPersistence(root, ExampleNames.SHUNTING_LOOP, END_TIME)
 					.persist(ctx, mainProcessFailed = false, runId = RUN_ID, timestamp = TIMESTAMP)
 
-			assertThat(path).isNull()
+			assertThat(outcome).isEqualTo(PersistOutcome.NoRecord)
+		}
+	}
+
+	@Test
+	fun `an interrupted run is not persisted`() {
+		val root = "${tempDirectory().trimEnd('/')}/fast-sim-runs-interrupted-${currentTimeMillisKMP()}"
+		NativeExampleRegistry.create(ExampleNames.CERVENY_UJEZD, END_TIME, NativeContextFactory()).use { ctx ->
+			ctx.run()
+
+			val outcome =
+				RunRecordPersistence(root, ExampleNames.CERVENY_UJEZD, END_TIME, interrupted = { true })
+					.persist(ctx, mainProcessFailed = false, runId = RUN_ID, timestamp = TIMESTAMP)
+
+			assertThat(outcome).isEqualTo(PersistOutcome.Interrupted)
+			assertThat(directoryExists(root), name = "runs root created").isEqualTo(false)
 		}
 	}
 }

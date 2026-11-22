@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.sim.metrics.RunStall
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.deleteFile
 import cz.vutbr.fit.interlockSim.util.directoryExists
+import cz.vutbr.fit.interlockSim.util.fileExists
 import cz.vutbr.fit.interlockSim.util.readTextFile
 import cz.vutbr.fit.interlockSim.util.tempDirectory
 import kotlinx.serialization.json.Json
@@ -261,6 +262,7 @@ class RunRecordJsonWriterTest {
 		assertThat(path).isEqualTo("$armDirectory/20261122-101500-native-run-1.json")
 		assertThat(directoryExists(armDirectory)).isEqualTo(true)
 		assertThat(readTextFile(path)).isEqualTo(RunRecordJsonWriter.snapshotJson(run))
+		assertThat(fileExists("$path.tmp"), name = "temporary file left behind").isEqualTo(false)
 	}
 
 	@Test

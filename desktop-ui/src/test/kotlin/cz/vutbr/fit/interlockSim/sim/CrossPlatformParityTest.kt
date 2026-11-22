@@ -293,9 +293,9 @@ class CrossPlatformParityTest {
 	 * for the same run, and prints the written path on stderr; its stdout stays what it is without the flag.
 	 *
 	 * The JVM twin `cervenyUjezdSync` runs with `-Dinterlocksim.dispatcher.runsRoot`, the native
-	 * `cervenyUjezd` with the flag. Both files are read with [DefaultRunSnapshotStore.readAll] and compared
-	 * without the run id, the example name (the twins have different names) and the wall-clock figures
-	 * (two processes), and without the zero entries of the dispatcher count maps (the JVM recorder writes
+	 * `cervenyUjezd` with the flag; the native binary files its run under the twin's name, so the two
+	 * runs land in the same report cell. Both files are read with [DefaultRunSnapshotStore.readAll] and
+	 * compared without the run id and the wall-clock figures (two processes), and without the zero entries of the dispatcher count maps (the JVM recorder writes
 	 * every vocabulary key with 0; the `:core` writer writes none). Everything else, the parameters
 	 * included, must be equal, or the report would file the native run in another cell.
 	 *
@@ -346,7 +346,7 @@ class CrossPlatformParityTest {
 		assertThat(withFlag.stderr.trim(), name = "native stderr with the flag")
 			.isEqualTo("Run record written: ${written.path}")
 		val native = nativeSnapshots.single()
-		assertThat(native.example, name = "native example").isEqualTo(ExampleNames.CERVENY_UJEZD)
+		assertThat(native.example, name = "native example").isEqualTo(ExampleNames.CERVENY_UJEZD_SYNC)
 		assertThat(native.schemaVersion, name = "native schema version")
 			.isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
 		assertThat(comparable(native), name = "native run JSON").isEqualTo(comparable(jvmSnapshots.single()))
@@ -360,7 +360,6 @@ class CrossPlatformParityTest {
 	private fun comparable(snapshot: DispatcherRunSnapshot): DispatcherRunSnapshot =
 		snapshot.copy(
 			runId = "",
-			example = null,
 			processWallSeconds = null,
 			ticksByOutcome = snapshot.ticksByOutcome.filterValues { it != 0L },
 			timeoutNoOpByCause = snapshot.timeoutNoOpByCause.filterValues { it != 0L },

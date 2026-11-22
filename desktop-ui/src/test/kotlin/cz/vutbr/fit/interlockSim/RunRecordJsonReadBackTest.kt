@@ -67,6 +67,17 @@ import java.util.stream.Stream
 class RunRecordJsonReadBackTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
 
+	/** A main process that ends on its first control step, long before the horizon, without a failure. */
+	private class AtOnceEndingMainProcess : LoopProcess() {
+		override suspend fun iteration() {
+			terminate()
+		}
+
+		override suspend fun interLoopSleep() {
+			hold(1.0)
+		}
+	}
+
 	/** A main process that throws on its second control step (the #1361 (e) fixture). */
 	private class FailingMainProcess : LoopProcess() {
 		private var steps = 0
@@ -88,42 +99,47 @@ class RunRecordJsonReadBackTest : KoinTestBase() {
 			.isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
 	}
 
-	@ParameterizedTest(name = "{0} persisted as {1} for {2} s ends {4} under {5}")
+	@ParameterizedTest(name = "{0} for {1} s with main process {2} ends {3} under {4}")
 	@MethodSource("cz.vutbr.fit.interlockSim.RunRecordJsonReadBackTest#cases")
 	@Tag("integration-test")
 	@Timeout(value = 180, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 	fun `the writer's JSON reads back equal to the JVM's`(
-		contextExample: String,
-		persistedExample: String,
+		example: String,
 		endTime: String,
-		mainProcessFails: Boolean,
+		mainProcess: MainProcess,
 		expectedCause: RunEndCause,
 		expectedArm: DispatcherArm,
 		@TempDir dir: Path
 	) {
 		val jvmRoot = dir.resolve("jvm")
 		val nativeRoot = dir.resolve("native")
-		val factory = checkNotNull(get<ExampleRegistry>().examples[contextExample])
+		val factory = checkNotNull(get<ExampleRegistry>().examples[example])
 		val context =
-			factory(get<SimulationContextFactory>(), arrayOf("example", contextExample, endTime)) as DefaultSimulationContext
+			factory(get<SimulationContextFactory>(), arrayOf("example", example, endTime)) as DefaultSimulationContext
 		val config =
 			DispatcherRunConfig.fromProperties(
 				properties = mapOf(DispatcherRunConfig.PROP_RUN_ID to JVM_RUN_ID)::get
 			)
 		context.scope.declare(config.copy(runsRoot = jvmRoot.toString()))
 		context.scope.declare<RunSnapshotStore>(DefaultRunSnapshotStore(jvmRoot))
-		if (mainProcessFails) context.setMainProcess(FailingMainProcess())
+		when (mainProcess) {
+			MainProcess.EXAMPLE -> Unit
+			MainProcess.ENDS_AT_ONCE -> context.setMainProcess(AtOnceEndingMainProcess())
+			MainProcess.FAILS -> context.setMainProcess(FailingMainProcess())
+		}
 		val recordSource = context.getMetricsServices().getRunRecordSource()
 
-		get<Main>().runExampleContext(context, endTime.toDouble(), persistedExample)
+		get<Main>().runExampleContext(context, endTime.toDouble(), example)
 
 		val record = checkNotNull(recordSource.runRecord()) { "run record" }
 		val nativePath =
 			RunRecordJsonWriter.write(
 				nativeRoot.toString(),
-				RecordedRun(record, NATIVE_RUN_ID, persistedExample, endTime.toDouble(), mainProcessFails),
+				RecordedRun(record, NATIVE_RUN_ID, example, endTime.toDouble(), mainProcess == MainProcess.FAILS),
 				TIMESTAMP
 			)
+		// A temporary file next to it, as a writer interrupted before its rename leaves one: readAll skips it.
+		Files.writeString(Path.of("$nativePath.tmp"), "{")
 
 		val jvmFiles = DefaultRunSnapshotStore(jvmRoot).readAll(jvmRoot)
 		val nativeFiles = DefaultRunSnapshotStore(nativeRoot).readAll(nativeRoot)
@@ -165,6 +181,18 @@ class RunRecordJsonReadBackTest : KoinTestBase() {
 
 	private fun Map<String, Long>.withoutZeros(): Map<String, Long> = filterValues { it != 0L }
 
+	/** Which main process the case runs. */
+	enum class MainProcess {
+		/** The example's own main process. */
+		EXAMPLE,
+
+		/** [AtOnceEndingMainProcess]: the run ends short of its horizon without a failure. */
+		ENDS_AT_ONCE,
+
+		/** [FailingMainProcess]: the main process dies (#1361 (e)). */
+		FAILS
+	}
+
 	companion object {
 		private const val JVM_RUN_ID = "jvm-run"
 		private const val NATIVE_RUN_ID = "native-run"
@@ -172,42 +200,46 @@ class RunRecordJsonReadBackTest : KoinTestBase() {
 
 		/**
 		 * `cervenyUjezdSync` is the JVM twin of the native `cervenyUjezd` (both built with
-		 * `wireSynchronousDispatcher`) and is persisted under the native name, as `fast-sim` writes it.
-		 * `multiTrainLoop` wires no dispatcher. A 20 s horizon lets trains in but none out (starved); the
-		 * failing main process ends the run early (#1361 (e)).
+		 * `wireSynchronousDispatcher`), and the native binary files its runs under that name, so both sides
+		 * write the same `example`. `multiTrainLoop` wires no dispatcher. A 20 s horizon lets trains in but
+		 * none out (starved); a main process that ends at once stops the run short of its horizon; the
+		 * failing main process dies (#1361 (e)).
 		 */
 		@JvmStatic
 		fun cases(): Stream<Arguments> =
 			Stream.of(
 				Arguments.of(
 					ExampleNames.CERVENY_UJEZD_SYNC,
-					ExampleNames.CERVENY_UJEZD,
 					"600",
-					false,
+					MainProcess.EXAMPLE,
 					RunEndCause.NATURAL_COMPLETION,
 					DispatcherArm.RULE_BASED
 				),
 				Arguments.of(
 					ExampleNames.CERVENY_UJEZD_SYNC,
-					ExampleNames.CERVENY_UJEZD,
 					"20",
-					false,
+					MainProcess.EXAMPLE,
 					RunEndCause.STARVED,
 					DispatcherArm.RULE_BASED
 				),
 				Arguments.of(
 					ExampleNames.MULTI_TRAIN_LOOP,
-					ExampleNames.MULTI_TRAIN_LOOP,
 					"600",
-					false,
+					MainProcess.EXAMPLE,
 					RunEndCause.NATURAL_COMPLETION,
 					DispatcherArm.NO_DISPATCHER
 				),
 				Arguments.of(
 					ExampleNames.MULTI_TRAIN_LOOP,
+					"600",
+					MainProcess.ENDS_AT_ONCE,
+					RunEndCause.TERMINATED_EARLY,
+					DispatcherArm.NO_DISPATCHER
+				),
+				Arguments.of(
 					ExampleNames.MULTI_TRAIN_LOOP,
 					"600",
-					true,
+					MainProcess.FAILS,
 					RunEndCause.TERMINATED_EARLY,
 					DispatcherArm.NO_DISPATCHER
 				)

@@ -11,6 +11,8 @@ package cz.vutbr.fit.interlockSim.persistence
 
 import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
 import cz.vutbr.fit.interlockSim.util.createDirectories
+import cz.vutbr.fit.interlockSim.util.deleteFile
+import cz.vutbr.fit.interlockSim.util.renameFile
 import cz.vutbr.fit.interlockSim.util.writeTextFile
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -78,7 +80,7 @@ data class RecordedRun(
  *   keys.
  *
  * The file goes to `<runsRoot>/<arm in lower case>/<timestamp>-<run id>.json`, the layout of
- * `DefaultRunSnapshotStore.write`.
+ * `DefaultRunSnapshotStore.write`, written to `<name>.json.tmp` first and renamed into place.
  *
  * @since Issue #1327 (Goal 6)
  */
@@ -115,19 +117,15 @@ object RunRecordJsonWriter {
 	private const val DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD: Int = 3
 	private const val DEFAULT_CIRCUIT_BREAKER_COOLDOWN_SECONDS: Double = 60.0
 
+	/** Suffix of the temporary file [write] renames into place. */
+	private const val TEMPORARY_SUFFIX: String = ".tmp"
+
 	private val UNSAFE_RUN_ID_CHARACTERS = Regex("[^A-Za-z0-9._-]")
 
 	private val prettyJson = Json { prettyPrint = true }
 
 	/** The dispatcher arm the run JSON of [record] is filed under: [ARM_RULE_BASED] or [ARM_NO_DISPATCHER]. */
-	fun arm(record: RunRecord): String =
-		if (record.capacityShownToDispatcher !=
-			null
-		) {
-			ARM_RULE_BASED
-		} else {
-			ARM_NO_DISPATCHER
-		}
+	fun arm(record: RunRecord): String = record.capacityShownToDispatcher?.let { ARM_RULE_BASED } ?: ARM_NO_DISPATCHER
 
 	/** The end cause of [run]: [END_NATURAL_COMPLETION], [END_TERMINATED_EARLY] or [END_STARVED]. */
 	fun endCause(run: RecordedRun): String =
@@ -171,7 +169,16 @@ object RunRecordJsonWriter {
 		val armDirectory = "${runsRoot.trimEnd('/')}/${arm(run.record).lowercase()}"
 		createDirectories(armDirectory)
 		val path = "$armDirectory/${fileName(timestamp, run.runId)}"
-		writeTextFile(path, snapshotJson(run))
+		// Through a temporary file and one rename, as DefaultRunSnapshotStore does, so a reader never sees a
+		// half-written JSON; readAll reads only names ending in .json, so it skips the temporary one.
+		val temporary = "$path$TEMPORARY_SUFFIX"
+		try {
+			writeTextFile(temporary, snapshotJson(run))
+			renameFile(temporary, path)
+		} catch (e: IllegalStateException) {
+			deleteFile(temporary)
+			throw e
+		}
 		return path
 	}
 
