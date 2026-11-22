@@ -52,12 +52,19 @@ class TrainJourneyEventIntegrationTest : KoinTestBase() {
 	private fun newContext(): DefaultSimulationContext =
 		TestFixtures.loadShuntingSimulationContext(getKoin().get<SimulationContextFactory>())
 
-	/** One `ShuntingLoop` run; [beforeRun] may subscribe after the metrics service has subscribed. */
-	private fun runOnce(beforeRun: (DefaultSimulationContext) -> Unit): RunOutcome {
+	/**
+	 * One `ShuntingLoop` run; [beforeRun] subscribes after the metrics service has subscribed, or before
+	 * any service of the context when [throwerFirst] is set.
+	 */
+	private fun runOnce(
+		throwerFirst: Boolean = false,
+		beforeRun: (DefaultSimulationContext) -> Unit
+	): RunOutcome {
 		val context = newContext()
+		if (throwerFirst) beforeRun(context)
 		val loop = prepareShuntingLoop(context, END_TIME)
 		val metrics = context.getMetricsServices().getMetricsCollectionService()
-		beforeRun(context)
+		if (!throwerFirst) beforeRun(context)
 		context.run()
 		// Train numbers come from a JVM-wide counter, so the second run's trains have other names;
 		// everything else about the journeys must match.
@@ -67,10 +74,10 @@ class TrainJourneyEventIntegrationTest : KoinTestBase() {
 
 	/**
 	 * A raw [cz.vutbr.fit.interlockSim.context.SimulationEnvironment.onSimulationEvent] subscriber is
-	 * not isolated by kDisco's bus, so without the guard in [emitTrainJourneyEvent] its failure would
-	 * end the train or generator process that emitted the step. With the guard the run is the same as
-	 * a run without that subscriber: same exits, same completed trains, same journey records. The
-	 * subscriber registers after the metrics service, so the service still sees every step.
+	 * not isolated by kDisco's bus, so without a guard its failure would end the train or generator
+	 * process that emitted the step. With the context's delivery guard (Issue #1361) and the guard in
+	 * [emitTrainJourneyEvent] the run is the same as a run without that subscriber: same exits, same
+	 * completed trains, same journey records. Here the subscriber registers after the metrics service.
 	 */
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
@@ -90,6 +97,30 @@ class TrainJourneyEventIntegrationTest : KoinTestBase() {
 		assertThat(plain.trainsExited, "trains exited in the plain run").isGreaterThan(0)
 		val steps = withThrower.journeys.sumOf { listOfNotNull(it.entryTime, it.admissionTime, it.exitTime).size }
 		assertThat(thrown, "the raw subscriber threw on every step").isEqualTo(steps)
+		assertThat(withThrower).isEqualTo(plain)
+	}
+
+	/**
+	 * The same with the throwing subscriber registered before the metrics service (Issue #1361): the
+	 * context's delivery guard contains its failure, so the service after it still records every step.
+	 * Without that guard kDisco's delivery ended at the throwing subscriber and the records lost the steps.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `a raw subscriber registered before the metrics service that throws on a journey step does not change the run`() {
+		val plain = runOnce {}
+		var thrown = 0
+		val withThrower =
+			runOnce(throwerFirst = true) { context ->
+				context.onSimulationEvent { event ->
+					if ((event as? SimulationEvent.Custom)?.payload is TrainJourneyEvent) {
+						thrown++
+						error("raw subscriber failure injected by the test")
+					}
+				}
+			}
+
+		assertThat(thrown, "the raw subscriber threw").isGreaterThan(0)
 		assertThat(withThrower).isEqualTo(plain)
 	}
 

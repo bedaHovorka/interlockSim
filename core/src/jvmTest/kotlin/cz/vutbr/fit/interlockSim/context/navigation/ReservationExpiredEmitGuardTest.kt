@@ -37,7 +37,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * of them, so the counters still include it.
  *
  * The evidence is the expiry's own counters and the expiring process, never a second subscriber:
- * a raw subscriber that throws ends the bus's delivery to the subscribers after it.
+ * on this bare kDisco bus a raw subscriber that throws ends the delivery to the subscribers after it
+ * (in a context run the delivery guard of Issue #1361 contains it first).
  *
  * @since Issue #1310
  */

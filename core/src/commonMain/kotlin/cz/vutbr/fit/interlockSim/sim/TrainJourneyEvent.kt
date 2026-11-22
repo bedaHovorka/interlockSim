@@ -105,6 +105,33 @@ internal fun rethrowProcessControl(e: Exception) {
 }
 
 /**
+ * The delivery guard of a context's event bus (Issue #1361): hands [event] to [listener] and contains a
+ * plain failure of the listener -- logged at WARN -- so the listeners after it still get the event and the
+ * process that emitted it carries on. kDisco's process control is rethrown ([rethrowProcessControl]) and an
+ * [Error] is never caught, as in [emitCustomGuarded].
+ *
+ * `DefaultSimulationContext` wraps with it each raw listener for `SimulationEvent.Custom` payloads (the
+ * built-in kDisco events stay unguarded), each typed listener of a payload type, and the block listeners of
+ * the run-end contention flush. Without it kDisco's delivery ends at the first listener that throws, so one
+ * failing raw subscriber starved every listener registered after it, the typed ones included.
+ *
+ * @since Issue #1361
+ */
+internal fun <T> deliverContained(
+	listener: (T) -> Unit,
+	event: T
+) {
+	try {
+		listener(event)
+	} catch (e: Exception) {
+		rethrowProcessControl(e)
+		logger.warn(e) {
+			"A simulation event listener failed on $event; the listeners after it still get the event (Issue #1361)"
+		}
+	}
+}
+
+/**
  * Send [event] on the kDisco event bus through [emitCustomGuarded]: announcing a journey step never
  * changes the run.
  */
@@ -119,8 +146,11 @@ internal fun emitTrainJourneyEvent(event: TrainJourneyEvent) = emitCustomGuarded
  * Guarded so that announcing never changes the run. kDisco's bus calls its raw listeners with no
  * guard of its own, so a raw [SimulationEnvironment.onSimulationEvent] subscriber that throws would
  * otherwise end the process that emitted the payload -- and before Issue #673 nothing was emitted
- * there. Such a failure is logged at WARN and the process carries on; the raw subscribers after the
- * failing one miss this payload (kDisco stops its delivery loop).
+ * there. Such a failure is logged at WARN and the process carries on. In a context run each listener
+ * sits behind [deliverContained] (Issue #1361), which contains the failure first, so the listeners
+ * after the failing one still get the payload; this guard catches only what reaches the emit on a bus
+ * without that wrap (a bare kDisco `Simulation`), where the listeners after the failing one miss the
+ * payload (kDisco stops its delivery loop).
  *
  * kDisco's process control is not swallowed: [rethrowProcessControl] rethrows a
  * `CancellationException` and kDisco's `ProcessTerminatedException`, and an [Error] is never caught
@@ -133,7 +163,7 @@ internal fun emitCustomGuarded(payload: Any) {
 		rethrowProcessControl(e)
 		logger.warn(e) {
 			"A raw simulation event listener failed on $payload; the emitting process continues and the " +
-				"listeners after the failing one miss this event (Issue #673)"
+				"listeners after the failing one on this unguarded bus miss this event (Issue #673)"
 		}
 	}
 }
