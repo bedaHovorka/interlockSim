@@ -25,6 +25,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
+import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
+import cz.vutbr.fit.interlockSim.sim.metrics.toRunRecord
 import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createExampleContext
@@ -284,6 +287,29 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		assertThat(outcome.blockTransitions, "block transitions").isNull()
 	}
 
+	/**
+	 * Issue #1325: after a manual stop the Stop handler reads the outcome on the EDT while the
+	 * simulation thread may still write the two maps the leak gauge copies. Without a record the gauge
+	 * must not be read at all; the outcome comes from the thread-safe snapshot alone. The stand-in
+	 * gauge throws when called, as the real one can on a concurrent write.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("railwayOutcomeFrom after a manual stop does not read the leak gauge (Issue #1325)")
+	fun railwayOutcomeFromManualStopSkipsLeakGauge() {
+		val context = createAiContext()
+		val service = FakeMetricsCollectionService(completedTrains = 3, conflictCount = 1)
+		service.leakGaugeFailure = ConcurrentModificationException("leak gauge read during a manual stop")
+		context.scope.declare<MetricsCollectionService>(service)
+
+		val outcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
+
+		assertThat(outcome.journeysCompleted, "journeys completed").isEqualTo(3L)
+		assertThat(outcome.conflicts, "conflicts").isEqualTo(1L)
+		assertThat(outcome.trainsExited, "trains exited").isNull()
+		assertThat(service.reportUnreleasedReservationsInvoked, "leak gauge invoked").isFalse()
+	}
+
 	// ── Leak-gauge wiring (Issue #936, review Minor #5) ──────────────────────
 
 	/**
@@ -298,7 +324,8 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	 * *wiring*: a spy standing in for the scoped metrics service records whether the method was
 	 * called at all, and `railwayOutcomeFrom` is invoked on its scope. The spy returns an empty leak
 	 * set because the assertion is about the call, not the leak — the return value is deliberately
-	 * not folded into `RailwayOutcome` (see the PR), so it is not otherwise observable.
+	 * not folded into `RailwayOutcome` (see the PR), so it is not otherwise observable. The spy carries
+	 * a run record: since Issue #1325 the gauge is read only for a run that has ended.
 	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
@@ -306,6 +333,7 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	fun railwayOutcomeFromInvokesLeakGauge() {
 		val context = createAiContext()
 		val spy = FakeMetricsCollectionService()
+		spy.record = endedRunRecord()
 		context.scope.declare<MetricsCollectionService>(spy)
 
 		DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
@@ -366,4 +394,13 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 
 		assertThat(DispatcherRunSummaries.starvationAdjusted(cause, dead), "adjusted cause").isEqualTo(cause)
 	}
+
+	/** A record of an ended run, built from the fake's own run-end figures (Issue #1325). */
+	private fun endedRunRecord(): RunRecord =
+		checkNotNull(
+			FakeMetricsCollectionService()
+				.runEndSummary()
+				.copy(classification = RunEndClassification.NATURAL_COMPLETION, endTime = 60.0)
+				.toRunRecord()
+		)
 }

@@ -95,6 +95,10 @@ interface MetricsCollectionService : RunRecordSource {
 	 * this method only reports the observed state and logs it for visibility. Called mid-run it simply
 	 * lists the trains under way, which is also not a fault.
 	 *
+	 * Not thread-safe: it copies maps that only the simulation thread writes. A caller on another
+	 * thread (the EDT after a manual stop) calls it only once [runRecord] is non-null, which is set
+	 * after the run-end flush (Issue #1325).
+	 *
 	 * Issue #936 is the failure that motivated it: a granted full-span route froze a train's stored
 	 * path, and every later hop-wise request was refused as non-contiguous, so the reservations were
 	 * never released. Nothing in the metrics surfaced that — `completedTrains` merely failed to

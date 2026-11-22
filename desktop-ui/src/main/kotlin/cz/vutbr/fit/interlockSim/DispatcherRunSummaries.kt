@@ -256,7 +256,9 @@ object DispatcherRunSummaries {
 	 * handler can race the simulation thread — has no record; it gets the three figures of the
 	 * thread-safe [MetricsCollectionService.latestSnapshot] and every other figure absent
 	 * (`MetricsSnapshot.toUnfinishedRunOutcome`). The run-end accounting is not read: it belongs to the
-	 * simulation thread and copies mutable maps, so reading it from the EDT could throw.
+	 * simulation thread and copies mutable maps, so reading it from the EDT could throw. For the same
+	 * reason the leak gauge ([MetricsCollectionService.reportUnreleasedReservations]) runs only with a
+	 * record; without one the snapshot's reservation counts are logged at INFO instead (Issue #1325).
 	 *
 	 * ## Absent, never zero
 	 *
@@ -278,12 +280,25 @@ object DispatcherRunSummaries {
 	 */
 	fun railwayOutcomeFrom(scope: Scope): RailwayOutcome {
 		val metricsService = scope.getOrNull<MetricsCollectionService>() ?: return RailwayOutcome.UNMEASURED
-		// Issue #936: the one run-end, quiesced read shared by the GUI and headless paths, so it is
-		// where a leaked reservation can still be reported. Deliberately not folded into
-		// RailwayOutcome.
-		metricsService.reportUnreleasedReservations()
-		return metricsService.runRecord()?.toRailwayOutcome()
-			?: metricsService.latestSnapshot().toUnfinishedRunOutcome()
+		val record = metricsService.runRecord()
+		if (record != null) {
+			// Issue #936: the one run-end, quiesced read shared by the GUI and headless paths, so it is
+			// where a leaked reservation can still be reported. Deliberately not folded into
+			// RailwayOutcome. Safe here: the record is set only after the kernel stopped and the
+			// run-end flush is done, so nothing writes the gauge's maps any more.
+			metricsService.reportUnreleasedReservations()
+			return record.toRailwayOutcome()
+		}
+		// Issue #1325: no record means a manual stop that the simulation thread may not have
+		// finished yet; the gauge copies maps that thread still writes, so read only the snapshot.
+		// A mid-run snapshot that still holds reservations is not a leak, hence INFO, not WARN.
+		val snapshot = metricsService.latestSnapshot()
+		logger.info {
+			"Run ended without a run record; the leak gauge is skipped. Latest snapshot: " +
+				"${snapshot.trainsHoldingReservations} trains holding reservations, " +
+				"${snapshot.heldBlocks} held blocks"
+		}
+		return snapshot.toUnfinishedRunOutcome()
 	}
 
 	/**
