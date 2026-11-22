@@ -1515,17 +1515,19 @@ open class DefaultSimulationContext(
 	private fun stopOnMainProcessFailure(event: KDiscoSimulationEvent) {
 		val main = mainProcess
 		val failure = main?.failure
-		if (event is KDiscoSimulationEvent.ProcessTerminated && event.process === main && failure != null) {
-			if (simulation?.isStopRequested() == false) {
-				mainProcessFailure = MainProcessFailedException(failure, main)
-				// The run-end marker only -- the accounting event counters stay untouched, they are
-				// the metrics record (Issue #1304).
-				endTimeReachedThisRun = false
-				// Flag first, kernel stop last (Issue #1032): the dispatcher driver's next poll must
-				// already see the stopped run. A no-op for a non-ShuntingLoop main process.
-				(main as? ShuntingLoop)?.signalStopped()
-				simulation?.stop()
-			}
+		if (event is KDiscoSimulationEvent.ProcessTerminated &&
+			event.process === main &&
+			failure != null &&
+			simulation?.isStopRequested() == false
+		) {
+			mainProcessFailure = MainProcessFailedException(failure, main)
+			// The run-end marker only -- the accounting event counters stay untouched, they are
+			// the metrics record (Issue #1304).
+			endTimeReachedThisRun = false
+			// Flag first, kernel stop last (Issue #1032): the dispatcher driver's next poll must
+			// already see the stopped run. A no-op for a non-ShuntingLoop main process.
+			(mainProcess as? ShuntingLoop)?.signalStopped()
+			simulation?.stop()
 		}
 	}
 
