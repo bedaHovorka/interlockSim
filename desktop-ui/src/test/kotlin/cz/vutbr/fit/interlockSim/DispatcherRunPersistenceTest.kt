@@ -10,12 +10,17 @@
 package cz.vutbr.fit.interlockSim
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
@@ -42,6 +47,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.module.Module
 import org.koin.test.get
+import org.slf4j.LoggerFactory
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
@@ -67,6 +73,15 @@ import java.util.concurrent.TimeUnit
 @DisplayName("A finished run is persisted as JSON the SP2c.23 aggregator can read")
 class DispatcherRunPersistenceTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
+
+	private companion object {
+		/**
+		 * The Logback logger the no-record path logs its snapshot notice at: [DispatcherRunSummaries]'s
+		 * `KotlinLogging.logger {}`, which kotlin-logging names after the enclosing object — the same
+		 * naming rule `TrainJourneyEventEmitTest` records for its delivery-guard logger.
+		 */
+		const val SUMMARIES_LOGGER = "cz.vutbr.fit.interlockSim.DispatcherRunSummaries"
+	}
 
 	private fun createAiContext(): DefaultSimulationContext =
 		createExample("createShuntingLoopAIExample", ExampleNames.SHUNTING_LOOP_AI)
@@ -329,6 +344,58 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		assertThat(service.reportUnreleasedReservationsInvoked, "leak gauge invoked").isFalse()
 	}
 
+	/**
+	 * Issue #1325: with no record the gauge is skipped, and what would have been its input is logged
+	 * at INFO instead — the snapshot's trains holding reservations and held blocks. The test config
+	 * (`logback-test.xml`) pins the root logger to WARN, so that INFO block never executed under
+	 * tests — the exact reason Sonar's new-code coverage of the branch sits at 80.0. Capturing this
+	 * logger at INFO runs the block and pins the message: the planted `published` snapshot's 7 and 4
+	 * differ from its journey and conflict figures, and the fake's fixed `getSnapshot()` fallback
+	 * carries no reservation counts at all, so a message quoting anything else fails on the text.
+	 */
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("railwayOutcomeFrom after a manual stop logs the snapshot reservation counts at INFO (Issue #1325)")
+	fun railwayOutcomeFromManualStopLogsSkippedLeakGauge() {
+		val context = createAiContext()
+		val service = FakeMetricsCollectionService(completedTrains = 2, conflictCount = 1)
+		service.published =
+			MetricsSnapshot(
+				time = 0.0,
+				conflictCount = 3,
+				completedTrains = 6,
+				throughput = 0.0,
+				totalWaitSeconds = 0.0,
+				averageWaitSeconds = 0.0,
+				occupiedBlocks = 0,
+				totalBlocks = 0,
+				utilization = 0.0,
+				trainsHoldingReservations = 7,
+				heldBlocks = 4,
+				unresolvedAtRunEndCount = 2
+			)
+		service.leakGaugeFailure = ConcurrentModificationException("leak gauge read during a manual stop")
+		context.scope.declare<MetricsCollectionService>(service)
+
+		var recordedOutcome: RailwayOutcome? = null
+		withLogOf(SUMMARIES_LOGGER) { appender ->
+			recordedOutcome = DispatcherRunSummaries.railwayOutcomeFrom(context.scope)
+
+			val infoMessages = appender.list.filter { it.level == Level.INFO }.map { it.formattedMessage }
+			assertThat(infoMessages, "captured INFO messages").hasSize(1)
+			val message = infoMessages.single()
+			assertThat(message, "leak-gauge skip notice").contains("leak gauge is skipped")
+			assertThat(message, "trains holding reservations").contains("7 trains holding reservations")
+			assertThat(message, "held blocks").contains("4 held blocks")
+		}
+		val outcome = checkNotNull(recordedOutcome)
+
+		assertThat(outcome.journeysCompleted, "journeys completed").isEqualTo(6L)
+		assertThat(outcome.conflicts, "conflicts").isEqualTo(3L)
+		assertThat(outcome.unresolvedAtRunEnd, "unresolved at run end").isEqualTo(2L)
+		assertThat(service.reportUnreleasedReservationsInvoked, "leak gauge invoked").isFalse()
+	}
+
 	// ── Leak-gauge wiring (Issue #936, review Minor #5) ──────────────────────
 
 	/**
@@ -412,6 +479,37 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		val dead = RailwayOutcome(journeysCompleted = 0L, trainsExited = 0L)
 
 		assertThat(DispatcherRunSummaries.starvationAdjusted(cause, dead), "adjusted cause").isEqualTo(cause)
+	}
+
+	/**
+	 * Runs [body] with a Logback [ListAppender] attached to the logger named [loggerName]; the
+	 * appender is detached and the logger's level restored in `finally`, also when an assertion
+	 * inside [body] throws.
+	 *
+	 * File-local adaptation of the capture `:core`'s jvmTest tests use (`testutil/LogCapture.kt`,
+	 * Issue #1394), which is unreachable from desktop-ui tests. The one difference: this copy raises
+	 * the logger's level to INFO first, because desktop-ui's `logback-test.xml` pins the root logger
+	 * to WARN and has no logger entry for this package, so the INFO event would be dropped before any
+	 * appender sees it — the same programmatic raise `:dispatcher-agent`'s log-capture tests apply on
+	 * exactly that config. Promote this to desktop-ui's `testutil` once a second test needs it.
+	 */
+	private fun withLogOf(
+		loggerName: String,
+		body: (ListAppender<ILoggingEvent>) -> Unit
+	) {
+		val logger = LoggerFactory.getLogger(loggerName) as Logger
+		val appender = ListAppender<ILoggingEvent>().also { it.start() }
+		val originalLevel: Level? = logger.level
+		logger.level = Level.INFO
+		logger.addAppender(appender)
+		try {
+			body(appender)
+		} finally {
+			logger.detachAppender(appender)
+			// Logback's setLevel throws on null, so a logger whose level was inherited (null) is
+			// reset to the root's explicit level — the level it effectively had before the raise.
+			logger.level = originalLevel ?: (LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger).level
+		}
 	}
 
 	/** A record of an ended run, built from the fake's own run-end figures (Issue #1325). */
