@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.exceptions.MainProcessFailedException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -268,6 +269,12 @@ open class DefaultSimulationContext(
 
 	/** Whether the main loop announced its end time in the current run (Issue #1304). */
 	private var endTimeReachedThisRun: Boolean = false
+
+	/**
+	 * The failure [run] throws when the main process died in this run (Issue #1361), built by
+	 * [stopOnMainProcessFailure]; `null` otherwise. Reset at the start of each run.
+	 */
+	private var mainProcessFailure: MainProcessFailedException? = null
 
 	/** Collision warning listeners registered before run(); wired into the service at run() time. */
 	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
@@ -1419,7 +1426,9 @@ open class DefaultSimulationContext(
 			}
 		simulation = sim
 		endTimeReachedThisRun = false
+		mainProcessFailure = null
 		sim.onEvent(::noteEndTimeReached) // Issue #1304
+		sim.onEvent(::stopOnMainProcessFailure) // Issue #1361
 		// Wire pre-registered listeners into kdisco simulation, each behind the delivery guard (Issue #1361)
 		pendingSimEventListeners.forEach { sim.onEvent(customPayloadGuarded(it)) }
 		wireCustomEventListeners(sim, pendingBlockEventListeners)
@@ -1433,7 +1442,11 @@ open class DefaultSimulationContext(
 					stepState = advanceControlledStep(sim, controller, stepState)
 				}
 			}
+			mainProcessFailure?.let { throw it }
 		} catch (e: DiscoException) {
+			// A kernel-level failure must not shadow the recorded main-process one (PR #1419): the
+			// wrapped SimulationException would make headless report a failed run as NOT_STARTED.
+			mainProcessFailure?.let { throw it }
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
@@ -1481,6 +1494,47 @@ open class DefaultSimulationContext(
 		{ event ->
 			if (event is KDiscoSimulationEvent.Custom) deliverContained(listener, event) else listener(event)
 		}
+
+	/**
+	 * Stop the kernel when the main process has died of a plain failure (Issue #1361). The main loop is the
+	 * only process that ends a run -- the kernel runs to `Double.MAX_VALUE` -- and kDisco reports a process
+	 * that threw as an ordinary [KDiscoSimulationEvent.ProcessTerminated], keeping the others running, so
+	 * without this stop the train generator went on making trains until the heap ran out. [run] throws
+	 * [mainProcessFailure] once the kernel has returned, after the run end has been delivered. The exception
+	 * is built here, while the run is still active, so its [MainProcessFailedException.time] is the model time of
+	 * the failure.
+	 *
+	 * The recording happens only while no stop has been requested yet (PR #1419): a graceful stop
+	 * ([stop], with the process terminations that follow it) can surface a plain failure during its
+	 * unwind, and that failure is the consequence of the stop that was asked for, not a failure of a
+	 * run the user did not ask to stop. On a record, the end-time marker and a [ShuntingLoop] main
+	 * process's liveness flag are cleared before the kernel itself is stopped: an end time announced
+	 * before the failure is revoked (Issue #1304), and by the time [run] throws, the async dispatcher
+	 * driver's next poll already sees [ShuntingLoop.isSimActive] as `false` (Issue #1032).
+	 */
+	private fun stopOnMainProcessFailure(event: KDiscoSimulationEvent) {
+		val main = mainProcess
+		val failure = main?.failure
+		if (event is KDiscoSimulationEvent.ProcessTerminated &&
+			event.process === main &&
+			failure != null &&
+			simulation?.isStopRequested() == false
+		) {
+			mainProcessFailure = MainProcessFailedException(failure, main)
+			// The run-end marker only -- the accounting event counters stay untouched, they are
+			// the metrics record (Issue #1304).
+			endTimeReachedThisRun = false
+			// Flag first, kernel stop last (Issue #1032): the dispatcher driver's next poll must
+			// already see the stopped run. `is` check, not an `as?` cast: Sonar's S6530 flags the
+			// cast as one that can never succeed, although ShuntingLoop IS-A LoopProcess via
+			// Interlocking (on the local `main`, a `var` property cannot be smart-cast). A no-op
+			// for a non-ShuntingLoop main process.
+			if (main is ShuntingLoop) {
+				main.signalStopped()
+			}
+			simulation?.stop()
+		}
+	}
 
 	/**
 	 * Remember that the main loop announced [RunAccountingEvent.EndTimeReached] in this run
