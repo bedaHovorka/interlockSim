@@ -143,7 +143,22 @@ its Parameter Sweep tables (Decision Hygiene, Railway Outcomes, Performance) hav
 one row per cell, and a cell is the run parameters **and** the example (#1333), so
 two examples swept with equal parameters get a row each, with their own `Runs`
 and gate (a split row can fall under the gate's 10-run minimum). A run JSON
-without `example` shows `(unnamed)`. A run that exceeds `perRunTimeoutSeconds` is
+without `example` shows `(unnamed)`.
+
+A run passes only if its trains that left by their **timetabled InOut**
+(trains exited minus wrong exits) reach the **exit bar** of its example (#1315).
+The bars live in `ExitPassBars`, beside `RunReportAggregator`, keyed by the
+`ExampleNames` constants, each with its control-arm source (600 s, commit, run
+count, figures): half of the deterministic arm's fewest own-InOut exits, rounded
+up. `shuntingLoop`, `shuntingLoopAI` and a run without `example` keep the #895
+bar `MIN_TRAINS_EXITED` = 6; an LLM example uses its twin's bar. Wrong exits
+subtract, they never veto. A name with no bar (a GUI run of `vyhybna.xml`, say)
+gets no exit check and the report prints `exit bar not measured` on its Gate.
+The bars are tripwires: re-measure them before reading the gate at another
+horizon, and record a new measurement with its source. Arm Comparison pools runs
+judged against different bars; each run's verdict reads its own.
+
+A run that exceeds `perRunTimeoutSeconds` is
 killed and recorded as `TIMEOUT_ABORT` rather than left absent — an absent failed
 run would silently improve the arm's measured rate.
 

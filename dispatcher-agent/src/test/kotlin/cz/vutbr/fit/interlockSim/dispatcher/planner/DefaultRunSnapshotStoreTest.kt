@@ -393,6 +393,9 @@ class DefaultRunSnapshotStoreTest {
 		)
 		assertThat(legacy.railwayOutcome.endClassification).isNull()
 		assertThat(legacy.railwayOutcome.wrongExits).isNull()
+		// Issue #1315: a file without an example keeps the #895 vyhybna bar, so its verdict does not move.
+		assertThat(ExitPassBars.barFor(legacy.example)).isEqualTo(RunReportAggregator.MIN_TRAINS_EXITED)
+		assertThat(RunReportAggregator(store).runPassed(legacy), "runPassed").isTrue()
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
