@@ -17,7 +17,8 @@ import org.slf4j.LoggerFactory
 
 /**
  * Runs [body] with a Logback appender attached to the logger named [loggerName]; the appender is
- * detached in `finally`. `logback-test.xml` must keep that logger at the level the test reads.
+ * detached in `finally`. `logback-test.xml` must keep that logger at the level the test reads, or
+ * use the `level` overload of [withLogOf] to raise it for the body only.
  *
  * The one copy of this capture for `:core`'s JVM tests (Issue #1394): `PathReservationServiceTestBase`
  * and the fixture tests that extend it used to carry their own. It lives in `:core`'s `jvmTest`

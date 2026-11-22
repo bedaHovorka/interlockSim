@@ -42,10 +42,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Logging
  *
- * The service logs a summary at INFO level whenever a train completes its
- * journey ([completedTrains] increments) and at DEBUG level for every other
- * state change.  The current snapshot is always visible in logs, satisfying the
- * Goal 10 requirement that metrics are observable in stdout/log without a GUI.
+ * The service logs an INFO summary (conflicts, throughput, avgWait, occupied) on each
+ * completed journey ([completedTrains] increments) and DEBUG lines for the other state
+ * changes, so the metrics stay observable in stdout/log without a GUI (Goal 10). The full
+ * snapshot is logged at DEBUG only on an explicit [getSnapshot] call; the snapshot published
+ * after every block event and the one [runEndSummary] reads are built without it (Issue #1330).
  *
  * ## History and journeys (Issue #673, Goal 6 SP2)
  *
