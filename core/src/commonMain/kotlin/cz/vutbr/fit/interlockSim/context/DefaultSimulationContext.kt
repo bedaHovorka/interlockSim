@@ -1444,6 +1444,9 @@ open class DefaultSimulationContext(
 			}
 			mainProcessFailure?.let { throw it }
 		} catch (e: DiscoException) {
+			// A kernel-level failure must not shadow the recorded main-process one (PR #1419): the
+			// wrapped SimulationException would make headless report a failed run as NOT_STARTED.
+			mainProcessFailure?.let { throw it }
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
@@ -1500,13 +1503,29 @@ open class DefaultSimulationContext(
 	 * [mainProcessFailure] once the kernel has returned, after the run end has been delivered. The exception
 	 * is built here, while the run is still active, so its [MainProcessFailedException.time] is the model time of
 	 * the failure.
+	 *
+	 * The recording happens only while no stop has been requested yet (PR #1419): a graceful stop
+	 * ([stop], with the process terminations that follow it) can surface a plain failure during its
+	 * unwind, and that failure is the consequence of the stop that was asked for, not a failure of a
+	 * run the user did not ask to stop. On a record, the end-time marker and a [ShuntingLoop] main
+	 * process's liveness flag are cleared before the kernel itself is stopped: an end time announced
+	 * before the failure is revoked (Issue #1304), and by the time [run] throws, the async dispatcher
+	 * driver's next poll already sees [ShuntingLoop.isSimActive] as `false` (Issue #1032).
 	 */
 	private fun stopOnMainProcessFailure(event: KDiscoSimulationEvent) {
 		val main = mainProcess
 		val failure = main?.failure
 		if (event is KDiscoSimulationEvent.ProcessTerminated && event.process === main && failure != null) {
-			mainProcessFailure = MainProcessFailedException(failure, main)
-			simulation?.stop()
+			if (simulation?.isStopRequested() == false) {
+				mainProcessFailure = MainProcessFailedException(failure, main)
+				// The run-end marker only -- the accounting event counters stay untouched, they are
+				// the metrics record (Issue #1304).
+				endTimeReachedThisRun = false
+				// Flag first, kernel stop last (Issue #1032): the dispatcher driver's next poll must
+				// already see the stopped run. A no-op for a non-ShuntingLoop main process.
+				(main as? ShuntingLoop)?.signalStopped()
+				simulation?.stop()
+			}
 		}
 	}
 

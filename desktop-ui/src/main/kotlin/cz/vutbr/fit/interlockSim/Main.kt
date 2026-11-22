@@ -199,18 +199,19 @@ class Main {
 		// default to NoOpSimulationController and the declared controller would never reach
 		// the kDisco kernel loop it was built to pace.
 		val controller = context.scope.publishedOrNull<SimulationController>() ?: NoOpSimulationController
-		var outcome = RunOutcome.NOT_STARTED
-		context.use {
-			try {
-				outcome = runAndReport(it, controller, reporter, simTimeTracker, requestedEndTime, name)
-			} finally {
-				// Issue #1072: release the cached Koog agent before the context/scope closes so
-				// agent workers do not outlive the run -- also when the run threw (Issue #1361). The
-				// shared Ollama executor stays open here — headless one-shot main closes it after the run
-				// returns (see loadExample).
-				DispatcherRunLifecycle.releaseKoogAgent(it.scope)
-			}
-		} // context closed after simulation
+		// runAndReport always returns or throws, so `use` itself yields the outcome (PR #1419).
+		val outcome =
+			context.use {
+				try {
+					runAndReport(it, controller, reporter, simTimeTracker, requestedEndTime, name)
+				} finally {
+					// Issue #1072: release the cached Koog agent before the context/scope closes so
+					// agent workers do not outlive the run -- also when the run threw (Issue #1361). The
+					// shared Ollama executor stays open here — headless one-shot main closes it after the run
+					// returns (see loadExample).
+					DispatcherRunLifecycle.releaseKoogAgent(it.scope)
+				}
+			} // context closed after simulation
 		return outcome
 	}
 

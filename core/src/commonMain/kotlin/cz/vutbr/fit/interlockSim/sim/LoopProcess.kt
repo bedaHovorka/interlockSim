@@ -30,10 +30,12 @@ abstract class LoopProcess : Process() {
 	 * The plain failure that ended this process, or `null` while it runs or when it ended normally
 	 * (Issue #1361). kDisco runs every process under a supervisor job and reports a process that threw
 	 * like one that ended normally, so the simulation context reads this to end a run whose main
-	 * process died, which would otherwise go on with the processes left. kDisco's process control
-	 * ([isProcessControl]) and a thread interrupt ([Throwable.isPlatformInterrupt], a GUI stop) are not failures.
+	 * process died, which would otherwise go on with the processes left. The net covers any
+	 * non-control Throwable, an [Error] included, so a death by Error (an OOM was the origin scenario
+	 * of Issue #1361, PR #1419) is recorded too. kDisco's process control ([isProcessControl]) and a
+	 * thread interrupt ([Throwable.isPlatformInterrupt], a GUI stop) are not failures.
 	 */
-	internal var failure: Exception? = null
+	internal var failure: Throwable? = null
 		private set
 
 	final override suspend fun actions() {
@@ -46,7 +48,7 @@ abstract class LoopProcess : Process() {
 				interLoopSleep()
 			}
 			byTerminateAction()
-		} catch (e: Exception) {
+		} catch (e: Throwable) {
 			// Recorded, then rethrown: kDisco still sees the failure as before.
 			if (!isProcessControl(e) && !e.isPlatformInterrupt()) failure = e
 			throw e

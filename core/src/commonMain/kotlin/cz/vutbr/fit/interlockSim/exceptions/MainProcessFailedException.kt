@@ -12,7 +12,8 @@ package cz.vutbr.fit.interlockSim.exceptions
 /**
  * The run's main process died of [cause], so the simulation context stopped the run early (Issue #1361).
  *
- * Thrown by `SimulationContext.run()` after the run end has been delivered, so the run record exists. Its
+ * Built while the run is still active, when the main process dies; a caller observes it as the exception
+ * `SimulationContext.run()` throws after the run end has been delivered, so the run record exists. Its
  * own type lets a caller tell a run that ended early from a run that failed to start.
  *
  * @param cause The failure that ended the main process.

@@ -73,6 +73,8 @@ class MainRunExampleMainProcessFailureTest : KoinTestBase() {
 		val outcome = get<Main>().runExampleContext(context, END_TIME.toDouble(), name)
 
 		assertThat(outcome, name = "outcome").isEqualTo(RunOutcome.TERMINATED_EARLY)
+		// The one non-zero exit code `main` forces (PR #1419): the sweep's caller sees 1.
+		assertThat(outcome.exitCode, name = "exit code").isEqualTo(1)
 		val snapshot = DefaultRunSnapshotStore(root).readAll(root).single()
 		assertThat(snapshot.endCause, name = "end cause").isEqualTo(RunEndCause.TERMINATED_EARLY)
 		assertThat(snapshot.railwayOutcome.endClassification, name = "end classification")

@@ -107,10 +107,12 @@ internal fun rethrowProcessControl(e: Exception) {
 /**
  * Whether [e] is kDisco's process control -- a [CancellationException] or kDisco's
  * `ProcessTerminatedException` -- rather than a failure; the test behind [rethrowProcessControl].
+ * Takes a Throwable so [LoopProcess] can share it while its net covers any non-control Throwable
+ * (Issue #1361, PR #1419).
  *
  * @since Issue #1361
  */
-internal fun isProcessControl(e: Exception): Boolean =
+internal fun isProcessControl(e: Throwable): Boolean =
 	e is CancellationException || e::class.qualifiedName == KDISCO_PROCESS_TERMINATED
 
 /**
