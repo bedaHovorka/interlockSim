@@ -10,10 +10,10 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.ksimulantenbande.kdisco.Process
-import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.isFreeOrOwnedBy
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.sim.emitCustomGuarded
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 
 /**
@@ -51,12 +51,13 @@ import cz.vutbr.fit.interlockSim.util.currentSimulationTime
  * **NOT thread-safe**, like the service that owns it.
  *
  * @property registry Ownership registry, read to name the train that owns a contended block
- * @property emitConflict Delivers the one-shot mid-run [ConflictDetectedEvent]; the kDisco
- *   [emitCustom] by default (a no-op outside a running simulation). A seam for unit tests.
+ * @property emitConflict Delivers the one-shot mid-run [ConflictDetectedEvent]; the guarded kDisco emit
+ *   [emitCustomGuarded] by default (a no-op outside a running simulation; a raw subscriber's plain failure
+ *   does not fail the request, Issue #1361). A seam for unit tests.
  */
 internal class ReservationContentionTracker(
 	private val registry: PathReservationRegistry,
-	private val emitConflict: (ConflictDetectedEvent) -> Unit = { emitCustom(it) }
+	private val emitConflict: (ConflictDetectedEvent) -> Unit = { emitCustomGuarded(it) }
 ) {
 	/**
 	 * The open contentions, keyed by (train, blocked block), valued by the simulation time the contention was first

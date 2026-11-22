@@ -80,10 +80,11 @@ private val logger = KotlinLogging.logger {}
  * event still reaches the subscribers after it -- except kDisco's process control (a
  * `CancellationException`, a listener terminating the running process), which [rethrowProcessControl]
  * passes through (Issue #1310), like the journey and run-accounting guards. kDisco's bus walks its
- * listeners with no guard of its own, so only subscribers registered through this function are
- * isolated; a raw [SimulationEnvironment.onSimulationEvent] subscriber that throws ends delivery to
- * the ones after it, and [DefaultReservationExpiry]'s guarded emit then only contains the failure so
- * the completed expiry stands.
+ * listeners with no guard of its own. In a context run the delivery guard (Issue #1361) contains a
+ * raw [SimulationEnvironment.onSimulationEvent] subscriber that throws first, so the ones after it
+ * still get the event; on a bare kDisco bus the ones after it miss the event, and
+ * [DefaultReservationExpiry]'s guarded emit then only contains the failure so the completed expiry
+ * stands.
  */
 fun SimulationEnvironment.onReservationExpired(listener: (ReservationExpired) -> Unit) =
 	onSimulationEvent { event ->

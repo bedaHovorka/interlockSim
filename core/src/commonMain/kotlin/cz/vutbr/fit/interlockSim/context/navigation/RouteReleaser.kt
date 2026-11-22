@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -18,6 +17,8 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.emitCustomGuarded
+import cz.vutbr.fit.interlockSim.sim.rethrowProcessControl
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -576,7 +577,9 @@ internal class RouteReleaser(
 	/**
 	 * Announce the switch claims [unregister] released (Issue #1271): a flank claim can outlive the
 	 * train's last block, so no `BlockReleased` of this teardown may carry its release. Emitted for any
-	 * released claim, after the block events; a throwing subscriber is contained like there.
+	 * released claim, after the block events, through the guarded emit (Issue #1361): a plain failure of a
+	 * raw or typed subscriber is contained with WARN, while kDisco's process control (a cancellation, a
+	 * terminated process) always leaves the teardown -- typed subscribers included.
 	 * [releaseAllBlocks] needs no such announcement: [release] reaches it only for a train that still
 	 * holds blocks, whose `BlockReleased` events go out in the same call.
 	 */
@@ -585,11 +588,7 @@ internal class RouteReleaser(
 		trainId: String
 	) {
 		if (switches.isEmpty()) return
-		try {
-			emitCustom(SwitchClaimsReleased(trainId, switches, currentSimulationTime()))
-		} catch (e: Exception) {
-			logger.warn(e) { "unregister: Failed to announce the switch release of '$trainId'" }
-		}
+		emitCustomGuarded(SwitchClaimsReleased(trainId, switches, currentSimulationTime()))
 	}
 
 	/**
@@ -601,10 +600,11 @@ internal class RouteReleaser(
 	 * footprint is already gone from the registry by the time these events go out: a throwing
 	 * listener must not cost the remaining freed blocks their announcement, skip the funnel's
 	 * contention clear, or reach the release caller (`NetworkActuatorPort.releaseRoute`:
-	 * `cancel_route` and the orphan sweeper). The catch spans the whole announce step, so a
-	 * throwing subscriber on the kDisco event channel is contained the same way; the legacy
-	 * channel is just the one issue #1202 names. The per-block funnel keeps propagating instead --
-	 * there the caller releases one block and can act on the failure (pinned by
+	 * `cancel_route` and the orphan sweeper). The kDisco event channel contains a plain failure of
+	 * its subscribers itself ([emitBlockReleased] uses the guarded emit, Issue #1361), so this catch
+	 * is the legacy channel's; kDisco's process control -- a cancellation or a terminated process --
+	 * is rethrown first, never swallowed. The per-block funnel keeps propagating a failure of the
+	 * legacy channel instead -- there the caller releases one block and can act on the failure (pinned by
 	 * `PathReservationReleaseAndRollbackBlockTest` and `Issue1076RegressionTest`).
 	 */
 	private fun emitReleasesContained(
@@ -617,6 +617,7 @@ internal class RouteReleaser(
 			try {
 				emitBlockReleased(block, trainId, simTime)
 			} catch (e: Exception) {
+				rethrowProcessControl(e)
 				logger.warn(e) { "$step: Failed to announce the release of block $block for '$trainId'" }
 			}
 		}
@@ -755,14 +756,16 @@ internal class RouteReleaser(
 	 * [BlockOccupancyEvent] (BLOCK_RELEASED) for a single block.
 	 *
 	 * This keeps the two event channels consistent on every release path
-	 * ([releasePath], [unregister], [unregisterBlock]).
+	 * ([releasePath], [unregister], [unregisterBlock]). The kDisco half goes through the guarded emit
+	 * (Issue #1361), so a raw subscriber's plain failure does not leave this call; a failing legacy
+	 * listener still does.
 	 */
 	fun emitBlockReleased(
 		block: DynamicTrackBlock,
 		trainId: String,
 		simTime: Double
 	) {
-		emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
+		emitCustomGuarded(BlockEvent.BlockReleased(block, trainId, simTime))
 		registry.emit(
 			BlockOccupancyEvent(
 				block = block,

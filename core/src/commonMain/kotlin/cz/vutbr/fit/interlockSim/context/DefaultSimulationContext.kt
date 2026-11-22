@@ -55,6 +55,7 @@ import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
+import cz.vutbr.fit.interlockSim.sim.deliverContained
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
@@ -1419,8 +1420,8 @@ open class DefaultSimulationContext(
 		simulation = sim
 		endTimeReachedThisRun = false
 		sim.onEvent(::noteEndTimeReached) // Issue #1304
-		// Wire pre-registered listeners into kdisco simulation
-		pendingSimEventListeners.forEach { sim.onEvent(it) }
+		// Wire pre-registered listeners into kdisco simulation, each behind the delivery guard (Issue #1361)
+		pendingSimEventListeners.forEach { sim.onEvent(customPayloadGuarded(it)) }
 		wireCustomEventListeners(sim, pendingBlockEventListeners)
 		wireCustomEventListeners(sim, pendingConflictEventListeners)
 		// Issue #1306 (Goal 6 SP8): the one wall clock of every harness, read around the kernel run.
@@ -1457,14 +1458,29 @@ open class DefaultSimulationContext(
 	 * once `Process.activeContext` is null, which is exactly the state here -- the run
 	 * has already fully stopped, so there is nothing left to pause.
 	 *
+	 * Each listener sits behind [deliverContained] (Issue #1361): one that throws neither keeps the event from
+	 * the listeners after it nor skips [deliverRunEnded], so the run record is still built.
+	 *
 	 * Extracted out of [run] purely to keep that method's cyclomatic complexity within
 	 * budget; carries no logic of its own beyond the guard + delivery.
 	 */
 	private fun flushUnresolvedReservationConflicts(simulationEndTime: Double) {
 		runCatching { pathReservationServiceInstance.flushUnresolvedConflicts(simulationEndTime) }
-			.onSuccess { events -> events.forEach { event -> pendingBlockEventListeners.forEach { it(event) } } }
-			.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
+			.onSuccess { events ->
+				events.forEach { event -> pendingBlockEventListeners.forEach { deliverContained(it, event) } }
+			}.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
 	}
+
+	/**
+	 * The raw [listener] as it goes on the kDisco bus (Issue #1361): a `SimulationEvent.Custom` reaches it
+	 * through [deliverContained], so a plain failure on a payload neither ends the emitting process nor keeps
+	 * the event from the listeners after it. The built-in kDisco events reach it as they are: a failure there
+	 * still propagates, as before.
+	 */
+	private fun customPayloadGuarded(listener: (KDiscoSimulationEvent) -> Unit): (KDiscoSimulationEvent) -> Unit =
+		{ event ->
+			if (event is KDiscoSimulationEvent.Custom) deliverContained(listener, event) else listener(event)
+		}
 
 	/**
 	 * Remember that the main loop announced [RunAccountingEvent.EndTimeReached] in this run
@@ -1501,7 +1517,9 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Wire a buffered listener list for one `SimulationEvent.Custom` payload type into [sim],
-	 * filtering by payload type at delivery time. No-op if [listeners] is empty.
+	 * filtering by payload type at delivery time. No-op if [listeners] is empty. Each listener sits
+	 * behind [deliverContained] (Issue #1361), so one that throws does not keep the payload from the
+	 * listeners after it.
 	 *
 	 * Extracted out of [run] to eliminate the block-event/conflict-event wiring duplication
 	 * introduced in PR #580 (Goal 9 SP1) and to keep [run]'s cyclomatic complexity within
@@ -1517,7 +1535,7 @@ open class DefaultSimulationContext(
 			if (event is KDiscoSimulationEvent.Custom) {
 				val payload = event.payload
 				if (payload is T) {
-					snapshot.forEach { it(payload) }
+					snapshot.forEach { deliverContained(it, payload) }
 				}
 			}
 		}

@@ -239,7 +239,9 @@ fun SimulationEnvironment.onRunAccountingEvent(listener: (RunAccountingEvent) ->
 
 /**
  * Subscribe to [RunEnded]. Sugar over [SimulationEnvironment.onSimulationEvent]: register before
- * `run()`. A [listener] that throws is logged at WARN.
+ * `run()`. A [listener] that throws is logged at WARN and the event still reaches the subscribers
+ * after it, except for kDisco's process control (a `CancellationException`, a listener terminating
+ * the running process), which [rethrowProcessControl] rethrows (Issue #1361).
  *
  * @since Issue #1304 (Goal 6 SP6)
  */
@@ -250,6 +252,7 @@ fun SimulationEnvironment.onRunEnded(listener: (RunEnded) -> Unit) =
 			try {
 				listener(payload)
 			} catch (e: Exception) {
+				rethrowProcessControl(e)
 				logger.warn(e) { "A RunEnded listener failed on $payload (Issue #1304)" }
 			}
 		}

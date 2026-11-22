@@ -269,7 +269,8 @@ internal class DefaultReservationExpiry(
 	 * [expiredHoldingCount] or [expiredTailCount] sees it included (Issue #1243). The send goes through
 	 * the guarded emit of the journey events, [emitCustomGuarded] (Issue #1310): a raw kDisco subscriber
 	 * that throws is logged at WARN and cannot undo the completed expiry or end the process running it
-	 * (the raw subscribers after it miss the event), while kDisco's process control -- a
+	 * (in a context run the delivery guard contains it first, so the subscribers after it still get
+	 * the event, Issue #1361; on a bare kDisco bus they miss it), while kDisco's process control -- a
 	 * `CancellationException` or a subscriber terminating that process -- passes through, and an
 	 * [Error] is never caught. An `onReservationExpired` subscriber is isolated by that function.
 	 */

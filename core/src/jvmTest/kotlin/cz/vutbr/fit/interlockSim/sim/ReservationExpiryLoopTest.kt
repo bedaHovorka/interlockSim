@@ -93,14 +93,16 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun `a raw subscriber throwing on ReservationExpired does not change a ShuntingLoop run`() {
-		// Issue #1310: the counters and the run's outcome are the evidence, never a second
-		// subscriber -- a raw subscriber that throws ends the bus's delivery to the ones after it.
+		// Issue #1310: the counters and the run's outcome are the evidence. Since the delivery guard of
+		// Issue #1361 the subscribers after the throwing one still get the event, so the metrics' own
+		// expiry counts are part of the compared run-end summary.
 		val baseline = phantomExpiryRun(throwingRawSubscriber = false)
 		val withThrowing = phantomExpiryRun(throwingRawSubscriber = true)
 
 		assertThat(withThrowing.subscriberCalls, name = "calls of the throwing subscriber").isEqualTo(1)
 		assertThat(withThrowing.expiredHoldingCount, name = "expiries counted").isEqualTo(1)
 		assertThat(withThrowing.phantomBlocksLeft, name = "phantom blocks still reserved").isEqualTo(0)
+		assertThat(withThrowing.summary.expiredHoldingCount, name = "expiries the metrics counted").isEqualTo(1)
 		assertThat(withThrowing.copy(subscriberCalls = 0), name = "run outcome").isEqualTo(baseline)
 	}
 
@@ -141,14 +143,14 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 			expiredTailCount = expiry.expiredTailCount,
 			phantomBlocksLeft = reservations.getReservedBlocks(PHANTOM).size,
 			// The wall-clock performance row differs run to run. The metrics count expiries from the event
-			// through their own subscriber, registered after the throwing one, so they miss it: those two
-			// counts are left out, and the expiry's own counters above stand for them.
+			// through their own subscriber, registered after the throwing one; the delivery guard (Issue
+			// #1361) still hands them the event, so their two counts are compared too.
 			summary =
 				context
 					.getMetricsServices()
 					.getMetricsCollectionService()
 					.runEndSummary()
-					.copy(performance = null, expiredHoldingCount = 0, expiredTailCount = 0)
+					.copy(performance = null)
 		)
 	}
 
