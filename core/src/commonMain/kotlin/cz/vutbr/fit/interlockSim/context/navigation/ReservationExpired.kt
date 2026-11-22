@@ -94,4 +94,4 @@ fun SimulationEnvironment.onReservationExpired(listener: (ReservationExpired) ->
  * @since Issue #1324
  */
 internal fun reservationExpiredRecipient(listener: (ReservationExpired) -> Unit): (SimulationEvent) -> Unit =
-	guardedRecipient(listener)
+	guardedRecipient({ it as? ReservationExpired }, listener)

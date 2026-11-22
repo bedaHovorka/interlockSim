@@ -77,19 +77,26 @@ internal fun <T> deliverContained(
 }
 
 /**
- * The raw kDisco listener of a typed lane (Issue #1324): carries a `SimulationEvent.Custom` payload of type
- * [T] to [listener] behind [deliverContained] and drops everything else. The typed helpers --
+ * The raw kDisco listener of a typed lane (Issue #1324): carries a `SimulationEvent.Custom` payload that
+ * [select] accepts -- it returns the payload as the lane's type [T], or `null` for any other payload -- to
+ * [listener] behind [deliverContained], and drops everything else. The typed helpers --
  * `onTrainJourneyEvent`, `onRunAccountingEvent`, `onReservationExpired`, `onSwitchClaimsReleased`,
  * `onRunEnded` -- all hand one of these to [SimulationEnvironment.onSimulationEvent], so they share one
  * contract. Each lane keeps a named recipient function built on this one, so tests pin the lane on a bare
  * kDisco `Simulation`, without a [SimulationEnvironment].
  *
+ * A plain function with a selector rather than an `inline` `reified` one, so its one body is the code that
+ * runs (and is measured) for every lane.
+ *
  * @since Issue #1324
  */
-internal inline fun <reified T : Any> guardedRecipient(
-	noinline listener: (T) -> Unit
+internal fun <T : Any> guardedRecipient(
+	select: (Any?) -> T?,
+	listener: (T) -> Unit
 ): (KDiscoSimulationEvent) -> Unit =
 	{ event ->
-		val payload = (event as? KDiscoSimulationEvent.Custom)?.payload
-		if (payload is T) deliverContained(listener, payload)
+		if (event is KDiscoSimulationEvent.Custom) {
+			val payload = select(event.payload)
+			if (payload != null) deliverContained(listener, payload)
+		}
 	}

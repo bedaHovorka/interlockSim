@@ -1476,6 +1476,8 @@ open class DefaultSimulationContext(
 			// An Error or process control from a run-end subscriber propagates, but never skips the cleanup below.
 			deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
 		} catch (t: Throwable) {
+			// Never added to itself: a run failure thrown again stays one throwable (explicit, because the JVM
+			// member Throwable.addSuppressed throws on self-suppression; only Kotlin's extension skips it).
 			if (runFailure != null && runFailure !== t) t.addSuppressed(runFailure)
 			throw t
 		} finally {
@@ -1598,7 +1600,7 @@ open class DefaultSimulationContext(
 					!isProcessControl(e) ->
 						logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
 					first == null -> processControl = e
-					// The same instance from two listeners (one shared cancellation) cannot suppress itself.
+					// The same instance from two listeners (one shared cancellation) is not added to itself.
 					first !== e -> first.addSuppressed(e)
 				}
 			}
@@ -1689,8 +1691,11 @@ open class DefaultSimulationContext(
 		// by InOutWorker/Train on a fatal simulation error) as well as any other caller of
 		// stop() — both terminate mainProcess without ever reaching ShuntingLoop.interLoopSleep's
 		// end-time branch, so without this the flag would stay true forever after such a stop.
-		// Safe cast keeps this a no-op for non-ShuntingLoop main processes (e.g. MultiTrainLoop).
-		(mainProcess as? ShuntingLoop)?.signalStopped()
+		// A no-op for non-ShuntingLoop main processes (e.g. MultiTrainLoop). `is` check, not an `as?` cast:
+		// Sonar's S6530 flags the cast as one that can never succeed, although ShuntingLoop IS-A LoopProcess
+		// (as in stopOnMainProcessFailure; a `var` property cannot be smart-cast, hence the local).
+		val main = mainProcess
+		if (main is ShuntingLoop) main.signalStopped()
 		logger.info { "Stopping simulation: terminating ${workers.size} workers and main process" }
 
 		val exceptions = mutableListOf<Throwable>()

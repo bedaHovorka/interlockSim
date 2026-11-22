@@ -173,6 +173,30 @@ class ListenerGuardContractTest {
 		}
 	}
 
+	/**
+	 * A lane hands its listener only its own payload (Issue #1324): a built-in kDisco event and a `Custom`
+	 * event of another payload never reach it. Fails if [guardedRecipient] stops filtering by event kind or by
+	 * the lane's selector.
+	 */
+	@Test
+	fun `a lane drops built-in events and other payloads`() {
+		lanes.forEach { lane ->
+			var calls = 0
+			val recipient = lane.recipient { calls++ }
+
+			recipient(SimulationEvent.ProcessActivated(0.0, Emitter(lane.payload)))
+			recipient(SimulationEvent.Custom(0.0, OtherPayload))
+			recipient(SimulationEvent.Custom(0.0, null))
+			assertThat(calls, "${lane.name}: deliveries of foreign events").isEqualTo(0)
+
+			recipient(SimulationEvent.Custom(0.0, lane.payload))
+			assertThat(calls, "${lane.name}: deliveries of its own payload").isEqualTo(1)
+		}
+	}
+
+	/** A payload no lane carries. */
+	private object OtherPayload
+
 	/** A process that terminates itself and keeps what kDisco threw to unwind it. */
 	private class SelfTerminating : Process() {
 		var thrown: Throwable? = null

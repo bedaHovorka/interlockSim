@@ -61,4 +61,4 @@ internal fun SimulationEnvironment.onSwitchClaimsReleased(listener: (SwitchClaim
  * @since Issue #1324
  */
 internal fun switchClaimsReleasedRecipient(listener: (SwitchClaimsReleased) -> Unit): (SimulationEvent) -> Unit =
-	guardedRecipient(listener)
+	guardedRecipient({ it as? SwitchClaimsReleased }, listener)

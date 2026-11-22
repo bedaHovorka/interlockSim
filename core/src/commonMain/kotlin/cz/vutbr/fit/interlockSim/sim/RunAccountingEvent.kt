@@ -212,7 +212,7 @@ fun emitRunAccountingEvent(event: RunAccountingEvent) = emitCustomGuarded(event)
  * @since Issue #1304 (Goal 6 SP6)
  */
 internal fun runAccountingRecipient(listener: (RunAccountingEvent) -> Unit): (SimulationEvent) -> Unit =
-	guardedRecipient(listener)
+	guardedRecipient({ it as? RunAccountingEvent }, listener)
 
 /**
  * Subscribe to [RunAccountingEvent]s. Sugar over [SimulationEnvironment.onSimulationEvent], with its
@@ -231,7 +231,8 @@ fun SimulationEnvironment.onRunAccountingEvent(listener: (RunAccountingEvent) ->
  *
  * @since Issue #1324
  */
-internal fun runEndedRecipient(listener: (RunEnded) -> Unit): (SimulationEvent) -> Unit = guardedRecipient(listener)
+internal fun runEndedRecipient(listener: (RunEnded) -> Unit): (SimulationEvent) -> Unit =
+	guardedRecipient({ it as? RunEnded }, listener)
 
 /**
  * Subscribe to [RunEnded]. Sugar over [SimulationEnvironment.onSimulationEvent]: register before

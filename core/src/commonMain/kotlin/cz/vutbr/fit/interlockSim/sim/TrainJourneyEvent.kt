@@ -135,7 +135,7 @@ internal fun emitCustomGuarded(payload: Any) {
  * @since Issue #673 (Goal 6 SP2)
  */
 internal fun trainJourneyRecipient(listener: (TrainJourneyEvent) -> Unit): (SimulationEvent) -> Unit =
-	guardedRecipient(listener)
+	guardedRecipient({ it as? TrainJourneyEvent }, listener)
 
 /**
  * Subscribe to [TrainJourneyEvent]s (Issue #673). Sugar over [SimulationEnvironment.onSimulationEvent],

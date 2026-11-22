@@ -18,8 +18,10 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.prop
+import cz.ksimulantenbande.kdisco.DiscoException
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.exceptions.MainProcessFailedException
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
@@ -262,6 +264,135 @@ class MainProcessFailureRunEndTest : KoinTestBase() {
 		// Flag first (Issue #1032): by the time run() throws, the async dispatcher driver's next poll
 		// already sees the run as not live. End time is far away: this is the pre-end-time window.
 		assertThat(shuntingLoop.isSimActive(), name = "sim-active flag").isFalse()
+	}
+
+	/** A main process with no failure: it holds once per step until the kernel stops. */
+	private class QuietMainProcess : LoopProcess() {
+		override suspend fun iteration() {
+			// Nothing to do: the test ends the run from outside.
+		}
+
+		override suspend fun interLoopSleep() {
+			hold(1.0)
+		}
+	}
+
+	/**
+	 * An [Error] whose only constructor takes no message or cause, so kotlinx.coroutines' stack-trace recovery
+	 * cannot copy it on its way out of `runBlocking`: the instance the test threw is the one `run()` throws.
+	 */
+	private class InjectedError(
+		val tag: Int
+	) : Error("error $tag injected by the test")
+
+	/** A controller that throws [failure] before the kernel's first event. */
+	private fun failingController(failure: Throwable): SimulationController =
+		object : SimulationController by NoOpSimulationController {
+			override fun throttle(simDeltaSeconds: Double): Unit = throw failure
+		}
+
+	/**
+	 * A kernel failure with no main-process failure ends the run with a [SimulationException] around it
+	 * (Issue #1324 keeps the branch while it remembers the run failure). Fails if `run()` lets the bare
+	 * `DiscoException` out or reports it as anything else.
+	 */
+	@Test
+	fun `a kernel failure ends the run with a SimulationException around it`() {
+		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
+		context.setMainProcess(QuietMainProcess())
+
+		assertFailure { context.run(failingController(DiscoException("kernel failure injected by the test"))) }
+			.isInstanceOf(SimulationException::class)
+			.cause()
+			.isNotNull()
+			.isInstanceOf(DiscoException::class)
+	}
+
+	/**
+	 * Waits on a condition that throws a `DiscoException` once [main] has failed. kDisco tests wait conditions
+	 * in its scheduler loop, outside the process coroutines, right after each event -- so the throw leaves
+	 * the kernel in the very iteration in which the main process died, after the context recorded the failure.
+	 */
+	private class KernelFailingWatcher(
+		private val main: LoopProcess
+	) : Process() {
+		override suspend fun actions() {
+			waitUntil {
+				if (main.failure != null) throw DiscoException("kernel failure injected by the test")
+				false
+			}
+		}
+	}
+
+	/** A [FailingMainProcess] that also starts a [KernelFailingWatcher] on itself. */
+	private class FailingMainWithKernelFailure(
+		private val injected: Exception
+	) : LoopProcess() {
+		private var steps = 0
+
+		override suspend fun startAction() {
+			activate(KernelFailingWatcher(this))
+		}
+
+		override suspend fun iteration() {
+			steps++
+			if (steps == 2) throw injected
+		}
+
+		override suspend fun interLoopSleep() {
+			hold(1.0)
+		}
+	}
+
+	/**
+	 * A kernel failure right after the main process failed does not shadow that failure (PR #1419; the branch
+	 * Issue #1324 rewrote to remember the run failure). Fails if `run()`'s `DiscoException` branch wraps the
+	 * kernel failure instead of throwing the recorded main-process failure.
+	 */
+	@Test
+	fun `a kernel failure after the main process failed ends the run with the main-process failure`() {
+		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
+		val failure = IllegalStateException("main process failure injected by the test")
+		context.setMainProcess(FailingMainWithKernelFailure(failure))
+
+		assertFailure { context.run() }
+			.isInstanceOf(MainProcessFailedException::class)
+			.cause()
+			.isNotNull()
+			.isSameInstanceAs(failure)
+	}
+
+	/**
+	 * The run failed with an [Error] and a run-end listener throws that same instance again (Issue #1324): it
+	 * leaves `run()` once and is not added to itself. Fails if `endRun` adds it through the JVM member
+	 * `Throwable.addSuppressed` without its identity guard (`IllegalArgumentException: Self-suppression not
+	 * permitted`).
+	 */
+	@Test
+	fun `an Error of the run thrown again at the run end is not suppressed by itself`() {
+		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
+		context.setMainProcess(QuietMainProcess())
+		val error = InjectedError(1)
+		context.onRunEnded { throw error }
+
+		assertFailure { context.run(failingController(error)) }.isSameInstanceAs(error)
+		assertThat(error.suppressed.toList(), name = "suppressed by itself").isEqualTo(emptyList<Throwable>())
+	}
+
+	/**
+	 * A run-end [Error] after a kernel failure carries the run's [SimulationException] as suppressed (Issue
+	 * #1324). Fails if `endRun` stops adding the run failure.
+	 */
+	@Test
+	fun `a run-end Error after a kernel failure carries the SimulationException as suppressed`() {
+		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
+		context.setMainProcess(QuietMainProcess())
+		val error = InjectedError(2)
+		context.onRunEnded { throw error }
+
+		assertFailure { context.run(failingController(DiscoException("kernel failure injected by the test"))) }
+			.isSameInstanceAs(error)
+		assertThat(error.suppressed.single(), name = "the run's own failure").isInstanceOf(SimulationException::class)
 	}
 
 	private companion object {

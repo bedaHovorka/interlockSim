@@ -233,6 +233,43 @@ class MultiTrainLoopRunEndAccountingTest : CommonKoinTestBase() {
 		assertThat(seen, name = "run-end subscribers in order").isEqualTo(listOf("failing", "cancelling", "last"))
 	}
 
+	/**
+	 * Two run-end listeners cancelling with two instances (Issue #1324): the first leaves `run()` and carries
+	 * the second as suppressed. Fails if `deliverRunEnded` keeps only the last one or drops the second.
+	 */
+	@Test
+	fun aSecondRunEndCancellationIsCarriedAsSuppressedByTheFirst() {
+		val ctx = context()
+		val first = CancellationException("first cancellation injected by the test")
+		val second = CancellationException("second cancellation injected by the test")
+		ctx.onRunEnded { throw first }
+		ctx.onRunEnded { throw second }
+		ctx.setMainProcess(MultiTrainLoop(ctx, endTime = END_TIME))
+
+		val caught = runCatching { ctx.run() }
+
+		assertThat(caught.exceptionOrNull(), name = "what left run()").isSameInstanceAs(first)
+		assertThat(first.suppressedExceptions, name = "suppressed by the first").isEqualTo(listOf<Throwable>(second))
+	}
+
+	/**
+	 * Two run-end listeners throwing one shared cancellation (Issue #1324): it leaves `run()` once and is not
+	 * added to itself (the identity guard of `deliverRunEnded`).
+	 */
+	@Test
+	fun aSharedRunEndCancellationIsNotSuppressedByItself() {
+		val ctx = context()
+		val shared = CancellationException("shared cancellation injected by the test")
+		ctx.onRunEnded { throw shared }
+		ctx.onRunEnded { throw shared }
+		ctx.setMainProcess(MultiTrainLoop(ctx, endTime = END_TIME))
+
+		val caught = runCatching { ctx.run() }
+
+		assertThat(caught.exceptionOrNull(), name = "what left run()").isSameInstanceAs(shared)
+		assertThat(shared.suppressedExceptions, name = "suppressed by itself").isEmpty()
+	}
+
 	/** An observer registered before any metrics lookup must still see the accounting finished (review of #1311). */
 	@Test
 	fun aRunEndObserverRegisteredBeforeTheMetricsServiceReadsAFinishedSummary() {
