@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -1092,6 +1093,59 @@ class RunReportAggregatorTest {
 	}
 
 	@Test
+	fun `cells with equal parameters and equal exits are ordered by example, unnamed last`() {
+		val exits = RailwayOutcome(trainsExited = 5L)
+		val runs =
+			listOf(
+				runSnapshot(runId = "u1", example = null, railwayOutcome = exits),
+				runSnapshot(runId = "s1", example = ExampleNames.SHUNTING_LOOP, railwayOutcome = exits),
+				runSnapshot(runId = "c1", example = ExampleNames.CERVENY_UJEZD, railwayOutcome = exits)
+			)
+		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(runs)))
+
+		val expected = listOf(ExampleNames.CERVENY_UJEZD, ExampleNames.SHUNTING_LOOP, "(unnamed)")
+		for (section in listOf(hygieneSection(md), outcomesSection(md), performanceSection(md))) {
+			val examples =
+				section
+					.lines()
+					.filter { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+					.map { rowCells(it)[EXAMPLE_COLUMN] }
+			assertThat(examples).isEqualTo(expected)
+		}
+	}
+
+	@Test
+	fun `a blank example reads as unnamed and shares the cell of a run without one`() {
+		val runs =
+			listOf(
+				runSnapshot(runId = "b1", example = " "),
+				runSnapshot(runId = "n1", example = null)
+			)
+		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(runs)))
+
+		val rows = outcomesSection(md).lines().filter { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+		assertThat(rows.size, "one cell").isEqualTo(1)
+		assertThat(rowCells(rows.single())[EXAMPLE_COLUMN]).isEqualTo("(unnamed)")
+		assertThat(rowCells(rows.single())[EXAMPLE_COLUMN + 1], "runs").isEqualTo("2")
+	}
+
+	@Test
+	fun `an example containing a pipe is escaped and keeps every sweep row intact`() {
+		val example = "odd|name.xml"
+		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(listOf(runSnapshot(example = example)))))
+
+		for ((section, columns) in listOf(
+			hygieneSection(md) to 25,
+			outcomesSection(md) to 23,
+			performanceSection(md) to 21
+		)) {
+			val row = section.lines().first { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+			assertThat(row).contains("| odd\\|name.xml |")
+			assertThat(row.split(Regex("(?<!\\\\)\\|")).size - 2, "columns").isEqualTo(columns)
+		}
+	}
+
+	@Test
 	fun `Arm Comparison still pools the examples of an arm`() {
 		val runs =
 			listOf(
@@ -1135,6 +1189,9 @@ class RunReportAggregatorTest {
 
 	private fun hygieneSection(md: String): String =
 		md.substringAfter("### Decision Hygiene").substringBefore("### Railway Outcomes")
+
+	/** The Performance table (Issue #1306) and the budget lines after it. */
+	private fun performanceSection(md: String): String = md.substringAfter("### Performance")
 
 	/** The Railway Outcomes table alone: the Performance table (Issue #1306) follows it. */
 	private fun outcomesSection(md: String): String =

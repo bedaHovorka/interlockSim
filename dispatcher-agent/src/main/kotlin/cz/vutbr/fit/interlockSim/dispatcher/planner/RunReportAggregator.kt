@@ -864,7 +864,7 @@ class RunReportAggregator(
 	}
 
 	/**
-	 * Legend for the two Parameter Sweep tables. Several of these metrics have names that sound
+	 * Legend for the Parameter Sweep tables. Several of these metrics have names that sound
 	 * interchangeable and are not — see each bullet for the exact numerator and denominator.
 	 */
 	private fun appendParameterSweepLegend(sb: StringBuilder) {
@@ -944,7 +944,7 @@ class RunReportAggregator(
 				"figures are shown; the gate is `n/a`, because they measure no dispatcher."
 		)
 		sb.appendLine(
-			"- **Ranking (issue #906)** — both tables are ranked by **Trains exited**, descending, cells " +
+			"- **Ranking (issue #906)** — the Parameter Sweep tables are ranked by **Trains exited**, descending, cells " +
 				"with no measured `trainsExited` sorted last. Not by `journeysCompleted`: that counter " +
 				"increments whenever a train's reservation count reaches zero, with no termination or " +
 				"movement predicate, so a stale swept route can credit a journey to a train that never " +
@@ -1014,7 +1014,7 @@ class RunReportAggregator(
 	 * Shared cell-identity columns rendered identically, in the same order, in every Parameter
 	 * Sweep table — the join key a reader uses to match a cell's hygiene row to its outcomes and
 	 * performance rows without guessing: the arm, the [RunParameters] and, last, the example
-	 * (Issue #1333).
+	 * (Issue #1333), escaped because it is free text (a GUI run can be named after its XML file).
 	 */
 	private fun paramsRowPrefix(cell: ParameterSweepCell): String {
 		val r = cell.report
@@ -1030,7 +1030,7 @@ class RunReportAggregator(
 			"| ${p.promptVariant} " +
 			"| ${p.circuitBreakerFailureThreshold} " +
 			"| ${p.circuitBreakerCooldownSeconds} " +
-			"| ${cell.key.exampleLabel} "
+			"| ${mdEscapeCell(cell.key.exampleLabel)} "
 	}
 
 	// ── Statistics helpers ────────────────────────────────────────────────────

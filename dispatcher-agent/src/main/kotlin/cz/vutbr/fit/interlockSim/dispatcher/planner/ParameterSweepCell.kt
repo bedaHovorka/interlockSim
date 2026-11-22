@@ -20,7 +20,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * are split.
  *
  * @property example [DispatcherRunSnapshot.example]; `null` for a run that named none (a GUI run, a
- *   file before schema version 13), rendered as [UNNAMED].
+ *   file before schema version 13) or a blank name, rendered as [UNNAMED].
  *
  * @since Issue #1333 (Goal 6)
  */
@@ -35,9 +35,9 @@ internal data class ParameterSweepCellKey(
 		/** The Example cell of a run that named no example (a GUI run, a file before schema version 13). */
 		const val UNNAMED = "(unnamed)"
 
-		/** The key of the cell [snapshot] belongs to. */
+		/** The key of the cell [snapshot] belongs to; a blank example counts as none, so it reads as [UNNAMED]. */
 		fun of(snapshot: DispatcherRunSnapshot): ParameterSweepCellKey =
-			ParameterSweepCellKey(snapshot.params, snapshot.example)
+			ParameterSweepCellKey(snapshot.params, snapshot.example?.takeIf { it.isNotBlank() })
 	}
 }
 

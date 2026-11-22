@@ -29,8 +29,8 @@ import org.junit.jupiter.api.Test
  * The property under test is agreement: [SweepCell.runParameters] is used for a killed/aborted
  * run's snapshot, and the live recording path is used for one that finishes naturally. If the two
  * ever produced different [RunParameters] for the same cell,
- * [cz.vutbr.fit.interlockSim.dispatcher.planner.RunReportAggregator.appendParameterSweep]'s
- * `groupBy { it.params }` would split a single grid cell's runs into two report rows, silently
+ * [cz.vutbr.fit.interlockSim.dispatcher.planner.RunReportAggregator.appendParameterSweep],
+ * which groups runs by `ParameterSweepCellKey` (the parameters and the example, Issue #1333), would split a single grid cell's runs into two report rows, silently
  * halving each row's sample size.
  *
  * @since Issue #834 (SP2c.11 — inferenceTimeoutSeconds/promptVariant threading)
