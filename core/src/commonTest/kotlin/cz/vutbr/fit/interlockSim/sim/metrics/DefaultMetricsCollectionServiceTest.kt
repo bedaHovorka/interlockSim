@@ -557,4 +557,16 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 		// Time matches last event time
 		assertThat(snap.time).isCloseTo(9.0, delta = 1e-9)
 	}
+
+	// ── Run-end summary ───────────────────────────────────────────────────────
+
+	@Test
+	fun `the run-end summary reads zero expiry totals without an environment`() {
+		val service = DefaultMetricsCollectionService()
+
+		val summary = service.runEndSummary()
+
+		assertThat(summary.expiredHoldingCount).isZero()
+		assertThat(summary.expiredTailCount).isZero()
+	}
 }

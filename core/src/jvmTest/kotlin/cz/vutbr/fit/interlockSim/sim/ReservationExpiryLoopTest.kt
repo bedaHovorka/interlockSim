@@ -84,25 +84,28 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 
 		assertThat(context.getRoutingServices().getPathReservationService().getReservedBlocks(PHANTOM)).isEmpty()
 		assertThat(expiryOf(context).expiredHoldingCount).isEqualTo(1)
-		// Issue #1304: the metrics count the same expiry from its event, not from the counter.
+		// Issue #1360: the run-end summary reads the expiry's own totals.
 		val summary = context.getMetricsServices().getMetricsCollectionService().runEndSummary()
-		assertThat(summary.expiredHoldingCount, name = "expiries the metrics counted").isEqualTo(1)
-		assertThat(summary.expiredTailCount, name = "tail expiries the metrics counted").isEqualTo(0)
+		assertThat(summary.expiredHoldingCount, name = "expiries in the run-end summary").isEqualTo(1)
+		assertThat(summary.expiredTailCount, name = "tail expiries in the run-end summary").isEqualTo(0)
 	}
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun `a raw subscriber throwing on ReservationExpired does not change a ShuntingLoop run`() {
 		// Issue #1310: the counters and the run's outcome are the evidence. Since the delivery guard of
-		// Issue #1361 the subscribers after the throwing one still get the event, so the metrics' own
-		// expiry counts are part of the compared run-end summary.
+		// Issue #1361 the subscribers after the throwing one still get the event, so the whole run-end
+		// summary (bar its wall-clock performance row) is compared.
 		val baseline = phantomExpiryRun(throwingRawSubscriber = false)
 		val withThrowing = phantomExpiryRun(throwingRawSubscriber = true)
 
 		assertThat(withThrowing.subscriberCalls, name = "calls of the throwing subscriber").isEqualTo(1)
 		assertThat(withThrowing.expiredHoldingCount, name = "expiries counted").isEqualTo(1)
 		assertThat(withThrowing.phantomBlocksLeft, name = "phantom blocks still reserved").isEqualTo(0)
-		assertThat(withThrowing.summary.expiredHoldingCount, name = "expiries the metrics counted").isEqualTo(1)
+		// Issue #1360: the run-end summary reads the expiry's own totals, so the throwing subscriber
+		// registered before the metrics cannot hide the expiry from it.
+		assertThat(withThrowing.summary.expiredHoldingCount, name = "expiries in the run-end summary").isEqualTo(1)
+		assertThat(withThrowing.summary.expiredTailCount, name = "tail expiries in the run-end summary").isEqualTo(0)
 		assertThat(withThrowing.copy(subscriberCalls = 0), name = "run outcome").isEqualTo(baseline)
 	}
 
@@ -142,9 +145,7 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 			expiredHoldingCount = expiry.expiredHoldingCount,
 			expiredTailCount = expiry.expiredTailCount,
 			phantomBlocksLeft = reservations.getReservedBlocks(PHANTOM).size,
-			// The wall-clock performance row differs run to run. The metrics count expiries from the event
-			// through their own subscriber, registered after the throwing one; the delivery guard (Issue
-			// #1361) still hands them the event, so their two counts are compared too.
+			// The wall-clock performance row differs run to run.
 			summary =
 				context
 					.getMetricsServices()

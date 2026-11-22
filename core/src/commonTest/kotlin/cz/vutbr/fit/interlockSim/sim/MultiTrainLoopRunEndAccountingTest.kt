@@ -115,8 +115,9 @@ class MultiTrainLoopRunEndAccountingTest : CommonKoinTestBase() {
 		)
 		assertThat(s.trainsEntered, name = "trains entered = the loop's").isEqualTo(loop.getTrainsEntered())
 		assertThat(s.blockTransitions, name = "route grants").isZero()
-		// ReleasingMultiTrainLoop announces its scripted releases as whole-holding expiries.
-		assertThat(s.expiredHoldingCount, name = "expiries seen").isEqualTo(releases.size)
+		// ReleasingMultiTrainLoop only announces its scripted releases as whole-holding expiry events; the
+		// summary reads the expiry's own totals (Issue #1360), and the kernel's expiry released nothing.
+		assertThat(s.expiredHoldingCount, name = "expiries the kernel completed").isZero()
 		// No train was ever admitted: the refused train was only queued, so it is no unfinished journey.
 		assertThat(s.classification, name = "classification").isEqualTo(RunEndClassification.NATURAL_COMPLETION)
 	}

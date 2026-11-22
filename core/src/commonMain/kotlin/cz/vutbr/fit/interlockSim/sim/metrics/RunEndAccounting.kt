@@ -10,8 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim.metrics
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
-import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
-import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
+import cz.vutbr.fit.interlockSim.context.navigation.ExpiryTotalsQuery
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
@@ -27,22 +26,28 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * The run-end counters of [DefaultMetricsCollectionService] (Issue #1304, Goal 6 SP6), kept in a
  * collaborator the service owns so the service itself only delegates.
  *
- * Counts from events only: [TrainJourneyEvent]s, [RunAccountingEvent]s, [ReservationExpired] and
- * [RunEnded]; the capacity comes through [recordCapacity] at wiring time, before the kernel runs.
+ * Counts from events: [TrainJourneyEvent]s, [RunAccountingEvent]s and [RunEnded]; the capacity comes
+ * through [recordCapacity] at wiring time, before the kernel runs. The two expiry totals are not counted
+ * from the `ReservationExpired` events: [summary] reads them from the expiry's own counters through
+ * [expiryTotals] (Issue #1360), so a raw subscriber that throws before the metrics' own cannot hide an
+ * expiry from the run end.
  * Always on (the CORE metric group): it subscribes for itself and does not depend on the journey
  * records. One instance counts one run: the service is created per simulation context and subscribes once, so
  * it is not reset for a second `run()`. Train names must be unique within a run (the set of trains on the
  * network is keyed by name). Single-threaded, like the service: driven by the simulation thread, read on it or after
  * the run.
+ *
+ * @param expiryTotals The expiry totals of the run, resolved on each [summary]; `null` when there are
+ *   none (a service built without an environment): no expiry ran, so both totals read zero.
  */
-internal class RunEndAccounting {
+internal class RunEndAccounting(
+	private val expiryTotals: () -> ExpiryTotalsQuery? = { null }
+) {
 	private var trainsEntered = 0
 	private var trainsExited = 0
 	private var wrongExits = 0
 	private var maxConcurrent = 0
 	private var blockTransitions = 0
-	private var expiredHolding = 0
-	private var expiredTail = 0
 	private var staleReleases = 0
 	private var partialReleases = 0
 	private var stall: RunStall? = null
@@ -63,7 +68,6 @@ internal class RunEndAccounting {
 	fun subscribe(env: SimulationEnvironment) {
 		env.onTrainJourneyEvent(::onJourney)
 		env.onRunAccountingEvent(::onAccounting)
-		env.onReservationExpired(::onExpired)
 		env.onRunEnded(::onRunEnded)
 	}
 
@@ -104,13 +108,6 @@ internal class RunEndAccounting {
 		}
 	}
 
-	fun onExpired(event: ReservationExpired) {
-		when (event.kind) {
-			ReservationExpired.Kind.WHOLE_HOLDING -> expiredHolding++
-			ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL -> expiredTail++
-		}
-	}
-
 	fun onRunEnded(event: RunEnded) {
 		runEnded = event
 		val classification = classification(event)
@@ -145,6 +142,7 @@ internal class RunEndAccounting {
 		performance: RunPerformance? = null
 	): RunEndSummary {
 		val ended = runEnded
+		val expiries = expiryTotals()
 		return RunEndSummary(
 			journeysCompleted = snapshot.completedTrains,
 			trainsEntered = trainsEntered,
@@ -159,8 +157,8 @@ internal class RunEndAccounting {
 			entryFailures = entryFailuresByKind.values.sum(),
 			entryFailuresByKind = entryFailuresByKind.toMap(),
 			stall = stall,
-			expiredHoldingCount = expiredHolding,
-			expiredTailCount = expiredTail,
+			expiredHoldingCount = expiries?.expiredHoldingCount ?: 0,
+			expiredTailCount = expiries?.expiredTailCount ?: 0,
 			staleReleaseCount = staleReleases,
 			partialReleaseCount = partialReleases,
 			capacityShownToDispatcher = capacityShown,

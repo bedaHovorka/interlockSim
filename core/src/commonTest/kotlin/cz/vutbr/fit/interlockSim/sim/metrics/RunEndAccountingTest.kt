@@ -18,7 +18,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
-import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
+import cz.vutbr.fit.interlockSim.context.navigation.ExpiryTotalsQuery
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
@@ -29,12 +29,20 @@ import kotlin.test.Test
 
 /**
  * Unit tests for [RunEndAccounting], the run-end counters of the metrics service (Issue #1304,
- * Goal 6 SP6), driven with synthetic events: no simulation runs.
+ * Goal 6 SP6), driven with synthetic events and, for the expiry totals, a [FakeExpiryTotals]
+ * view (Issue #1360): no simulation runs.
  *
  * @since Issue #1304 (Goal 6 SP6)
  */
 class RunEndAccountingTest {
-	private val accounting = RunEndAccounting()
+	/** An [ExpiryTotalsQuery] whose totals the test sets, as the expiry's own counters would stand. */
+	private class FakeExpiryTotals : ExpiryTotalsQuery {
+		override var expiredHoldingCount: Int = 0
+		override var expiredTailCount: Int = 0
+	}
+
+	private val expiryTotals = FakeExpiryTotals()
+	private val accounting = RunEndAccounting { expiryTotals }
 
 	private fun summary(): RunEndSummary = accounting.summary(EMPTY)
 
@@ -55,9 +63,6 @@ class RunEndAccountingTest {
 		exitInOut: String = "B",
 		time: Double = 2.0
 	) = accounting.onJourney(TrainJourneyEvent.Exited(train, exitInOut, time))
-
-	private fun expiry(kind: ReservationExpired.Kind) =
-		accounting.onExpired(ReservationExpired("T1", kind, emptyList(), emptyList(), 61.0, 60.0, 61.0))
 
 	private fun entryFailure(kind: MultiTrainLoop.EntryFailureKind) =
 		RunAccountingEvent.EntryFailed(MultiTrainLoop.EntryFailure("T1", "A", "B", kind, 1, null, 3.0))
@@ -162,17 +167,32 @@ class RunEndAccountingTest {
 	}
 
 	@Test
-	fun `expiries and sweeper releases are counted by kind`() {
-		expiry(ReservationExpired.Kind.WHOLE_HOLDING)
-		expiry(ReservationExpired.Kind.WHOLE_HOLDING)
-		expiry(ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL)
+	fun `the expiry totals come from the view even when no expiry event was delivered`() {
+		// Issue #1360: a raw subscriber that throws can keep the ReservationExpired event from the
+		// metrics; the expiry's own counters still stand, and the summary reads them.
+		expiryTotals.expiredHoldingCount = 2
+		expiryTotals.expiredTailCount = 1
+
+		val s = summary()
+		assertThat(s.expiredHoldingCount).isEqualTo(2)
+		assertThat(s.expiredTailCount).isEqualTo(1)
+	}
+
+	@Test
+	fun `without an expiry view the expiry totals read zero`() {
+		val s = RunEndAccounting().summary(EMPTY)
+
+		assertThat(s.expiredHoldingCount).isZero()
+		assertThat(s.expiredTailCount).isZero()
+	}
+
+	@Test
+	fun `sweeper releases are counted by kind`() {
 		accounting.onAccounting(RunAccountingEvent.SweeperReleased("T1", SweeperReleaseKind.STALE, 70.0))
 		accounting.onAccounting(RunAccountingEvent.SweeperReleased("T1", SweeperReleaseKind.PARTIAL, 72.0))
 		accounting.onAccounting(RunAccountingEvent.SweeperReleased("T2", SweeperReleaseKind.PARTIAL, 74.0))
 
 		val s = summary()
-		assertThat(s.expiredHoldingCount).isEqualTo(2)
-		assertThat(s.expiredTailCount).isEqualTo(1)
 		assertThat(s.staleReleaseCount).isEqualTo(1)
 		assertThat(s.partialReleaseCount).isEqualTo(2)
 	}
