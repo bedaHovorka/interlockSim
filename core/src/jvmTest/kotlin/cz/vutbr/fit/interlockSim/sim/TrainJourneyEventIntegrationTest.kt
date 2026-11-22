@@ -60,7 +60,7 @@ class TrainJourneyEventIntegrationTest : KoinTestBase() {
 		throwerFirst: Boolean = false,
 		beforeRun: (DefaultSimulationContext) -> Unit
 	): RunOutcome {
-		val context = newContext()
+		val context = newContext().tracked()
 		if (throwerFirst) beforeRun(context)
 		val loop = prepareShuntingLoop(context, END_TIME)
 		val metrics = context.getMetricsServices().getMetricsCollectionService()

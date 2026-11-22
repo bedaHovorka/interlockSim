@@ -129,7 +129,7 @@ class CustomEventDeliveryGuardRunTest : KoinTestBase() {
 		loopOf: (DefaultSimulationContext) -> LoopUnderTest,
 		typedThrowOn: KClass<out BlockEvent>? = null
 	): Pair<RunOutcome, Int> {
-		val context = newContext()
+		val context = newContext().tracked()
 		var thrown = 0
 		if (typedThrowOn != null) {
 			context.onBlockEvent { event ->

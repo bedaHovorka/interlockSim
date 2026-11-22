@@ -16,10 +16,12 @@ package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -34,6 +36,7 @@ import org.junit.jupiter.api.Timeout
 import org.koin.test.get
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 
 @Tag("integration-test")
@@ -195,6 +198,7 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 		context.use {
 			val loop = requireNotNull(it.mainProcess) as ShuntingLoop
 			val flagWasObservedActive = AtomicBoolean(false)
+			val builtInDeliveriesWhileActive = AtomicInteger(0)
 			// Simulate a component other than InOutWorker/Train (e.g. DispatchDecisionApplier)
 			// letting an unexpected failure terminate the run without ever calling
 			// context.errorStop(). onSimulationEvent listeners run directly in kDisco's
@@ -205,9 +209,13 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 			// `signalStopped()` was never reached and the flag stayed `true` forever.
 			// The context's delivery guard (#1361) contains a failure on a Custom payload only;
 			// the built-in kDisco events this listener also throws on stay unguarded, so the
-			// failure still escapes.
-			it.onSimulationEvent { _ ->
+			// failure still escapes. The built-in count pins that escape path itself: the
+			// assertion below demands at least one built-in delivery while the sim is active,
+			// so a Custom-payload-only observation could not carry the pin (the guard
+			// contains those).
+			it.onSimulationEvent { event ->
 				if (loop.isSimActive()) {
+					if (event !is SimulationEvent.Custom) builtInDeliveriesWhileActive.incrementAndGet()
 					flagWasObservedActive.set(true)
 					throw IllegalStateException("simulated unrelated dispatcher failure")
 				}
@@ -219,6 +227,7 @@ class SimulationControllerAgentPacingLifecycleTest : IntegrationKoinTestBase() {
 				awaitMonitorDetach(controller)
 
 				assertThat(flagWasObservedActive.get()).isTrue()
+				assertThat(builtInDeliveriesWhileActive.get(), "built-in kDisco events while active").isGreaterThan(0)
 				assertThat(loop.isSimActive()).isFalse()
 			} finally {
 				controller.stop()
