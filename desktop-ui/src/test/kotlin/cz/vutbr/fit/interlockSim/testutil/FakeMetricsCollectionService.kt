@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * was read.
  *
  * `DispatcherRunSummaries.railwayOutcomeFrom` reads the run-end figures (from Issue #676 the run
- * record, or [runEndSummary] before the run ended), so a test that wants a particular railway
+ * record, or [latestSnapshot] when there is no record), so a test that wants a particular railway
  * outcome needs a service reporting those numbers — but the real one needs a real run behind it. Two test classes each declared their own
  * stand-in for exactly this, one reporting zero journeys and one reporting a completed journey
  * (Issue #955, cluster U7).
@@ -64,8 +64,16 @@ class FakeMetricsCollectionService(
 
 	override fun removeSnapshotListener(listener: (MetricsSnapshot) -> Unit) = Unit
 
+	/**
+	 * When set, [reportUnreleasedReservations] throws it: stands in for the real gauge copying maps
+	 * the simulation thread still writes after a manual stop (Issue #1325).
+	 */
+	@Volatile
+	var leakGaugeFailure: RuntimeException? = null
+
 	override fun reportUnreleasedReservations(): Set<String> {
 		reportUnreleasedReservationsInvoked = true
+		leakGaugeFailure?.let { throw it }
 		return unreleasedReservations
 	}
 
