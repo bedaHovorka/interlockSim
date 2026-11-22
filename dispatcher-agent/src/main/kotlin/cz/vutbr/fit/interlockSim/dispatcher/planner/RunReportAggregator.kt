@@ -967,17 +967,7 @@ class RunReportAggregator(
 				"count only through Exits by own InOut (issue #1315). Runs written before schema version 11 " +
 				"show `n/a`."
 		)
-		sb.appendLine(
-			"- **Exits by own InOut / Exit bar (issue #1315)** — **Exits by own InOut** is Trains exited " +
-				"minus Wrong exits, summed: the trains that left by their timetabled InOut. **Exit bar** is " +
-				"the minimum of those a single run of the example must reach to pass, measured per example " +
-				"from its deterministic arm at 600 s (half of its fewest own-InOut exits, rounded up; " +
-				"`shuntingLoop`, its LLM twin and an unnamed run keep the #895 bar of 6; an LLM example uses " +
-				"its twin's bar). It is a tripwire. Wrong exits subtract from a pass, they never veto it. " +
-				"`$EXIT_BAR_NOT_MEASURED` — on the bar and on the Gate — marks an example with no measured " +
-				"bar (an XML file run from the GUI, say): its runs had no exit check. Arm Comparison pools " +
-				"runs judged against different bars, one per example; each run's verdict reads its own bar."
-		)
+		appendExitBarLegend(sb)
 		sb.appendLine(
 			"- **Example (issue #1333)** — the example the cell's runs ran; `(unnamed)` is a run that named " +
 				"none or a blank name (a GUI run, or a file before schema version 13). A cell is its parameters **and** its " +
@@ -1001,6 +991,24 @@ class RunReportAggregator(
 		)
 		sb.appendLine(PerformanceReportSection.legend())
 		sb.appendLine()
+	}
+
+	/** The legend bullet of the Exits by own InOut and Exit bar columns (Issue #1315). */
+	private fun appendExitBarLegend(sb: StringBuilder) {
+		sb.appendLine(
+			"- **Exits by own InOut / Exit bar (issue #1315)** — **Exits by own InOut** is Trains exited " +
+				"minus Wrong exits, summed: the trains that left by their timetabled InOut. **Exit bar** is " +
+				"the minimum of those a single run of the example must reach to pass, measured per example " +
+				"from its deterministic arm at 600 s (half of its fewest own-InOut exits, rounded up; " +
+				"`shuntingLoop`, its LLM twin and an unnamed run keep the #895 bar of 6; an LLM example uses " +
+				"its twin's bar). It is a tripwire. Wrong exits subtract from a pass, they never veto it. " +
+				"`$EXIT_BAR_NOT_MEASURED` — on the bar and on the Gate — marks an example with no measured " +
+				"bar (an XML file run from the GUI, say): its runs had no exit check. A run without an example " +
+				"(a file before schema version 13) is judged against the bar of 6 whatever network it ran. " +
+				"Runs written before schema version 11 counted no wrong exits, so there Exits by own InOut " +
+				"equals Trains exited. Arm Comparison pools runs judged against different bars, one per " +
+				"example; each run's verdict reads its own bar."
+		)
 	}
 
 	/**

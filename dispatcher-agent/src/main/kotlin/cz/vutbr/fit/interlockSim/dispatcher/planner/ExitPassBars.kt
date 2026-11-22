@@ -16,7 +16,8 @@ import cz.vutbr.fit.interlockSim.ExampleNames
  *
  * @property horizonSeconds Simulated run length the bar was measured at. Recorded with the bar,
  *   deliberately not a key of the table: a key would move the #895 verdicts (Issue #1315 ruling).
- * @property commit Commit the control arm ran on.
+ * @property provenance What the control arm ran on: a commit, or, for the #895 entry whose run files
+ *   are gone, a prose pointer to the record that survived.
  * @property runCount Runs of the campaign behind the bar.
  * @property rawFigures The measured per-run figures and the derivation, as read from the run JSONs.
  *
@@ -24,7 +25,7 @@ import cz.vutbr.fit.interlockSim.ExampleNames
  */
 internal data class ExitBarSource(
 	val horizonSeconds: Int,
-	val commit: String,
+	val provenance: String,
 	val runCount: Int,
 	val rawFigures: String
 )
@@ -82,7 +83,7 @@ internal object ExitPassBars {
 	private val ISSUE_895_SOURCE =
 		ExitBarSource(
 			horizonSeconds = CONTROL_ARM_HORIZON_SECONDS,
-			commit = "Issue #895 campaign (run files deleted 2026-08-24; GOAL_10_SP2C14 report, section 12.2)",
+			provenance = "Issue #895 campaign (run files deleted 2026-08-24; GOAL_10_SP2C14 report, section 12.2)",
 			runCount = ISSUE_895_CONTROL_RUNS,
 			rawFigures =
 				"vyhybna.xml rule-based: 11 exits on every run, zero variance; bar = ceil(11 / 2) = 6. " +
@@ -140,7 +141,9 @@ internal object ExitPassBars {
 	/**
 	 * The bar of [example] with its source; `null` when [example] has no measured bar. A run without
 	 * an example (`null`, or a blank name, which the sweep cell key also reads as unnamed) reads as
-	 * `shuntingLoop`, the #895 network.
+	 * `shuntingLoop`, the #895 network, **whatever network it actually ran**: a file before schema
+	 * version 13 carries no example, so an SP5-era `cervenyUjezd` file is judged against the bar of 6,
+	 * with its wrong exits subtracted.
 	 */
 	fun entryFor(example: String?): ExitPassBar? {
 		val name = example?.takeIf { it.isNotBlank() } ?: ExampleNames.SHUNTING_LOOP

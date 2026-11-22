@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.doesNotContain
+import assertk.assertions.endsWith
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
@@ -140,6 +141,28 @@ class RunPassBarTest {
 	}
 
 	@Test
+	fun `Arm Comparison counts the pooled runs that had no exit bar`() {
+		val runs =
+			listOf(
+				run(ExampleNames.CERVENY_UJEZD, exited = 19L, wrongExits = 0L, runId = "c1"),
+				run(UNKNOWN_EXAMPLE, exited = 4L, runId = "x1")
+			)
+
+		val gate = rowCells(armComparisonRow(aggregator.renderMarkdown(aggregator.aggregateByArm(runs))))[ARM_GATE_COLUMN]
+
+		assertThat(gate).endsWith("${RunReportAggregator.EXIT_BAR_NOT_MEASURED} for 1 of 2 runs")
+	}
+
+	@Test
+	fun `Arm Comparison marks an arm whose runs all had no exit bar`() {
+		val runs = listOf(run(UNKNOWN_EXAMPLE, exited = 4L, runId = "x1"), run(UNKNOWN_EXAMPLE, exited = 5L, runId = "x2"))
+
+		val gate = rowCells(armComparisonRow(aggregator.renderMarkdown(aggregator.aggregateByArm(runs))))[ARM_GATE_COLUMN]
+
+		assertThat(gate).endsWith(" · ${RunReportAggregator.EXIT_BAR_NOT_MEASURED}")
+	}
+
+	@Test
 	fun `the legend says the bar counts own-InOut exits and that Arm Comparison pools bars`() {
 		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(listOf(run(ExampleNames.SHUNTING_LOOP, 11L)))))
 
@@ -167,6 +190,11 @@ class RunPassBarTest {
 			it.startsWith("| ${DispatcherArm.RULE_BASED} ")
 		}
 
+	private fun armComparisonRow(md: String): String =
+		md.substringAfter("## Arm Comparison").substringBefore("## ").lines().first {
+			it.startsWith("| ${DispatcherArm.RULE_BASED} ")
+		}
+
 	private fun rowCells(line: String): List<String> =
 		line
 			.split("|")
@@ -183,6 +211,9 @@ class RunPassBarTest {
 
 		/** Gate cell of the Decision Hygiene table: the Example column, then Runs, Passing, Gate. */
 		private const val GATE_COLUMN = 14
+
+		/** Gate cell of the Arm Comparison table: Arm, Runs, Passing, Gate. */
+		private const val ARM_GATE_COLUMN = 3
 
 		private const val OWN_EXITS_COLUMN = 23
 		private const val EXIT_BAR_COLUMN = 24

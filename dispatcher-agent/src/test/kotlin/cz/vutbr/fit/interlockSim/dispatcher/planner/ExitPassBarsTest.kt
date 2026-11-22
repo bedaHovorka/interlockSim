@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 
 import assertk.all
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
@@ -18,9 +19,11 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.ExampleNames
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
+import java.lang.reflect.Modifier
 
 /**
  * The per-example exit bar table (Issue #1315): which example gets which bar, how an LLM twin
@@ -62,7 +65,7 @@ class ExitPassBarsTest {
 		assertThat(ExitPassBars.entryFor(llmExample)).isEqualTo(ExitPassBars.entryFor(controlArm))
 	}
 
-	@org.junit.jupiter.api.Test
+	@Test
 	fun `a file without an example keeps the vyhybna bar of issue 895`() {
 		assertThat(ExitPassBars.barFor(null)).isEqualTo(RunReportAggregator.MIN_TRAINS_EXITED)
 		assertThat(RunReportAggregator.MIN_TRAINS_EXITED).isEqualTo(6L)
@@ -93,8 +96,29 @@ class ExitPassBarsTest {
 		assertThat(ExitPassBars.entryFor(example)).isNotNull().prop(ExitPassBar::source).all {
 			prop(ExitBarSource::horizonSeconds).isEqualTo(ExitPassBars.CONTROL_ARM_HORIZON_SECONDS)
 			prop(ExitBarSource::runCount).isGreaterThan(0)
-			prop(ExitBarSource::commit).isNotEmpty()
+			prop(ExitBarSource::provenance).isNotEmpty()
 			prop(ExitBarSource::rawFigures).isNotEmpty()
 		}
+	}
+
+	/**
+	 * Tripwire (Issue #1315 review): a new example constant must get a measured bar here or be
+	 * listed in [EXCLUDED_FROM_EXIT_BARS] on purpose, so it cannot fall into "not measured" silently.
+	 */
+	@Test
+	fun `every ExampleNames constant has an exit bar or is excluded on purpose`() {
+		val names =
+			ExampleNames::class.java.declaredFields
+				.filter { Modifier.isStatic(it.modifiers) && it.type == String::class.java }
+				.map { it.get(null) as String }
+		assertThat(names.size, "constants found").isGreaterThan(0)
+
+		val missing = names.filter { ExitPassBars.entryFor(it) == null && it !in EXCLUDED_FROM_EXIT_BARS }
+		assertThat(missing, "examples without a bar").isEmpty()
+	}
+
+	private companion object {
+		/** Example names that deliberately have no exit bar. None today. */
+		val EXCLUDED_FROM_EXIT_BARS: Set<String> = emptySet()
 	}
 }

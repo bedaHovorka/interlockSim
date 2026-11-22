@@ -148,10 +148,12 @@ without `example` shows `(unnamed)`.
 A run passes only if its trains that left by their **timetabled InOut**
 (trains exited minus wrong exits) reach the **exit bar** of its example (#1315).
 The bars live in `ExitPassBars`, beside `RunReportAggregator`, keyed by the
-`ExampleNames` constants, each with its control-arm source (600 s, commit, run
+`ExampleNames` constants, each with its control-arm source (600 s, provenance, run
 count, figures): half of the deterministic arm's fewest own-InOut exits, rounded
 up. `shuntingLoop`, `shuntingLoopAI` and a run without `example` keep the #895
-bar `MIN_TRAINS_EXITED` = 6; an LLM example uses its twin's bar. Wrong exits
+bar `MIN_TRAINS_EXITED` = 6 — an unnamed file (before schema 13, e.g. an SP5-era
+`cervenyUjezd` file) is judged as the #895 network whatever it ran, with its
+wrong exits subtracted; an LLM example uses its twin's bar. Wrong exits
 subtract, they never veto. A name with no bar (a GUI run of `vyhybna.xml`, say)
 gets no exit check and the report prints `exit bar not measured` on its Gate.
 The bars are tripwires: re-measure them before reading the gate at another
