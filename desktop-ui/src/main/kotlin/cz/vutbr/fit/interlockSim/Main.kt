@@ -463,7 +463,7 @@ class Main {
 			context.addReportTypes(*ReportType.values())
 
 			val sourceFile = if (args.size > 1) File(args[1]).canonicalFile else null
-			showContextInGui(context, sourceFile)
+			showContextInGui(context, sourceFile, runName = sourceFile?.let(DispatcherRunSummaries::fileRunName))
 		} catch (e: ContextCreationException) {
 			logger.error(e) { MSG_CONTEXT_CREATION_FAILED }
 		} catch (e: EmptyContextException) {
@@ -517,7 +517,7 @@ class Main {
 			// Reuse the same GUI launch path as loadSimWithGui (no sourceFile for examples).
 			// LLM-driven examples get their own window title (Issue #839).
 			val appTitle = if (exampleRegistry.usesLlmDispatcher(name)) PROGRAM_LLM_FULL_NAME else null
-			showContextInGui(context, appTitle = appTitle)
+			showContextInGui(context, appTitle = appTitle, runName = name)
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "GUI example context creation failed" }
 		} catch (e: EmptyContextException) {
@@ -541,11 +541,14 @@ class Main {
 	 * @param context Simulation context to display; must already have report types added.
 	 * @param sourceFile Optional XML file to show in the window title (null for built-in examples).
 	 * @param appTitle Optional base window title; null keeps [Frame]'s default (Issue #839).
+	 * @param runName What the run JSON records as `example` (Issue #1328): the example name, or the
+	 *   XML file's [DispatcherRunSummaries.fileRunName]; null records none.
 	 */
 	private fun showContextInGui(
 		context: SimulationContext,
 		sourceFile: File? = null,
-		appTitle: String? = null
+		appTitle: String? = null,
+		runName: String? = null
 	) {
 		javax.swing.SwingUtilities.invokeLater {
 			appTitle?.let { frame.appTitle = it }
@@ -554,7 +557,7 @@ class Main {
 			// File->Save uses that state to enter editing-only save flow.
 			sourceFile?.let { frame.title = it.name }
 			frame.isVisible = true
-			frame.startSimulation()
+			frame.startSimulation(runName)
 		}
 	}
 }

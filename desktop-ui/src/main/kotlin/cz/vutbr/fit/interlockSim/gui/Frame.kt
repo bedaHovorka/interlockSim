@@ -185,6 +185,18 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 */
 	private var wiredRunScope: Scope? = null
 
+	/**
+	 * Name handed to the latest [startSimulation]: the example name, or the XML file's base name
+	 * with its extension (Issue #1328). `null` when the caller passed none.
+	 */
+	private var startedRunName: String? = null
+
+	/**
+	 * [startedRunName] captured at RUNNING, beside [wiredRunScope] and for the same reason: STOPPED
+	 * persists it as the run JSON's `example` for the run that just ended (Issue #1328).
+	 */
+	private var wiredRunName: String? = null
+
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -268,6 +280,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// finish() but nothing ever wrote the result, and nothing fed onTick or
 							// onActionOutcome — so what it froze and discarded was an all-zero snapshot.
 							wiredRunScope = currentSimulationContext?.scope
+							// Issue #1328: the run JSON names the example or XML file this run started from.
+							wiredRunName = startedRunName
 							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
 							wireDispatcherControlPanel()
 							// Issue #675: start the dashboard on this run's metrics service (read only through
@@ -336,7 +350,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// it back so the verdict reaches the user instead of only the log file.
 							val runScope = wiredRunScope
 							if (runScope != null) {
-								val persisted = DispatcherRunSummaries.finishAndPersist(runScope, runEndCause)
+								val persisted = DispatcherRunSummaries.finishAndPersist(runScope, runEndCause, wiredRunName)
 								statusBar.setStarvedIndicator(persisted.endCause == RunEndCause.STARVED)
 							} else {
 								// No scope captured (a context set outside the RUNNING transition): fall back to
@@ -352,6 +366,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							DispatcherRunLifecycle.releaseKoogAgentInBackground(runScope)
 							wiredRunRecorder = null
 							wiredRunScope = null
+							wiredRunName = null
 						}
 					}
 				}
@@ -830,9 +845,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * listener to populate [conflictResolutionPanel] with ranked resolution candidates whenever
 	 * a spatial conflict is detected (Issue #590, Goal 9 SP5).
 	 *
+	 * [runName] is what the run JSON records as `example` when the run ends (Issue #1328): the
+	 * example name for an example run, or [DispatcherRunSummaries.fileRunName] of the XML file it
+	 * was loaded from. `null` records no name.
+	 *
 	 * **Must be called from EDT.**
 	 */
-	fun startSimulation() {
+	fun startSimulation(runName: String? = null) {
 		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
 			"startSimulation must be called from EDT"
 		}
@@ -842,6 +861,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				logger.warn { "startSimulation called without a SimulationContext — ignoring" }
 				return
 			}
+		startedRunName = runName
 
 		// Register collision warning listener BEFORE context.run() is called (Issue #616).
 		// The listener is delivered on the simulation thread; all UI updates are dispatched

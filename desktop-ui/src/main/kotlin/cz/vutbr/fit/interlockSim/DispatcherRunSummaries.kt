@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.scope.Scope
+import java.io.File
 import java.io.IOException
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -111,6 +112,17 @@ object DispatcherRunSummaries {
 	}
 
 	/**
+	 * The name a run started from an XML file records as its `example` (Issue #1328): the file's
+	 * base name **with** its extension (`vyhybna.xml`), never a path.
+	 *
+	 * Keeping the extension means the name can never equal a registered example name (none
+	 * contains a dot), so a file run is never pooled with an example in the sweep report. Two files
+	 * with the same base name in different directories do pool — the accepted cost of keeping
+	 * machine-specific paths out of the run JSON.
+	 */
+	fun fileRunName(sourceFile: File): String = sourceFile.name
+
+	/**
 	 * Closes the run's recorder and persists its snapshot as one JSON under the arm directory.
 	 *
 	 * ## Why this is here (Issue #847 round 4, R4-5)
@@ -136,8 +148,9 @@ object DispatcherRunSummaries {
 	 * [starvationAdjusted].
 	 *
 	 * @param example The registered example the run ran, persisted as [DispatcherRunSnapshot.example]
-	 *   so the report never pools wall time across networks (Issue #1306); `null` when the caller does
-	 *   not know it (the GUI).
+	 *   so the report never pools wall time across networks (Issue #1306). A GUI run passes its
+	 *   example name, or [fileRunName] of the XML file it ran (Issue #1328); `null` when the caller
+	 *   does not know it.
 	 * @return what was recorded, including the file written (`null` if this context has no
 	 *   dispatcher recorder or store, or the run was already persisted).
 	 */

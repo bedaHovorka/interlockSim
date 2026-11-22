@@ -75,6 +75,18 @@ delivers `RunEnded`, so a final poll without a record re-reads it from a one-sho
 no record after that, the end cause reads "stopped manually" after a manual stop and "–" otherwise (#1326). With `MetricGroup.TRAIN_WAIT` off, Queued, Blocked and
 Open contentions show "–" (not measured).
 
+## Run JSON Name of a GUI Run (Goal 6, #1328)
+
+Every GUI start hands a run name to `Frame.startSimulation(runName)`; the STOPPED handler passes it to
+`DispatcherRunSummaries.finishAndPersist`, which writes it as the run JSON's `example`:
+
+- `exampleGui <name>` (`Main.runExampleGui`) records the example name (`ExampleNames` constant).
+- `simgui <file>` (`Main.loadSimWithGui`) and **Simulation → Start...** (`startSimulationFromFile` in
+  `MenuBar.kt`, which takes the name before it clears the current file) record
+  `DispatcherRunSummaries.fileRunName`: the file's base name **with** its extension (`vyhybna.xml`), never a path.
+  No example name contains a dot, so a file run never pools with an example; two files with the same
+  base name in different directories do pool in the sweep report.
+
 ## Verification and Benchmark Tasks
 
 ```bash

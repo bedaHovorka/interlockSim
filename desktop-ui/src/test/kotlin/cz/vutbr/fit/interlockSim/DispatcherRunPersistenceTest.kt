@@ -14,6 +14,7 @@ import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -48,6 +49,7 @@ import org.junit.jupiter.params.provider.EnumSource
 import org.koin.core.module.Module
 import org.koin.test.get
 import org.slf4j.LoggerFactory
+import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
@@ -92,6 +94,16 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 	): DefaultSimulationContext {
 		val registry = get<ExampleRegistry>()
 		return createExampleContext(registry, get<SimulationContextFactory>(), factoryMethod, exampleName, "60")
+	}
+
+	@Test
+	@DisplayName("a run from an XML file is named by the file's base name with its extension, never a path (#1328)")
+	fun fileRunNameIsBaseNameWithExtension() {
+		val name = DispatcherRunSummaries.fileRunName(File("/some/dir/vyhybna.xml"))
+
+		assertThat(name, "run name").isEqualTo("vyhybna.xml")
+		// The extension keeps a file run apart from every registered example name.
+		assertThat(name, "run name").isNotEqualTo(ExampleNames.SHUNTING_LOOP)
 	}
 
 	@Test
