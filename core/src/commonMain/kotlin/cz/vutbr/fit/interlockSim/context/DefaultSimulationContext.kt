@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.exceptions.MainProcessFailedException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -268,6 +269,12 @@ open class DefaultSimulationContext(
 
 	/** Whether the main loop announced its end time in the current run (Issue #1304). */
 	private var endTimeReachedThisRun: Boolean = false
+
+	/**
+	 * The failure [run] throws when the main process died in this run (Issue #1361), built by
+	 * [stopOnMainProcessFailure]; `null` otherwise. Reset at the start of each run.
+	 */
+	private var mainProcessFailure: MainProcessFailedException? = null
 
 	/** Collision warning listeners registered before run(); wired into the service at run() time. */
 	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
@@ -1419,7 +1426,9 @@ open class DefaultSimulationContext(
 			}
 		simulation = sim
 		endTimeReachedThisRun = false
+		mainProcessFailure = null
 		sim.onEvent(::noteEndTimeReached) // Issue #1304
+		sim.onEvent(::stopOnMainProcessFailure) // Issue #1361
 		// Wire pre-registered listeners into kdisco simulation, each behind the delivery guard (Issue #1361)
 		pendingSimEventListeners.forEach { sim.onEvent(customPayloadGuarded(it)) }
 		wireCustomEventListeners(sim, pendingBlockEventListeners)
@@ -1433,6 +1442,7 @@ open class DefaultSimulationContext(
 					stepState = advanceControlledStep(sim, controller, stepState)
 				}
 			}
+			mainProcessFailure?.let { throw it }
 		} catch (e: DiscoException) {
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
@@ -1481,6 +1491,24 @@ open class DefaultSimulationContext(
 		{ event ->
 			if (event is KDiscoSimulationEvent.Custom) deliverContained(listener, event) else listener(event)
 		}
+
+	/**
+	 * Stop the kernel when the main process has died of a plain failure (Issue #1361). The main loop is the
+	 * only process that ends a run -- the kernel runs to `Double.MAX_VALUE` -- and kDisco reports a process
+	 * that threw as an ordinary [KDiscoSimulationEvent.ProcessTerminated], keeping the others running, so
+	 * without this stop the train generator went on making trains until the heap ran out. [run] throws
+	 * [mainProcessFailure] once the kernel has returned, after the run end has been delivered. The exception
+	 * is built here, while the run is still active, so its [MainProcessFailedException.time] is the model time of
+	 * the failure.
+	 */
+	private fun stopOnMainProcessFailure(event: KDiscoSimulationEvent) {
+		val main = mainProcess
+		val failure = main?.failure
+		if (event is KDiscoSimulationEvent.ProcessTerminated && event.process === main && failure != null) {
+			mainProcessFailure = MainProcessFailedException(failure, main)
+			simulation?.stop()
+		}
+	}
 
 	/**
 	 * Remember that the main loop announced [RunAccountingEvent.EndTimeReached] in this run

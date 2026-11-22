@@ -101,8 +101,17 @@ private const val KDISCO_PROCESS_TERMINATED = "cz.ksimulantenbande.kdisco.Proces
  * @since Issue #673 (Goal 6 SP2)
  */
 internal fun rethrowProcessControl(e: Exception) {
-	if (e is CancellationException || e::class.qualifiedName == KDISCO_PROCESS_TERMINATED) throw e
+	if (isProcessControl(e)) throw e
 }
+
+/**
+ * Whether [e] is kDisco's process control -- a [CancellationException] or kDisco's
+ * `ProcessTerminatedException` -- rather than a failure; the test behind [rethrowProcessControl].
+ *
+ * @since Issue #1361
+ */
+internal fun isProcessControl(e: Exception): Boolean =
+	e is CancellationException || e::class.qualifiedName == KDISCO_PROCESS_TERMINATED
 
 /**
  * The delivery guard of a context's event bus (Issue #1361): hands [event] to [listener] and contains a

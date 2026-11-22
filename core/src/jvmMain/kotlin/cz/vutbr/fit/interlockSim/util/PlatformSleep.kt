@@ -7,3 +7,5 @@ actual fun platformSleep(millis: Long) {
 		Thread.currentThread().interrupt()
 	}
 }
+
+actual fun Throwable.isPlatformInterrupt(): Boolean = this is InterruptedException
