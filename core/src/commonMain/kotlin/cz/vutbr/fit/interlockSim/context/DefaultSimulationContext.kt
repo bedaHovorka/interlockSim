@@ -56,7 +56,6 @@ import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
-import cz.vutbr.fit.interlockSim.sim.deliverContained
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
@@ -1554,19 +1553,35 @@ open class DefaultSimulationContext(
 	 * reason as [flushUnresolvedReservationConflicts]: the kernel has stopped and `emitCustom` is a
 	 * no-op. A listener that throws an [Exception] is logged at WARN and the ones after it still
 	 * receive the event; an [Error] is never caught.
+	 *
+	 * kDisco's process control ([isProcessControl]) follows the one listener-guard contract (Issue #1324):
+	 * it is not a failure, so it is not logged and not swallowed. The catch stays per listener, so it
+	 * cannot skip the run-end listeners after it: the first one is kept, later ones are added to it as
+	 * suppressed, and it is rethrown once every listener has had the event. It then leaves [run] after the
+	 * cleanup of its `finally` and, like an [Error] here, takes the place of a failure the run itself
+	 * threw -- a cancellation means the caller no longer waits for the run's own outcome.
 	 */
 	private fun deliverRunEnded(runEnded: RunEnded) {
 		val event = KDiscoSimulationEvent.Custom(runEnded.time, runEnded)
 		val inOrder =
 			metricsListenerIndices.map { pendingSimEventListeners[it] } +
 				pendingSimEventListeners.filterIndexed { index, _ -> index !in metricsListenerIndices }
+		var processControl: Exception? = null
 		inOrder.forEach { listener ->
 			try {
 				listener(event)
 			} catch (e: Exception) {
-				logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
+				val first = processControl
+				when {
+					!isProcessControl(e) ->
+						logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
+					first == null -> processControl = e
+					// The same instance from two listeners (one shared cancellation) cannot suppress itself.
+					first !== e -> first.addSuppressed(e)
+				}
 			}
 		}
+		processControl?.let { throw it }
 	}
 
 	/**

@@ -15,6 +15,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
@@ -26,6 +27,7 @@ import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import org.koin.core.component.KoinComponent
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -673,5 +675,67 @@ class TemporalConflictDetectionTest : KoinComponent {
 		assertThat(event.otherTrainId).isEqualTo("train-B")
 		assertThat(event.conflictBlock).isEqualTo(blockY)
 		assertThat(event.predictedConflictTime).isEqualTo(4.0 + 12.0)
+	}
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// The listener-guard contract of the fan-out (Issue #1324)
+	// ──────────────────────────────────────────────────────────────────────────
+
+	/** A detector whose two trains always conflict on [block], with [listeners] registered in order. */
+	private fun conflictingDetector(
+		block: DynamicTrackBlock,
+		vararg listeners: (TemporalConflictEvent) -> Unit
+	): TemporalConflictDetector {
+		val detector = TemporalConflictDetector()
+		listeners.forEach { detector.onTemporalConflictEvent(it) }
+		detector.registerProjectionProvider { trainId ->
+			when (trainId) {
+				"train-A" -> listOf(ProjectedOccupancy(block, enterOffsetSeconds = 0.0, exitOffsetSeconds = 20.0))
+				"train-B" -> listOf(ProjectedOccupancy(block, enterOffsetSeconds = 10.0, exitOffsetSeconds = 30.0))
+				else -> null
+			}
+		}
+		return detector
+	}
+
+	/** A plain failure of a conflict listener is contained: the listener after it still gets the event. */
+	@Test
+	fun `a failing conflict listener does not keep the event from the next one`() {
+		val block = realBlock()
+		val received = mutableListOf<TemporalConflictEvent>()
+		val detector =
+			conflictingDetector(block, { error("conflict listener failure injected by the test") }, { received += it })
+
+		reserveAThenB(detector, block)
+
+		assertThat(received, "the listener after the failing one").hasSize(1)
+	}
+
+	/**
+	 * kDisco's process control is not a listener failure (Issue #1324): a cancellation leaves the fan-out as
+	 * the very instance thrown, so the process that reserved the block unwinds instead of being
+	 * logged-and-continued.
+	 */
+	@Test
+	fun `a conflict listener cancelling leaves the fan-out as the very instance thrown`() {
+		val block = realBlock()
+		val cancellation = CancellationException("cancellation injected by the test")
+		val detector = conflictingDetector(block, { throw cancellation })
+
+		val caught = runCatching { reserveAThenB(detector, block) }
+
+		assertThat(caught.exceptionOrNull(), "the exception that escaped").isSameInstanceAs(cancellation)
+	}
+
+	/** An [Error] of a conflict listener is never caught, as in every other listener guard (Issue #1324). */
+	@Test
+	fun `an Error of a conflict listener is not caught`() {
+		val block = realBlock()
+		val failure = NotImplementedError("error injected by the test")
+		val detector = conflictingDetector(block, { throw failure })
+
+		val caught = runCatching { reserveAThenB(detector, block) }
+
+		assertThat(caught.exceptionOrNull(), "the error that escaped").isSameInstanceAs(failure)
 	}
 }

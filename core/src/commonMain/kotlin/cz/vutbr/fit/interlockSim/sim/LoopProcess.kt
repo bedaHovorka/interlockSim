@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.ksimulantenbande.kdisco.DiscoException
 import cz.ksimulantenbande.kdisco.Process
+import cz.vutbr.fit.interlockSim.context.isProcessControl
 import cz.vutbr.fit.interlockSim.util.isPlatformInterrupt
 import io.github.oshai.kotlinlogging.KotlinLogging
 

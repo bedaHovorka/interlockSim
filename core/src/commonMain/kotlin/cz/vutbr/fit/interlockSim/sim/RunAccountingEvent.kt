@@ -11,8 +11,8 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.guardedRecipient
 import cz.vutbr.fit.interlockSim.exceptions.SimulationStalled
-import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * A fact about the run that the metrics service counts toward its run-end accounting
@@ -191,8 +191,6 @@ data class RunEnded(
 	val wallSeconds: Double
 )
 
-private val logger = KotlinLogging.logger {}
-
 /**
  * Send [event] on the kDisco event bus, guarded so that announcing it never changes the run (see
  * [emitCustomGuarded]); a no-op outside a running simulation. Public so the `:dispatcher-agent`
@@ -203,28 +201,18 @@ private val logger = KotlinLogging.logger {}
 fun emitRunAccountingEvent(event: RunAccountingEvent) = emitCustomGuarded(event)
 
 /**
- * The raw kDisco listener behind [onRunAccountingEvent]: carries the [RunAccountingEvent] payload of a
- * [SimulationEvent.Custom] to [listener] and drops everything else. A [listener] that throws an
- * ordinary exception is logged at WARN; kDisco's process control (`CancellationException`, kDisco's
- * `ProcessTerminatedException`) is rethrown by [rethrowProcessControl], consistently with
- * [trainJourneyGuard], so [emitCustomGuarded] can unwind the emitting process.
+ * The raw kDisco listener behind [onRunAccountingEvent]: the typed lane's [guardedRecipient], so a
+ * [listener] that throws an ordinary exception is logged at WARN and the event still reaches the
+ * subscribers after it, while kDisco's process control (`CancellationException`, kDisco's
+ * `ProcessTerminatedException`) passes, so [emitCustomGuarded] can unwind the emitting process (Issue
+ * #1324).
  *
  * Kept as a named function so tests can wire it onto a bare kDisco `Simulation`.
  *
  * @since Issue #1304 (Goal 6 SP6)
  */
 internal fun runAccountingRecipient(listener: (RunAccountingEvent) -> Unit): (SimulationEvent) -> Unit =
-	{ event ->
-		val payload = (event as? SimulationEvent.Custom)?.payload
-		if (payload is RunAccountingEvent) {
-			try {
-				listener(payload)
-			} catch (e: Exception) {
-				rethrowProcessControl(e)
-				logger.warn(e) { "A RunAccountingEvent listener failed on $payload (Issue #1304)" }
-			}
-		}
-	}
+	guardedRecipient(listener)
 
 /**
  * Subscribe to [RunAccountingEvent]s. Sugar over [SimulationEnvironment.onSimulationEvent], with its
@@ -238,22 +226,21 @@ fun SimulationEnvironment.onRunAccountingEvent(listener: (RunAccountingEvent) ->
 	onSimulationEvent(runAccountingRecipient(listener))
 
 /**
+ * The raw kDisco listener behind [onRunEnded]: the typed lane's [guardedRecipient] (Issue #1324). Kept as
+ * a named function so tests can wire it onto a bare kDisco `Simulation`.
+ *
+ * @since Issue #1324
+ */
+internal fun runEndedRecipient(listener: (RunEnded) -> Unit): (SimulationEvent) -> Unit = guardedRecipient(listener)
+
+/**
  * Subscribe to [RunEnded]. Sugar over [SimulationEnvironment.onSimulationEvent]: register before
  * `run()`. A [listener] that throws is logged at WARN and the event still reaches the subscribers
  * after it, except for kDisco's process control (a `CancellationException`, a listener terminating
- * the running process), which [rethrowProcessControl] rethrows (Issue #1361).
+ * the running process), which [runEndedRecipient] rethrows. The context delivers `RunEnded` after the
+ * kernel stopped, one listener at a time, so a rethrow there leaves `run()` only after every run-end
+ * listener and the cleanup (Issue #1324).
  *
  * @since Issue #1304 (Goal 6 SP6)
  */
-fun SimulationEnvironment.onRunEnded(listener: (RunEnded) -> Unit) =
-	onSimulationEvent { event ->
-		val payload = (event as? SimulationEvent.Custom)?.payload
-		if (payload is RunEnded) {
-			try {
-				listener(payload)
-			} catch (e: Exception) {
-				rethrowProcessControl(e)
-				logger.warn(e) { "A RunEnded listener failed on $payload (Issue #1304)" }
-			}
-		}
-	}
+fun SimulationEnvironment.onRunEnded(listener: (RunEnded) -> Unit) = onSimulationEvent(runEndedRecipient(listener))
