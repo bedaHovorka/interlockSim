@@ -72,9 +72,7 @@ internal fun <T> deliverContained(
 		listener(event)
 	} catch (e: Exception) {
 		rethrowProcessControl(e)
-		logger.warn(e) {
-			"A simulation event listener failed on $event; the listeners after it still get the event (Issue #1361)"
-		}
+		logger.warn(e) { "A simulation event listener failed on $event (Issue #1324)" }
 	}
 }
 

@@ -1434,6 +1434,8 @@ open class DefaultSimulationContext(
 		wireCustomEventListeners(sim, pendingConflictEventListeners)
 		// Issue #1306 (Goal 6 SP8): the one wall clock of every harness, read around the kernel run.
 		val kernelStartNanos = monotonicNanosKMP()
+		// The run's own failure, kept so a throwable of the run end that takes its place still carries it.
+		var runFailure: Throwable? = null
 		try {
 			var stepState = StepControlState(prevTime = 0.0)
 			runBlocking {
@@ -1445,21 +1447,41 @@ open class DefaultSimulationContext(
 		} catch (e: DiscoException) {
 			// A kernel-level failure must not shadow the recorded main-process one (PR #1419): the
 			// wrapped SimulationException would make headless report a failed run as NOT_STARTED.
-			mainProcessFailure?.let { throw it }
-			logger.error(e) { "Simulation run failed" }
-			throw SimulationException(e)
+			val failure =
+				mainProcessFailure ?: SimulationException(e).also { logger.error(e) { "Simulation run failed" } }
+			runFailure = failure
+			throw failure
+		} catch (t: Throwable) {
+			runFailure = t
+			throw t
 		} finally {
-			val wallSeconds = (monotonicNanosKMP() - kernelStartNanos) / NANOS_PER_SECOND
-			val kernelEndTime = sim.time()
-			try {
-				flushUnresolvedReservationConflicts(kernelEndTime)
-				// An Error from a run-end subscriber propagates, but never skips the cleanup below.
-				deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
-			} finally {
-				lastRunEndTime = kernelEndTime
-				simulation = null // Release reference once sim.run() returns (natural end or stop() called)
-				currentController = null
-			}
+			endRun(sim, (monotonicNanosKMP() - kernelStartNanos) / NANOS_PER_SECOND, runFailure)
+		}
+	}
+
+	/**
+	 * The run end of [run], from its `finally`: the contention flush, the delivery of [RunEnded], then the
+	 * cleanup, which nothing skips. A run-end subscriber's [Error] or kDisco process control propagates
+	 * (Issue #1324) and takes the place of the run's own failure [runFailure], so it carries that failure as
+	 * suppressed -- a headless report can still read the main-process failure.
+	 */
+	private fun endRun(
+		sim: Simulation,
+		wallSeconds: Double,
+		runFailure: Throwable?
+	) {
+		val kernelEndTime = sim.time()
+		try {
+			flushUnresolvedReservationConflicts(kernelEndTime)
+			// An Error or process control from a run-end subscriber propagates, but never skips the cleanup below.
+			deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
+		} catch (t: Throwable) {
+			if (runFailure != null && runFailure !== t) t.addSuppressed(runFailure)
+			throw t
+		} finally {
+			lastRunEndTime = kernelEndTime
+			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
+			currentController = null
 		}
 	}
 

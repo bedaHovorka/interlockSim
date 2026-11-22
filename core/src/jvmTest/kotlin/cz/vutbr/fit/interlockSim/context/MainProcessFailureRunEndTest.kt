@@ -32,6 +32,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * A run whose main process dies ends with a failure instead of spinning (Issue #1361, step (e)).
@@ -153,6 +154,28 @@ class MainProcessFailureRunEndTest : KoinTestBase() {
 		assertThat(ended.map { it.endTimeReached }, name = "run ends delivered").isEqualTo(listOf(false))
 		val summary = context.getMetricsServices().getMetricsCollectionService().runEndSummary()
 		assertThat(summary.classification).isEqualTo(RunEndClassification.TERMINATED_EARLY)
+	}
+
+	/**
+	 * A run-end listener's process control leaves `run()` after the cleanup (Issue #1324) and takes the place
+	 * of the run's own failure -- which it must carry, as suppressed, so the main-process failure that a
+	 * headless report reads is not lost without a trace.
+	 */
+	@Test
+	fun `a run-end cancellation carries the failure of the run as suppressed`() {
+		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
+		val failure = IllegalStateException("main process failure injected by the test")
+		context.setMainProcess(FailingMainProcess(failure))
+		val cancellation = CancellationException("run-end cancellation injected by the test")
+		context.onRunEnded { throw cancellation }
+
+		assertFailure { context.run() }.isSameInstanceAs(cancellation)
+
+		val suppressed = cancellation.suppressed.toList()
+		assertThat(suppressed.size, name = "suppressed throwables").isEqualTo(1)
+		val runFailure = suppressed.single()
+		assertThat(runFailure, name = "the run's own failure").isInstanceOf(MainProcessFailedException::class)
+		assertThat(runFailure.cause, name = "its cause").isSameInstanceAs(failure)
 	}
 
 	@Test

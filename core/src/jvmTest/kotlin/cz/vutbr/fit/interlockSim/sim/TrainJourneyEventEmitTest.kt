@@ -167,7 +167,8 @@ class TrainJourneyEventEmitTest {
 				throw CancellationException("cancellation injected by the test")
 			}
 
-		val caught = runCatching { recipient(SimulationEvent.Custom(1.0, TrainJourneyEvent.Admitted(TEST_TRAIN_NAME, 1.0))) }
+		val event = SimulationEvent.Custom(1.0, TrainJourneyEvent.Admitted(TEST_TRAIN_NAME, 1.0))
+		val caught = runCatching { recipient(event) }
 		val thrown = caught.exceptionOrNull() ?: error("the guard swallowed the cancellation")
 
 		Util.assertInstanceOf<CancellationException>(thrown)
@@ -201,7 +202,7 @@ class TrainJourneyEventEmitTest {
 			val containmentWarnings =
 				appender.warnMessages().filter { it.startsWith("A simulation event listener failed on ") }
 			assertThat(containmentWarnings, "the containment WARN line").hasSize(1)
-			assertThat(containmentWarnings.single()).contains("(Issue #1361)")
+			assertThat(containmentWarnings.single()).contains("(Issue #1324)")
 		}
 
 		assertThat(calls, "the failing listener threw").isEqualTo(1)
@@ -212,7 +213,8 @@ class TrainJourneyEventEmitTest {
 
 	/**
 	 * The rethrow branch of [deliverContained] (Issue #1361): a cancellation is kDisco's process control
-	 * ([cz.vutbr.fit.interlockSim.context.rethrowProcessControl]), so the very instance the listener threw leaves the guard.
+	 * ([cz.vutbr.fit.interlockSim.context.rethrowProcessControl]), so the very instance the listener threw
+	 * leaves the guard.
 	 */
 	@Test
 	fun `a listener cancelling leaves deliverContained as the very instance thrown`() {

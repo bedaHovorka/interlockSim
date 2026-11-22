@@ -77,8 +77,8 @@ data class ReservationExpired(
  * Each subscriber registered here is isolated: a [listener] that throws is logged at WARN and the
  * event still reaches the subscribers after it -- except kDisco's process control (a
  * `CancellationException`, a listener terminating the running process), which [rethrowProcessControl]
- * passes through (Issue #1310) -- the one contract of every typed lane, [guardedRecipient] (Issue #1324). kDisco's bus walks its
- * listeners with no guard of its own. In a context run the delivery guard (Issue #1361) contains a
+ * passes through (Issue #1310) -- the one contract of every typed lane, [guardedRecipient] (Issue
+ * #1324). kDisco's bus walks its listeners with no guard of its own. In a context run the delivery guard (Issue #1361) contains a
  * raw [SimulationEnvironment.onSimulationEvent] subscriber that throws first, so the ones after it
  * still get the event; on a bare kDisco bus the ones after it miss the event, and
  * [DefaultReservationExpiry]'s guarded emit then only contains the failure so the completed expiry
