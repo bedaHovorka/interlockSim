@@ -12,9 +12,9 @@ package cz.vutbr.fit.interlockSim
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -102,8 +102,19 @@ class DispatcherRunPersistenceTest : KoinTestBase() {
 		val name = DispatcherRunSummaries.fileRunName(File("/some/dir/vyhybna.xml"))
 
 		assertThat(name, "run name").isEqualTo("vyhybna.xml")
-		// The extension keeps a file run apart from every registered example name.
-		assertThat(name, "run name").isNotEqualTo(ExampleNames.SHUNTING_LOOP)
+	}
+
+	/**
+	 * Tripwire for the #1328 rule: a run from a file with an extension can never be pooled with an
+	 * example in the sweep report only because no registered example name contains a dot.
+	 */
+	@Test
+	@DisplayName("no registered example name contains a dot, so a file run with an extension never equals one (#1328)")
+	fun noExampleNameContainsADot() {
+		val registry = get<ExampleRegistry>()
+		val names = registry.examples.keys + registry.guiExamples.keys
+
+		assertThat(names.filter { '.' in it }, "example names with a dot").isEmpty()
 	}
 
 	@Test

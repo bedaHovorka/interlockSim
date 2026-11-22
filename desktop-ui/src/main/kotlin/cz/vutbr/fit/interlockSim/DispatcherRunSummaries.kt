@@ -113,12 +113,13 @@ object DispatcherRunSummaries {
 
 	/**
 	 * The name a run started from an XML file records as its `example` (Issue #1328): the file's
-	 * base name **with** its extension (`vyhybna.xml`), never a path.
+	 * base name **with** its extension, never a path.
 	 *
-	 * Keeping the extension means the name can never equal a registered example name (none
-	 * contains a dot), so a file run is never pooled with an example in the sweep report. Two files
-	 * with the same base name in different directories do pool — the accepted cost of keeping
-	 * machine-specific paths out of the run JSON.
+	 * For a file with an extension (`vyhybna.xml`) the name can never equal a registered example
+	 * name, because none contains a dot (pinned by `DispatcherRunPersistenceTest`), so such a file
+	 * run is never pooled with an example in the sweep report. A file without an extension that is
+	 * named like an example would pool with it. Two files with the same name in different
+	 * directories also pool — the accepted cost of keeping machine-specific paths out of the run JSON.
 	 */
 	fun fileRunName(sourceFile: File): String = sourceFile.name
 

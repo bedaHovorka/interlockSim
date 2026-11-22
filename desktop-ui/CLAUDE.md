@@ -83,9 +83,10 @@ Every GUI start hands a run name to `Frame.startSimulation(runName)`; the STOPPE
 - `exampleGui <name>` (`Main.runExampleGui`) records the example name (`ExampleNames` constant).
 - `simgui <file>` (`Main.loadSimWithGui`) and **Simulation → Start...** (`startSimulationFromFile` in
   `MenuBar.kt`, which takes the name before it clears the current file) record
-  `DispatcherRunSummaries.fileRunName`: the file's base name **with** its extension (`vyhybna.xml`), never a path.
-  No example name contains a dot, so a file run never pools with an example; two files with the same
-  base name in different directories do pool in the sweep report.
+  `DispatcherRunSummaries.fileRunName`: the file's base name **with** its extension, never a path.
+  No example name contains a dot (pinned), so a file with an extension (`vyhybna.xml`) never pools with
+  an example; an extensionless file named like an example would. Two files with the same name in
+  different directories do pool in the sweep report.
 
 ## Verification and Benchmark Tasks
 

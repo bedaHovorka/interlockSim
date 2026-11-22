@@ -67,14 +67,23 @@ class GuiRunNamePersistenceTest : AbstractFrameTestBase() {
 
 		/** The XML fixture's file name: what a run from that file must persist. */
 		const val XML_FILE_NAME = "vyhybna.xml"
+
+		/** Where the `simgui` test copies the fixture: below the working directory, as Main requires. */
+		val FIXTURE_COPY_DIR = File("build/tmp/guiRunNamePersistenceTest")
 	}
 
 	private val contexts = mutableListOf<SimulationContext>()
 
+	/**
+	 * Stops only the frames this test registered. Resolving the Koin `Frame` here would create it
+	 * even when the test was skipped as headless, and the resulting `HeadlessException` would turn
+	 * the skip into a failure.
+	 */
 	@AfterEach
 	fun closeContexts() {
-		SwingUtilities.invokeAndWait { getKoin().getOrNull<Frame>()?.stopSimulation() }
+		frames.forEach { frame -> SwingUtilities.invokeAndWait { frame.stopSimulation() } }
 		contexts.forEach { it.close() }
+		FIXTURE_COPY_DIR.deleteRecursively()
 	}
 
 	@Test
@@ -186,7 +195,7 @@ class GuiRunNamePersistenceTest : AbstractFrameTestBase() {
 	}
 
 	private fun fixtureCopyInWorkingDirectory(): File {
-		val dir = File("build/tmp/guiRunNamePersistenceTest").apply { mkdirs() }
+		val dir = FIXTURE_COPY_DIR.apply { mkdirs() }
 		val file = File(dir, XML_FILE_NAME)
 		TestFixtures.loadShuntingXml().use { input -> file.outputStream().use { input.copyTo(it) } }
 		return file

@@ -186,8 +186,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var wiredRunScope: Scope? = null
 
 	/**
-	 * Name handed to the latest [startSimulation]: the example name, or the XML file's base name
-	 * with its extension (Issue #1328). `null` when the caller passed none.
+	 * Name handed to the latest [startSimulation]: the example name, or the XML file's
+	 * [DispatcherRunSummaries.fileRunName] (Issue #1328). `null` when the caller passed none.
+	 * One-shot: RUNNING moves it into [wiredRunName] and clears it.
 	 */
 	private var startedRunName: String? = null
 
@@ -282,6 +283,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							wiredRunScope = currentSimulationContext?.scope
 							// Issue #1328: the run JSON names the example or XML file this run started from.
 							wiredRunName = startedRunName
+							startedRunName = null
 							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
 							wireDispatcherControlPanel()
 							// Issue #675: start the dashboard on this run's metrics service (read only through
