@@ -51,24 +51,49 @@ class EmitSiteGuardTest : EmitSiteScenarios() {
 		val runEnded: Boolean
 	)
 
+	/** What the observers registered by [registerObservers] observe during a scenario run. */
+	private class Observations {
+		var thrown = 0
+		val raw = mutableListOf<String>()
+		val typed = mutableListOf<String>()
+		var runEnded = false
+	}
+
 	private fun kindOf(payload: Any?): String = payload?.let { it::class.simpleName } ?: "null"
 
 	/**
 	 * Runs [scenario] once in the main process of the test's context, with a first raw subscriber that
 	 * throws on [throwOn] when it is given; the second value is how often it threw. A typed block listener
 	 * may be made to throw with [typedThrowOn]. A raw and a typed subscriber registered after the throwing
-	 * one record every payload they get.
+	 * one record every payload they get. The work is split into [registerObservers] and
+	 * [runScenarioInMainProcess].
 	 */
 	private fun inContext(
 		throwOn: KClass<*>?,
 		typedThrowOn: KClass<*>? = null,
 		scenario: () -> Any?
 	): Pair<ContextOutcome, Int> {
-		var thrown = 0
+		val observations = registerObservers(throwOn, typedThrowOn)
+		val (result, failure) = runScenarioInMainProcess(scenario)
+		val outcome = ContextOutcome(result, failure, observations.raw, observations.typed, observations.runEnded)
+		return outcome to observations.thrown
+	}
+
+	/**
+	 * Registers the scenario run's observers and returns what they observe. The throwing subscribers come
+	 * first: [throwOn] makes a first raw subscriber throw on the payload, [typedThrowOn] makes a typed
+	 * block listener throw. Registered after them, a later raw subscriber and the typed listeners record
+	 * every payload they get, and the run-ended flag observes the end of the run.
+	 */
+	private fun registerObservers(
+		throwOn: KClass<*>?,
+		typedThrowOn: KClass<*>?
+	): Observations {
+		val observations = Observations()
 		if (throwOn != null) {
 			simulationContext.onSimulationEvent { event ->
 				if (throwOn.isInstance(payloadOf(event))) {
-					thrown++
+					observations.thrown++
 					error("raw subscriber failure injected by the test")
 				}
 			}
@@ -76,20 +101,28 @@ class EmitSiteGuardTest : EmitSiteScenarios() {
 		if (typedThrowOn != null) {
 			simulationContext.onBlockEvent { event ->
 				if (typedThrowOn.isInstance(event)) {
-					thrown++
+					observations.thrown++
 					error("typed block listener failure injected by the test")
 				}
 			}
 		}
-		val raw = mutableListOf<String>()
-		simulationContext.onSimulationEvent { event -> if (event is SimulationEvent.Custom) raw += kindOf(event.payload) }
-		val typed = mutableListOf<String>()
-		simulationContext.onBlockEvent { typed += kindOf(it) }
-		simulationContext.onConflictDetectedEvent { typed += kindOf(it) }
-		simulationContext.onSwitchClaimsReleased { typed += kindOf(it) }
-		simulationContext.getCollisionServices().onCollisionWarning { typed += kindOf(it) }
-		var runEnded = false
-		simulationContext.onRunEnded { runEnded = true }
+		simulationContext.onSimulationEvent { event ->
+			if (event is SimulationEvent.Custom) observations.raw += kindOf(event.payload)
+		}
+		simulationContext.onBlockEvent { observations.typed += kindOf(it) }
+		simulationContext.onConflictDetectedEvent { observations.typed += kindOf(it) }
+		simulationContext.onSwitchClaimsReleased { observations.typed += kindOf(it) }
+		simulationContext.getCollisionServices().onCollisionWarning { observations.typed += kindOf(it) }
+		simulationContext.onRunEnded { observations.runEnded = true }
+		return observations
+	}
+
+	/**
+	 * Runs [scenario] once in the main process of the test's context and returns its result and failure
+	 * message. An `Exception` the scenario throws is the failure; a thrown assertion failure is not one:
+	 * the run still ends, and the assertion is rethrown afterwards to fail the test.
+	 */
+	private fun runScenarioInMainProcess(scenario: () -> Any?): Pair<Any?, String?> {
 		var result: Any? = null
 		var failure: String? = null
 		var escaped: Throwable? = null
@@ -109,8 +142,9 @@ class EmitSiteGuardTest : EmitSiteScenarios() {
 			}
 		)
 		simulationContext.run()
+		// The run ended with it, so the assertion fails the test now.
 		escaped?.let { throw it }
-		return ContextOutcome(result, failure, raw, typed, runEnded) to thrown
+		return result to failure
 	}
 
 	@ParameterizedTest(name = "a first raw subscriber throwing on {0}")
