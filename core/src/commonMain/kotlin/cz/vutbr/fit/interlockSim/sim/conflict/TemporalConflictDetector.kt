@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim.conflict
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.deliverContained
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -142,8 +143,9 @@ class TemporalConflictDetector(
 	 * Register a listener that is called each time a [TemporalConflictEvent] is detected.
 	 *
 	 * Listeners are called synchronously on the simulation thread.  Each listener is
-	 * isolated — a throwing listener is logged but does **not** prevent delivery to the
-	 * remaining listeners.
+	 * isolated — a listener that throws an ordinary exception is logged at WARN and does **not**
+	 * prevent delivery to the remaining listeners; kDisco's process control passes and an [Error]
+	 * is never caught, as on every typed event lane (Issue #1324).
 	 *
 	 * Unlike [cz.vutbr.fit.interlockSim.context.SimulationEnvironment.onTemporalConflictEvent],
 	 * this method has **no** "silently ignored after run() has started" guard: it always
@@ -354,13 +356,9 @@ class TemporalConflictDetector(
 			"Temporal conflict detected: $trainA ↔ $trainB on ${block.name} " +
 				"at predicted t=$predictedConflictTime (detected at t=$detectionTime)"
 		}
-		listeners.toList().forEach { listener ->
-			try {
-				listener(event)
-			} catch (e: Throwable) {
-				logger.error(e) { "TemporalConflictEvent listener threw; continuing to remaining listeners" }
-			}
-		}
+		// The one listener-guard contract (Issue #1324): a plain failure is contained, kDisco's process
+		// control unwinds the process that reserved the block, an Error is never caught.
+		listeners.toList().forEach { deliverContained(it, event) }
 	}
 
 	companion object {

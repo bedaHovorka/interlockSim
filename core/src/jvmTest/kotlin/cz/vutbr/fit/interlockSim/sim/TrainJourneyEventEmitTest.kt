@@ -20,6 +20,7 @@ import assertk.assertions.isTrue
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
 import cz.ksimulantenbande.kdisco.SimulationEvent
+import cz.vutbr.fit.interlockSim.context.deliverContained
 import cz.vutbr.fit.interlockSim.testutil.warnMessages
 import cz.vutbr.fit.interlockSim.testutil.withLogOf
 import cz.vutbr.fit.interlockSim.util.Util
@@ -46,8 +47,8 @@ class TrainJourneyEventEmitTest {
 		const val TEST_TRAIN_NAME = "T1"
 
 		/** The file logger that [deliverContained] logs its containment at: kotlin-logging names a
-		 * file-level logger after its file, without the `Kt` suffix. */
-		const val DELIVERY_GUARD_LOGGER = "cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent"
+		 * file-level logger after its file, without the `Kt` suffix (Issue #1324 moved it to `context/`). */
+		const val DELIVERY_GUARD_LOGGER = "cz.vutbr.fit.interlockSim.context.SimulationEventGuard"
 	}
 
 	/** The emitting process; [reachedAfterEmit] tells whether it ran on past the emit. */
@@ -161,12 +162,13 @@ class TrainJourneyEventEmitTest {
 
 	@Test
 	fun `a typed listener cancelling is rethrown by the guard`() {
-		val guarded =
-			trainJourneyGuard {
+		val recipient =
+			trainJourneyRecipient {
 				throw CancellationException("cancellation injected by the test")
 			}
 
-		val caught = runCatching { guarded(TrainJourneyEvent.Admitted(TEST_TRAIN_NAME, 1.0)) }
+		val event = SimulationEvent.Custom(1.0, TrainJourneyEvent.Admitted(TEST_TRAIN_NAME, 1.0))
+		val caught = runCatching { recipient(event) }
 		val thrown = caught.exceptionOrNull() ?: error("the guard swallowed the cancellation")
 
 		Util.assertInstanceOf<CancellationException>(thrown)
@@ -200,7 +202,7 @@ class TrainJourneyEventEmitTest {
 			val containmentWarnings =
 				appender.warnMessages().filter { it.startsWith("A simulation event listener failed on ") }
 			assertThat(containmentWarnings, "the containment WARN line").hasSize(1)
-			assertThat(containmentWarnings.single()).contains("(Issue #1361)")
+			assertThat(containmentWarnings.single()).contains("(Issue #1324)")
 		}
 
 		assertThat(calls, "the failing listener threw").isEqualTo(1)
@@ -211,7 +213,8 @@ class TrainJourneyEventEmitTest {
 
 	/**
 	 * The rethrow branch of [deliverContained] (Issue #1361): a cancellation is kDisco's process control
-	 * ([rethrowProcessControl]), so the very instance the listener threw leaves the guard.
+	 * ([cz.vutbr.fit.interlockSim.context.rethrowProcessControl]), so the very instance the listener threw
+	 * leaves the guard.
 	 */
 	@Test
 	fun `a listener cancelling leaves deliverContained as the very instance thrown`() {

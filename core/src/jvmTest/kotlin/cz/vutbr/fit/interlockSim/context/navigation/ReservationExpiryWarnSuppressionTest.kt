@@ -126,7 +126,7 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 			received += it
 			countsAtDelivery += expiry.expiredHoldingCount
 		}
-		withLogOf(ReservationExpired::class.java.name) { appender ->
+		withLogOf(DELIVERY_GUARD_LOGGER) { appender ->
 			val zA = findSemaphoreByName("zA")
 			lateinit var blocks: List<DynamicTrackBlock>
 
@@ -297,5 +297,11 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 		 * kotlin-logging names a file-level logger after the file, without the `Kt` suffix.
 		 */
 		const val GUARDED_EMIT_LOGGER = "cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent"
+
+		/**
+		 * The logger of the one listener guard (`deliverContained`, file `SimulationEventGuard.kt`), which
+		 * every typed lane delivers through since Issue #1324.
+		 */
+		const val DELIVERY_GUARD_LOGGER = "cz.vutbr.fit.interlockSim.context.SimulationEventGuard"
 	}
 }

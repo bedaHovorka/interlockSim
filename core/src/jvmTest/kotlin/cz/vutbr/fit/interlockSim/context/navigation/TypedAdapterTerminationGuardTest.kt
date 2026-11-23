@@ -44,6 +44,9 @@ import java.util.concurrent.TimeUnit
  * adapter its payload itself, on the simulation thread of a live process, which is the delivery the
  * adapter's guard exists for.
  *
+ * The overlap with `ListenerGuardContractTest` (commonTest) is intentional: this class subscribes through
+ * the environment helpers, that one wires the bare lane recipients (Issue #1324).
+ *
  * @since Issue #1361
  */
 @DisplayName("Process control at the typed adapters (Issue #1361)")

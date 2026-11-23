@@ -56,7 +56,6 @@ import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
-import cz.vutbr.fit.interlockSim.sim.deliverContained
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
@@ -1435,6 +1434,8 @@ open class DefaultSimulationContext(
 		wireCustomEventListeners(sim, pendingConflictEventListeners)
 		// Issue #1306 (Goal 6 SP8): the one wall clock of every harness, read around the kernel run.
 		val kernelStartNanos = monotonicNanosKMP()
+		// The run's own failure, kept so a throwable of the run end that takes its place still carries it.
+		var runFailure: Throwable? = null
 		try {
 			var stepState = StepControlState(prevTime = 0.0)
 			runBlocking {
@@ -1446,21 +1447,43 @@ open class DefaultSimulationContext(
 		} catch (e: DiscoException) {
 			// A kernel-level failure must not shadow the recorded main-process one (PR #1419): the
 			// wrapped SimulationException would make headless report a failed run as NOT_STARTED.
-			mainProcessFailure?.let { throw it }
-			logger.error(e) { "Simulation run failed" }
-			throw SimulationException(e)
+			val failure =
+				mainProcessFailure ?: SimulationException(e).also { logger.error(e) { "Simulation run failed" } }
+			runFailure = failure
+			throw failure
+		} catch (t: Throwable) {
+			runFailure = t
+			throw t
 		} finally {
-			val wallSeconds = (monotonicNanosKMP() - kernelStartNanos) / NANOS_PER_SECOND
-			val kernelEndTime = sim.time()
-			try {
-				flushUnresolvedReservationConflicts(kernelEndTime)
-				// An Error from a run-end subscriber propagates, but never skips the cleanup below.
-				deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
-			} finally {
-				lastRunEndTime = kernelEndTime
-				simulation = null // Release reference once sim.run() returns (natural end or stop() called)
-				currentController = null
-			}
+			endRun(sim, (monotonicNanosKMP() - kernelStartNanos) / NANOS_PER_SECOND, runFailure)
+		}
+	}
+
+	/**
+	 * The run end of [run], from its `finally`: the contention flush, the delivery of [RunEnded], then the
+	 * cleanup, which nothing skips. A run-end subscriber's [Error] or kDisco process control propagates
+	 * (Issue #1324) and takes the place of the run's own failure [runFailure], so it carries that failure as
+	 * suppressed -- a headless report can still read the main-process failure.
+	 */
+	private fun endRun(
+		sim: Simulation,
+		wallSeconds: Double,
+		runFailure: Throwable?
+	) {
+		val kernelEndTime = sim.time()
+		try {
+			flushUnresolvedReservationConflicts(kernelEndTime)
+			// An Error or process control from a run-end subscriber propagates, but never skips the cleanup below.
+			deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
+		} catch (t: Throwable) {
+			// Never added to itself: a run failure thrown again stays one throwable (explicit, because the JVM
+			// member Throwable.addSuppressed throws on self-suppression; only Kotlin's extension skips it).
+			if (runFailure != null && runFailure !== t) t.addSuppressed(runFailure)
+			throw t
+		} finally {
+			lastRunEndTime = kernelEndTime
+			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
+			currentController = null
 		}
 	}
 
@@ -1554,19 +1577,35 @@ open class DefaultSimulationContext(
 	 * reason as [flushUnresolvedReservationConflicts]: the kernel has stopped and `emitCustom` is a
 	 * no-op. A listener that throws an [Exception] is logged at WARN and the ones after it still
 	 * receive the event; an [Error] is never caught.
+	 *
+	 * kDisco's process control ([isProcessControl]) follows the one listener-guard contract (Issue #1324):
+	 * it is not a failure, so it is not logged and not swallowed. The catch stays per listener, so it
+	 * cannot skip the run-end listeners after it: the first one is kept, later ones are added to it as
+	 * suppressed, and it is rethrown once every listener has had the event. It then leaves [run] after the
+	 * cleanup of its `finally` and, like an [Error] here, takes the place of a failure the run itself
+	 * threw -- a cancellation means the caller no longer waits for the run's own outcome.
 	 */
 	private fun deliverRunEnded(runEnded: RunEnded) {
 		val event = KDiscoSimulationEvent.Custom(runEnded.time, runEnded)
 		val inOrder =
 			metricsListenerIndices.map { pendingSimEventListeners[it] } +
 				pendingSimEventListeners.filterIndexed { index, _ -> index !in metricsListenerIndices }
+		var processControl: Exception? = null
 		inOrder.forEach { listener ->
 			try {
 				listener(event)
 			} catch (e: Exception) {
-				logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
+				val first = processControl
+				when {
+					!isProcessControl(e) ->
+						logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
+					first == null -> processControl = e
+					// The same instance from two listeners (one shared cancellation) is not added to itself.
+					first !== e -> first.addSuppressed(e)
+				}
 			}
 		}
+		processControl?.let { throw it }
 	}
 
 	/**
@@ -1652,8 +1691,11 @@ open class DefaultSimulationContext(
 		// by InOutWorker/Train on a fatal simulation error) as well as any other caller of
 		// stop() — both terminate mainProcess without ever reaching ShuntingLoop.interLoopSleep's
 		// end-time branch, so without this the flag would stay true forever after such a stop.
-		// Safe cast keeps this a no-op for non-ShuntingLoop main processes (e.g. MultiTrainLoop).
-		(mainProcess as? ShuntingLoop)?.signalStopped()
+		// A no-op for non-ShuntingLoop main processes (e.g. MultiTrainLoop). `is` check, not an `as?` cast:
+		// Sonar's S6530 flags the cast as one that can never succeed, although ShuntingLoop IS-A LoopProcess
+		// (as in stopOnMainProcessFailure; a `var` property cannot be smart-cast, hence the local).
+		val main = mainProcess
+		if (main is ShuntingLoop) main.signalStopped()
 		logger.info { "Stopping simulation: terminating ${workers.size} workers and main process" }
 
 		val exceptions = mutableListOf<Throwable>()

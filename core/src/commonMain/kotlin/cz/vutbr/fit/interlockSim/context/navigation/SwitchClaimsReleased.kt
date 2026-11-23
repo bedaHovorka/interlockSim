@@ -11,9 +11,9 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.guardedRecipient
+import cz.vutbr.fit.interlockSim.context.rethrowProcessControl
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.sim.rethrowProcessControl
-import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * A train's teardown ([RouteReleaser.unregister]) unlocked switch claims the train still held
@@ -43,25 +43,22 @@ internal data class SwitchClaimsReleased(
 	val time: Double
 )
 
-private val logger = KotlinLogging.logger {}
-
 /**
  * Subscribe to [SwitchClaimsReleased] (Issue #1271). Sugar over
  * [SimulationEnvironment.onSimulationEvent], with its contract: register before `run()`, delivered
  * synchronously on the simulation thread. A [listener] that throws is logged at WARN and the event
  * still reaches the subscribers after it, as for [onReservationExpired] -- except kDisco's process
  * control (a `CancellationException`, a listener terminating the running process), which
- * [rethrowProcessControl] rethrows (Issue #1361).
+ * [rethrowProcessControl] rethrows: the one contract of every typed lane, [guardedRecipient] (Issue #1324).
  */
 internal fun SimulationEnvironment.onSwitchClaimsReleased(listener: (SwitchClaimsReleased) -> Unit) =
-	onSimulationEvent { event ->
-		val payload = (event as? SimulationEvent.Custom)?.payload
-		if (payload is SwitchClaimsReleased) {
-			try {
-				listener(payload)
-			} catch (e: Exception) {
-				rethrowProcessControl(e)
-				logger.warn(e) { "A SwitchClaimsReleased listener failed for '${payload.trainId}' (Issue #1271)" }
-			}
-		}
-	}
+	onSimulationEvent(switchClaimsReleasedRecipient(listener))
+
+/**
+ * The raw kDisco listener behind [onSwitchClaimsReleased]: the typed lane's [guardedRecipient] (Issue
+ * #1324). Kept as a named function so tests can wire it onto a bare kDisco `Simulation`.
+ *
+ * @since Issue #1324
+ */
+internal fun switchClaimsReleasedRecipient(listener: (SwitchClaimsReleased) -> Unit): (SimulationEvent) -> Unit =
+	guardedRecipient({ it as? SwitchClaimsReleased }, listener)

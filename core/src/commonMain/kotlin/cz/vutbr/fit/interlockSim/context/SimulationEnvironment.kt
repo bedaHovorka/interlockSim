@@ -513,6 +513,12 @@ interface SimulationEnvironment : NetworkState {
 	 * Listeners registered after [run] has started are silently ignored (this is based on simulation start,
 	 * not on context freezing).
 	 *
+	 * One listener-guard contract covers this bus (Issue #1324; `SimulationEventGuard.kt` in this package):
+	 * a listener's plain failure on a `Custom` payload is contained by [deliverContained] -- logged at WARN,
+	 * the listeners after it still get the event -- while kDisco's process control ([isProcessControl])
+	 * passes and an [Error] is never caught. The typed helpers built on this method deliver through
+	 * [guardedRecipient].
+	 *
 	 * @since Issue #569 (Goal 10 prereq)
 	 */
 	fun onSimulationEvent(listener: (KDiscoSimulationEvent) -> Unit)

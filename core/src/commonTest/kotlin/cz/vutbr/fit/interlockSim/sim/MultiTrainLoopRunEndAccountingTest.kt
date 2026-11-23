@@ -14,6 +14,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
 import cz.ksimulantenbande.kdisco.SimulationEvent
@@ -26,6 +27,7 @@ import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 
 /**
@@ -180,6 +182,92 @@ class MultiTrainLoopRunEndAccountingTest : CommonKoinTestBase() {
 		assertThat(seen.size, name = "RunEnded deliveries").isEqualTo(1)
 		assertThat(seen.single().time, name = "run-end time").isEqualTo(ctx.lastRunEndTime)
 		assertThat(seen.single().endTimeReached, name = "end time reached").isTrue()
+	}
+
+	/**
+	 * The run-end delivery keeps its catch per listener and still lets kDisco's process control pass (Issue
+	 * #1324): a raw listener cancelling on `RunEnded` neither keeps the event from the subscriber after it
+	 * nor skips the cleanup of `run()`; the very cancellation it threw leaves `run()` once both are done.
+	 */
+	@Test
+	fun aRunEndListenerCancellingLeavesRunAfterTheLaterSubscribersAndTheCleanup() {
+		val ctx = context()
+		val cancellation = CancellationException("cancellation injected by the test")
+		ctx.onSimulationEvent { event ->
+			if ((event as? SimulationEvent.Custom)?.payload is RunEnded) throw cancellation
+		}
+		val seen = mutableListOf<RunEnded>()
+		ctx.onRunEnded { seen += it }
+		ctx.setMainProcess(MultiTrainLoop(ctx, endTime = END_TIME))
+
+		val caught = runCatching { ctx.run() }
+
+		assertThat(caught.exceptionOrNull(), name = "what left run()").isSameInstanceAs(cancellation)
+		assertThat(seen.size, name = "RunEnded deliveries after the cancelling listener").isEqualTo(1)
+		assertThat(ctx.lastRunEndTime, name = "the cleanup recorded the run-end time").isEqualTo(seen.single().time)
+	}
+
+	/**
+	 * A plain failure and a cancellation in one run-end delivery (Issue #1324): the failure is contained,
+	 * the cancellation is the one that leaves `run()`, and every subscriber still got the event.
+	 */
+	@Test
+	fun aRunEndDeliveryContainsAPlainFailureAndPassesTheCancellationOfALaterListener() {
+		val ctx = context()
+		val cancellation = CancellationException("cancellation injected by the test")
+		val seen = mutableListOf<String>()
+		ctx.onRunEnded {
+			seen += "failing"
+			error("run-end listener failure injected by the test")
+		}
+		ctx.onRunEnded {
+			seen += "cancelling"
+			throw cancellation
+		}
+		ctx.onRunEnded { seen += "last" }
+		ctx.setMainProcess(MultiTrainLoop(ctx, endTime = END_TIME))
+
+		val caught = runCatching { ctx.run() }
+
+		assertThat(caught.exceptionOrNull(), name = "what left run()").isSameInstanceAs(cancellation)
+		assertThat(seen, name = "run-end subscribers in order").isEqualTo(listOf("failing", "cancelling", "last"))
+	}
+
+	/**
+	 * Two run-end listeners cancelling with two instances (Issue #1324): the first leaves `run()` and carries
+	 * the second as suppressed. Fails if `deliverRunEnded` keeps only the last one or drops the second.
+	 */
+	@Test
+	fun aSecondRunEndCancellationIsCarriedAsSuppressedByTheFirst() {
+		val ctx = context()
+		val first = CancellationException("first cancellation injected by the test")
+		val second = CancellationException("second cancellation injected by the test")
+		ctx.onRunEnded { throw first }
+		ctx.onRunEnded { throw second }
+		ctx.setMainProcess(MultiTrainLoop(ctx, endTime = END_TIME))
+
+		val caught = runCatching { ctx.run() }
+
+		assertThat(caught.exceptionOrNull(), name = "what left run()").isSameInstanceAs(first)
+		assertThat(first.suppressedExceptions, name = "suppressed by the first").isEqualTo(listOf<Throwable>(second))
+	}
+
+	/**
+	 * Two run-end listeners throwing one shared cancellation (Issue #1324): it leaves `run()` once and is not
+	 * added to itself (the identity guard of `deliverRunEnded`).
+	 */
+	@Test
+	fun aSharedRunEndCancellationIsNotSuppressedByItself() {
+		val ctx = context()
+		val shared = CancellationException("shared cancellation injected by the test")
+		ctx.onRunEnded { throw shared }
+		ctx.onRunEnded { throw shared }
+		ctx.setMainProcess(MultiTrainLoop(ctx, endTime = END_TIME))
+
+		val caught = runCatching { ctx.run() }
+
+		assertThat(caught.exceptionOrNull(), name = "what left run()").isSameInstanceAs(shared)
+		assertThat(shared.suppressedExceptions, name = "suppressed by itself").isEmpty()
 	}
 
 	/** An observer registered before any metrics lookup must still see the accounting finished (review of #1311). */
