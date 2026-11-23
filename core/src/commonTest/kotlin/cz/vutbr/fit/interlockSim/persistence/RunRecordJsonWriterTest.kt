@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.matches
+import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
@@ -23,7 +24,6 @@ import cz.vutbr.fit.interlockSim.sim.metrics.RunStall
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.deleteFile
 import cz.vutbr.fit.interlockSim.util.directoryExists
-import cz.vutbr.fit.interlockSim.util.fileExists
 import cz.vutbr.fit.interlockSim.util.readTextFile
 import cz.vutbr.fit.interlockSim.util.tempDirectory
 import kotlinx.serialization.json.Json
@@ -262,7 +262,20 @@ class RunRecordJsonWriterTest {
 		assertThat(path).isEqualTo("$armDirectory/20261122-101500-native-run-1.json")
 		assertThat(directoryExists(armDirectory)).isEqualTo(true)
 		assertThat(readTextFile(path)).isEqualTo(RunRecordJsonWriter.snapshotJson(run))
-		assertThat(fileExists("$path.tmp"), name = "temporary file left behind").isEqualTo(false)
+		// The temporary name is per write, so no assertion here can name the file that was renamed away.
+		// A leftover temporary file not breaking readers is pinned in RunRecordJsonReadBackTest (it
+		// plants a *.tmp beside a native run JSON), and two writers never share one: the pin below.
+	}
+
+	@Test
+	fun `each write gets its own temporary name so concurrent writers never share one`() {
+		val target = "runs/no_dispatcher/20261122-101500-native-run-1.json"
+
+		val first = RunRecordJsonWriter.temporaryPath(target)
+
+		assertThat(first, name = "first temp path beside its target").startsWith(target)
+		assertThat(first, name = "a second temp path of the same target")
+			.isNotEqualTo(RunRecordJsonWriter.temporaryPath(target))
 	}
 
 	@Test

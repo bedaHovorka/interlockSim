@@ -42,14 +42,17 @@ private const val TIMESTAMP_BUFFER_SIZE = 32
 /**
  * The directory of the `--runs-root=<dir>` flag in [args], or `null` when the flag is absent.
  *
- * @throws IllegalArgumentException if the flag names no directory, or is given as two tokens
- *   (`--runs-root <dir>`), which would leave the directory among the positional arguments.
+ * @throws IllegalArgumentException if the flag names no directory, is given as two tokens
+ *   (`--runs-root <dir>`), which would leave the directory among the positional arguments, or is
+ *   repeated -- the last one silently winning would hide which run went to which root.
  */
 internal fun parseRunsRoot(args: Array<String>): String? {
 	require(
 		CMD_RUNS_ROOT !in args
 	) { "$CMD_RUNS_ROOT takes its directory in the same token: ${CMD_RUNS_ROOT_PREFIX}<dir>" }
-	val flag = args.lastOrNull { it.startsWith(CMD_RUNS_ROOT_PREFIX) } ?: return null
+	val flags = args.filter { it.startsWith(CMD_RUNS_ROOT_PREFIX) }
+	require(flags.size <= 1) { "$CMD_RUNS_ROOT_PREFIX given ${flags.size} times" }
+	val flag = flags.lastOrNull() ?: return null
 	val directory = flag.removePrefix(CMD_RUNS_ROOT_PREFIX)
 	require(directory.isNotEmpty()) {
 		"$CMD_RUNS_ROOT_PREFIX needs a directory, for example ${CMD_RUNS_ROOT_PREFIX}build/runs"

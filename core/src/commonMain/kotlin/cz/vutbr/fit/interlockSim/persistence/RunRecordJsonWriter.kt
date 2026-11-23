@@ -169,9 +169,12 @@ object RunRecordJsonWriter {
 		val armDirectory = "${runsRoot.trimEnd('/')}/${arm(run.record).lowercase()}"
 		createDirectories(armDirectory)
 		val path = "$armDirectory/${fileName(timestamp, run.runId)}"
-		// Through a temporary file and one rename, as DefaultRunSnapshotStore does, so a reader never sees a
-		// half-written JSON; readAll reads only names ending in .json, so it skips the temporary one.
-		val temporary = "$path$TEMPORARY_SUFFIX"
+		// Through a temporary file with a fresh per-write name and one rename, as DefaultRunSnapshotStore
+		// does with Files.createTempFile: a reader never sees a half-written JSON, and two writers of the
+		// same final name -- the same second and run id -- never share their temporary file, so one
+		// writer's rename cannot publish the other's in-flight bytes (Issue #1327 round of 2026-11-23).
+		// readAll reads only names ending in .json, so it skips the temporary one either way.
+		val temporary = temporaryPath(path)
 		try {
 			writeTextFile(temporary, snapshotJson(run))
 			renameFile(temporary, path)
@@ -181,6 +184,17 @@ object RunRecordJsonWriter {
 		}
 		return path
 	}
+
+	/**
+	 * The temporary file [write] renames into place: [path] with a fresh random UUID before `.tmp`
+	 * (`Uuid.random`, the same source as [newRunId]). One per write -- the name of
+	 * `DefaultRunSnapshotStore.write`'s per-call temporary file is unique the same way -- so two
+	 * writers of the same final name cannot race on one temporary file: the POSIX interleaving would
+	 * let the first rename publish the second writer's in-flight bytes and fail the second rename.
+	 * `internal` for the pin of that guarantee.
+	 */
+	@OptIn(ExperimentalUuidApi::class)
+	internal fun temporaryPath(path: String): String = "$path.${Uuid.random()}$TEMPORARY_SUFFIX"
 
 	/** A new random run id, a UUID like the JVM default (`UUID.randomUUID()`). */
 	@OptIn(ExperimentalUuidApi::class)

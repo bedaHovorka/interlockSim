@@ -102,6 +102,21 @@ class RunRecordPersistenceTest {
 		}
 	}
 
+	@Test
+	fun `a repeated runs root flag is an argument error`() {
+		assertFailsWith<IllegalArgumentException> {
+			parseRunsRoot(
+				arrayOf(
+					CMD_EXAMPLE_FOR_TEST,
+					ExampleNames.CERVENY_UJEZD,
+					"600",
+					"--runs-root=/tmp/runs",
+					"--runs-root=/tmp/other"
+				)
+			)
+		}
+	}
+
 	// ---- the example name the JSON is filed under ----
 
 	@Test
