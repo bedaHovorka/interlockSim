@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
+import assertk.assertions.isNotEmpty
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
@@ -63,6 +64,10 @@ class MetricsSnapshotQueriedLogTest : KoinTestBase() {
 			service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
 			service.handleBlockEvent(BlockEvent.ReservationConflictDetected(block, "T2", "T1", time = 2.0))
 
+			// Wiring control: the block events log their own DEBUG lines through this same logger, so
+			// appender capture works and the empty queried filter below is not vacuously empty.
+			assertThat(appender.list.map { it.formattedMessage }, "captured lines after two block events")
+				.isNotEmpty()
 			assertThat(appender.queriedLines(), "queried lines after two block events").isEmpty()
 		}
 	}
