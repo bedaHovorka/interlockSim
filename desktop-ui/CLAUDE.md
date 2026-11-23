@@ -66,9 +66,10 @@ and [../docs/SIMULATION_SPEED_CONTROL.md](../docs/SIMULATION_SPEED_CONTROL.md).
 ## KPI Dashboard (Goal 6 SP3)
 
 `MetricsDashboardPanel` is docked in `Frame`'s south panel in simulation mode. It polls only
-`MetricsCollectionService.latestSnapshot()` and `latestOpenContentions()` (cross-thread safe) from a
+`MetricsCollectionService.latestSnapshot()` and `latestOpenContentions()`, and on its final poll the volatile
+`runRecord()`, all cross-thread safe, from a
 `SwingWorker` driven by a `javax.swing.Timer`, never simulation-thread objects. `stop(manual)` at STOPPED,
-after any stop (natural or manual), makes one last poll that also reads the volatile `runRecord()` (set at
+after any stop (natural or manual), makes that final poll, which reads the record (set at
 `RunEnded`) for the stall and the end cause. A manual stop reports STOPPED before the simulation thread
 delivers `RunEnded`, so a final poll without a record re-reads it from a one-shot timer (10 × 100 ms). With
 no record after that, the end cause reads "stopped manually" after a manual stop and "–" otherwise (#1326). With `MetricGroup.TRAIN_WAIT` off, Queued, Blocked and

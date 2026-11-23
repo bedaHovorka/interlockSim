@@ -167,8 +167,12 @@ class FakeMetricsCollectionService(
 	val runRecordReads: AtomicInteger = AtomicInteger()
 
 	override fun runRecord(): RunRecord? {
+		// The record is captured before the counter becomes observable (Issue #1326 thread): a waiter
+		// that sees `runRecordReads` >= 1 then knows a read completed and what it returned, so the
+		// read-count pins cannot pass while the first read was still in flight.
+		val current = record
 		runRecordReads.incrementAndGet()
-		return record
+		return current
 	}
 
 	private companion object {
