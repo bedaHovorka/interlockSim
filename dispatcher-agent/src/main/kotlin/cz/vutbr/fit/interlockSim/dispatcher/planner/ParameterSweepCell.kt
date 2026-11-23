@@ -20,7 +20,8 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * are split.
  *
  * @property example [DispatcherRunSnapshot.example]; `null` for a run that named none (a GUI run, a
- *   file before schema version 13) or a blank name, rendered as [UNNAMED].
+ *   file before schema version 13), rendered as [UNNAMED]. Only [of] normalizes a blank name to
+ *   `null`; the constructor itself trusts the caller.
  *
  * @since Issue #1333 (Goal 6)
  */

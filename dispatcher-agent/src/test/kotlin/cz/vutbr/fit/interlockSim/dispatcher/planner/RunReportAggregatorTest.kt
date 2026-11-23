@@ -1164,6 +1164,32 @@ class RunReportAggregatorTest {
 		assertThat(rowCells(armRow)[1], "pooled run count").isEqualTo("2")
 	}
 
+	@Test
+	fun `a pooled cell that passed the gate shows a failing row per example after the split`() {
+		// The headline reader-visible change of Issue #1333: ten runs split 5/5 over two examples. The
+		// pooled Arm Comparison row saw ten passing runs; each split Parameter Sweep row holds only
+		// five, below the gate's 10-run minimum, so both fail while the pooled row would have passed.
+		val runs =
+			(1..5).map { runSnapshot(runId = "s$it", example = ExampleNames.SHUNTING_LOOP) } +
+				(1..5).map { runSnapshot(runId = "c$it", example = ExampleNames.CERVENY_UJEZD) }
+		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(runs)))
+
+		val rows = hygieneSection(md).lines().filter { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+		assertThat(rows.size, "one row per example").isEqualTo(2)
+		for (row in rows) {
+			assertThat(rowCells(row)[EXAMPLE_COLUMN + 1], "own run count").isEqualTo("5")
+			assertThat(rowCells(row), "gate of a split cell").contains("❌ FAIL")
+		}
+		// The pooled gate the reader compares against still sees all ten runs.
+		val armRow =
+			md
+				.substringAfter("## Arm Comparison")
+				.substringBefore("## ")
+				.lines()
+				.first { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+		assertThat(rowCells(armRow)[1], "pooled run count").isEqualTo("10")
+	}
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	/**

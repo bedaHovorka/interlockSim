@@ -933,7 +933,7 @@ class RunReportAggregator(
 		)
 		sb.appendLine(
 			"- **Example (issue #1333)** — the example the cell's runs ran; `(unnamed)` is a run that named " +
-				"none (a GUI run, or a file before schema version 13). A cell is its parameters **and** its " +
+				"none or a blank name (a GUI run, or a file before schema version 13). A cell is its parameters **and** its " +
 				"example, so two networks run with equal parameters get a row each, and each row's `Runs`, " +
 				"`Passing` and `Gate` are that example's own: a row can show `FAIL` on fewer than 10 runs where " +
 				"the arm's pooled row in Arm Comparison, which still pools the examples, shows enough runs."
