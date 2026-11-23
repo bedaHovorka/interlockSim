@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.fastsim
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.di.coreModule
+import cz.vutbr.fit.interlockSim.exceptions.MainProcessFailedException
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
@@ -121,13 +122,15 @@ internal fun configureLogging(debug: Boolean) {
 }
 
 /**
- * Filters out all non-positional flag arguments (`--verbose`, `--quiet`, `--debug`)
- * from [args], returning the remaining positional arguments in order.
+ * Filters out all non-positional flag arguments (`--verbose`, `--quiet`, `--debug`,
+ * `--runs-root=<dir>`) from [args], returning the remaining positional arguments in order.
  *
  * Extracted as an [internal] function so it can be unit-tested independently of [main].
  */
 internal fun filterPositionalArgs(args: Array<String>): Array<String> =
-	args.filter { it != CMD_VERBOSE && it != CMD_QUIET && it != CMD_DEBUG }.toTypedArray()
+	args
+		.filter { it != CMD_VERBOSE && it != CMD_QUIET && it != CMD_DEBUG && !it.startsWith(CMD_RUNS_ROOT_PREFIX) }
+		.toTypedArray()
 
 /** Writes [message] followed by a newline to stderr using POSIX [fprintf] (not Kotlin stdlib). */
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
@@ -180,6 +183,8 @@ private fun parseVerbosity(args: Array<String>): Verbosity =
  * - `fast-sim --version` — print version and exit (no Koin started)
  * - `fast-sim --help` / `fast-sim -h` — print usage and exit 0 (no Koin started)
  * - `fast-sim --debug ...` — enable DEBUG logging to stderr
+ * - `fast-sim example <name> <endTime> --runs-root=<dir>` — also write the run JSON under `<dir>`
+ *   (Issue #1327) and print its path to stderr
  * - No args or unknown command → print usage to stderr, exit 2
  *
  * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments, 130 = interrupted (SIGINT)
@@ -201,13 +206,17 @@ fun main(args: Array<String>) {
 	val factory = NativeContextFactory()
 	val exitCode =
 		try {
+			val runsRoot = parseRunsRoot(args)
 			if (positionalArgs.isEmpty()) {
 				printUsage()
 				2
 			} else {
 				when (positionalArgs[0]) {
-					CMD_EXAMPLE -> runExample(positionalArgs, factory, verbosity)
-					CMD_SIM -> runSim(positionalArgs, factory, verbosity)
+					CMD_EXAMPLE -> runExample(positionalArgs, factory, verbosity, runsRoot)
+					CMD_SIM -> {
+						require(runsRoot == null) { "$CMD_RUNS_ROOT_PREFIX is supported in $CMD_EXAMPLE mode only" }
+						runSim(positionalArgs, factory, verbosity)
+					}
 					else -> {
 						printUsage()
 						2
@@ -231,7 +240,8 @@ fun main(args: Array<String>) {
 private fun runExample(
 	args: Array<String>,
 	factory: NativeContextFactory,
-	verbosity: Verbosity
+	verbosity: Verbosity,
+	runsRoot: String?
 ): Int {
 	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
@@ -246,13 +256,18 @@ private fun runExample(
 	val ctx = NativeExampleRegistry.create(name, endTime, factory)
 	val reporter = TextReporter(verbosity)
 	ctx.addPropertyChangeListener(reporter)
+	val persistence = runsRoot?.let { RunRecordPersistence(it, name, endTime) }
 	try {
 		ctx.run()
 		printRunSummary(reporter, ctx)
+		persistence?.let { persistAndReport(it, ctx, mainProcessFailed = false) }
 		return 0
 	} catch (
 		@Suppress("TooGenericExceptionCaught") e: Exception
 	) {
+		// Issue #1327: a run whose main process died is persisted as terminated early, as on the JVM
+		// (Main.runAndReport); the run end was delivered, so its record exists.
+		if (e is MainProcessFailedException) persistence?.let { persistAndReport(it, ctx, mainProcessFailed = true) }
 		return handleInterruptedRun(reporter, ctx, e)
 	} finally {
 		ctx.close()
@@ -325,6 +340,32 @@ private fun handleInterruptedRun(
 	throw e
 }
 
+/**
+ * Writes the run JSON of [env] through [persistence] and reports the outcome on stderr, never on stdout
+ * (Issue #1327). A file that cannot be written is a lost data point, not a failed run, so the exit code
+ * stays as it is -- the JVM's `finishAndPersist` treats a write failure the same way.
+ */
+private fun persistAndReport(
+	persistence: RunRecordPersistence,
+	env: SimulationEnvironment,
+	mainProcessFailed: Boolean
+) {
+	val outcome =
+		try {
+			persistence.persist(env, mainProcessFailed)
+		} catch (e: IllegalStateException) {
+			eprintln("Error: run record not written: ${e.message}")
+			return
+		}
+	eprintln(
+		when (outcome) {
+			is PersistOutcome.Written -> "Run record written: ${outcome.path}"
+			PersistOutcome.NoRecord -> "Run record not written: the run has not ended"
+			PersistOutcome.Interrupted -> "Run record not written: the run was interrupted"
+		}
+	)
+}
+
 /** Prints the reporter's summary line, the run record line (Issue #676) and its performance row (Issue #1306). */
 private fun printRunSummary(
 	reporter: TextReporter,
@@ -375,6 +416,7 @@ private fun printUsage() {
 
 		Flags (combinable with any mode):
 		  $CMD_DEBUG                                          Enable DEBUG-level logging output to stderr
+		  ${CMD_RUNS_ROOT_PREFIX}<dir>                               $CMD_EXAMPLE mode: also write the run JSON under <dir>/<arm>/ (path on stderr)
 		""".trimIndent()
 	)
 }

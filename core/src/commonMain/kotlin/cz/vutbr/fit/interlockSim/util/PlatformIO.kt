@@ -53,3 +53,42 @@ expect fun fileExists(path: String): Boolean
  * @return Absolute path to a writable temporary directory, without trailing separator.
  */
 expect fun tempDirectory(): String
+
+/**
+ * Creates the directory at [path] together with every missing parent directory, like `mkdir -p`.
+ *
+ * Succeeds silently when the directory already exists. Needed by the run JSON writer
+ * (`RunRecordJsonWriter`), whose store layout is one directory per dispatcher arm (Issue #1327).
+ *
+ * KMP expect/actual: JVM uses [java.nio.file.Files.createDirectories]; native uses POSIX mkdir.
+ *
+ * @param path Absolute or relative directory path
+ * @throws IllegalStateException if the directory cannot be created, or a path component exists and is
+ *   not a directory
+ */
+expect fun createDirectories(path: String)
+
+/**
+ * Checks whether a directory exists at the given path.
+ *
+ * KMP expect/actual: JVM uses [java.io.File.isDirectory]; native uses POSIX stat.
+ *
+ * @param path Absolute or relative path
+ * @return true if [path] names an existing directory, false otherwise (also for a regular file)
+ */
+expect fun directoryExists(path: String): Boolean
+
+/**
+ * Renames the file [from] to [to] in one step, replacing [to] if it exists.
+ *
+ * Both paths must be on the same file system. Used by the run JSON writer (`RunRecordJsonWriter`) to
+ * write through a temporary file, so a reader never sees a half-written JSON (Issue #1327).
+ *
+ * KMP expect/actual: JVM uses [java.nio.file.Files.move] with an atomic move; native uses POSIX rename.
+ *
+ * @throws IllegalStateException if the file cannot be renamed
+ */
+expect fun renameFile(
+	from: String,
+	to: String
+)

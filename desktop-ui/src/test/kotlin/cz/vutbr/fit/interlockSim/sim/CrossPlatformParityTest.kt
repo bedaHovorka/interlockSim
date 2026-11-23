@@ -16,14 +16,20 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.ExampleNames
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import java.io.File
+import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import java.util.stream.Stream
 
@@ -281,4 +287,86 @@ class CrossPlatformParityTest {
 		assertThat(nativeTrains, name = "Native summary train count (JVM=$jvmTrains)\n$diag")
 			.isEqualTo(jvmTrains)
 	}
+
+	/**
+	 * Issue #1327 (Goal 6): with `--runs-root=<dir>` the native binary writes the run JSON the JVM writes
+	 * for the same run, and prints the written path on stderr; its stdout stays what it is without the flag.
+	 *
+	 * The JVM twin `cervenyUjezdSync` runs with `-Dinterlocksim.dispatcher.runsRoot`, the native
+	 * `cervenyUjezd` with the flag; the native binary files its run under the twin's name, so the two
+	 * runs land in the same report cell. Both files are read with [DefaultRunSnapshotStore.readAll] and
+	 * compared without the run id and the wall-clock figures (two processes), and without the zero entries of the dispatcher count maps (the JVM recorder writes
+	 * every vocabulary key with 0; the `:core` writer writes none). Everything else, the parameters
+	 * included, must be equal, or the report would file the native run in another cell.
+	 *
+	 * stdout is compared with and without the flag after dropping the performance row, whose wall time
+	 * differs from one process to the next.
+	 */
+	@Test
+	@Timeout(value = 300, unit = TimeUnit.SECONDS)
+	fun `native --runs-root writes the run JSON the JVM writes and keeps stdout unchanged`(
+		@TempDir dir: Path
+	) {
+		assumeParityArtifacts()
+		val jvmRoot = dir.resolve("jvm")
+		val nativeRoot = dir.resolve("native")
+
+		val jvmResult =
+			runProcess(
+				listOf(
+					"java",
+					"-D${DispatcherRunConfig.PROP_RUNS_ROOT}=$jvmRoot",
+					"-jar",
+					JAR_PATH.absolutePath,
+					"example",
+					ExampleNames.CERVENY_UJEZD_SYNC,
+					"60"
+				)
+			)
+		val withFlag =
+			runProcess(
+				listOf(NATIVE_PATH.absolutePath, "example", ExampleNames.CERVENY_UJEZD, "60", "--runs-root=$nativeRoot")
+			)
+		val withoutFlag = runProcess(listOf(NATIVE_PATH.absolutePath, "example", ExampleNames.CERVENY_UJEZD, "60"))
+		val diag = diagnostics(jvmResult, withFlag)
+
+		assertThat(jvmResult.exitCode, name = "JVM exit code\n$diag").isEqualTo(0)
+		assertThat(withFlag.exitCode, name = "Native exit code with the flag\n$diag").isEqualTo(0)
+		assertThat(withoutFlag.exitCode, name = "Native exit code without the flag").isEqualTo(0)
+		assertThat(withoutPerformanceRow(withFlag.stdout), name = "native stdout with the flag")
+			.isEqualTo(withoutPerformanceRow(withoutFlag.stdout))
+		assertThat(withoutFlag.stderr, name = "native stderr without the flag").isEqualTo("")
+
+		val jvmSnapshots = DefaultRunSnapshotStore(jvmRoot).readAll(jvmRoot)
+		val nativeSnapshots = DefaultRunSnapshotStore(nativeRoot).readAll(nativeRoot)
+		assertThat(jvmSnapshots.size, name = "JVM run JSONs\n$diag").isEqualTo(1)
+		assertThat(nativeSnapshots.size, name = "native run JSONs\n$diag").isEqualTo(1)
+		val written =
+			nativeRoot.toFile().walk().single { it.isFile && it.name.endsWith(".json") }
+		assertThat(withFlag.stderr.trim(), name = "native stderr with the flag")
+			.isEqualTo("Run record written: ${written.path}")
+		val native = nativeSnapshots.single()
+		assertThat(native.example, name = "native example").isEqualTo(ExampleNames.CERVENY_UJEZD_SYNC)
+		assertThat(native.schemaVersion, name = "native schema version")
+			.isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
+		assertThat(comparable(native), name = "native run JSON").isEqualTo(comparable(jvmSnapshots.single()))
+	}
+
+	/** [output] without the performance row, whose wall time differs between two processes. */
+	private fun withoutPerformanceRow(output: String): String =
+		output.lines().filterNot { it.startsWith("Performance: ") }.joinToString("\n")
+
+	/** [snapshot] without what two different processes of one run cannot share (see the test above). */
+	private fun comparable(snapshot: DispatcherRunSnapshot): DispatcherRunSnapshot =
+		snapshot.copy(
+			runId = "",
+			processWallSeconds = null,
+			ticksByOutcome = snapshot.ticksByOutcome.filterValues { it != 0L },
+			timeoutNoOpByCause = snapshot.timeoutNoOpByCause.filterValues { it != 0L },
+			emittedByActionType = snapshot.emittedByActionType.filterValues { it != 0L },
+			rejectionsByCode = snapshot.rejectionsByCode.filterValues { it != 0L },
+			applyFailuresByCode = snapshot.applyFailuresByCode.filterValues { it != 0L },
+			actionsByAuthor = snapshot.actionsByAuthor.filterValues { it != 0L },
+			railwayOutcome = snapshot.railwayOutcome.copy(wallSeconds = null, realTimeRatio = null)
+		)
 }
