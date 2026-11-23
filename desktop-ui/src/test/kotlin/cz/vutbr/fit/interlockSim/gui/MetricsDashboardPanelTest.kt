@@ -15,6 +15,7 @@ import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -22,7 +23,9 @@ import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
+import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
 import cz.vutbr.fit.interlockSim.sim.metrics.RunStall
+import cz.vutbr.fit.interlockSim.sim.metrics.toRunRecord
 import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.flushEDT
 import io.mockk.mockk
@@ -53,6 +56,18 @@ class MetricsDashboardPanelTest {
 			blockedTrains = 2,
 			openContentions = 3
 		)
+
+	/** The record of an ended run, built from a zero summary so no [FakeMetricsCollectionService] read is counted. */
+	private fun record(
+		classification: RunEndClassification,
+		stall: RunStall? = null
+	): RunRecord =
+		checkNotNull(
+			FakeMetricsCollectionService()
+				.runEndSummary()
+				.copy(classification = classification, endTime = 99.0, stall = stall)
+				.toRunRecord()
+		) { "ended summary" }
 
 	private var panel: MetricsDashboardPanel? = null
 
@@ -86,6 +101,16 @@ class MetricsDashboardPanelTest {
 		assertThat(text).contains(expected)
 	}
 
+	/** Waits until [fake]'s run record was read at least [reads] times. */
+	private fun awaitReads(
+		fake: FakeMetricsCollectionService,
+		reads: Int
+	) {
+		val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+		while (fake.runRecordReads.get() < reads && System.nanoTime() < deadline) Thread.sleep(5)
+		assertThat(fake.runRecordReads.get()).isGreaterThanOrEqualTo(reads)
+	}
+
 	@Nested
 	@DisplayName("DashboardText formatting")
 	inner class Formatting {
@@ -116,19 +141,13 @@ class MetricsDashboardPanelTest {
 		@Test
 		@DisplayName("after the run it shows the end classification and the stalled trains")
 		fun showsEndCauseAndStall() {
-			val fake = FakeMetricsCollectionService()
-			val clean = fake.runEndSummary()
-			val stalled =
-				clean.copy(
-					stall = RunStall(listOf("t1", "t2"), setOf("t2", "t1"), 3, 99.0),
-					classification = RunEndClassification.STALLED
-				)
+			val stalled = record(RunEndClassification.STALLED, RunStall(listOf("t1", "t2"), setOf("t2", "t1"), 3, 99.0))
 
 			assertThat(DashboardText.of(DashboardReading(snapshot, emptyList(), stalled)).stall)
 				.isEqualTo("Stall: yes (t1, t2)")
 			assertThat(DashboardText.of(DashboardReading(snapshot, emptyList(), stalled)).endCause)
 				.isEqualTo("End: STALLED")
-			val natural = clean.copy(classification = RunEndClassification.NATURAL_COMPLETION)
+			val natural = record(RunEndClassification.NATURAL_COMPLETION)
 			val naturalText = DashboardText.of(DashboardReading(snapshot, emptyList(), natural))
 			assertThat(naturalText.stall).isEqualTo("Stall: none")
 			assertThat(naturalText.endCause).isEqualTo("End: NATURAL_COMPLETION")
@@ -197,7 +216,7 @@ class MetricsDashboardPanelTest {
 
 		@Test
 		@Timeout(value = 15, unit = TimeUnit.SECONDS)
-		@DisplayName("a natural stop makes a last poll with the run-end summary and ends the polling")
+		@DisplayName("a natural stop makes a last poll with the run record and ends the polling")
 		fun naturalStopReadsRunEndAndStopsPolling() {
 			val fake = FakeMetricsCollectionService()
 			fake.published = snapshot
@@ -205,15 +224,15 @@ class MetricsDashboardPanelTest {
 			onEdt { p.start(fake) }
 			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
 			fake.published = snapshot.copy(conflictCount = 11)
-			fake.runEnd = fake.runEndSummary().copy(classification = RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS)
-			val readsBefore = fake.runEndSummaryReads.get()
+			fake.record = record(RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS)
 
-			onEdt { p.stop(summaryValid = true) }
+			onEdt { p.stop(manual = false) }
 			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "CUTOFF_WITH_UNFINISHED_JOURNEYS")
 
 			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo("Conflicts: 11")
 			assertThat(p.isPolling).isFalse()
-			assertThat(fake.runEndSummaryReads.get()).isEqualTo(readsBefore + 1)
+			assertThat(p.textOf(MetricsDashboardPanel.STALL_NAME)).isEqualTo("Stall: none")
+			assertThat(fake.runEndSummaryReads.get()).isEqualTo(0)
 			val reads = fake.latestSnapshotThreads.size
 			Thread.sleep(700)
 			flushEDT()
@@ -222,22 +241,83 @@ class MetricsDashboardPanelTest {
 
 		@Test
 		@Timeout(value = 15, unit = TimeUnit.SECONDS)
-		@DisplayName("a manual stop makes a plain last snapshot poll, never reads the summary, says stopped manually")
-		fun manualStopDoesNotReadSummary() {
+		@DisplayName("a natural stop without a record shows a dash for the end cause, never stopped manually")
+		fun naturalStopWithoutRecordShowsDash() {
 			val fake = FakeMetricsCollectionService()
 			fake.published = snapshot
 			val p = newPanel()
 			onEdt { p.start(fake) }
 			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
+			val readsBefore = fake.runRecordReads.get()
 			fake.published = snapshot.copy(conflictCount = 11)
 
-			onEdt { p.stop(summaryValid = false) }
-			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "stopped manually")
+			onEdt { p.stop(manual = false) }
+			awaitReads(fake, readsBefore + 1 + MetricsDashboardPanel.RECORD_RETRIES)
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 11")
+			flushEDT()
 
-			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo("Conflicts: 11")
-			assertThat(p.textOf(MetricsDashboardPanel.END_CAUSE_NAME)).isEqualTo("End: stopped manually")
+			assertThat(p.textOf(MetricsDashboardPanel.END_CAUSE_NAME)).isEqualTo(DashboardText.EMPTY.endCause)
+			assertThat(p.textOf(MetricsDashboardPanel.STALL_NAME)).isEqualTo(DashboardText.EMPTY.stall)
+			assertThat(fake.runEndSummaryReads.get()).isEqualTo(0)
+		}
+
+		@Test
+		@Timeout(value = 15, unit = TimeUnit.SECONDS)
+		@DisplayName("a manual stop after RunEnded shows the record's end cause and stall")
+		fun manualStopAfterRunEndedShowsRecord() {
+			val fake = FakeMetricsCollectionService()
+			fake.published = snapshot
+			val p = newPanel()
+			onEdt { p.start(fake) }
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
+			fake.record = record(RunEndClassification.STALLED, RunStall(listOf("t1", "t2"), setOf("t2", "t1"), 3, 99.0))
+
+			onEdt { p.stop(manual = true) }
+			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "STALLED")
+
+			assertThat(p.textOf(MetricsDashboardPanel.END_CAUSE_NAME)).isEqualTo("End: STALLED")
+			assertThat(p.textOf(MetricsDashboardPanel.STALL_NAME)).isEqualTo("Stall: yes (t1, t2)")
 			assertThat(p.isPolling).isFalse()
 			assertThat(fake.runEndSummaryReads.get()).isEqualTo(0)
+		}
+
+		@Test
+		@Timeout(value = 15, unit = TimeUnit.SECONDS)
+		@DisplayName("a record that arrives just after a manual stop is shown, not stopped manually")
+		fun recordArrivingAfterManualStopIsShown() {
+			val fake = FakeMetricsCollectionService()
+			fake.published = snapshot
+			val p = newPanel()
+			onEdt { p.start(fake) }
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
+			val readsBefore = fake.runRecordReads.get()
+
+			onEdt { p.stop(manual = true) }
+			awaitReads(fake, readsBefore + 1) // the final poll found no record yet
+			fake.record = record(RunEndClassification.TERMINATED_EARLY)
+
+			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "TERMINATED_EARLY")
+			assertThat(p.textOf(MetricsDashboardPanel.END_CAUSE_NAME)).isEqualTo("End: TERMINATED_EARLY")
+			assertThat(p.textOf(MetricsDashboardPanel.STALL_NAME)).isEqualTo("Stall: none")
+		}
+
+		@Test
+		@Timeout(value = 15, unit = TimeUnit.SECONDS)
+		@DisplayName("a manual stop whose record never comes says stopped manually after the bounded retries")
+		fun manualStopWithoutRecordAfterRetries() {
+			val fake = FakeMetricsCollectionService()
+			fake.published = snapshot
+			val p = newPanel()
+			onEdt { p.start(fake) }
+			awaitText(p, MetricsDashboardPanel.CONFLICTS_NAME, "Conflicts: 7")
+			val readsBefore = fake.runRecordReads.get()
+
+			onEdt { p.stop(manual = true) }
+			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "stopped manually")
+
+			assertThat(p.textOf(MetricsDashboardPanel.END_CAUSE_NAME)).isEqualTo("End: stopped manually")
+			assertThat(fake.runRecordReads.get() - readsBefore)
+				.isEqualTo(1 + MetricsDashboardPanel.RECORD_RETRIES)
 		}
 
 		@Test
@@ -285,7 +365,7 @@ class MetricsDashboardPanelTest {
 			val gate = CountDownLatch(1)
 			fake.latestSnapshotGate = gate
 
-			onEdt { p.stop(summaryValid = true) } // the old final poll hangs on the gate
+			onEdt { p.stop(manual = false) } // the old final poll hangs on the gate
 			onEdt { p.start(fake) } // restarted with the same service
 			gate.countDown()
 			fake.published = snapshot.copy(conflictCount = 9)
@@ -306,19 +386,18 @@ class MetricsDashboardPanelTest {
 			old.latestSnapshotGate = gate
 			val fresh = FakeMetricsCollectionService()
 			fresh.published = snapshot.copy(conflictCount = 5)
-			fresh.runEnd = fresh.runEndSummary().copy(classification = RunEndClassification.NATURAL_COMPLETION)
-			val freshReadsBefore = fresh.runEndSummaryReads.get()
+			fresh.record = record(RunEndClassification.NATURAL_COMPLETION)
 			val p = newPanel()
 			onEdt { p.start(old) } // its poll hangs on the gate
 
 			onEdt { p.start(fresh) }
-			onEdt { p.stop(summaryValid = true) }
+			onEdt { p.stop(manual = false) }
 			awaitText(p, MetricsDashboardPanel.END_CAUSE_NAME, "NATURAL_COMPLETION")
 			gate.countDown()
 			flushEDT()
 
 			assertThat(p.textOf(MetricsDashboardPanel.CONFLICTS_NAME)).isEqualTo("Conflicts: 5")
-			assertThat(fresh.runEndSummaryReads.get()).isEqualTo(freshReadsBefore + 1)
+			assertThat(fresh.runEndSummaryReads.get()).isEqualTo(0)
 		}
 
 		@Test
