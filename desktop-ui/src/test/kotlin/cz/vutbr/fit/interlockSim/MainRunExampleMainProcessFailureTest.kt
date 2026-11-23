@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
+import cz.vutbr.fit.interlockSim.sim.onRunEnded
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
@@ -29,6 +30,7 @@ import org.koin.core.module.Module
 import org.koin.test.get
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The headless `example` mode when the run's main process dies (Issue #1361, step (e)).
@@ -37,6 +39,10 @@ import java.util.concurrent.TimeUnit
  * still report it as a run that ended early -- [RunOutcome.TERMINATED_EARLY], the one outcome `main`
  * exits non-zero on -- and persist its run JSON, so a sweep records the run instead of finding no file.
  * The run record exists: the context delivers the run end before it throws.
+ *
+ * Since #1324 a run-end listener's kDisco process control also leaves `run()`, taking the run's own
+ * failure place and carrying it as suppressed -- these tests pin that the headless classification and
+ * JSON persistence survive that propagation too, also with no main-process failure at all.
  *
  * @since Issue #1361
  */
@@ -64,10 +70,7 @@ class MainRunExampleMainProcessFailureTest : KoinTestBase() {
 		@TempDir root: Path
 	) {
 		val name = ExampleNames.MULTI_TRAIN_LOOP
-		val factory = checkNotNull(get<ExampleRegistry>().examples[name])
-		val context = factory(get<SimulationContextFactory>(), arrayOf("example", name, END_TIME)) as DefaultSimulationContext
-		context.scope.declare(DispatcherRunConfig(runId = RUN_ID, runsRoot = root.toString()))
-		context.scope.declare<RunSnapshotStore>(DefaultRunSnapshotStore(root))
+		val context = registeredRun(name, root, END_TIME)
 		context.setMainProcess(FailingMainProcess())
 
 		val outcome = get<Main>().runExampleContext(context, END_TIME.toDouble(), name)
@@ -81,8 +84,60 @@ class MainRunExampleMainProcessFailureTest : KoinTestBase() {
 			.isEqualTo(RunEndClassification.TERMINATED_EARLY)
 	}
 
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+	fun `a run whose main process failed and whose run-end listener cancelled still reports TERMINATED_EARLY`(
+		@TempDir root: Path
+	) {
+		val name = ExampleNames.MULTI_TRAIN_LOOP
+		val context = registeredRun(name, root, END_TIME)
+		context.setMainProcess(FailingMainProcess())
+		context.onRunEnded { throw CancellationException("run-end listener cancellation injected by the test") }
+
+		val outcome = get<Main>().runExampleContext(context, END_TIME.toDouble(), name)
+
+		assertThat(outcome, name = "outcome").isEqualTo(RunOutcome.TERMINATED_EARLY)
+		assertThat(outcome.exitCode, name = "exit code").isEqualTo(1)
+		val snapshot = DefaultRunSnapshotStore(root).readAll(root).single()
+		assertThat(snapshot.endCause, name = "end cause").isEqualTo(RunEndCause.TERMINATED_EARLY)
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+	fun `a run-end cancellation without a main-process failure reports TERMINATED_EARLY too`(
+		@TempDir root: Path
+	) {
+		val name = ExampleNames.MULTI_TRAIN_LOOP
+		val context = registeredRun(name, root, SHORT_END_TIME)
+		context.onRunEnded { throw CancellationException("run-end listener cancellation injected by the test") }
+
+		val outcome = get<Main>().runExampleContext(context, SHORT_END_TIME.toDouble(), name)
+
+		assertThat(outcome, name = "outcome").isEqualTo(RunOutcome.TERMINATED_EARLY)
+		assertThat(outcome.exitCode, name = "exit code").isEqualTo(1)
+		val snapshot = DefaultRunSnapshotStore(root).readAll(root).single()
+		assertThat(snapshot.endCause, name = "end cause").isEqualTo(RunEndCause.TERMINATED_EARLY)
+	}
+
+	/** A headless run of [name] whose run JSON persists under [root]; the caller injects processes and listeners. */
+	private fun registeredRun(
+		name: String,
+		root: Path,
+		endTime: String
+	): DefaultSimulationContext {
+		val factory = checkNotNull(get<ExampleRegistry>().examples[name])
+		return (factory(get<SimulationContextFactory>(), arrayOf("example", name, endTime)) as DefaultSimulationContext)
+			.also {
+				it.scope.declare(DispatcherRunConfig(runId = RUN_ID, runsRoot = root.toString()))
+				it.scope.declare<RunSnapshotStore>(DefaultRunSnapshotStore(root))
+			}
+	}
+
 	private companion object {
 		const val END_TIME = "600"
+
+		/** Short horizon so the bare-cancellation run ends naturally at once instead of running the full loop. */
+		const val SHORT_END_TIME = "5"
 		const val RUN_ID = "sweep-ex-multiTrainLoop_r01"
 	}
 }

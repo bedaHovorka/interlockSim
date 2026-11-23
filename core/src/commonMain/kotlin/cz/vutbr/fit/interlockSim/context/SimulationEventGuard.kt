@@ -36,9 +36,12 @@ private const val KDISCO_PROCESS_TERMINATED = "cz.ksimulantenbande.kdisco.Proces
  * `ProcessTerminatedException` (a listener terminating the running process) -- rather than a failure. Takes
  * a Throwable so `LoopProcess` can share it while its net covers any non-control Throwable (Issue #1361).
  *
- * @since Issue #1361 (moved here by Issue #1324)
+ * Public so the headless classifier (`Main.runAndReport`) recognises the same process control the
+ * guards deliver (Issue #1324): the recognition exists here, in one place.
+ *
+ * @since Issue #1361 (moved here and made public by Issue #1324)
  */
-internal fun isProcessControl(e: Throwable): Boolean =
+public fun isProcessControl(e: Throwable): Boolean =
 	e is CancellationException || e::class.qualifiedName == KDISCO_PROCESS_TERMINATED
 
 /**

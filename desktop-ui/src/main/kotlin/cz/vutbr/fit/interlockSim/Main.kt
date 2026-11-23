@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.context.isProcessControl
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
@@ -219,7 +220,10 @@ class Main {
 	 * The body of [runExampleContext] inside the context's `use`: runs [context], prints the summary and the
 	 * run record, classifies the run and persists its JSON. A run whose main process died
 	 * ([MainProcessFailedException], Issue #1361) is reported as [RunOutcome.TERMINATED_EARLY] and still
-	 * persisted: the context delivered its run end, so the run record exists. Any other failure propagates.
+	 * persisted: the context delivered its run end, so the run record exists. The same outcome covers the
+	 * run-end process control the listener-guard contract lets leave [SimulationContext.run] (Issue #1324):
+	 * a cancellation that escaped the run-end delivery, bare or carrying the main-process failure as its
+	 * suppressed throwable. Any other failure propagates.
 	 */
 	private fun runAndReport(
 		context: SimulationContext,
@@ -229,13 +233,35 @@ class Main {
 		requestedEndTime: Double?,
 		name: String
 	): RunOutcome {
-		val mainProcessFailed =
+		val endedByProcessControl =
 			try {
 				context.run(controller)
 				false
 			} catch (e: MainProcessFailedException) {
 				logger.error(e) {
 					"Example simulation ended early: its main process failed. " +
+						"Exiting ${RunOutcome.TERMINATED_EARLY.exitCode}."
+				}
+				true
+			} catch (e: Exception) {
+				// The run-end process control of the listener-guard contract (Issue #1324): the escapee of the
+				// run-end delivery, either a bare cancellation of a listener or one that carries the
+				// main-process failure the run itself threw as its suppressed throwable -- `endRun` added it
+				// there, and the promise of its KDoc is that a headless report can still read the failure.
+				val runFailure =
+					e.suppressed.firstOrNull { it is MainProcessFailedException } as? MainProcessFailedException
+				if (runFailure == null && !isProcessControl(e)) {
+					// Any other failure keeps its classification: it propagates and `runExample` reports it (Issue #1361).
+					throw e
+				}
+				logger.error(e) {
+					val detail =
+						if (runFailure == null) {
+							"the run end delivered kDisco process control (Issue #1324)"
+						} else {
+							"its main process failed behind the run-end process control (Issue #1324)"
+						}
+					"Example simulation ended early: $detail. " +
 						"Exiting ${RunOutcome.TERMINATED_EARLY.exitCode}."
 				}
 				true
@@ -254,7 +280,7 @@ class Main {
 		val dispatcherGaveUp = context.scope.agentDriverLoopOrNull()?.stoppedByFailures == true
 		val reachedSimTime = resolveReachedSimTime(simTimeTracker.lastSimTime, context.lastRunEndTime)
 		val outcome =
-			if (mainProcessFailed) {
+			if (endedByProcessControl) {
 				RunOutcome.TERMINATED_EARLY
 			} else {
 				classifyRun(reachedSimTime, requestedEndTime, dispatcherGaveUp)
