@@ -391,6 +391,14 @@ class RunReportAggregator(
 	private fun ownInOutExits(outcome: RailwayOutcome): Long? =
 		outcome.trainsExited?.let { it - (outcome.wrongExits ?: 0L) }
 
+	/**
+	 * Exits by the timetabled InOut, summed over the runs that measured an exit count: `null` when none
+	 * did. Per run, not over the composite outcome -- a run whose exits were absent must contribute
+	 * neither exits nor a subtraction to the measured runs' total (Issue #1315 thread of 2026-11-23).
+	 */
+	private fun ownInOutExits(snapshots: List<DispatcherRunSnapshot>): Long? =
+		snapshots.mapNotNull { ownInOutExits(it.railwayOutcome) }.reduceOrNull(Long::plus)
+
 	// ── Table renderers ───────────────────────────────────────────────────────
 
 	private fun appendArmComparison(
@@ -882,7 +890,7 @@ class RunReportAggregator(
 					"| ${fmtNullableLong(outcome.unresolvedAtRunEnd)} " +
 					"| ${fmtNullableLong(outcome.wrongExits)} " +
 					"| ${fmtNullableLong(cutoffRuns(r.snapshots))} " +
-					"| ${fmtNullableLong(ownInOutExits(outcome))} " +
+					"| ${fmtNullableLong(ownInOutExits(r.snapshots))} " +
 					"| ${exitBarText(cell.key.example)} |"
 			)
 		}

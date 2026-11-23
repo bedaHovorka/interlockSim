@@ -414,12 +414,14 @@ class DefaultRunSnapshotStoreTest {
 		Files.createDirectories(armDir)
 
 		for ((exits, passes) in listOf(11 to true, 5 to false)) {
-			val file = armDir.resolve("legacy-v10-exits.json")
+			val file = armDir.resolve("legacy-v10-exits-$exits.json")
 			Files.writeString(file, SCHEMA_V10_JSON.replace("\"trainsExited\": 15", "\"trainsExited\": $exits"))
 			val legacy = store.readAll(tmpDir).single()
 
 			assertThat(legacy.railwayOutcome.trainsExited, "decoded exits").isEqualTo(exits.toLong())
 			assertThat(aggregator.runPassed(legacy), "runPassed at $exits exits").isEqualTo(passes)
+			// A distinct file per iteration: delete it, so `readAll().single()` sees exactly one again.
+			Files.delete(file)
 		}
 	}
 

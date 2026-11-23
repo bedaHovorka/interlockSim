@@ -170,6 +170,38 @@ class RunPassBarTest {
 		assertThat(md).contains("Arm Comparison pools runs judged against different bars")
 	}
 
+	@Test
+	fun `a cell where no run measured an exit count shows unmeasured for its own exits`() {
+		val runs =
+			listOf(
+				run(ExampleNames.CERVENY_UJEZD, exited = null, runId = "m1"),
+				run(ExampleNames.CERVENY_UJEZD, exited = null, wrongExits = 0L, runId = "m2")
+			)
+		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(runs)))
+
+		val outcome = rowCells(sectionRow(md, "### Railway Outcomes", "### Performance"))
+		assertThat(outcome[OWN_EXITS_COLUMN], "own exits unmeasured").isEqualTo("n/a")
+	}
+
+	@Test
+	fun `an unmeasured run's wrong exits do not reduce a measured run's own exits`() {
+		// The Copilot thread shape: one cell mixing a measured run with a run whose exit count is
+		// absent. Each run's own exits are summed per run, so the absent-exits run contributes
+		// neither exits nor a subtraction; its wrong exits still appear in the Wrong exits column.
+		// No writer produces this shape today (RunRecordOutcomes maps both figures from one record,
+		// always both or neither) -- the column's arithmetic just stays per run.
+		val runs =
+			listOf(
+				run(ExampleNames.CERVENY_UJEZD, exited = 10L, wrongExits = 0L, runId = "m1"),
+				run(ExampleNames.CERVENY_UJEZD, exited = null, wrongExits = 5L, runId = "m2")
+			)
+		val md = aggregator.renderMarkdown(listOf(aggregator.aggregate(runs)))
+
+		val outcome = rowCells(sectionRow(md, "### Railway Outcomes", "### Performance"))
+		assertThat(outcome[WRONG_EXITS_COLUMN], "wrong exits summed").isEqualTo("5")
+		assertThat(outcome[OWN_EXITS_COLUMN], "own exits of the measured run").isEqualTo("10")
+	}
+
 	private fun sectionHeader(
 		md: String,
 		start: String,
@@ -218,6 +250,9 @@ class RunPassBarTest {
 		private const val OWN_EXITS_COLUMN = 23
 		private const val EXIT_BAR_COLUMN = 24
 		private const val OUTCOMES_COLUMNS = 25
+
+		/** Wrong exits cell of the Railway Outcomes table: two columns before Exits by own InOut. */
+		private const val WRONG_EXITS_COLUMN = OWN_EXITS_COLUMN - 2
 
 		@JvmStatic
 		fun issue895Runs(): List<Arguments> =
