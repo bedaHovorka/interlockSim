@@ -28,7 +28,9 @@ import java.util.Locale
  * ```
  * runPassed  = completedNaturally && !terminalFallbackEngaged && c7Clean &&
  *              (arm == RULE_BASED || actionableTickRate >= MIN_ACTIONABLE_RATE) &&
- *              (trainsExited == null || trainsExited >= MIN_TRAINS_EXITED)
+ *              exitTermAcceptable
+ * exitTermAcceptable = bar == null || trainsExited == null ||
+ *              trainsExited - (wrongExits ?: 0) >= bar      // bar = ExitPassBars.barFor(example)
  * gatePassed = runCount >= 10 && passingRuns >= 8 && snapshots.all { it.c7Clean }
  * ```
  *
@@ -39,8 +41,10 @@ import java.util.Locale
  * *actionable-rate AND railway outcome*, after a measured run at `tickPeriodMs=20000` scored
  * `llmSuccessRate=0.846` on a railway that moved nothing (journeys 0/7). Issue #895 measured that
  * both of its terms were decision-hygiene terms and that neither read the railway, so the outcome
- * half is now [MIN_TRAINS_EXITED]. Both constants are measured — see their own KDoc, and
- * `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` §12.2 for how each was derived.
+ * half is now the exit bar. Issue #1315 made that bar per example ([ExitPassBars]): it counts exits
+ * by the timetabled InOut, and [MIN_TRAINS_EXITED] is the #895 vyhybna entry of that table. Both
+ * thresholds are measured — see their own KDoc, and `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`
+ * §12.2 for how the #895 values were derived.
  *
  * ## Sections rendered
  *
@@ -95,7 +99,10 @@ class RunReportAggregator(
 		const val MIN_ACTIONABLE_RATE: Double = 0.8
 
 		/**
-		 * Minimum [RailwayOutcome.trainsExited] a run must reach to pass [runPassed] (Issue #895).
+		 * The #895 exit bar of the vyhybna examples (`shuntingLoop`, `shuntingLoopAI`, and a run file
+		 * without an example) in [ExitPassBars]: the minimum count of trains that left by their
+		 * **timetabled InOut** a run must reach to pass [runPassed]. Since Issue #1315 every other
+		 * example has a bar of its own, measured the same way, or none.
 		 *
 		 * This is the gate's **railway-outcome** term. #927 described the gate as "actionable rate
 		 * AND railway outcome", but both of its terms measured decision hygiene; nothing in the
@@ -113,18 +120,26 @@ class RunReportAggregator(
 		 * reads decision records.
 		 *
 		 * **Network- and horizon-specific.** `11` is a property of `vyhybna.xml` at 600 s with
-		 * `RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS = 2`. Re-derive this constant from the
-		 * control arm before reading the gate on a different network or horizon.
+		 * `RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS = 2`. Issue #1315 measured the same arm
+		 * at 15 exits (all by the own InOut); the bar stays `6` by ruling, so the #895 verdicts do
+		 * not move. It stays a tripwire.
 		 *
 		 * An absent exit count is "not measured", never "zero" — see [runPassed].
 		 */
 		const val MIN_TRAINS_EXITED: Long = 6
 
+		/**
+		 * The text a verdict carries when the run's example has no measured exit bar in [ExitPassBars]
+		 * (Issue #1315): such a run gets no exit check, and the report must not let that read as a
+		 * pass against a bar.
+		 */
+		const val EXIT_BAR_NOT_MEASURED = "exit bar not measured"
+
 		/** Column count of the Parameter Sweep "Decision Hygiene" table (for its separator row). */
 		private const val HYGIENE_TABLE_COLUMNS = 25
 
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
-		private const val OUTCOMES_TABLE_COLUMNS = 23
+		private const val OUTCOMES_TABLE_COLUMNS = 25
 
 		/**
 		 * Column headers of the "Arm Comparison" table — the single source for both its header row
@@ -325,7 +340,15 @@ class RunReportAggregator(
 	/**
 	 * Per-run pass predicate: the run completed naturally, the terminal fallback never engaged, no
 	 * C7 violation was observed, its decision rate cleared [MIN_ACTIONABLE_RATE] (Issue #927) and
-	 * its railway moved at least [MIN_TRAINS_EXITED] trains out (Issue #895).
+	 * its railway moved at least its example's exit bar of trains out by their timetabled InOut
+	 * (Issue #895, per example since Issue #1315).
+	 *
+	 * **The exit term (Issue #1315 ruling).** The bar is [ExitPassBars.barFor] of
+	 * [DispatcherRunSnapshot.example]. Wrong exits count against a pass by **subtraction**, not as a
+	 * veto: `trainsExited - (wrongExits ?: 0) >= bar`. A veto is wrong because the own-exit fallback
+	 * (#1299) is designed degraded operation, and the bar was derived from the control arm's correctly
+	 * delivered exits. An example without a bar gets no exit check; the report then shows
+	 * [EXIT_BAR_NOT_MEASURED] on its verdict, never a silent pass against the vyhybna bar.
 	 *
 	 * Two scoping rules, both measured by #895:
 	 *
@@ -354,9 +377,27 @@ class RunReportAggregator(
 			!snapshot.arm.hasDispatcher ||
 			snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
 
-	/** See [runPassed] for why an absent exit count cannot fail a run. */
-	private fun railwayOutcomeAcceptable(snapshot: DispatcherRunSnapshot): Boolean =
-		snapshot.railwayOutcome.trainsExited?.let { it >= MIN_TRAINS_EXITED } ?: true
+	/**
+	 * The exit term: see [runPassed] for why an example without a bar and an absent exit count
+	 * cannot fail a run, and why wrong exits are subtracted.
+	 */
+	private fun railwayOutcomeAcceptable(snapshot: DispatcherRunSnapshot): Boolean {
+		val bar = ExitPassBars.barFor(snapshot.example) ?: return true
+		val exited = snapshot.railwayOutcome.trainsExited ?: return true
+		return exited - (snapshot.railwayOutcome.wrongExits ?: 0L) >= bar
+	}
+
+	/** Exits by the timetabled InOut: `null` when the exit count was not measured. */
+	private fun ownInOutExits(outcome: RailwayOutcome): Long? =
+		outcome.trainsExited?.let { it - (outcome.wrongExits ?: 0L) }
+
+	/**
+	 * Exits by the timetabled InOut, summed over the runs that measured an exit count: `null` when none
+	 * did. Per run, not over the composite outcome -- a run whose exits were absent must contribute
+	 * neither exits nor a subtraction to the measured runs' total (Issue #1315 thread of 2026-11-23).
+	 */
+	private fun ownInOutExits(snapshots: List<DispatcherRunSnapshot>): Long? =
+		snapshots.mapNotNull { ownInOutExits(it.railwayOutcome) }.reduceOrNull(Long::plus)
 
 	// ── Table renderers ───────────────────────────────────────────────────────
 
@@ -373,7 +414,7 @@ class RunReportAggregator(
 				"| ${r.arm} " +
 					"| ${r.runCount} " +
 					"| ${r.passingRuns} " +
-					"| ${gateText(r)} " +
+					"| ${verdictText(r)} " +
 					"| ${fmtRate(r.medianLlmSuccessRate)} " +
 					"| ${fmtRate(r.medianActionableTickRate)} " +
 					"| ${fmtRate(r.medianNoOpRate)} " +
@@ -802,7 +843,7 @@ class RunReportAggregator(
 				paramsRowPrefix(cell) +
 					"| ${r.runCount} " +
 					"| ${r.passingRuns} " +
-					"| ${gateText(r)} " +
+					"| ${verdictText(r)} " +
 					"| ${fmtRate(r.medianLlmSuccessRate)} " +
 					"| ${fmtRateNullable(invalidActionRate)} " +
 					"| ${fmtRate(r.medianNoOpRate)} " +
@@ -828,7 +869,8 @@ class RunReportAggregator(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
 				"Breaker Threshold | Breaker Cooldown s | Example | " +
 				"Runs | Journeys completed | Trains entered | Trains exited (authoritative) | Max concurrent | " +
-				"Block transitions | Conflicts | Failed reservations | Unresolved at run end | Wrong exits | Cutoff runs |"
+				"Block transitions | Conflicts | Failed reservations | Unresolved at run end | Wrong exits | Cutoff runs | " +
+				"Exits by own InOut | Exit bar (per run) |"
 		)
 		sb.appendLine("|" + "---|".repeat(OUTCOMES_TABLE_COLUMNS))
 
@@ -847,7 +889,9 @@ class RunReportAggregator(
 					"| ${fmtNullableLong(outcome.failedReservations)} " +
 					"| ${fmtNullableLong(outcome.unresolvedAtRunEnd)} " +
 					"| ${fmtNullableLong(outcome.wrongExits)} " +
-					"| ${fmtNullableLong(cutoffRuns(r.snapshots))} |"
+					"| ${fmtNullableLong(cutoffRuns(r.snapshots))} " +
+					"| ${fmtNullableLong(ownInOutExits(r.snapshots))} " +
+					"| ${exitBarText(cell.key.example)} |"
 			)
 		}
 		sb.appendLine()
@@ -927,10 +971,11 @@ class RunReportAggregator(
 			"- **Wrong exits / Cutoff runs (issue #676)** — **Wrong exits** sums the trains that left " +
 				"through another InOut than the one they were queued for. **Cutoff runs** counts the runs " +
 				"that reached their end time with admitted trains still on the network " +
-				"(`CUTOFF_WITH_UNFINISHED_JOURNEYS`). Neither fails a run or the gate: they say why a " +
-				"passing cell may still have sent trains the wrong way or left them under way. Runs written " +
-				"before schema version 11 show `n/a`."
+				"(`CUTOFF_WITH_UNFINISHED_JOURNEYS`). A cutoff never fails a run or the gate; wrong exits " +
+				"count only through Exits by own InOut (issue #1315). Runs written before schema version 11 " +
+				"show `n/a`."
 		)
+		appendExitBarLegend(sb)
 		sb.appendLine(
 			"- **Example (issue #1333)** — the example the cell's runs ran; `(unnamed)` is a run that named " +
 				"none or a blank name (a GUI run, or a file before schema version 13). A cell is its parameters **and** its " +
@@ -954,6 +999,24 @@ class RunReportAggregator(
 		)
 		sb.appendLine(PerformanceReportSection.legend())
 		sb.appendLine()
+	}
+
+	/** The legend bullet of the Exits by own InOut and Exit bar columns (Issue #1315). */
+	private fun appendExitBarLegend(sb: StringBuilder) {
+		sb.appendLine(
+			"- **Exits by own InOut / Exit bar (issue #1315)** — **Exits by own InOut** is Trains exited " +
+				"minus Wrong exits, summed: the trains that left by their timetabled InOut. **Exit bar** is " +
+				"the minimum of those a single run of the example must reach to pass, measured per example " +
+				"from its deterministic arm at 600 s (half of its fewest own-InOut exits, rounded up; " +
+				"`shuntingLoop`, its LLM twin and an unnamed run keep the #895 bar of 6; an LLM example uses " +
+				"its twin's bar). It is a tripwire. Wrong exits subtract from a pass, they never veto it. " +
+				"`$EXIT_BAR_NOT_MEASURED` — on the bar and on the Gate — marks an example with no measured " +
+				"bar (an XML file run from the GUI, say): its runs had no exit check. A run without an example " +
+				"(a file before schema version 13) is judged against the bar of 6 whatever network it ran. " +
+				"Runs written before schema version 11 counted no wrong exits, so there Exits by own InOut " +
+				"equals Trains exited. Arm Comparison pools runs judged against different bars, one per " +
+				"example; each run's verdict reads its own bar."
+		)
 	}
 
 	/**
@@ -1113,6 +1176,22 @@ class RunReportAggregator(
 	/** The gate cell: `n/a` for an arm without a dispatcher, which the gate does not judge (Issue #676). */
 	private fun gateText(r: ArmReport): String =
 		if (r.arm.hasDispatcher) gateSymbol(r.gatePassed) else "n/a (no dispatcher)"
+
+	/**
+	 * The gate cell plus, when some of [r]'s runs have no measured exit bar, [EXIT_BAR_NOT_MEASURED]
+	 * (Issue #1315): their `Passing` count did not read the railway's exits.
+	 */
+	private fun verdictText(r: ArmReport): String {
+		val unmeasured = r.snapshots.count { ExitPassBars.barFor(it.example) == null }
+		return when (unmeasured) {
+			0 -> gateText(r)
+			r.snapshots.size -> "${gateText(r)} · $EXIT_BAR_NOT_MEASURED"
+			else -> "${gateText(r)} · $EXIT_BAR_NOT_MEASURED for $unmeasured of ${r.snapshots.size} runs"
+		}
+	}
+
+	/** The Exit bar cell of a sweep row: the bar of its [example], or [EXIT_BAR_NOT_MEASURED]. */
+	private fun exitBarText(example: String?): String = ExitPassBars.barFor(example)?.toString() ?: EXIT_BAR_NOT_MEASURED
 
 	private fun boolSymbol(v: Boolean): String = if (v) "yes" else "no"
 

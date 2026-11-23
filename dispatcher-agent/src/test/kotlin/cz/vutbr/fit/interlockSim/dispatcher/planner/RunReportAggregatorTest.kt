@@ -1136,7 +1136,7 @@ class RunReportAggregatorTest {
 
 		for ((section, columns) in listOf(
 			hygieneSection(md) to 25,
-			outcomesSection(md) to 23,
+			outcomesSection(md) to 25,
 			performanceSection(md) to 21
 		)) {
 			val row = section.lines().first { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }

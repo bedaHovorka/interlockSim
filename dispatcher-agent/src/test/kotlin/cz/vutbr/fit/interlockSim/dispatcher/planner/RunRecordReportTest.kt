@@ -24,7 +24,9 @@ import org.junit.jupiter.api.Test
  * (Issue #676, Goal 6 SP5 fix round 1).
  *
  * Rulings (gemma4 as traffic-simulation-expert): [RunReportAggregator.runPassed] does not fail a run
- * on wrong exits or on a cutoff; the Railway Outcomes table makes both visible instead. Runs without
+ * on a cutoff; the Railway Outcomes table makes it visible instead. Wrong exits were not judged
+ * either until Issue #1315, which subtracts them from the exits a run's bar counts (see
+ * `RunPassBarTest`); they never veto a run on their own. Runs without
  * any dispatcher are their own arm, [DispatcherArm.NO_DISPATCHER], which never passes the arm gate.
  *
  * @since Issue #676 (Goal 6 SP5)
@@ -74,7 +76,7 @@ class RunRecordReportTest {
 		val header = md.substringAfter("### Railway Outcomes").lines().first { it.startsWith("| Arm ") }
 		assertThat(header).contains("| Unresolved at run end | Wrong exits | Cutoff runs |")
 		val cells = outcomeCells(md, DispatcherArm.RULE_BASED)
-		assertThat(cells.size, "column count").isEqualTo(23)
+		assertThat(cells.size, "column count").isEqualTo(25)
 		assertThat(cells[20], "unresolved at run end, unmoved").isEqualTo("0")
 		assertThat(cells[21], "wrong exits summed").isEqualTo("10")
 		assertThat(cells[22], "cutoff runs counted").isEqualTo("1")
@@ -92,7 +94,8 @@ class RunRecordReportTest {
 	}
 
 	@Test
-	fun `a run is not failed for its wrong exits or for being cut off`() {
+	fun `a cut-off run whose own-InOut exits clear the bar is not failed for its wrong exits`() {
+		// 17 exits, 10 by another InOut: 7 by the own InOut, above the bar of 6 (Issue #1315).
 		val cutOff = runSnapshot(railwayOutcome = record(10L, RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS))
 
 		assertThat(aggregator.runPassed(cutOff), "runPassed").isTrue()

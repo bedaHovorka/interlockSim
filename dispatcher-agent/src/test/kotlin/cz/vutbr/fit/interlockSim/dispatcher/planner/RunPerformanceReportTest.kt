@@ -95,7 +95,7 @@ class RunPerformanceReportTest {
 	}
 
 	@Test
-	fun `the Railway Outcomes table has 23 columns, its Example column included`() {
+	fun `the Railway Outcomes table has 25 columns, its Example column included`() {
 		val md = render(listOf(run("s1", ExampleNames.SHUNTING_LOOP, wallSeconds = 1.0, reservePathCalls = 30L)))
 
 		val row =
@@ -104,7 +104,7 @@ class RunPerformanceReportTest {
 				.substringBefore("### Performance")
 				.lines()
 				.first { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
-		assertThat(row.split("|").size - 2, "outcomes columns").isEqualTo(23)
+		assertThat(row.split("|").size - 2, "outcomes columns").isEqualTo(25)
 	}
 
 	@Test

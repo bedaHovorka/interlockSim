@@ -361,10 +361,11 @@ class DefaultRunSnapshotStoreTest {
 	}
 
 	/**
-	 * A literal schema-version-10 document (Issue #676 fix round 1): the shape of a run JSON written
-	 * on 2026-10-31 by the version-10 code (maps trimmed to a few keys), with the per-run railway
-	 * figures of the #895 control arm (vyhybna `shuntingLoop`, 600 s). Not built from the current
-	 * encoder, so it keeps testing the old shape when the encoder changes.
+	 * A literal schema-version-10 vyhybna document (Issue #676 fix round 1): the shape of a run JSON
+	 * written on 2026-10-31 by the version-10 code (maps trimmed to a few keys), with the per-run
+	 * railway figures of a vyhybna `shuntingLoop` control-arm run at 600 s on that code (15 exits; it
+	 * is not an #895 file — the #895 control arm exited 11). Not built from the current encoder, so it
+	 * keeps testing the old shape when the encoder changes.
 	 */
 	@Test
 	fun `readAll still decodes a literal schema-version-10 control-arm run`(
@@ -393,6 +394,35 @@ class DefaultRunSnapshotStoreTest {
 		)
 		assertThat(legacy.railwayOutcome.endClassification).isNull()
 		assertThat(legacy.railwayOutcome.wrongExits).isNull()
+		// Issue #1315: a file without an example keeps the vyhybna bar of #895, so its verdict does not move.
+		assertThat(ExitPassBars.barFor(legacy.example)).isEqualTo(RunReportAggregator.MIN_TRAINS_EXITED)
+		assertThat(RunReportAggregator(store).runPassed(legacy), "runPassed").isTrue()
+	}
+
+	/**
+	 * The exit bar on the old file shape (Issue #1315): a schema-version-10 vyhybna document names no
+	 * example and counts no wrong exits, so it is read against the #895 bar of 6 with nothing
+	 * subtracted. 11 exits (the #895 control arm's figure) pass; 5 exits fail, as they did before.
+	 */
+	@Test
+	fun `a literal schema-version-10 vyhybna document is judged against the 895 bar`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val aggregator = RunReportAggregator(store)
+		val armDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(armDir)
+
+		for ((exits, passes) in listOf(11 to true, 5 to false)) {
+			val file = armDir.resolve("legacy-v10-exits-$exits.json")
+			Files.writeString(file, SCHEMA_V10_JSON.replace("\"trainsExited\": 15", "\"trainsExited\": $exits"))
+			val legacy = store.readAll(tmpDir).single()
+
+			assertThat(legacy.railwayOutcome.trainsExited, "decoded exits").isEqualTo(exits.toLong())
+			assertThat(aggregator.runPassed(legacy), "runPassed at $exits exits").isEqualTo(passes)
+			// A distinct file per iteration: delete it, so `readAll().single()` sees exactly one again.
+			Files.delete(file)
+		}
 	}
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
