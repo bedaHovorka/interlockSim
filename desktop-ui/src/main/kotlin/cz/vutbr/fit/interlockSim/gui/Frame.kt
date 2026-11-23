@@ -188,7 +188,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Name handed to the latest [startSimulation]: the example name, or the XML file's
 	 * [DispatcherRunSummaries.fileRunName] (Issue #1328). `null` when the caller passed none.
-	 * One-shot: RUNNING moves it into [wiredRunName] and clears it.
+	 * One-shot: RUNNING moves it into [wiredRunName] and clears it. A start that fails before RUNNING
+	 * leaves it set; the next start overwrites it first, so a stale name never reaches a run JSON.
 	 */
 	private var startedRunName: String? = null
 

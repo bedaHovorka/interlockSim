@@ -97,7 +97,7 @@ class GuiRunNamePersistenceTest : AbstractFrameTestBase() {
 		every { registry.guiExamples } returns mapOf(ExampleNames.CERVENY_UJEZD to { _, _ -> context })
 		every { registry.usesLlmDispatcher(any()) } returns false
 		getKoin().loadModules(listOf(module { single<ExampleRegistry> { registry } }), allowOverride = true)
-		frames.add(getKoin().get<Frame>())
+		SwingUtilities.invokeAndWait { frames.add(getKoin().get<Frame>()) }
 
 		getKoin().get<Main>().runExampleGui(arrayOf("exampleGui", ExampleNames.CERVENY_UJEZD, "60"))
 
@@ -114,7 +114,7 @@ class GuiRunNamePersistenceTest : AbstractFrameTestBase() {
 		val factory = mockk<SimulationContextFactory>()
 		every { factory.createContext(any<EditingContext>()) } returns context
 		getKoin().loadModules(listOf(module { single<SimulationContextFactory> { factory } }), allowOverride = true)
-		frames.add(getKoin().get<Frame>())
+		SwingUtilities.invokeAndWait { frames.add(getKoin().get<Frame>()) }
 		// Main refuses a file outside its working directory, so the fixture is copied below it.
 		val xmlFile = fixtureCopyInWorkingDirectory()
 
@@ -130,7 +130,9 @@ class GuiRunNamePersistenceTest : AbstractFrameTestBase() {
 		@TempDir root: Path
 	) {
 		val context = persistingContext(root)
-		val frame = getKoin().get<Frame>()
+		// Every sibling test constructs its Frame on the EDT; match that discipline here.
+		lateinit var frame: Frame
+		SwingUtilities.invokeAndWait { frame = getKoin().get<Frame>() }
 		frames.add(frame)
 		val selected = File(root.toFile(), XML_FILE_NAME)
 
@@ -149,7 +151,8 @@ class GuiRunNamePersistenceTest : AbstractFrameTestBase() {
 		@TempDir root: Path
 	) {
 		val context = persistingContext(root)
-		val frame = getKoin().get<Frame>()
+		lateinit var frame: Frame
+		SwingUtilities.invokeAndWait { frame = getKoin().get<Frame>() }
 		frames.add(frame)
 
 		SwingUtilities.invokeAndWait {
@@ -188,7 +191,13 @@ class GuiRunNamePersistenceTest : AbstractFrameTestBase() {
 		val store = DefaultRunSnapshotStore(root)
 		val deadline = System.currentTimeMillis() + WAIT_MS
 		while (System.currentTimeMillis() < deadline) {
-			store.readAll(root).singleOrNull()?.let { return it }
+			val written = store.readAll(root)
+			if (written.size == 1) return written.single()
+			// Two JSONs would mean two runs persisted to one store: fail on that instead of spinning
+			// to the deadline with a misleading "no run JSON" message.
+			check(written.size < 2) {
+				"${written.size} run JSONs were written under $root: ${written.joinToString { it.runId }}"
+			}
 			Thread.sleep(POLL_MS)
 		}
 		throw AssertionError("No run JSON was written under $root within $WAIT_MS ms")
