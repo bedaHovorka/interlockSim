@@ -1,6 +1,6 @@
 # CLAUDE.md — :dispatcher-agent
 
-**Last Updated:** 2026-10-29
+**Last Updated:** 2026-11-22
 
 Guidance for Claude Code when working in `:dispatcher-agent`. Repo-wide rules
 (English-only output, heavy-test policy, Koin rules, code quality) live in the
@@ -138,7 +138,12 @@ java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
 ```
 
 Each run writes one JSON under `<out>/<arm>/`, and the sweep renders
-`<out>/report.md` when it finishes. A run that exceeds `perRunTimeoutSeconds` is
+`<out>/report.md` when it finishes. Its Arm Comparison pools every run of an arm;
+its Parameter Sweep tables (Decision Hygiene, Railway Outcomes, Performance) have
+one row per cell, and a cell is the run parameters **and** the example (#1333), so
+two examples swept with equal parameters get a row each, with their own `Runs`
+and gate (a split row can fall under the gate's 10-run minimum). A run JSON
+without `example` shows `(unnamed)`. A run that exceeds `perRunTimeoutSeconds` is
 killed and recorded as `TIMEOUT_ABORT` rather than left absent — an absent failed
 run would silently improve the arm's measured rate.
 

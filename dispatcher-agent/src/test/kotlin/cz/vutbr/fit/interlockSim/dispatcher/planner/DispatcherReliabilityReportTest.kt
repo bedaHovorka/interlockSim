@@ -13,7 +13,9 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import assertk.assertions.exists
+import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.ExampleNames
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -69,5 +71,34 @@ class DispatcherReliabilityReportTest {
 		val markdown = Files.readString(reportFile)
 		assertThat(markdown).contains("| ${DispatcherArm.RULE_BASED} | 1 |")
 		assertThat(markdown).contains("| ${DispatcherArm.RULE_BASED} | temp-root-run |")
+	}
+
+	/**
+	 * Issue #1333: the example is read back from the run JSON, so two networks run with equal
+	 * parameters get a Railway Outcomes row each; Arm Comparison still pools them.
+	 */
+	@Test
+	fun `two examples with equal parameters read from disk give one Railway Outcomes row each`(
+		@TempDir tempDir: Path
+	) {
+		val root = tempDir.resolve("dispatcher-runs")
+		val store = DefaultRunSnapshotStore(root)
+		store.write(runSnapshot(runId = "shunting-run", example = ExampleNames.SHUNTING_LOOP))
+		store.write(runSnapshot(runId = "cerveny-run", example = ExampleNames.CERVENY_UJEZD))
+
+		val markdown = Files.readString(renderDispatcherReliabilityReport(root))
+
+		assertThat(markdown).contains("| ${DispatcherArm.RULE_BASED} | 2 |")
+		val outcomeRows =
+			markdown
+				.substringAfter("### Railway Outcomes")
+				.substringBefore("### Performance")
+				.lines()
+				.filter { it.startsWith("| ${DispatcherArm.RULE_BASED} ") }
+		assertThat(outcomeRows).hasSize(2)
+		assertThat(outcomeRows.single { it.contains("| ${ExampleNames.SHUNTING_LOOP} | ") })
+			.contains("| ${ExampleNames.SHUNTING_LOOP} | 1 | ")
+		assertThat(outcomeRows.single { it.contains("| ${ExampleNames.CERVENY_UJEZD} | ") })
+			.contains("| ${ExampleNames.CERVENY_UJEZD} | 1 | ")
 	}
 }

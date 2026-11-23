@@ -54,7 +54,7 @@ import java.util.Locale
  * | Author Attribution | [ActionAuthor] × arm |
  * | Skipped NEXT SECTION Offers | per arm, offered hops the LLM left unrequested on fallback-skipping cycles |
  * | Latency | arm × tick period, p50/p95/max and deadline-miss count |
- * | Parameter Sweep | one row per [RunParameters] cell; its Performance table one per cell and example |
+ * | Parameter Sweep | one row per cell: [RunParameters] and example ([ParameterSweepCellKey], Issue #1333) |
  *
  * @param store Used to load per-run JSON snapshots for the Gradle task entry point.
  *
@@ -121,10 +121,10 @@ class RunReportAggregator(
 		const val MIN_TRAINS_EXITED: Long = 6
 
 		/** Column count of the Parameter Sweep "Decision Hygiene" table (for its separator row). */
-		private const val HYGIENE_TABLE_COLUMNS = 24
+		private const val HYGIENE_TABLE_COLUMNS = 25
 
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
-		private const val OUTCOMES_TABLE_COLUMNS = 22
+		private const val OUTCOMES_TABLE_COLUMNS = 23
 
 		/**
 		 * Column headers of the "Arm Comparison" table — the single source for both its header row
@@ -682,8 +682,18 @@ class RunReportAggregator(
 	}
 
 	/**
-	 * One row per distinct `(arm, params)` combination — the grid cells, not the arms — split
-	 * across two tables that share the same parameter-identity columns as their join key.
+	 * One row per distinct `(arm, params, example)` combination — the grid cells, not the arms —
+	 * split across tables that share the same parameter-identity columns, Example included, as their
+	 * join key.
+	 *
+	 * ## Why the example is part of the cell (Issue #1333)
+	 *
+	 * [RunParameters] has no example field, so a cell keyed by it alone pooled two networks run with
+	 * equal parameters (`shuntingLoop` and `cervenyUjezd` on the rule-based arm; `multiTrainLoop` and
+	 * `threeTrainLoop` without a dispatcher) into one row. The cell is now a [ParameterSweepCellKey]:
+	 * a cell's `Runs`, `Passing` and `Gate` are read per example, so a split row can fall under the
+	 * gate's run-count minimum where the pooled row did not. Arm Comparison still pools the examples
+	 * of an arm.
 	 *
 	 * ## Why two tables (Issue #834, SP2c.11, Task 5)
 	 *
@@ -695,7 +705,7 @@ class RunReportAggregator(
 	 * bookkeeping, the existing gate columns) and **Railway Outcomes** (what the railway actually
 	 * did) as two tables built from the identical [paramsRowPrefix] columns, so a reader can join
 	 * a row in one to its counterpart in the other without guessing. A third, **Performance**
-	 * ([PerformanceReportSection], Issue #1306), splits each cell by example and starts with the same
+	 * ([PerformanceReportSection], Issue #1306), renders the same cells and starts with the same
 	 * columns.
 	 *
 	 * ## Why this is not one row per arm (Issue #847, SP2c.24)
@@ -723,66 +733,73 @@ class RunReportAggregator(
 	) {
 		sb.appendLine("## Parameter Sweep")
 		sb.appendLine()
-		sb.appendLine("> One row per distinct parameter cell. `Runs`/`Passing` are that cell's own.")
+		sb.appendLine(
+			"> One row per distinct parameter cell and example. `Runs`/`Passing`/`Gate` are that cell's own."
+		)
 		sb.appendLine()
 
-		val cellReports =
-			reports.flatMap { report ->
-				if (report.snapshots.isEmpty()) {
-					// An arm with no snapshots still renders a placeholder Parameter Sweep row:
-					// [aggregate] fills its `params` with the default RunParameters (rule-based arm,
-					// unset seed), and the railway figures render as `n/a`. This is the intentional
-					// fallback pinned by `renderMarkdown falls back to placeholders …` and `… zero
-					// runs renders both tables without throwing` — an empty arm must show it exists
-					// with defaults, not vanish from the sweep.
-					listOf(report)
-				} else {
-					report.snapshots
-						.groupBy { it.params }
-						.entries
-						.sortedBy { it.key.toString() }
-						.map { (_, cellSnapshots) -> aggregate(cellSnapshots) }
-				}
-			}
-
-		val ranked =
-			cellReports
-				.map { it to aggregateRailwayOutcome(it.snapshots) }
-				.sortedWith(
-					compareByDescending<Pair<ArmReport, RailwayOutcome>> { it.second.trainsExited ?: Long.MIN_VALUE }
-						.thenBy { it.first.params.toString() }
-				)
+		val ranked = parameterSweepCells(reports)
 
 		appendParameterSweepLegend(sb)
 		appendHygieneTable(sb, ranked)
 		appendOutcomesTable(sb, ranked)
-		// Issue #1306: per cell and example, so wall time is never pooled across networks.
-		PerformanceReportSection.append(sb, ranked.map { it.first }, ::paramsRowPrefix)
+		// Issue #1306, #1333: the same cells, so wall time is never pooled across networks.
+		PerformanceReportSection.append(sb, ranked, ::paramsRowPrefix)
 	}
+
+	/**
+	 * The Parameter Sweep cells of [reports], ranked: every arm's runs grouped by
+	 * [ParameterSweepCellKey] (Issue #1333) and each group aggregated alone, ordered by summed
+	 * [RailwayOutcome.trainsExited] descending (unmeasured last), then by parameters and example.
+	 *
+	 * An arm with no snapshots still yields a placeholder cell: [aggregate] fills its `params` with
+	 * the default RunParameters (rule-based arm, unset seed), its example is unnamed and its railway
+	 * figures render as `n/a`. This is the intentional fallback pinned by `renderMarkdown falls back
+	 * to placeholders …` and `… zero runs renders both tables without throwing` — an empty arm must
+	 * show it exists with defaults, not vanish from the sweep.
+	 */
+	private fun parameterSweepCells(reports: List<ArmReport>): List<ParameterSweepCell> =
+		reports
+			.flatMap { report ->
+				if (report.snapshots.isEmpty()) {
+					listOf(ParameterSweepCell(ParameterSweepCellKey(report.params, null), report, RailwayOutcome.UNMEASURED))
+				} else {
+					report.snapshots
+						.groupBy(ParameterSweepCellKey::of)
+						.map { (key, cellSnapshots) ->
+							ParameterSweepCell(key, aggregate(cellSnapshots), aggregateRailwayOutcome(cellSnapshots))
+						}
+				}
+			}.sortedWith(
+				compareByDescending<ParameterSweepCell> { it.outcome.trainsExited ?: Long.MIN_VALUE }
+					.thenBy { it.key.params.toString() }
+					.thenBy(nullsLast()) { it.key.example }
+			)
 
 	private fun appendHygieneTable(
 		sb: StringBuilder,
-		ranked: List<Pair<ArmReport, RailwayOutcome>>
+		ranked: List<ParameterSweepCell>
 	) {
 		sb.appendLine("### Decision Hygiene")
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
-				"Breaker Threshold | Breaker Cooldown s | " +
+				"Breaker Threshold | Breaker Cooldown s | Example | " +
 				"Runs | Passing | Gate | LLM Success | Invalid-action rate | No-op rate | " +
 				"Repair-success rate † | validAt1 | correctAt1 | p50 latency ms | p95 latency ms | " +
 				"C7 clean | RULE_FALLBACK ticks |"
 		)
 		sb.appendLine("|" + "---|".repeat(HYGIENE_TABLE_COLUMNS))
 
-		for ((r, _) in ranked) {
+		for (cell in ranked) {
+			val r = cell.report
 			val invalidActionRate = medianInvalidActionRate(r.snapshots)
 			val repairRate = median(r.snapshots.map { it.repairSuccessRate }.sorted())
 			val p50s = r.snapshots.mapNotNull { it.latencyP50Ms }.sorted()
 			val p50 = if (p50s.isEmpty()) null else percentile50(p50s)
 			val ruleFallbackTicks = r.snapshots.sumOf { it.ticksByOutcome[TickOutcome.RULE_FALLBACK.name] ?: 0L }
 			sb.appendLine(
-				paramsRowPrefix(r) +
+				paramsRowPrefix(cell) +
 					"| ${r.runCount} " +
 					"| ${r.passingRuns} " +
 					"| ${gateText(r)} " +
@@ -803,21 +820,23 @@ class RunReportAggregator(
 
 	private fun appendOutcomesTable(
 		sb: StringBuilder,
-		ranked: List<Pair<ArmReport, RailwayOutcome>>
+		ranked: List<ParameterSweepCell>
 	) {
 		sb.appendLine("### Railway Outcomes")
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
-				"Breaker Threshold | Breaker Cooldown s | " +
+				"Breaker Threshold | Breaker Cooldown s | Example | " +
 				"Runs | Journeys completed | Trains entered | Trains exited (authoritative) | Max concurrent | " +
 				"Block transitions | Conflicts | Failed reservations | Unresolved at run end | Wrong exits | Cutoff runs |"
 		)
 		sb.appendLine("|" + "---|".repeat(OUTCOMES_TABLE_COLUMNS))
 
-		for ((r, outcome) in ranked) {
+		for (cell in ranked) {
+			val r = cell.report
+			val outcome = cell.outcome
 			sb.appendLine(
-				paramsRowPrefix(r) +
+				paramsRowPrefix(cell) +
 					"| ${r.runCount} " +
 					"| ${fmtNullableLong(outcome.journeysCompleted)} " +
 					"| ${fmtNullableLong(outcome.trainsEntered)} " +
@@ -845,7 +864,7 @@ class RunReportAggregator(
 	}
 
 	/**
-	 * Legend for the two Parameter Sweep tables. Several of these metrics have names that sound
+	 * Legend for the Parameter Sweep tables. Several of these metrics have names that sound
 	 * interchangeable and are not — see each bullet for the exact numerator and denominator.
 	 */
 	private fun appendParameterSweepLegend(sb: StringBuilder) {
@@ -913,12 +932,19 @@ class RunReportAggregator(
 				"before schema version 11 show `n/a`."
 		)
 		sb.appendLine(
+			"- **Example (issue #1333)** — the example the cell's runs ran; `(unnamed)` is a run that named " +
+				"none or a blank name (a GUI run, or a file before schema version 13). A cell is its parameters **and** its " +
+				"example, so two networks run with equal parameters get a row each, and each row's `Runs`, " +
+				"`Passing` and `Gate` are that example's own: a row can show `FAIL` on fewer than 10 runs where " +
+				"the arm's pooled row in Arm Comparison, which still pools the examples, shows enough runs."
+		)
+		sb.appendLine(
 			"- **NO_DISPATCHER arm (issue #676)** — runs with no dispatcher at all (for example " +
 				"`multiTrainLoop`), persisted because a sweep configured a store for them. Their railway " +
 				"figures are shown; the gate is `n/a`, because they measure no dispatcher."
 		)
 		sb.appendLine(
-			"- **Ranking (issue #906)** — both tables are ranked by **Trains exited**, descending, cells " +
+			"- **Ranking (issue #906)** — the Parameter Sweep tables are ranked by **Trains exited**, descending, cells " +
 				"with no measured `trainsExited` sorted last. Not by `journeysCompleted`: that counter " +
 				"increments whenever a train's reservation count reaches zero, with no termination or " +
 				"movement predicate, so a stale swept route can credit a journey to a train that never " +
@@ -985,12 +1011,14 @@ class RunReportAggregator(
 	}
 
 	/**
-	 * Shared parameter-identity columns rendered identically, in the same order, in both
-	 * Parameter Sweep tables — the join key a reader uses to match a [ArmReport]'s hygiene row to
-	 * its outcomes row without guessing.
+	 * Shared cell-identity columns rendered identically, in the same order, in every Parameter
+	 * Sweep table — the join key a reader uses to match a cell's hygiene row to its outcomes and
+	 * performance rows without guessing: the arm, the [RunParameters] and, last, the example
+	 * (Issue #1333), escaped because it is free text (a GUI run can be named after its XML file).
 	 */
-	private fun paramsRowPrefix(r: ArmReport): String {
-		val p = r.params
+	private fun paramsRowPrefix(cell: ParameterSweepCell): String {
+		val r = cell.report
+		val p = cell.key.params
 		return "| ${r.arm} " +
 			"| ${p.model.ifEmpty { if (r.arm.hasDispatcher) "rule-based" else "none" }} " +
 			"| ${p.temperature} " +
@@ -1001,7 +1029,8 @@ class RunReportAggregator(
 			"| ${p.inferenceTimeoutSeconds} " +
 			"| ${p.promptVariant} " +
 			"| ${p.circuitBreakerFailureThreshold} " +
-			"| ${p.circuitBreakerCooldownSeconds} "
+			"| ${p.circuitBreakerCooldownSeconds} " +
+			"| ${mdEscapeCell(cell.key.exampleLabel)} "
 	}
 
 	// ── Statistics helpers ────────────────────────────────────────────────────

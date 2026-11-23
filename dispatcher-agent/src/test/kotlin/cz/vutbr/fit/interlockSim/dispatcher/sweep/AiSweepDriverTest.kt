@@ -85,7 +85,8 @@ class AiSweepDriverTest {
 						runId,
 						DispatcherArm.LLM_TOOL_CALLING,
 						SweepAxes().cells().single().runParameters(),
-						RunEndCause.NATURAL_COMPLETION
+						RunEndCause.NATURAL_COMPLETION,
+						example = request.exampleName
 					).copy(completedNaturally = true)
 				)
 			}
@@ -491,5 +492,28 @@ class AiSweepDriverTest {
 		val report = outputRoot.resolve("report.md")
 		assertThat(Files.exists(report)).isTrue()
 		assertThat(Files.readString(report)).contains("## Parameter Sweep")
+	}
+
+	/**
+	 * Issue #1333: a sweep over two examples with equal parameters renders a Parameter Sweep row per
+	 * example, each with that example's own run count, while Arm Comparison pools both.
+	 */
+	@Test
+	fun `a sweep over two examples renders one sweep row per example`() {
+		val examples = listOf(ExampleNames.SHUNTING_LOOP_AI, ExampleNames.CERVENY_UJEZD_AI)
+		driverWith(RecordingRunner()).run(grid(repeat = 2, examples = examples), outputRoot, mainClass)
+
+		val report = Files.readString(outputRoot.resolve("report.md"))
+		val hygieneRows =
+			report
+				.substringAfter("### Decision Hygiene")
+				.substringBefore("### Railway Outcomes")
+				.lines()
+				.filter { it.startsWith("| ${DispatcherArm.LLM_TOOL_CALLING} ") }
+		assertThat(hygieneRows).hasSize(2)
+		for (example in examples) {
+			assertThat(hygieneRows.single { it.contains("| $example | ") }, example).contains("| $example | 2 | ")
+		}
+		assertThat(report).contains("| ${DispatcherArm.LLM_TOOL_CALLING} | 4 |")
 	}
 }

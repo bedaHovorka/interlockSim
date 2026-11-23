@@ -16,11 +16,11 @@ import java.util.Locale
  * run record's performance row aggregated per parameter cell **and example**, followed by the Goal 1B
  * SP11 wall budget, reported against and never asserted.
  *
- * Its own table, by ruling (gemma4 as traffic-simulation-expert, B2): the #895 Decision Hygiene and
- * Railway Outcomes tables are keyed by parameter cell alone, so a campaign that runs two networks
- * with the same parameters pools them into one row, and a wall time averaged across networks would
- * be meaningless. Here every network of a cell has its own row; the rows follow the cells' ranking
- * and start with the same parameter-identity columns, so a reader can join them to the #895 tables.
+ * Its own table, by ruling (gemma4 as traffic-simulation-expert, B2). A wall time averaged across
+ * networks would be meaningless, so every network has its own row: since Issue #1333 the cells of
+ * every Parameter Sweep table are keyed by parameters **and** example ([ParameterSweepCellKey]), and
+ * this table renders the same ranked cells, one row each, starting with the same cell-identity
+ * columns (the Example column last among them), so a reader can join them to the #895 tables.
  *
  * Wall time is a measurement of the machine, not of the railway: it varies with load and between
  * runs, so the table reports medians and nothing in the gate reads it. Two walls are shown: the
@@ -35,24 +35,21 @@ internal object PerformanceReportSection {
 	/** Goal 1B SP11 budget for a whole campaign (#1158), in wall seconds. Reported against, never asserted. */
 	private const val SP11_TOTAL_BUDGET_SECONDS = 180
 
-	/** Column count of the Performance table: 11 parameter-identity columns and 10 of its own. */
+	/** Column count of the Performance table: 12 cell-identity columns (Example last) and 9 of its own. */
 	private const val PERFORMANCE_TABLE_COLUMNS = 21
 
 	private const val NOT_MEASURED = "n/a"
 
-	/** The Example cell of a run that named no example (a GUI run, a file before schema version 13). */
-	private const val UNNAMED = "(unnamed)"
-
 	private val ABORTED_CAUSES = setOf(RunEndCause.TIMEOUT_ABORT, RunEndCause.CRASH)
 
 	/**
-	 * Appends the Performance table for [cells] (ranked Parameter Sweep cells), each row starting
-	 * with [paramsRowPrefix], then the SP11 budget line over every run of [cells].
+	 * Appends the Performance table for [cells] (ranked Parameter Sweep cells), one row per cell
+	 * starting with [paramsRowPrefix], then the SP11 budget line over every run of [cells].
 	 */
 	fun append(
 		sb: StringBuilder,
-		cells: List<ArmReport>,
-		paramsRowPrefix: (ArmReport) -> String
+		cells: List<ParameterSweepCell>,
+		paramsRowPrefix: (ParameterSweepCell) -> String
 	) {
 		sb.appendLine("### Performance")
 		sb.appendLine()
@@ -64,30 +61,19 @@ internal object PerformanceReportSection {
 		)
 		sb.appendLine("|" + "---|".repeat(PERFORMANCE_TABLE_COLUMNS))
 		for (cell in cells) {
-			val byExample =
-				if (cell.snapshots.isEmpty()) {
-					listOf(null to emptyList())
-				} else {
-					cell.snapshots
-						.groupBy { it.example }
-						.entries
-						.sortedWith(compareBy(nullsLast()) { it.key })
-						.map { it.key to it.value }
-				}
-			for ((example, runs) in byExample) {
-				sb.appendLine(paramsRowPrefix(cell) + row(example, runs))
-			}
+			sb.appendLine(paramsRowPrefix(cell) + row(cell.report.snapshots))
 		}
 		sb.appendLine()
-		budgetLines(cells.flatMap { it.snapshots }).forEach(sb::appendLine)
+		budgetLines(cells.flatMap { it.report.snapshots }).forEach(sb::appendLine)
 		sb.appendLine()
 	}
 
 	/** The legend bullet for the Performance table. */
 	fun legend(): String =
 		"- **Performance (issue #1306)** — the run record's performance row, one row per parameter cell " +
-			"and example, so wall time is never averaged across networks; `(unnamed)` is a run that named " +
-			"no example. **Runs** counts every run of the row, aborted ones included; **Measured runs** " +
+			"and example, like the two tables above (#1333), so wall time is never averaged across networks; " +
+			"`(unnamed)` is a run that named no example. **Runs** counts every run of the row, aborted ones " +
+			"included; **Measured runs** " +
 			"those with a kernel wall, the runs the medians are taken over. **Kernel wall s** is the wall " +
 			"time the simulation kernel ran, **Whole-run wall s** the forked run as aiSweep timed it (JVM " +
 			"start, network loading, run and persistence; aborted runs included), **Sim s** the simulated " +
@@ -103,13 +89,9 @@ internal object PerformanceReportSection {
 			"group off, or no aiSweep timing). The SP11 wall budget below the table is reported against, " +
 			"never asserted."
 
-	private fun row(
-		example: String?,
-		runs: List<DispatcherRunSnapshot>
-	): String {
+	private fun row(runs: List<DispatcherRunSnapshot>): String {
 		val outcomes = runs.map { it.railwayOutcome }
-		return "| ${example ?: UNNAMED} " +
-			"| ${runs.size} " +
+		return "| ${runs.size} " +
 			"| ${outcomes.count { it.wallSeconds != null }} " +
 			"| ${fixed(medianOf(outcomes.mapNotNull { it.wallSeconds }), 2)} " +
 			"| ${fixed(medianOf(runs.mapNotNull { it.processWallSeconds }), 2)} " +
