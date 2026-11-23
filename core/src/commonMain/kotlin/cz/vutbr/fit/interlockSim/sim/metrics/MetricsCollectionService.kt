@@ -49,6 +49,10 @@ interface MetricsCollectionService : RunRecordSource {
 	 * The returned snapshot is an immutable value object; subsequent calls
 	 * return independent instances that reflect the state at the time of the call.
 	 *
+	 * Logging (Issue #1330): an explicit call logs the built snapshot at DEBUG ("Metrics snapshot
+	 * queried"). The snapshot published after every block event and the one [runEndSummary] reads are
+	 * built silently; a caller that must not produce that line reads [latestSnapshot] instead.
+	 *
 	 * @return Current performance KPI snapshot.
 	 */
 	fun getSnapshot(): MetricsSnapshot

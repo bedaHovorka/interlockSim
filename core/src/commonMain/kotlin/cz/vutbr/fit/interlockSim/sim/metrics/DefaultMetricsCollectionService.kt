@@ -42,10 +42,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Logging
  *
- * The service logs a summary at INFO level whenever a train completes its
- * journey ([completedTrains] increments) and at DEBUG level for every other
- * state change.  The current snapshot is always visible in logs, satisfying the
- * Goal 10 requirement that metrics are observable in stdout/log without a GUI.
+ * The service logs an INFO summary (conflicts, throughput, avgWait, occupied) on each
+ * completed journey ([completedTrains] increments) and DEBUG lines for the other state
+ * changes, so the metrics stay observable in stdout/log without a GUI (Goal 10). The full
+ * snapshot is logged at DEBUG only on an explicit [getSnapshot] call; the snapshot published
+ * after every block event and the one [runEndSummary] reads are built without it (Issue #1330).
  *
  * ## History and journeys (Issue #673, Goal 6 SP2)
  *
@@ -235,6 +236,16 @@ class DefaultMetricsCollectionService(
 	// ── Interface implementation ──────────────────────────────────────────────
 
 	override fun getSnapshot(): MetricsSnapshot {
+		val snapshot = buildSnapshot()
+		logger.debug { "Metrics snapshot queried: $snapshot" }
+		return snapshot
+	}
+
+	/**
+	 * The current snapshot, built without a log line (Issue #1330). The per-event [publishSnapshot]
+	 * and [runEndSummary] read it here; only an explicit [getSnapshot] call logs "queried".
+	 */
+	private fun buildSnapshot(): MetricsSnapshot {
 		val t = lastEventTime
 		val completed = completedTrains
 		val throughput = if (t > 0.0) completed / t else 0.0
@@ -244,26 +255,23 @@ class DefaultMetricsCollectionService(
 		val avgWait = if (occupancyEventCount > 0) totalWaitSeconds / occupancyEventCount else 0.0
 		val pressure = trainWait?.pressure() ?: CapacityPressure.NONE
 
-		val snapshot =
-			MetricsSnapshot(
-				time = t,
-				conflictCount = conflictCount,
-				completedTrains = completed,
-				throughput = throughput,
-				totalWaitSeconds = totalWaitSeconds,
-				averageWaitSeconds = avgWait,
-				occupiedBlocks = occupied,
-				totalBlocks = total,
-				utilization = utilization,
-				trainsHoldingReservations = activeReservationCount.size,
-				heldBlocks = blockReservedAt.size,
-				unresolvedAtRunEndCount = unresolvedAtRunEndCount,
-				queuedTrains = pressure.queuedTrains,
-				blockedTrains = pressure.blockedTrains,
-				openContentions = pressure.openContentions
-			)
-		logger.debug { "Metrics snapshot queried: $snapshot" }
-		return snapshot
+		return MetricsSnapshot(
+			time = t,
+			conflictCount = conflictCount,
+			completedTrains = completed,
+			throughput = throughput,
+			totalWaitSeconds = totalWaitSeconds,
+			averageWaitSeconds = avgWait,
+			occupiedBlocks = occupied,
+			totalBlocks = total,
+			utilization = utilization,
+			trainsHoldingReservations = activeReservationCount.size,
+			heldBlocks = blockReservedAt.size,
+			unresolvedAtRunEndCount = unresolvedAtRunEndCount,
+			queuedTrains = pressure.queuedTrains,
+			blockedTrains = pressure.blockedTrains,
+			openContentions = pressure.openContentions
+		)
 	}
 
 	override fun reportUnreleasedReservations(): Set<String> {
@@ -300,7 +308,7 @@ class DefaultMetricsCollectionService(
 	override fun latestOpenContentions(): List<OpenContention> = trainWait?.latestOpenContentions().orEmpty()
 
 	override fun runEndSummary(): RunEndSummary =
-		runEndAccounting.summary(getSnapshot(), performanceAccounting?.performance())
+		runEndAccounting.summary(buildSnapshot(), performanceAccounting?.performance())
 
 	override fun runRecord(): RunRecord? = runRecord
 
@@ -465,7 +473,7 @@ class DefaultMetricsCollectionService(
 	 * value), append it to [history], then hand the same instance to the listeners.
 	 */
 	private fun publishSnapshot() {
-		val snapshot = getSnapshot()
+		val snapshot = buildSnapshot()
 		published = snapshot
 		if (historyEnabled) history.add(snapshot)
 		notifyListeners(snapshot)
