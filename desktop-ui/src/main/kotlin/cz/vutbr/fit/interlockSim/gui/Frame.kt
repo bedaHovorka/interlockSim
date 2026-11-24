@@ -24,7 +24,6 @@ import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
-import java.awt.Toolkit
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
@@ -224,6 +223,20 @@ class Frame internal constructor(
 	internal val bottomTabs: JTabbedPane
 		get() = bottomPane.bottomTabs
 
+	/**
+	 * The collision-warning presentation (Issue #616, Goal 3 SP6): the selection highlight and the
+	 * clear wiring and [showCollisionWarning] live in [WarningPresenter]; the volatile settings stay
+	 * here, where MenuBar's toggles write them and the simulation-thread listener reads them.
+	 */
+	private val warningPresenter: WarningPresenter =
+		WarningPresenter(
+			warningPanel = warningPanel,
+			statusBar = statusBar,
+			canvas = railwayNetGridCanvas,
+			bottomPane = bottomPane,
+			resumeRun = { simulationController.runner?.isPaused = false }
+		)
+
 	/** Right-hand column: speed, KPI dashboard, dispatcher and conflict panels, in both modes. */
 	internal val sideDock: SideDock =
 		SideDock(simulationControlPanel, metricsDashboardPanel, dispatcherControlPanel, conflictResolutionPanel)
@@ -372,21 +385,8 @@ class Frame internal constructor(
 		statusBar.registerProducer(railwayNetGridCanvas)
 		contentPane.add(statusBar, BorderLayout.SOUTH)
 
-		// Bottom pane assembles its tabs itself (Issue #1421); the count wiring travels with it.
-		// Selection highlights the involved block on the canvas when known (Issue #1331: only
-		// a CRITICAL warning gets the collision highlight; an advisory clears it instead -- the
-		// rationale lives on RailwayNetGridCanvas.clearWarningHighlights).
-		warningPanel.onWarningSelected = { warning ->
-			if (warning.severity == CollisionWarning.Severity.CRITICAL) {
-				railwayNetGridCanvas.highlightWarningBlock(warning)
-			} else {
-				railwayNetGridCanvas.clearWarningHighlights()
-			}
-		}
-		// Clearing the log also silences the status-bar warning indicator (Issue #616 follow-up).
-		warningPanel.onClear = {
-			statusBar.setWarningIndicator(false)
-		}
+		// Bottom pane assembles its tabs itself (Issue #1421); the count wiring travels with it,
+		// the selection highlight and clear wiring live in [WarningPresenter].
 
 		// Conflict resolution panel (Issue #590, Goal 9 SP5) – initially hidden; it lives in the side
 		// dock (Issue #1421) and shows itself when an active conflict requires dispatcher attention.
@@ -627,22 +627,7 @@ class Frame internal constructor(
 		warning: CollisionWarning,
 		autoPause: Boolean,
 		sound: Boolean
-	) {
-		warningPanel.addWarning(warning)
-		if (warning.severity != CollisionWarning.Severity.CRITICAL) return
-		statusBar.setWarningIndicator(true)
-		// A critical warning must not hide behind another tab (Issue #1421)
-		if (bottomTabs.isEnabledAt(BottomPane.TAB_WARNINGS)) {
-			bottomTabs.selectedIndex = BottomPane.TAB_WARNINGS
-		}
-		if (sound) {
-			Toolkit.getDefaultToolkit().beep()
-		}
-		// If auto-pause is OFF, resume the simulation immediately.
-		if (!autoPause) {
-			simulationController.runner?.isPaused = false
-		}
-	}
+	) = warningPresenter.show(warning, autoPause, sound)
 
 	/**
 	 * Launch the simulation on a background thread via [SimulationController] (Issue #189).
