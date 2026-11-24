@@ -29,8 +29,9 @@ import javax.swing.JPanel
  * All methods must be called from the Event Dispatch Thread (EDT).
  *
  * **Design Constraints:**
- * - No pause/resume button: kDisco simulations cannot be paused once started
- * - Stop button: enabled while a simulation is running; calls [onStop] callback
+ * - Stop button: enabled while a simulation is running; calls [onStop] callback. Pause and the
+ *   step controls sit beside it in [cz.vutbr.fit.interlockSim.gui.SimulationControlPanel] since
+ *   Goal 8 (the short doc note that denied a pause button went stale then).
  * - Time formatting: HH:MM:SS.mmm (hours:minutes:seconds.milliseconds)
  * - Status values: [SimulationStatus.READY], [SimulationStatus.RUNNING], [SimulationStatus.STOPPED]
  *
@@ -76,7 +77,7 @@ class ControlPanel : JPanel() {
 		// Create stop button (disabled until simulation starts)
 		stopButton = JButton()
 		// Player stop symbol instead of text (Issue #1421); "Stop" stays the accessible name
-		PlayerIcon.apply(stopButton, PlayerIcon.Symbol.STOP, "Stop")
+		PlayerIcon.apply(stopButton, PlayerIcon.Symbol.STOP, STOP_ACCESSIBLE_NAME)
 		stopButton.toolTipText = "Stop the simulation"
 		// Never takes keyboard focus (Issue #1421): a focused button turns Space into its own click,
 		// so the Space pause shortcut stopped the run instead of pausing it.
@@ -191,5 +192,10 @@ class ControlPanel : JPanel() {
 
 		/** Simulation has finished or was stopped. */
 		STOPPED("Stopped")
+	}
+
+	companion object {
+		/** The accessible name screen readers and tests read on the Stop button (Issue #1421). */
+		internal const val STOP_ACCESSIBLE_NAME = "Stop"
 	}
 }

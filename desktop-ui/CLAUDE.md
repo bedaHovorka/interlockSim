@@ -1,6 +1,6 @@
 # CLAUDE.md — :desktop-ui
 
-**Last Updated:** 2026-10-29
+**Last Updated:** 2026-11-24
 
 Guidance for Claude Code when working in `:desktop-ui`. Repo-wide rules
 (English-only output, heavy-test policy, Koin rules, code quality) live in the

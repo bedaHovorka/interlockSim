@@ -39,6 +39,10 @@ import java.util.concurrent.TimeUnit
 import javax.swing.JScrollPane
 import javax.swing.SwingUtilities
 
+// The narrow-panel scroll check keeps its panel sizes named (PR #1430 review: no magic constants).
+private const val NARROWER_THAN_A_FIGURE_WIDTH = 60
+private const val PANEL_HEIGHT_GIVING_ONE_FIGURE_PER_LINE = 400
+
 @DisplayName("MetricsDashboardPanel")
 class MetricsDashboardPanelTest {
 	private val snapshot =
@@ -408,7 +412,7 @@ class MetricsDashboardPanelTest {
 			var rowsWider = false
 			onEdt {
 				// One figure per line (Issue #1421): only a panel narrower than a figure must scroll
-				p.setSize(60, 400)
+				p.setSize(NARROWER_THAN_A_FIGURE_WIDTH, PANEL_HEIGHT_GIVING_ONE_FIGURE_PER_LINE)
 				p.doLayout()
 				val scroll = p.components.filterIsInstance<JScrollPane>().single()
 				scroll.doLayout()
