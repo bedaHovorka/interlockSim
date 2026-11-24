@@ -14,29 +14,15 @@ import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.SimulationTimeTracker
 import cz.vutbr.fit.interlockSim.context.Context
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
-import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
-import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
-import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
-import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
-import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
-import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.metrics.MetricGroup
-import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
-import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.koin.core.scope.Scope
 import java.awt.BorderLayout
 import java.awt.Rectangle
 import java.awt.Toolkit
@@ -164,53 +150,6 @@ class Frame internal constructor(
 	// Dispatcher control panel (Issue #561, Goal 10 SP2b.6)
 	internal val dispatcherControlPanel: DispatcherControlPanel = DispatcherControlPanel()
 
-	// Decision-listener hub wired to the active context's Koin scope (Issue #561, SP2b.6).
-	// Held so the STOPPED transition can detach the sink and stop the sim thread from
-	// pushing applied decisions into a stale panel.
-	private var wiredDecisionHub: DispatchDecisionListenerHub? = null
-
-	// SEMI_AUTO approval gateway wired to the active context's Koin scope (Issue #806, SP2b.6 follow-up).
-	// Held so the STOPPED transition can detach the approver and prevent the sim thread from
-	// calling a stale dialog after the GUI is torn down.
-	private var wiredSemiAutoGateway: SemiAutoApprovalGateway? = null
-
-	// MeasuringPlanAdapter wired to the active context's Koin scope, captured at RUNNING time
-	// (Issue tracking: none — internal polish from final review) so the STOPPED transition
-	// logs metrics for the run that just ended, not whatever context happens to be current
-	// when STOPPED is (asynchronously) delivered on the EDT. Only the shuntingLoopAI example
-	// registers one; every other example leaves this null.
-	private var wiredMeasuringAdapter: MeasuringPlanAdapter? = null
-
-	// DispatcherRunRecorder wired to the active context's Koin scope, captured at RUNNING time
-	// (SP2c.22, Issue #845) so the STOPPED transition calls finish() and logFinalSummary() for
-	// the run that just ended. Present for any context that has one scoped (all contexts with
-	// the dispatcherAgentModule wired). Null for contexts without the dispatcher module.
-	private var wiredRunRecorder: DispatcherRunRecorder? = null
-
-	/**
-	 * Koin scope of the run captured at RUNNING, used at STOPPED to persist the run snapshot.
-	 *
-	 * Captured alongside [wiredRunRecorder] and for the same reason: the current context may have
-	 * changed by the time STOPPED fires, and the snapshot must belong to the run that just ended.
-	 *
-	 * @since Issue #847 round 4 (PR #891 — R4-5)
-	 */
-	private var wiredRunScope: Scope? = null
-
-	/**
-	 * Name handed to the latest [startSimulation]: the example name, or the XML file's
-	 * [DispatcherRunSummaries.fileRunName] (Issue #1328). `null` when the caller passed none.
-	 * One-shot: RUNNING moves it into [wiredRunName] and clears it. A start that fails before RUNNING
-	 * leaves it set; the next start overwrites it first, so a stale name never reaches a run JSON.
-	 */
-	private var startedRunName: String? = null
-
-	/**
-	 * [startedRunName] captured at RUNNING, beside [wiredRunScope] and for the same reason: STOPPED
-	 * persists it as the run JSON's `example` for the run that just ended (Issue #1328).
-	 */
-	private var wiredRunName: String? = null
-
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
@@ -219,6 +158,21 @@ class Frame internal constructor(
 
 	// Conflict resolution side panel (Issue #590, Goal 9 SP5) – visible when a conflict is active
 	internal val conflictResolutionPanel: ConflictResolutionPanel = ConflictResolutionPanel()
+
+	/**
+	 * The run's scope-bound wiring (issues #561/#806/#845/#1328/#930, Goal 9 SP5): the
+	 * scope captures, the run-record finish and the panel wiring live in [SimulationRunWiring];
+	 * [Frame]'s STOPPED transition calls it in the original order.
+	 *
+	 * Declared after its three panels so the initializer reads non-null fields.
+	 */
+	private val runWiring: SimulationRunWiring =
+		SimulationRunWiring(
+			dispatcherControlPanel = dispatcherControlPanel,
+			dashboardPanel = metricsDashboardPanel,
+			conflictResolutionPanel = conflictResolutionPanel,
+			dialogOwner = this
+		)
 
 	// ── Collision Response settings (Goal 3 SP6) ──────────────────────────────
 
@@ -298,46 +252,18 @@ class Frame internal constructor(
 							toolBar.showSimulationControls()
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 							controlPanel.setStopEnabled(true)
-							// Capture now so the STOPPED transition logs metrics for the run that just
-							// ended, not whatever context happens to be current when STOPPED fires.
-							wiredMeasuringAdapter = currentSimulationContext?.scope?.publishedOrNull<MeasuringPlanAdapter>()
-							// SP2c.22 (#845): capture DispatcherRunRecorder at RUNNING so the STOPPED
-							// transition can call finish() and logFinalSummary() for this specific run.
-							wiredRunRecorder = currentSimulationContext?.scope?.getOrNull<DispatcherRunRecorder>()
-							// Issue #847 round 4 (R4-5): capture the scope alongside the recorder so
-							// STOPPED can also persist the run snapshot. Until round 4 the GUI called
-							// finish() but nothing ever wrote the result, and nothing fed onTick or
-							// onActionOutcome — so what it froze and discarded was an all-zero snapshot.
-							wiredRunScope = currentSimulationContext?.scope
-							// Issue #1328: the run JSON names the example or XML file this run started from.
-							wiredRunName = startedRunName
-							startedRunName = null
-							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
-							wireDispatcherControlPanel()
-							// Issue #675: start the dashboard on this run's metrics service (read only through
-							// its cross-thread-safe latestSnapshot / latestOpenContentions).
-							currentSimulationContext?.scope?.let { runScope ->
-								runScope.getOrNull<MetricsCollectionService>()?.let {
-									val trainWait =
-										runScope.getOrNull<MetricsConfig>()?.isEnabled(MetricGroup.TRAIN_WAIT) ?: true
-									metricsDashboardPanel.start(it, trainWait)
-								}
-							}
+							// Capture this run's scope-bound collaborators, wire the panel and
+							// start the dashboard (issues #561, #675, #845, #847, #1328).
+							runWiring.onRunning(currentSimulationContext, simulationController.runner)
 						}
 
 						SimulationController.SimulationStatus.STOPPED -> {
 							toolBar.hideSimulationControls()
 							simulationControlPanel.runner = null
-							// Detach the decision sink first so the sim thread can no longer push
-							// applied decisions into the panel, then clear panel state (Issue #561).
-							wiredDecisionHub?.setSink(null)
-							wiredDecisionHub = null
-							// Detach the SEMI_AUTO approver so the sim thread cannot call a stale
-							// dialog after the GUI is torn down (Issue #806, SP2b.6 follow-up).
-							wiredSemiAutoGateway?.setApprover(null)
-							wiredSemiAutoGateway = null
-							dispatcherControlPanel.modeState = null
-							dispatcherControlPanel.clearRationale()
+							// Detach the decision-listener sink, the SEMI_AUTO approver and the
+							// dispatcher panel state first: a failure later in this branch can
+							// never skip the safety-motivated detach calls (issues #561, #806).
+							runWiring.detachFromStaleRun()
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 							// Issue #1072: stop the 10 Hz time-update timer and the 30 FPS animation
@@ -353,52 +279,17 @@ class Frame internal constructor(
 							refreshSimulationTime()
 							stopAnimationUpdates()
 							railwayNetGridCanvas.captureFinalFrameAndPause()
-							// Issue #675: one last dashboard poll, then stop. It reads the run record after any
-							// stop and retries a missing one briefly, since a manual stop reports STOPPED before
-							// the simulation thread delivers RunEnded (Issue #1326). The cause only picks the
-							// label when no record comes: "stopped manually" for a manual stop, else a dash.
-							metricsDashboardPanel.stop(manual = runEndCause != RunEndCause.NATURAL_COMPLETION)
-							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
-							// ended (captured at RUNNING time above). Null for every example except
-							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
-							// Placed last so a failure here can never skip the safety-motivated
-							// detach calls above.
-							wiredMeasuringAdapter?.logFinalSummary()
-							wiredMeasuringAdapter = null
-							// SP2c.22 (#845): finish the run recorder and log its final summary.
+							// One last dashboard poll, then stop (Issue #675 + #1326).
+							runWiring.stopDashboard(manual = runEndCause != RunEndCause.NATURAL_COMPLETION)
+							// Finish the run record, release the Koog agent (issues #830, #930).
 							// runEndCause was captured above, before this runOnEdt block, from
 							// SimulationController.lastStopWasNatural — see that property's kdoc for
 							// why the read is race-free with respect to which thread produced this
 							// STOPPED transition (manual stop() vs. the monitor thread's natural
 							// completion path both reach the identical STOPPED emission here).
-							// Round 4 (R4-5): finishAndPersist performs finish() + logFinalSummary() and
-							// then writes the snapshot under build/reports/dispatcher-runs/<arm>/, giving
-							// SP2c.23's aggregator (#846) a producer. Until round 4 the GUI called finish()
-							// but nothing wrote the result, and nothing fed onTick/onActionOutcome, so the
-							// frozen snapshot was all zeroes and was then discarded. It is a no-op for a
-							// context that wired no dispatcher, and idempotent per run.
-							// Issue #930: finishAndPersist decides the cause actually recorded — a natural
-							// completion over a railway that achieved nothing becomes STARVED — and hands
-							// it back so the verdict reaches the user instead of only the log file.
-							val runScope = wiredRunScope
-							if (runScope != null) {
-								val persisted = DispatcherRunSummaries.finishAndPersist(runScope, runEndCause, wiredRunName)
-								statusBar.setStarvedIndicator(persisted.endCause == RunEndCause.STARVED)
-							} else {
-								// No scope captured (a context set outside the RUNNING transition): fall back to
-								// the recorder alone so the run is still finished and summarised.
-								wiredRunRecorder?.finish(runEndCause)
-								wiredRunRecorder?.logFinalSummary()
+							runWiring.finishRun(runEndCause)?.let { endedCause ->
+								statusBar.setStarvedIndicator(endedCause == RunEndCause.STARVED)
 							}
-							// #1096 review: release the cached Koog agent AFTER persistence, through
-							// DispatcherRunLifecycle (falls back to a bare KoogAgentPlanAdapter,
-							// swallows exceptions) and off the EDT — a throwing release can no
-							// longer lose the run JSON or the STARVED verdict (#930), and the EDT
-							// never blocks on the agent's runBlocking close bridge (Issue #1072).
-							DispatcherRunLifecycle.releaseKoogAgentInBackground(runScope)
-							wiredRunRecorder = null
-							wiredRunScope = null
-							wiredRunName = null
 						}
 					}
 				}
@@ -594,12 +485,10 @@ class Frame internal constructor(
 		controlPanel.isVisible = false
 		simulationControlPanel.stepControls.isVisible = false
 		sideDock.setSimulationMode(false)
-		dispatcherControlPanel.modeState = null
-		dispatcherControlPanel.clearRationale()
-		// Detach the SEMI_AUTO approver in case switchToEditingMode is called without a prior
-		// STOPPED transition (e.g. a context swap while the simulation is not running).
-		wiredSemiAutoGateway?.setApprover(null)
-		wiredSemiAutoGateway = null
+		// Detach the SEMI_AUTO approver and the dispatcher panel state in case
+		// switchToEditingMode is called without a prior STOPPED transition (e.g. a context
+		// swap while the simulation is not running).
+		runWiring.detachFromStaleRun()
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
@@ -609,103 +498,6 @@ class Frame internal constructor(
 
 		contentPane.revalidate()
 		contentPane.repaint()
-	}
-
-	/**
-	 * Wire the [DispatcherControlPanel] to the active simulation context (Issue #561, SP2b.6).
-	 *
-	 * Resolves four things from the context's Koin scope (when the dispatcher-agent
-	 * module is loaded):
-	 * 1. [cz.vutbr.fit.interlockSim.sim.DispatcherModeState] → drives the panel's mode
-	 *    combo box and indicator.
-	 * 2. [cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub] → the panel's
-	 *    `onModeChanged` callback propagates the operator's selection to
-	 *    [cz.vutbr.fit.interlockSim.sim.DispatcherModeState.setOverride]; the hub's
-	 *    sink feeds every applied [cz.vutbr.fit.interlockSim.sim.DispatchDecision]'s rationale into the panel so
-	 *    the "Why this route?" button can display it.
-	 * 3. The panel's `onRationale` callback → shows the rationale in a dialog.
-	 * 4. [cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway] → installs a
-	 *    [SemiAutoApprovalDialog]-based blocking approver on the gateway so that
-	 *    decisions in [cz.vutbr.fit.interlockSim.sim.DispatcherMode.SEMI_AUTO] mode
-	 *    wait for the operator to click Approve or Dismiss (Issue #806, SP2b.6 follow-up).
-	 *
-	 * If any lookup fails (e.g. the context is not a [DefaultSimulationContext], or the
-	 * dispatcher-agent module is not loaded) the panel remains disabled but the GUI is
-	 * still functional (backward compatibility).
-	 *
-	 * **Must be called from EDT.**
-	 */
-	private fun wireDispatcherControlPanel() {
-		val runner = simulationController.runner ?: return
-		val simContext = runner.simulationContext
-		// Cast to DefaultSimulationContext is necessary to access the Koin scope.
-		// SimulationContext interface does not expose the scope (by design);
-		// only DefaultSimulationContext provides Koin DI bindings like DispatcherModeState.
-		// This is acceptable because the dispatcher-agent module is only used with
-		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
-		val context = simContext as? DefaultSimulationContext
-		if (context == null) {
-			logger.debug {
-				"Context type ${simContext::class.simpleName} is not DefaultSimulationContext; " +
-					"dispatcher control panel remains disabled (backward compatible)"
-			}
-			return
-		}
-		try {
-			val modeState = context.scope.getOrNull<DispatcherModeState>()
-			if (modeState != null) {
-				dispatcherControlPanel.modeState = modeState
-				// The operator's combo-box selection propagates to the shared DispatcherModeState override.
-				// In SEMI_AUTO mode, the SemiAutoApprovalGateway (wired below) will prompt the
-				// operator to approve or dismiss each decision (Issue #806, SP2b.6 follow-up).
-				dispatcherControlPanel.onModeChanged = { mode -> modeState.setOverride(mode) }
-				// The "Why this route?" button shows the last decision's rationale in a modal dialog.
-				dispatcherControlPanel.onRationale = { rationale ->
-					JOptionPane.showMessageDialog(
-						this@Frame,
-						formatRationale(rationale),
-						"Dispatcher decision rationale",
-						JOptionPane.INFORMATION_MESSAGE
-					)
-				}
-				// The sim-thread applier pushes every applied decision through the hub;
-				// marshal the update onto the EDT before touching the panel.
-				val hub = context.scope.getOrNull<DispatchDecisionListenerHub>()
-				if (hub != null) {
-					hub.setSink { decision ->
-						SwingUtilities.invokeLater {
-							dispatcherControlPanel.updateDecisionRationale(decision)
-						}
-					}
-					wiredDecisionHub = hub
-				} else {
-					logger.debug { "DispatchDecisionListenerHub not available in context scope; rationale button will have no feed" }
-				}
-				// SP2b.6 follow-up (Issue #806): install a blocking SemiAutoApprovalDialog
-				// as the SEMI_AUTO approver. The gateway bridges the sim-thread call to this
-				// EDT-side dialog via SwingUtilities.invokeAndWait inside SemiAutoApprovalDialog.promptOnEdt.
-				// On stop, the STOPPED transition calls setApprover(null) to detach.
-				val semiAutoGateway = context.scope.getOrNull<SemiAutoApprovalGateway>()
-				if (semiAutoGateway != null) {
-					semiAutoGateway.setApprover { decision ->
-						// Called on the sim thread; invokeAndWait hands off to EDT to show modal dialog.
-						SemiAutoApprovalDialog.promptOnEdt(this@Frame, decision)
-					}
-					wiredSemiAutoGateway = semiAutoGateway
-				} else {
-					logger.debug {
-						"SemiAutoApprovalGateway not available in context scope; SEMI_AUTO mode will drop decisions with warning"
-					}
-				}
-			} else {
-				logger.debug { "DispatcherModeState not available in context scope; dispatcher control panel remains disabled" }
-			}
-		} catch (e: Exception) {
-			logger.debug(e) {
-				"Failed to wire DispatcherModeState to control panel; dispatcher control panel remains disabled " +
-					"(backward compatible)"
-			}
-		}
 	}
 
 	/**
@@ -865,7 +657,7 @@ class Frame internal constructor(
 				logger.warn { "startSimulation called without a SimulationContext — ignoring" }
 				return
 			}
-		startedRunName = runName
+		runWiring.stageRunName(runName)
 
 		// Register collision warning listener BEFORE context.run() is called (Issue #616).
 		// The listener is delivered on the simulation thread; all UI updates are dispatched
@@ -880,39 +672,8 @@ class Frame internal constructor(
 		// Apply the current auto-halt setting to the newly created service (Goal 3 SP6).
 		applyAutoHaltSetting(autoHaltTrainOnViolation)
 
-		// Register conflict-detected listener to drive ConflictResolutionPanel (Goal 9 SP5).
-		// Listener is delivered on the simulation thread; UI updates dispatched to EDT.
-		// Resolver + preference stores are retrieved from the context's Koin scope so every
-		// collaborator shares the same scoped instances (Goal 9 SC3 + SC4 wiring).
-		val resolver = context.scope.get<ConflictResolver>()
-		val dispatcherStore = context.scope.get<DispatcherPreferenceStore>()
-		val strategyStore = context.scope.get<StrategyPreferenceStore>()
-
-		// Operator Apply: record the chosen resolution (SC3) and feed the choice into the
-		// preference-learning store so future rankings reflect it (SC4). Invoked on the EDT.
-		conflictResolutionPanel.onResolutionApplied = { conflict, resolution ->
-			dispatcherStore.record(
-				conflict,
-				resolution,
-				DispatcherPreferenceStore.ApplicationSource.OPERATOR
-			)
-			val conflictTypeKey = conflict.block.name ?: "unknown-block"
-			strategyStore.recordChoice(conflictTypeKey, resolution.strategy)
-			logger.debug {
-				"Operator applied ${resolution.strategy} to conflict " +
-					"(${conflict.trainId} vs ${conflict.conflictingTrainId}) " +
-					"on block ${conflict.block.name} — recorded for preference learning"
-			}
-		}
-
-		context.onConflictDetectedEvent { conflict ->
-			val resolutions = resolver.generateResolutions(conflict)
-			conflictResolutionPanel.showResolutions(conflict, resolutions)
-			logger.debug {
-				"ConflictDetectedEvent: ${conflict.trainId} vs ${conflict.conflictingTrainId} " +
-					"on block ${conflict.block.name} — ${resolutions.size} resolution candidates shown"
-			}
-		}
+		// Register conflict-detected listener to drive ConflictResolutionPanel (Goal 9 SP5, SC3 + SC4).
+		runWiring.wireConflictResolution(context)
 
 		// Clear any stale warnings from a previous run.
 		warningPanel.clearWarnings()
@@ -985,7 +746,7 @@ class Frame internal constructor(
 		statusBar.setWarningIndicator(false)
 		// Clear and hide the conflict resolution panel when the simulation stops (Goal 9 SP5).
 		// Drop the operator-Apply callback so it can no longer reference this run's stores.
-		conflictResolutionPanel.onResolutionApplied = null
+		runWiring.unwireConflictResolution()
 		conflictResolutionPanel.clearResolutions()
 	}
 
