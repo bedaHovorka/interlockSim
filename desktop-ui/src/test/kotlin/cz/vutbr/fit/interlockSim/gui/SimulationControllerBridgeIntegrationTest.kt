@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.get
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 @Tag("integration-test")
@@ -141,12 +142,13 @@ class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 
 		ctx.use { context ->
 			context.getInOuts()
-			val loop = ShuntingLoop(context, endTime = 60L, enableRealTimeSync = false)
+			val loop = ShuntingLoop(context, endTime = 20L, enableRealTimeSync = false)
 			context.setMainProcess(loop)
 
-			// 60 simulated seconds at 10x pace ~6 wall seconds. `setSpeed` before `start`
+			// 20 simulated seconds at 10x pace ~2 wall seconds. `setSpeed` before `start`
 			// applies the multiplier on the runner (see the pre-start test above).
-			val controller = SimulationController()
+			val completion = CountDownLatch(1)
+			val controller = SimulationController(onCompleted = { completion.countDown() })
 			controller.setSpeed(10.0)
 			controller.start(context)
 			val runner = requireNotNull(controller.runner) { "start() must keep the runner" }
@@ -154,18 +156,15 @@ class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 				// Mid-run the simulation thread publishes its own authoritative gaps, so two
 				// reads a wall-second apart must advance (PR #1430 review: the unit tests only
 				// drove the throttle off the run's thread).
-				val midRunFirst = runner.pacedSimulationTime()
 				assertMidRunAdvances(runner)
 
 				// Natural completion: the last gap the simulation thread published ends at the
 				// run's end time, and the runner object keeps it after the controller has
-				// dropped its own reference.
-				val deadline = System.nanoTime() + TimeUnit.NANOSECONDS.convert(15, TimeUnit.SECONDS)
-				while (controller.isRunning() && System.nanoTime() < deadline) {
-					Thread.sleep(100)
-				}
+				// dropped its own reference. The controller's own completion notification
+				// replaces a polling loop (the same event shape the controller tests use).
+				assertThat(completion.await(15, TimeUnit.SECONDS)).isTrue()
 				assertThat(controller.isRunning()).isFalse()
-				assertThat(runner.pacedSimulationTime()).isCloseTo(60.0, 1.0)
+				assertThat(runner.pacedSimulationTime()).isCloseTo(20.0, 1.0)
 			} finally {
 				controller.stop()
 			}

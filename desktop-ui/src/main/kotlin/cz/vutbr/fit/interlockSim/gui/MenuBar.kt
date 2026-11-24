@@ -297,7 +297,7 @@ class MenuBar : JMenuBar() {
 	 * events and the animation is not visually frozen.
 	 *
 	 * **Modification tracker:** The tracker is cleared before switching to simulation mode
-	 * so that the "unsaved changes" path in [Frame.handleWindowClosing] does not attempt to
+	 * so that the "unsaved changes" path in [Frame.requestClose] does not attempt to
 	 * save a [SimulationContext] through the editor's save logic.
 	 */
 	private inner class StartSimulationAction : AbstractAction("Start...") {

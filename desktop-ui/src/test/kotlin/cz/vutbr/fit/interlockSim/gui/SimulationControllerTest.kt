@@ -20,6 +20,8 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.testutil.flushEDT
+import cz.vutbr.fit.interlockSim.testutil.pacedGapNanos
+import cz.vutbr.fit.interlockSim.testutil.useMaxSpeedPacedClocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -353,41 +355,19 @@ class SimulationControllerTest {
 	fun stopCapturesFinalPacedTime() {
 		val runner = SimulationRunner(context)
 		var engineTime: Double? = 42.0
-		runner.authoritativeSimTime = { engineTime }
 		var nowNanos = 0L
-		runner.nanoTime = { nowNanos }
-		runner.speedMultiplier = SimulationRunner.MAX_SPEED
-		val gapNanos = (2.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
+		runner.useMaxSpeedPacedClocks({ nowNanos }, { engineTime })
 		runner.throttle(2.0)
-		nowNanos += gapNanos * 10
+		nowNanos += pacedGapNanos(2.0) * 10
 
 		val controller = createController()
 		controller.runner = runner // internal setter seam (Issue #1331): install the seeded runner
 		controller.stop()
 
+		// The capture is written once, before the runner clears: the value stays readable.
 		assertThat(controller.runner).isNull()
 		assertThat(controller.lastRunFinalPacedTime).isEqualTo(42.0)
-	}
-
-	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("the captured time stays readable after the runner is cleared")
-	fun capturedTimeStableAfterRunnerCleared() {
-		val runner = SimulationRunner(context)
-		runner.authoritativeSimTime = { 42.0 }
-		var nowNanos = 0L
-		runner.nanoTime = { nowNanos }
-		runner.speedMultiplier = SimulationRunner.MAX_SPEED
-		val gapNanos = (2.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
-		runner.throttle(2.0)
-		nowNanos += gapNanos * 10
-
-		val controller = createController()
-		controller.runner = runner
-		controller.stop()
-		val captured = controller.lastRunFinalPacedTime
-		assertThat(captured).isEqualTo(42.0)
-		assertThat(controller.lastRunFinalPacedTime).isEqualTo(captured)
+		assertThat(controller.lastRunFinalPacedTime).isEqualTo(42.0)
 	}
 
 	@Test
@@ -400,13 +380,10 @@ class SimulationControllerTest {
 			// before returning: the monitor then captures the runner's final paced position.
 			val runner = firstArg<CoreSimulationController>()
 			(runner as? SimulationRunner)?.let {
-				it.authoritativeSimTime = { 42.0 }
-				it.speedMultiplier = SimulationRunner.MAX_SPEED
-				val gapNanos = (2.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
 				var nowNanos = 0L
-				it.nanoTime = { nowNanos }
+				it.useMaxSpeedPacedClocks({ nowNanos }, { 42.0 })
 				it.throttle(2.0)
-				nowNanos += gapNanos * 10
+				nowNanos += pacedGapNanos(2.0) * 10
 			}
 		}
 

@@ -8,7 +8,7 @@
 	Integration test for the DispatcherControlPanel wiring seam in Frame
 	(Issue #561, SP2b.6 — PR #801 review follow-up).
 
-	Verifies that [Frame.wireDispatcherControlPanel] — the seam where the two
+	Verifies that [cz.vutbr.fit.interlockSim.gui.SimulationRunWiring.wireDispatcherControlPanel] — the seam where the two
 	Critical review bugs lived — actually end-to-end wires the panel to the
 	scoped [DispatcherModeState] and [DispatchDecisionListenerHub]:
 	- setContext(SimulationContext) shows the panel.
@@ -61,7 +61,7 @@ import javax.swing.SwingUtilities
 /**
  * Integration test for the [Frame] ↔ [DispatcherControlPanel] wiring seam (Issue #561, SP2b.6).
  *
- * Uses a real [DefaultSimulationContext] (not a mock — [Frame.wireDispatcherControlPanel]
+ * Uses a real [DefaultSimulationContext] (not a mock — [cz.vutbr.fit.interlockSim.gui.SimulationRunWiring.wireDispatcherControlPanel]
  * casts the runner's context to [DefaultSimulationContext] to reach the Koin scope) with a
  * long-running [ShuntingLoop] main process, mirroring
  * [SimulationControllerAgentPacingLifecycleTest].

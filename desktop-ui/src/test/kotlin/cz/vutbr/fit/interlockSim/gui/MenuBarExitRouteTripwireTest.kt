@@ -10,8 +10,6 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
-import assertk.assertions.contains
-import assertk.assertions.doesNotContain
 import assertk.assertions.isTrue
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -26,18 +24,24 @@ import java.io.File
 class MenuBarExitRouteTripwireTest {
 	@Test
 	fun exitActionGoesThroughTheClosePath() {
-		val source = File("src/main/kotlin/cz/vutbr/fit/interlockSim/gui/MenuBar.kt").readText()
-
-		assertThat(
-			source.contains("getKoin().get<Frame>().requestClose()") ||
-				source.contains("val frame = getKoin().get<Frame>()\n\t\t\tframe.requestClose()")
-		).isTrue()
+		assertThat(codeLines().any { "requestClose()" in it }).isTrue()
 	}
 
 	@Test
 	fun exitActionLeavesTheImmediateJvmExitBehind() {
-		val source = File("src/main/kotlin/cz/vutbr/fit/interlockSim/gui/MenuBar.kt").readText()
-
-		assertThat(source).doesNotContain("System.exit")
+		assertThat(codeLines().none { "System.exit" in it }).isTrue()
 	}
+
+	/**
+	 * MenuBar's source without comment lines: a doc note mentioning `System.exit` (like the
+	 * teardown comment in other classes) must read the code, not the prose. The same
+	 * comment-skip idiom [cz.vutbr.fit.interlockSim.ExampleRegistryDeclareTripwireTest] uses.
+	 */
+	private fun codeLines(): List<String> =
+		File("src/main/kotlin/cz/vutbr/fit/interlockSim/gui/MenuBar.kt")
+			.readText()
+			.lines()
+			.filterNot {
+				it.trimStart().startsWith("//") || it.trimStart().startsWith("*") || it.trimStart().startsWith("/*")
+			}
 }

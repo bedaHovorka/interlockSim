@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.DispatcherRunLifecycle
-import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.SimulationTimeTracker
 import cz.vutbr.fit.interlockSim.context.Context
@@ -32,6 +31,7 @@ import java.beans.PropertyChangeListener
 import javax.swing.BoxLayout
 import javax.swing.JFrame
 import javax.swing.JPanel
+import javax.swing.JSplitPane
 import javax.swing.JTabbedPane
 import javax.swing.SwingUtilities
 
@@ -223,6 +223,10 @@ class Frame internal constructor(
 	internal val bottomTabs: JTabbedPane
 		get() = bottomPane.bottomTabs
 
+	/** The vertical split above [bottomTabs]; owned by [bottomPane], kept as a test seam. */
+	internal val splitPane: JSplitPane
+		get() = bottomPane.splitPane
+
 	/**
 	 * The collision-warning presentation (Issue #616, Goal 3 SP6): the selection highlight and the
 	 * clear wiring and [showCollisionWarning] live in [WarningPresenter]; the volatile settings stay
@@ -256,7 +260,7 @@ class Frame internal constructor(
 			teardown = {
 				stopSimulation() // Stop any running simulation before exit
 				currentSimulationContext?.close() // Release simulation resources before JVM exit
-				stopAnimationUpdates() // Stop Frame's 10 Hz timer
+				clock.stopUpdates() // Stop Frame's 10 Hz timer
 				railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
 				// Issue #1072: close the shared Ollama/Koog executor so its worker threads do not
 				// outlive the application. Terminal for this JVM process (System.exit follows).
@@ -312,7 +316,7 @@ class Frame internal constructor(
 							// Issue #1421: show the time the run reached before the clock timer stops;
 							// the final paced position covers the gap's tail the 10 Hz timer never saw.
 							refreshSimulationTime(finalPacedTime)
-							stopAnimationUpdates()
+							clock.stopUpdates()
 							railwayNetGridCanvas.captureFinalFrameAndPause()
 							// One last dashboard poll, then stop (Issue #675 + #1326).
 							runWiring.stopDashboard(manual = runEndCause != RunEndCause.NATURAL_COMPLETION)
@@ -541,7 +545,7 @@ class Frame internal constructor(
 			"setContext must be called from EDT"
 		}
 		stopSimulation() // Stop any running simulation before switching context
-		stopAnimationUpdates() // Cleanup existing timer
+		clock.stopUpdates() // Cleanup existing timer
 
 		val previousSimulationContext = currentSimulationContext
 
@@ -555,12 +559,12 @@ class Frame internal constructor(
 				}
 
 				switchToSimulationMode()
-				attachSimulationTimeTracker(context)
+				clock.attach(context)
 				refreshSimulationTime()
 				railwayNetGridCanvas.setEventTimelinePanel(eventTimelinePanel)
 				railwayNetGridCanvas.setContext(context)
 				railwayNetGridCanvas.autoCenterViewport()
-				startAnimationUpdates()
+				clock.startUpdates()
 
 				// Wire stop button to stopSimulation()
 				controlPanel.onStop = { stopSimulation() }
@@ -571,7 +575,7 @@ class Frame internal constructor(
 			is EditingContext -> {
 				currentSimulationContext = null
 				controlPanel.onStop = null
-				attachSimulationTimeTracker(null)
+				clock.attach(null)
 				switchToEditingMode()
 				railwayNetGridCanvas.setContext(context)
 				context.addPropertyChangeListener(modificationTracker)
@@ -583,7 +587,7 @@ class Frame internal constructor(
 				controlPanel.onStop = null
 				// Unknown context type - default to simulation mode (read-only)
 				switchToSimulationMode()
-				attachSimulationTimeTracker(context)
+				clock.attach(context)
 				railwayNetGridCanvas.setContext(context)
 				// Clear PathPreviewPanel context (Issue #596)
 				pathPreviewPanel.setEditingContext(null)
@@ -601,9 +605,6 @@ class Frame internal constructor(
 
 	// ── The ControlPanel clock; [SimulationClock] owns the details ────────────
 
-	/** Start the clock's 10 Hz update timer. **Must be called from EDT.** */
-	private fun startAnimationUpdates() = clock.startUpdates()
-
 	/**
 	 * Shows the simulated time of the run in [ControlPanel] (Issue #1421). EDT only. The shown
 	 * time never goes backward within one run; [finalPacedTime] feeds in the run's final paced
@@ -611,12 +612,6 @@ class Frame internal constructor(
 	 * the clock ratchets, keeping both readings.
 	 */
 	internal fun refreshSimulationTime(finalPacedTime: Double = 0.0) = clock.refresh(finalPacedTime)
-
-	/** Replace the clock's tracker on [context] (or detach it in editing mode). */
-	private fun attachSimulationTimeTracker(context: Context<*, *>?) = clock.attach(context)
-
-	/** Stop the clock's update timer. Safe to call multiple times. */
-	private fun stopAnimationUpdates() = clock.stopUpdates()
 
 	/**
 	 * Show one collision warning; **must be called from EDT**.
@@ -649,7 +644,7 @@ class Frame internal constructor(
 	 * a spatial conflict is detected (Issue #590, Goal 9 SP5).
 	 *
 	 * [runName] is what the run JSON records as `example` when the run ends (Issue #1328): the
-	 * example name for an example run, or [DispatcherRunSummaries.fileRunName] of the XML file it
+	 * example name for an example run, or the XML file's base name with its extension
 	 * was loaded from. `null` records no name.
 	 *
 	 * **Must be called from EDT.**
@@ -694,7 +689,7 @@ class Frame internal constructor(
 		try {
 			// Issue #1421: a fresh clock source per run, so a second run on this context starts at zero.
 			// Attached before start, so the tracker sees the run's first events too.
-			attachSimulationTimeTracker(context)
+			clock.attach(context)
 			refreshSimulationTime()
 			simulationController.start(context)
 			// Issue #1072 + #1096 review: a previous STOPPED paused the animation and the 10 Hz
@@ -702,8 +697,8 @@ class Frame internal constructor(
 			// setContext cycle — moved here, after a successful start, so a failed start leaves
 			// the previous run's animation paused instead of resurrecting it with no run behind it.
 			railwayNetGridCanvas.ensureAnimationRunning()
-			stopAnimationUpdates()
-			startAnimationUpdates()
+			clock.stopUpdates()
+			clock.startUpdates()
 			val activeRunner = simulationController.runner?.takeIf { it.isRunning() }
 			simulationControlPanel.runner = activeRunner
 

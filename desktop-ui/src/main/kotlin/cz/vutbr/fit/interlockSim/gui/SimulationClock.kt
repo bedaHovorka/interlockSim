@@ -74,12 +74,13 @@ internal class SimulationClock(
 			"startUpdates must be called from EDT"
 		}
 
-		updateTimer =
+		val timer =
 			Timer(100) {
 				// 10 Hz update rate
 				refresh()
 			}
-		updateTimer?.start()
+		timer.start()
+		updateTimer = timer
 	}
 
 	/**

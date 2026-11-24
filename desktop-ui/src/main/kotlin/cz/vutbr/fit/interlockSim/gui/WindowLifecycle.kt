@@ -57,7 +57,7 @@ internal class WindowLifecycle(
 			bottomPane.setRestoredBottomHeight(saved.bottomHeight, frame.height)
 		} else {
 			frame.bounds = WindowGeometry.initialBounds(WindowGeometry.usableScreen())
-			bottomPane.setInitialBottomHeight(frame.height)
+			bottomPane.setRestoredBottomHeight(null, frame.height)
 		}
 	}
 

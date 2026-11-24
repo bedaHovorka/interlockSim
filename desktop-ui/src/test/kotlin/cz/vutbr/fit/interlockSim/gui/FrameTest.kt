@@ -16,6 +16,7 @@ import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
@@ -500,7 +501,7 @@ class FrameTest : AbstractFrameTestBase() {
 			val split = frameSplitPane()
 			split.setSize(2560, 900)
 			split.doLayout()
-			assertThat(frame.bottomTabs.height > 0).isTrue()
+			assertThat(frame.bottomTabs.height).isGreaterThan(0)
 
 			split.dividerLocation = split.height - split.dividerSize
 			split.doLayout()
@@ -509,7 +510,7 @@ class FrameTest : AbstractFrameTestBase() {
 			frame.showCollisionWarning(critical, autoPause = true, sound = false)
 			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(BottomPane.TAB_WARNINGS)
 			split.doLayout()
-			assertThat(frame.bottomTabs.height > 0).isTrue()
+			assertThat(frame.bottomTabs.height).isGreaterThan(0)
 		}
 		runOnEDT { frame.stopSimulation() }
 		context.close()

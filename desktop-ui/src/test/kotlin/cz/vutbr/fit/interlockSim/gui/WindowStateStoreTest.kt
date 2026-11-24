@@ -3,12 +3,12 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.testutil.throwawayWindowPrefsNode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.awt.Rectangle
-import java.util.UUID
 import java.util.prefs.Preferences
 
 /**
@@ -22,7 +22,7 @@ class WindowStateStoreTest {
 
 	@BeforeEach
 	fun setUp() {
-		node = Preferences.userRoot().node("interlockSim-test/window-${UUID.randomUUID()}")
+		node = throwawayWindowPrefsNode()
 		store = WindowStateStore(node)
 	}
 

@@ -42,14 +42,15 @@ import javax.swing.JPanel
  * **Integration:**
  * - Direct-constructed by [Frame] (one panel per main window); not Koin-injected.
  * - Bound to the per-context [DispatcherModeState] (a scoped Koin binding in
- *   `dispatcherAgentModule`) on simulation start via [Frame.wireDispatcherControlPanel].
+ *   `dispatcherAgentModule`) on simulation start via
+ *   [cz.vutbr.fit.interlockSim.gui.SimulationRunWiring.wireDispatcherControlPanel].
  * - Callbacks ([onModeChanged], [onRationale]) route user actions to the simulation
  *
  * **SEMI_AUTO approval:**
  * Selecting SEMI_AUTO records the operator's choice in [DispatcherModeState] via
  * [onModeChanged]. When a decision arrives in SEMI_AUTO mode, the sim thread calls the
  * [cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway] approver (wired by
- * [cz.vutbr.fit.interlockSim.gui.Frame.wireDispatcherControlPanel] on sim start) which
+ * [cz.vutbr.fit.interlockSim.gui.SimulationRunWiring.wireDispatcherControlPanel] on sim start) which
  * shows a [SemiAutoApprovalDialog] to the operator. The operator clicks Approve or Dismiss
  * before the simulation resumes (Issue #806, SP2b.6 follow-up).
  *

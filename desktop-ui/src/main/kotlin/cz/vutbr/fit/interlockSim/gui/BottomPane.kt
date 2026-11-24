@@ -122,8 +122,7 @@ internal class BottomPane(
 			bottomTabs.selectedIndex = TAB_WARNINGS
 		}
 		if (bottomTabs.height >= MIN_BOTTOM_HEIGHT) return
-		val restore = lastOpenDividerLocation ?: (splitPane.height * (PERCENT - BOTTOM_HEIGHT_PERCENT) / PERCENT)
-		splitPane.dividerLocation = restore
+		splitPane.dividerLocation = lastOpenDividerLocation ?: firstStartDividerLocation(splitPane.height)
 	}
 
 	/**
@@ -172,11 +171,6 @@ internal class BottomPane(
 	private fun maxUsableBottomHeight(windowHeight: Int): Int =
 		(windowHeight - MIN_CANVAS_HEIGHT - MIN_BOTTOM_HEIGHT).coerceAtLeast(MIN_BOTTOM_HEIGHT)
 
-	/** Applies the first-start tab-area height for a window [windowHeight] pixels high. */
-	fun setInitialBottomHeight(windowHeight: Int) {
-		bottomTabs.preferredSize = Dimension(0, defaultBottomHeight(windowHeight))
-	}
-
 	/** The tab-area height while the window shows one, or `null` (collapsed or never laid out). */
 	fun rememberBottomHeight(): Int? = bottomTabs.height.takeIf { it > 0 }
 
@@ -202,6 +196,13 @@ internal class BottomPane(
 		 */
 		internal fun defaultBottomHeight(windowHeight: Int): Int =
 			(windowHeight * BOTTOM_HEIGHT_PERCENT / PERCENT).coerceAtLeast(DEFAULT_BOTTOM_HEIGHT)
+
+		/**
+		 * The divider's first-start position for a [windowHeight]-pixel-tall split pane: the
+		 * first-start share ([defaultBottomHeight]) measured as a position from the top.
+		 */
+		internal fun firstStartDividerLocation(splitPaneHeight: Int): Int =
+			splitPaneHeight - defaultBottomHeight(splitPaneHeight)
 
 		private const val PERCENT = 100
 

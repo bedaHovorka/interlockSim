@@ -11,10 +11,10 @@ package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNull
-import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import io.mockk.every
 import io.mockk.mockk
@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.awt.GraphicsEnvironment
 import java.awt.Rectangle
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.prefs.Preferences
 import javax.swing.JFrame
@@ -48,6 +47,9 @@ import javax.swing.SwingUtilities
 class WindowLifecycleTest {
 	private val windows = mutableListOf<JFrame>()
 
+	/** Throwaway preferences nodes this test created; removed in the teardown. */
+	private val prefNodes = mutableListOf<Preferences>()
+
 	@BeforeEach
 	fun setUp() {
 		// JFrame needs an X11 display; the message matches the frame suites' skip text
@@ -63,6 +65,8 @@ class WindowLifecycleTest {
 			windows.forEach { frame -> if (frame.isDisplayable) frame.dispose() }
 		}
 		windows.clear()
+		prefNodes.forEach { node -> runCatching { node.removeNode() } }
+		prefNodes.clear()
 	}
 
 	/** Creates a JFrame parked offscreen (registered for disposal) and records it. */
@@ -85,6 +89,22 @@ class WindowLifecycleTest {
 
 	private fun newBottomPane(): BottomPane = BottomPane(RailwayNetGridCanvas(), PathPreviewPanel(), WarningPanel())
 
+	/** [WindowLifecycle] with the tests' defaults: a clean document and no-op save. */
+	private fun newLifecycle(
+		frame: JFrame,
+		store: WindowStateStore? = null,
+		bottomPane: BottomPane = newBottomPane(),
+		teardown: () -> Unit = {}
+	): WindowLifecycle =
+		WindowLifecycle(
+			frame = frame,
+			store = store,
+			bottomPane = bottomPane,
+			isDirty = { false },
+			save = { false },
+			teardown = teardown
+		)
+
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("a clean close tears down, saves the window state and exits through the seam")
@@ -96,14 +116,7 @@ class WindowLifecycleTest {
 
 		SwingUtilities.invokeAndWait {
 			val lifecycle =
-				WindowLifecycle(
-					frame = frame,
-					store = store,
-					bottomPane = newBottomPane(),
-					isDirty = { false },
-					save = { false },
-					teardown = { events.add("teardown") }
-				)
+				newLifecycle(frame, store, teardown = { events.add("teardown") })
 			lifecycle.exit = { code -> events.add("exit:$code") }
 			lifecycle.requestClose()
 			events.add("displayable:" + frame.isDisplayable)
@@ -123,17 +136,10 @@ class WindowLifecycleTest {
 
 		SwingUtilities.invokeAndWait {
 			val lifecycle =
-				WindowLifecycle(
-					frame = frame,
-					store = WindowStateStore(node),
-					bottomPane = bottomPane,
-					isDirty = { false },
-					save = { false },
-					teardown = {}
-				)
+				newLifecycle(frame, WindowStateStore(node), bottomPane)
 			frame.bounds = Rectangle(10, 20, 800, 600)
 			bottomPane.splitPane.setSize(800, 600)
-			bottomPane.setInitialBottomHeight(600)
+			bottomPane.setRestoredBottomHeight(null, 600)
 			bottomPane.splitPane.doLayout()
 			lifecycle.saveWindowState()
 		}
@@ -142,18 +148,11 @@ class WindowLifecycleTest {
 		val restoredFrame = newHiddenFrame()
 		SwingUtilities.invokeAndWait {
 			val restored =
-				WindowLifecycle(
-					frame = restoredFrame,
-					store = WindowStateStore(node),
-					bottomPane = restoredBottomPane,
-					isDirty = { false },
-					save = { false },
-					teardown = {}
-				)
+				newLifecycle(restoredFrame, WindowStateStore(node), restoredBottomPane)
 			restored.applyInitialGeometry()
 		}
 		assertThat(restoredFrame.bounds).isEqualTo(Rectangle(10, 20, 800, 600))
-		assertThat(restoredBottomPane.bottomTabs.preferredSize.height > 0).isTrue()
+		assertThat(restoredBottomPane.bottomTabs.preferredSize.height).isGreaterThan(0)
 	}
 
 	@Test
@@ -166,14 +165,7 @@ class WindowLifecycleTest {
 
 		SwingUtilities.invokeAndWait {
 			val lifecycle =
-				WindowLifecycle(
-					frame = frame,
-					store = WindowStateStore(node),
-					bottomPane = bottomPane,
-					isDirty = { false },
-					save = { false },
-					teardown = {}
-				)
+				newLifecycle(frame, WindowStateStore(node), bottomPane)
 			bottomPane.splitPane.setSize(1600, 900)
 			bottomPane.splitPane.doLayout()
 			// The user folded the tab area up: the divider sits below its last open position.
@@ -202,14 +194,7 @@ class WindowLifecycleTest {
 
 		SwingUtilities.invokeAndWait {
 			val lifecycle =
-				WindowLifecycle(
-					frame = frame,
-					store = WindowStateStore(node),
-					bottomPane = bottomPane,
-					isDirty = { false },
-					save = { false },
-					teardown = {}
-				)
+				newLifecycle(frame, WindowStateStore(node), bottomPane)
 			lifecycle.applyInitialGeometry()
 		}
 
@@ -233,22 +218,18 @@ class WindowLifecycleTest {
 
 		SwingUtilities.invokeAndWait {
 			val lifecycle =
-				WindowLifecycle(
-					frame = frame,
-					store = WindowStateStore(node),
-					bottomPane = bottomPane,
-					isDirty = { false },
-					save = { false },
-					teardown = {}
-				)
+				newLifecycle(frame, WindowStateStore(node), bottomPane)
 			lifecycle.applyInitialGeometry()
 		}
 
 		assertThat(bottomPane.bottomTabs.preferredSize.height).isEqualTo(BottomPane.defaultBottomHeight(1000))
 	}
 
-	/** A fresh throwaway preferences node (the same shape the store tests use). */
-	private fun throwawayNode() = Preferences.userRoot().node("interlockSim-test/window-${UUID.randomUUID()}")
+	/** A fresh throwaway preferences node, registered so the teardown removes it. */
+	private fun throwawayNode(): Preferences =
+		cz.vutbr.fit.interlockSim.testutil
+			.throwawayWindowPrefsNode()
+			.also { prefNodes.add(it) }
 
 	private companion object {
 		/** Offscreen position no real display reaches, so a probe window never flashes. */
