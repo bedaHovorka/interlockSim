@@ -213,7 +213,9 @@ class SimulationControlPanel : JPanel() {
 		// (Issue #1421): see [stepControls].
 		val pauseRow = stepControls
 
-		pauseButton = JButton(LABEL_PAUSE)
+		pauseButton = JButton()
+		// Player symbol instead of text (Issue #1421): pause while the run plays, play while paused
+		PlayerIcon.apply(pauseButton, PlayerIcon.Symbol.PAUSE, LABEL_PAUSE)
 		pauseButton.toolTipText = "Pause/resume the simulation (Space)"
 		pauseButton.isEnabled = false
 		pauseButton.addActionListener {
@@ -327,7 +329,8 @@ class SimulationControlPanel : JPanel() {
 		if (speed >= 1.0) "%.0fx".format(Locale.ROOT, speed) else "%.1fx".format(Locale.ROOT, speed)
 
 	/**
-	 * Synchronise the pause button text and the step buttons' enabled state to [paused].
+	 * Synchronise the pause button symbol and accessible name, and the step buttons' enabled state,
+	 * to [paused].
 	 *
 	 * Called from [pausedListener] (which runs on EDT via [SwingUtilities.invokeLater]) and
 	 * from the [runner] setter when a non-null runner is attached.
@@ -335,7 +338,11 @@ class SimulationControlPanel : JPanel() {
 	 */
 	private fun syncUiToPaused(paused: Boolean) {
 		val simRunning = runner != null
-		pauseButton.text = if (paused) LABEL_RESUME else LABEL_PAUSE
+		if (paused) {
+			PlayerIcon.apply(pauseButton, PlayerIcon.Symbol.PLAY, LABEL_RESUME)
+		} else {
+			PlayerIcon.apply(pauseButton, PlayerIcon.Symbol.PAUSE, LABEL_PAUSE)
+		}
 		pauseButton.isEnabled = simRunning
 		stepEventButton.isEnabled = simRunning && paused
 		stepTimeButton.isEnabled = simRunning && paused

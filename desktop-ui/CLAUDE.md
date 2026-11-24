@@ -85,7 +85,8 @@ One layout for both modes, so nothing jumps when the mode changes (design:
   `SimulationControlPanel.stepControls` (Pause, Step Event, Step Time, delta). The clock shows
   `SimulationRunner.pacedSimulationTime()`, which moves smoothly between events.
 - CENTER: a `JSplitPane` — canvas on top, `bottomTabs` below (Path Preview, Warnings (n),
-  Timeline). The mode enables the tabs that have content; a CRITICAL warning selects Warnings.
+  Timeline). The mode enables the tabs that have content; simulation mode opens on Timeline, and a
+  CRITICAL warning selects Warnings.
 - EAST: `SideDock`, 320 px — Simulation Speed, Metrics (KPI), Dispatcher, Conflict Resolution.
   Editing mode disables the speed and dispatcher controls instead of hiding them.
 - SOUTH: `StatusBar` only.

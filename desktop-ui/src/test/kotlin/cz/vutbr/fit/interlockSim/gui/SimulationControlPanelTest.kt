@@ -415,7 +415,11 @@ class SimulationControlPanelTest {
 				findAllComponents(panel, JButton::class.java)
 					.filter { it.toolTipText?.startsWith("Set speed to") == true }
 			assertThat(presets.size).isEqualTo(SimulationControlPanel.PRESETS.size)
-			val pause = findAllComponents(panel.stepControls, JButton::class.java).first { it.text == "Pause" }
+			val pause =
+				findAllComponents(panel.stepControls, JButton::class.java).first {
+					it.accessibleContext.accessibleName ==
+						"Pause"
+				}
 
 			panel.speedControlsEnabled = false
 			assertThat(findSlider().isEnabled).isFalse()

@@ -565,7 +565,7 @@ class Frame internal constructor(
 	 * - StatusBar remains visible (its speed indicator [StatusBar.updateSpeedIndicator] shows
 	 *   non-default speeds; [StatusBar.statusLabel] continues to display simulation events)
 	 * - Puts EventTimelinePanel into the Timeline tab (if created)
-	 * - Enables the Warnings and Timeline tabs, selects Warnings (Issue #1421)
+	 * - Enables the Warnings and Timeline tabs, selects Timeline (Issue #1421)
 	 * - Shows ControlPanel and enables the side dock's speed controls
 	 * - Disables editing ToolBar
 	 * - Installs global keyboard shortcuts for speed control (Phase 3.1, Issue #193)
@@ -1133,13 +1133,13 @@ class Frame internal constructor(
 	/**
 	 * Enables the bottom tabs that have content in the current mode and selects the main one
 	 * (Issue #1421). Editing mode: Path Preview only. Simulation mode: Warnings and Timeline, with
-	 * Warnings selected. The tabs themselves never come or go, so the layout does not jump.
+	 * Timeline selected (a CRITICAL warning switches to Warnings). The tabs themselves never come or go, so the layout does not jump.
 	 */
 	private fun applyTabMode(simulation: Boolean) {
 		bottomTabs.setEnabledAt(TAB_PATH_PREVIEW, !simulation)
 		bottomTabs.setEnabledAt(TAB_WARNINGS, simulation)
 		bottomTabs.setEnabledAt(TAB_TIMELINE, simulation)
-		bottomTabs.selectedIndex = if (simulation) TAB_WARNINGS else TAB_PATH_PREVIEW
+		bottomTabs.selectedIndex = if (simulation) TAB_TIMELINE else TAB_PATH_PREVIEW
 	}
 
 	/**

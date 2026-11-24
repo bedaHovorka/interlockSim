@@ -158,7 +158,7 @@ class ControlPanelTest {
 	private fun findStopButton(): JButton? =
 		(0 until panel.componentCount)
 			.mapNotNull { panel.getComponent(it) as? JButton }
-			.firstOrNull { it.text == "Stop" }
+			.firstOrNull { it.accessibleContext.accessibleName == "Stop" }
 
 	private fun findStatusLabel(): JLabel? =
 		(0 until panel.componentCount)

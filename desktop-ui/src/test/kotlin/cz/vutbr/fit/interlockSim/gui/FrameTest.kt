@@ -397,7 +397,7 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("simulation mode enables Warnings and Timeline, selects Warnings and shows the timeline")
+	@DisplayName("simulation mode enables Warnings and Timeline, selects Timeline and shows the timeline")
 	fun southPanelGainsTimelinePanelInSimulationMode() {
 		val context =
 			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
@@ -516,7 +516,7 @@ class FrameTest : AbstractFrameTestBase() {
 		assertThat(tabs.isEnabledAt(Frame.TAB_PATH_PREVIEW)).isEqualTo(!simulation)
 		assertThat(tabs.isEnabledAt(Frame.TAB_WARNINGS)).isEqualTo(simulation)
 		assertThat(tabs.isEnabledAt(Frame.TAB_TIMELINE)).isEqualTo(simulation)
-		assertThat(tabs.selectedIndex).isEqualTo(if (simulation) Frame.TAB_WARNINGS else Frame.TAB_PATH_PREVIEW)
+		assertThat(tabs.selectedIndex).isEqualTo(if (simulation) Frame.TAB_TIMELINE else Frame.TAB_PATH_PREVIEW)
 	}
 
 	@Test

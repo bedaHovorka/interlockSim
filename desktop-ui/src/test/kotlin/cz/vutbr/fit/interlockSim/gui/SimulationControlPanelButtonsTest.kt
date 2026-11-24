@@ -54,7 +54,7 @@ class SimulationControlPanelButtonsTest {
 	// so it is searched separately.
 	private fun findButton(text: String): JButton =
 		findAllComponents(panel.stepControls, JButton::class.java)
-			.firstOrNull { it.text == text }
+			.firstOrNull { it.text == text || it.accessibleContext.accessibleName == text }
 			?: error("JButton with text '$text' not found in SimulationControlPanel.stepControls")
 
 	private fun findSpinner(): JSpinner =
@@ -127,7 +127,7 @@ class SimulationControlPanelButtonsTest {
 		}
 		SwingUtilities.invokeAndWait {
 			val pauseBtn = findButton("Resume")
-			assertThat(pauseBtn.text).isEqualTo("Resume")
+			assertThat(pauseBtn.accessibleContext.accessibleName).isEqualTo("Resume")
 			assertThat(pauseBtn.isEnabled).isTrue()
 			assertThat(findButton("Step Event").isEnabled).isTrue()
 			assertThat(findButton("Step Time").isEnabled).isTrue()
@@ -161,7 +161,7 @@ class SimulationControlPanelButtonsTest {
 	// ── Pause / Resume toggle ─────────────────────────────────────────────────
 
 	@Test
-	@DisplayName("clicking Pause toggles runner.isPaused and switches button text to Resume")
+	@DisplayName("clicking Pause toggles runner.isPaused and switches the button to Resume (play symbol)")
 	fun pauseTogglePausesSimulation() {
 		val runner = runnerWith(paused = false)
 		SwingUtilities.invokeAndWait {
@@ -171,7 +171,9 @@ class SimulationControlPanelButtonsTest {
 		}
 		assertThat(runner.isPaused).isTrue()
 		SwingUtilities.invokeAndWait {
-			assertThat(findButton("Resume").text).isEqualTo("Resume")
+			assertThat(findButton("Resume").accessibleContext.accessibleName).isEqualTo("Resume")
+			// Issue #1421: a paused run shows the play symbol, a running one the pause symbol
+			assertThat((findButton("Resume").icon as PlayerIcon).symbol).isEqualTo(PlayerIcon.Symbol.PLAY)
 			assertThat(findButton("Step Event").isEnabled).isTrue()
 			assertThat(findButton("Step Time").isEnabled).isTrue()
 		}
@@ -187,7 +189,7 @@ class SimulationControlPanelButtonsTest {
 		}
 		assertThat(runner.isPaused).isFalse()
 		SwingUtilities.invokeAndWait {
-			assertThat(findButton("Pause").text).isEqualTo("Pause")
+			assertThat(findButton("Pause").accessibleContext.accessibleName).isEqualTo("Pause")
 			assertThat(findButton("Step Event").isEnabled).isFalse()
 			assertThat(findButton("Step Time").isEnabled).isFalse()
 		}
@@ -214,7 +216,7 @@ class SimulationControlPanelButtonsTest {
 
 		flushEdt()
 		SwingUtilities.invokeAndWait {
-			assertThat(findButton("Resume").text).isEqualTo("Resume")
+			assertThat(findButton("Resume").accessibleContext.accessibleName).isEqualTo("Resume")
 			assertThat(findButton("Step Event").isEnabled).isTrue()
 			assertThat(findButton("Step Time").isEnabled).isTrue()
 		}

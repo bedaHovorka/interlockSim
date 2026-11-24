@@ -72,7 +72,9 @@ The owner picked **C**. Recommended was B; C was chosen to also free the top row
   `SimulationRunner.throttle` records each paced gap with the run's time at its end (read on the
   simulation thread); the clock interpolates inside the gap and holds at its end while the run
   waits, so it never runs ahead of the simulation, also while an LLM dispatcher decides.
-- Pause, Step Event, Step Time and the delta sit next to Stop.
+- Pause, Step Event, Step Time and the delta sit next to Stop. Stop and Pause show media-player
+  symbols (stop square; pause bars while running, play triangle while paused), drawn as vector icons;
+  their words stay as tooltip and accessible name.
 
 ## Builder's calls (can be changed in review)
 
@@ -85,7 +87,8 @@ The owner picked **C**. Recommended was B; C was chosen to also free the top row
   drops its fixed 400x50 size and stacks its controls.
 - The KPI dashboard shows one figure per line, so it fits the 320 px column.
 - Tabs in this order: Path preview, Warnings, Timeline. Edit mode: only Path preview is
-  enabled and selected. Simulation mode: Path preview is disabled, Warnings is selected.
+  enabled and selected. Simulation mode: Path preview is disabled, Timeline is selected (owner
+  request).
 - The Warnings tab title shows the count. A CRITICAL warning selects the Warnings tab. The
   status-bar indicator stays as before.
 - `JSplitPane`: `resizeWeight = 1.0`, one-touch buttons; the tab area starts at 30% of the window

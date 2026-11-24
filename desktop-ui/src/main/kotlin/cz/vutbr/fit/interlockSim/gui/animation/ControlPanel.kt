@@ -1,5 +1,6 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
+import cz.vutbr.fit.interlockSim.gui.PlayerIcon
 import java.awt.FlowLayout
 import javax.swing.BorderFactory
 import javax.swing.JButton
@@ -73,7 +74,10 @@ class ControlPanel : JPanel() {
 		add(statusLabel)
 
 		// Create stop button (disabled until simulation starts)
-		stopButton = JButton("Stop")
+		stopButton = JButton()
+		// Player stop symbol instead of text (Issue #1421); "Stop" stays the accessible name
+		PlayerIcon.apply(stopButton, PlayerIcon.Symbol.STOP, "Stop")
+		stopButton.toolTipText = "Stop the simulation"
 		stopButton.isEnabled = false
 		stopButton.addActionListener { onStop?.invoke() }
 		add(stopButton)
