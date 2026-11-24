@@ -60,6 +60,13 @@ internal class BottomPane(
 		JLabel("The event timeline appears when a simulation is loaded.", SwingConstants.CENTER)
 
 	/**
+	 * Divider position of the last layout that gave the tab area usable height (PR #1430 review):
+	 * remembered from the split pane's divider moves, used to expand a collapsed (one-touch) tab
+	 * area back to where the user had it. `null` until the first such move.
+	 */
+	private var lastOpenDividerLocation: Int? = null
+
+	/**
 	 * Canvas above, [bottomTabs] below, with a bar the user can drag. `resizeWeight = 1.0`: when the
 	 * window grows or shrinks, only the canvas changes height.
 	 */
@@ -89,6 +96,34 @@ internal class BottomPane(
 		warningPanel.onCountChanged = { count ->
 			bottomTabs.setTitleAt(TAB_WARNINGS, warningsTabTitle(count))
 		}
+
+		// Track the divider so a collapsed (one-touch) tab area can be expanded back to the
+		// position the user had (PR #1430 review): a divider move is "open" while the tab area
+		// keeps its smallest usable height below the divider.
+		splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY) { event ->
+			(event.newValue as? Int)?.let { location ->
+				val openLimit = splitPane.height - splitPane.dividerSize - MIN_BOTTOM_HEIGHT
+				if (location > 0 && location <= openLimit) {
+					lastOpenDividerLocation = location
+				}
+			}
+		}
+	}
+
+	/**
+	 * Reveals the Warnings tab for a critical warning (PR #1430 review): selects the tab, and when
+	 * the tab area is collapsed (folded up with the split pane's one-touch bar) or too small to
+	 * read, expands it to the divider position the user last had open, else to the first-start
+	 * share of the current window height. The previous divider position is restored so the user's
+	 * own layout decision survives a warning they did not ask to change it with.
+	 */
+	fun revealCriticalWarningsTab() {
+		if (bottomTabs.isEnabledAt(TAB_WARNINGS)) {
+			bottomTabs.selectedIndex = TAB_WARNINGS
+		}
+		if (bottomTabs.height >= MIN_BOTTOM_HEIGHT) return
+		val restore = lastOpenDividerLocation ?: (splitPane.height * (PERCENT - BOTTOM_HEIGHT_PERCENT) / PERCENT)
+		splitPane.dividerLocation = restore
 	}
 
 	/**

@@ -67,10 +67,9 @@ internal class WarningPresenter(
 		warningPanel.addWarning(warning)
 		if (warning.severity != CollisionWarning.Severity.CRITICAL) return
 		statusBar.setWarningIndicator(true)
-		// A critical warning must not hide behind another tab (Issue #1421)
-		if (bottomPane.bottomTabs.isEnabledAt(BottomPane.TAB_WARNINGS)) {
-			bottomPane.bottomTabs.selectedIndex = BottomPane.TAB_WARNINGS
-		}
+		// A critical warning must not hide behind another tab or behind a bottom pane the user
+		// folded up with the split bar (Issue #1421, PR #1430 review)
+		bottomPane.revealCriticalWarningsTab()
 		if (sound) {
 			Toolkit.getDefaultToolkit().beep()
 		}

@@ -482,6 +482,41 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("a critical warning expands a collapsed bottom pane and selects Warnings")
+	fun criticalWarningExpandsCollapsedBottomPane() {
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		runOnEDT {
+			frame.setContext(context)
+			frame.bottomTabs.selectedIndex = BottomPane.TAB_TIMELINE
+
+			// The user folded the tab area up with the split pane's one-touch bar: the divider
+			// sits at the very bottom and the tab area keeps no height. The split pane lays out
+			// itself (Swing sizes a never-validated frame at zero, so the frame would report no
+			// geometry at all).
+			val split = frameSplitPane()
+			split.setSize(2560, 900)
+			split.doLayout()
+			assertThat(frame.bottomTabs.height > 0).isTrue()
+
+			split.dividerLocation = split.height - split.dividerSize
+			split.doLayout()
+			assertThat(frame.bottomTabs.height).isEqualTo(0)
+
+			frame.showCollisionWarning(critical, autoPause = true, sound = false)
+			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(BottomPane.TAB_WARNINGS)
+			split.doLayout()
+			assertThat(frame.bottomTabs.height > 0).isTrue()
+		}
+		runOnEDT { frame.stopSimulation() }
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("the side dock is at EAST in both modes with the KPI dashboard; editing disables speed controls")
 	fun sideDockStaysInBothModes() {
 		val simContext =
@@ -509,6 +544,10 @@ class FrameTest : AbstractFrameTestBase() {
 		simContext.close()
 		editContext.close()
 	}
+
+	/** The center component of the frame: the vertical split pane holding the bottom tabs. */
+	private fun frameSplitPane(): JSplitPane =
+		(frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.CENTER) as JSplitPane
 
 	/** Checks the bottom tabs' enabled and selected state for one mode (Issue #1421). */
 	private fun assertTabMode(simulation: Boolean) {
