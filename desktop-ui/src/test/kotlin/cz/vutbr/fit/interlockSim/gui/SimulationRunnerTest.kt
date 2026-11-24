@@ -11,6 +11,7 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
@@ -504,5 +505,31 @@ class SimulationRunnerTest {
 		assertThat(producer.isAlive).isFalse()
 		assertThat(consumer.isAlive).isFalse()
 		assertThat(runner.pollStepEvent()).isFalse()
+	}
+
+	// ── Paced simulation time for the GUI clock (Issue #1421) ─────────────────
+
+	@Test
+	@DisplayName("pacedSimulationTime moves through each paced gap and stops at its end")
+	fun pacedSimulationTimeFollowsGaps() {
+		var nowNanos = 0L
+		runner.nanoTime = { nowNanos }
+		runner.speedMultiplier = SimulationRunner.MAX_SPEED
+		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
+
+		// Off the simulation thread the gaps add up: the first gap covers 0..2 s
+		runner.throttle(2.0)
+		val gapNanos = (2.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
+		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
+		nowNanos += gapNanos / 2
+		assertThat(runner.pacedSimulationTime()).isCloseTo(1.0, 1e-6)
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(2.0)
+
+		// The next gap starts where the last one ended
+		runner.throttle(3.0)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(2.0)
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(5.0)
 	}
 }

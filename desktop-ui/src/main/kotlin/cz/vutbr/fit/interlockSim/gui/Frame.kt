@@ -75,7 +75,7 @@ import javax.swing.Timer
  * │ MenuBar                              │                      │
  * ├──────────────────────────────────────┤ SideDock (EAST)      │
  * │ ToolBar                              │ ┌──────────────────┐ │
- * │ ControlPanel [Time] [Status] [Stop]  │ │ Simulation Speed │ │
+ * │ [Time] [Status] [Stop] [Pause] [Step]│ │ Simulation Speed │ │
  * │ (simulation mode only)               │ ├──────────────────┤ │
  * │                                      │ │ Metrics (KPI)    │ │
  * ├──────────────────────────────────────┤ ├──────────────────┤ │
@@ -164,6 +164,9 @@ class Frame internal constructor(
 
 	/** The context [simulationTimeTracker] listens to, so a new tracker can detach the old one. */
 	private var trackedContext: Context<*, *>? = null
+
+	/** The time the clock shows now; reset with each new tracker, i.e. with each run. */
+	private var shownSimulationTime: Double = 0.0
 
 	// Live KPI dashboard (Issue #675, Goal 6 SP3): shown in simulation mode, polls the metrics service
 	// off the EDT between RUNNING and STOPPED.
@@ -475,7 +478,14 @@ class Frame internal constructor(
 		northContainer.layout = BoxLayout(northContainer, BoxLayout.PAGE_AXIS)
 		northContainer.add(toolBar)
 		controlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
-		northContainer.add(controlPanel)
+		// Run bar (Issue #1421): time, status and Stop, then Pause, Step Event, Step Time and the delta.
+		// A left-aligned FlowLayout without gaps: each part keeps its own width (a BoxLayout let the
+		// ControlPanel take the whole row), and the bar takes no height while both parts are hidden.
+		val runBar = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0))
+		runBar.add(controlPanel)
+		simulationControlPanel.stepControls.isVisible = false
+		runBar.add(simulationControlPanel.stepControls)
+		northContainer.add(runBar)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
 		// Side dock (Issue #1421): visible in both modes; editing mode disables the speed controls.
@@ -584,6 +594,7 @@ class Frame internal constructor(
 		// Show ControlPanel; enable the side dock's speed controls
 		controlPanel.isVisible = true
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
+		simulationControlPanel.stepControls.isVisible = true
 		sideDock.setSimulationMode(true)
 
 		// Disable editing toolbar in simulation mode
@@ -622,6 +633,7 @@ class Frame internal constructor(
 
 		// Hide ControlPanel; the side dock stays, with its speed and dispatcher controls disabled
 		controlPanel.isVisible = false
+		simulationControlPanel.stepControls.isVisible = false
 		sideDock.setSimulationMode(false)
 		dispatcherControlPanel.modeState = null
 		dispatcherControlPanel.clearRationale()
@@ -840,9 +852,18 @@ class Frame internal constructor(
 		animationUpdateTimer?.start()
 	}
 
-	/** Shows the latest simulated time of the run in the [ControlPanel] (Issue #1421). EDT only. */
+	/**
+	 * Shows the simulated time of the run in the [ControlPanel] (Issue #1421). EDT only.
+	 *
+	 * The runner's [SimulationRunner.pacedSimulationTime] moves smoothly between events; the
+	 * [simulationTimeTracker] covers what it cannot see (a run without pacing). The shown time never
+	 * goes backward within one run.
+	 */
 	internal fun refreshSimulationTime() {
-		controlPanel.updateTime(simulationTimeTracker?.lastSimTime ?: 0.0)
+		val paced = simulationController.runner?.pacedSimulationTime() ?: 0.0
+		val reported = simulationTimeTracker?.lastSimTime ?: 0.0
+		shownSimulationTime = maxOf(shownSimulationTime, paced, reported)
+		controlPanel.updateTime(shownSimulationTime)
 	}
 
 	/**
@@ -855,6 +876,7 @@ class Frame internal constructor(
 		tracker?.let { context.addPropertyChangeListener(it) }
 		simulationTimeTracker = tracker
 		trackedContext = context
+		shownSimulationTime = 0.0
 	}
 
 	/**

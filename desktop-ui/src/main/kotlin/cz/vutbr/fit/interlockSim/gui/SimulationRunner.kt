@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationPacing
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -77,6 +78,24 @@ class SimulationRunner(
 
 	@Volatile
 	private var simThread: Thread? = null
+
+	/**
+	 * One paced gap between two events: the run sleeps [sleepNanos] from [startNanos] while the
+	 * simulated time moves from [baseTime] to `baseTime + delta` (Issue #1421).
+	 */
+	private data class PacedGap(
+		val baseTime: Double,
+		val delta: Double,
+		val startNanos: Long,
+		val sleepNanos: Long
+	)
+
+	/** The latest paced gap; written by the simulation thread in [throttle], read by the GUI clock. */
+	@Volatile
+	private var pacedGap: PacedGap = PacedGap(0.0, 0.0, 0L, 0L)
+
+	/** Wall clock for [pacedSimulationTime]; replaceable so tests control it. */
+	internal var nanoTime: () -> Long = System::nanoTime
 
 	@Volatile
 	private var speedMultiplierBacking: Double = DEFAULT_SPEED
@@ -354,9 +373,37 @@ class SimulationRunner(
 		if (simDeltaSeconds <= 0.0) return
 		val speed = speedMultiplierBacking
 		val sleepMs = Math.round(simDeltaSeconds / speed * MILLIS_PER_SECOND)
+		// Publish the gap before sleeping through it, so the GUI clock can follow it (Issue #1421).
+		// The gap ends at the run's current time: the run loop advances the clock to the next event
+		// before it throttles, and the dispatcher loops throttle after their own time step. Read on
+		// the simulation thread, where kDisco's thread-local time works; elsewhere (tests) fall back
+		// to adding the gap to the previous one's end.
+		val previous = pacedGap
+		val end = currentSimulationTime(fallback = previous.baseTime + previous.delta + simDeltaSeconds)
+		pacedGap =
+			PacedGap(
+				baseTime = end - simDeltaSeconds,
+				delta = simDeltaSeconds,
+				startNanos = nanoTime(),
+				sleepNanos = (simDeltaSeconds / speed * NANOS_PER_SECOND).toLong()
+			)
 		if (sleepMs > 0) {
 			Thread.sleep(sleepMs)
 		}
+	}
+
+	/**
+	 * The simulated time of the run now, also between events (Issue #1421). Safe from any thread.
+	 *
+	 * [throttle] records each paced gap with the run's time at its end. Inside a gap the time moves
+	 * linearly with the sleep; it never passes the gap's end, and it holds there while the run waits
+	 * (paused, or a dispatcher still deciding). A run without pacing (no gap yet) reads 0.
+	 */
+	fun pacedSimulationTime(): Double {
+		val gap = pacedGap
+		if (gap.sleepNanos <= 0L) return gap.baseTime + gap.delta
+		val fraction = ((nanoTime() - gap.startNanos).toDouble() / gap.sleepNanos).coerceIn(0.0, 1.0)
+		return gap.baseTime + fraction * gap.delta
 	}
 
 	/** Returns the currently configured [speedMultiplier]. */
@@ -377,6 +424,7 @@ class SimulationRunner(
 		const val PROP_STEP_TIME_REQUESTED: String = "stepTimeRequested"
 
 		private const val MILLIS_PER_SECOND: Double = SimulationPacing.MILLIS_PER_SECOND
+		private const val NANOS_PER_SECOND: Double = 1_000_000_000.0
 
 		private val logger = KotlinLogging.logger {}
 	}

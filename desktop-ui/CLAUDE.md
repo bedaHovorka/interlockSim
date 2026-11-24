@@ -81,7 +81,9 @@ Open contentions show "–" (not measured).
 One layout for both modes, so nothing jumps when the mode changes (design:
 `docs/superpowers/specs/2026-11-24-main-window-layout-design.md`):
 
-- NORTH: toolbar and `ControlPanel` (time, status, Stop; simulation mode only).
+- NORTH: toolbar and a run bar (simulation mode only): `ControlPanel` (time, status, Stop), then
+  `SimulationControlPanel.stepControls` (Pause, Step Event, Step Time, delta). The clock shows
+  `SimulationRunner.pacedSimulationTime()`, which moves smoothly between events.
 - CENTER: a `JSplitPane` — canvas on top, `bottomTabs` below (Path Preview, Warnings (n),
   Timeline). The mode enables the tabs that have content; a CRITICAL warning selects Warnings.
 - EAST: `SideDock`, 320 px — Simulation Speed, Metrics (KPI), Dispatcher, Conflict Resolution.

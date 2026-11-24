@@ -76,6 +76,13 @@ class SimulationControlPanel : JPanel() {
 	/** Spinner that configures the time delta used by [stepTimeButton]. */
 	private val stepTimeDeltaSpinner: JSpinner
 
+	/**
+	 * Pause, Step Event, Step Time and the step-time delta, in one row. They are not children of
+	 * this panel: the frame puts the row in the top bar, next to the Stop button (Issue #1421). This
+	 * panel still owns and drives them (their enabled state follows [runner]).
+	 */
+	val stepControls: JPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
+
 	/** The preset buttons, in [PRESETS] order; toggled together by [speedControlsEnabled]. */
 	private val presetButtons: MutableList<JButton> = mutableListOf()
 
@@ -201,10 +208,10 @@ class SimulationControlPanel : JPanel() {
 
 		add(buttonGrid)
 
-		// ── Row 3: pause / step controls (Goal 8, Issue #501) ───────────────────
-		// Two rows (buttons, then the time delta) so each fits the side dock width (Issue #1421).
-		val pauseRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
-		val deltaRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
+		// ── Pause / step controls (Goal 8, Issue #501) ────────────────────────────
+		// Built here, where their logic lives, but shown by the frame in the top bar next to Stop
+		// (Issue #1421): see [stepControls].
+		val pauseRow = stepControls
 
 		pauseButton = JButton(LABEL_PAUSE)
 		pauseButton.toolTipText = "Pause/resume the simulation (Space)"
@@ -251,11 +258,8 @@ class SimulationControlPanel : JPanel() {
 			val value = (stepTimeDeltaSpinner.value as? Number)?.toDouble() ?: return@addChangeListener
 			runner?.stepTimeDelta = value
 		}
-		deltaRow.add(JLabel("Step Time delta:"))
-		deltaRow.add(stepTimeDeltaSpinner)
-
-		add(pauseRow)
-		add(deltaRow)
+		pauseRow.add(JLabel("Delta:"))
+		pauseRow.add(stepTimeDeltaSpinner)
 	}
 
 	/**

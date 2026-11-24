@@ -287,6 +287,11 @@ class FrameTest : AbstractFrameTestBase() {
 			val panel = northComponent as javax.swing.JPanel
 			assertThat(panel.componentCount).isEqualTo(2)
 			assertThat(panel.getComponent(0)).isInstanceOf(ToolBar::class)
+			// The run bar holds the step controls next to the ControlPanel's Stop (Issue #1421)
+			assertThat(
+				SwingUtilities.isDescendingFrom(frame.simulationControlPanel.stepControls, panel.getComponent(1))
+			).isTrue()
+			assertThat(SwingUtilities.isDescendingFrom(frame.controlPanel, panel.getComponent(1))).isTrue()
 		}
 	}
 
@@ -491,12 +496,15 @@ class FrameTest : AbstractFrameTestBase() {
 			assertThat(SwingUtilities.isDescendingFrom(frame.metricsDashboardPanel, frame.sideDock)).isTrue()
 			assertThat(frame.sideDock.isVisible).isTrue()
 			assertThat(frame.simulationControlPanel.speedControlsEnabled).isFalse()
+			assertThat(frame.simulationControlPanel.stepControls.isVisible).isFalse()
 			frame.setContext(simContext)
 			assertThat(frame.sideDock.isVisible).isTrue()
 			assertThat(frame.simulationControlPanel.speedControlsEnabled).isTrue()
+			assertThat(frame.simulationControlPanel.stepControls.isVisible).isTrue()
 			frame.setContext(editContext)
 			assertThat(frame.sideDock.isVisible).isTrue()
 			assertThat(frame.simulationControlPanel.speedControlsEnabled).isFalse()
+			assertThat(frame.simulationControlPanel.stepControls.isVisible).isFalse()
 		}
 		simContext.close()
 		editContext.close()

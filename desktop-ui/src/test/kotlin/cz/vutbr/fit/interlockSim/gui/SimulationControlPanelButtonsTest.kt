@@ -50,14 +50,16 @@ class SimulationControlPanelButtonsTest {
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
+	// The pause/step row is owned by the panel but shown by the frame next to Stop (Issue #1421),
+	// so it is searched separately.
 	private fun findButton(text: String): JButton =
-		findAllComponents(panel, JButton::class.java)
+		findAllComponents(panel.stepControls, JButton::class.java)
 			.firstOrNull { it.text == text }
-			?: error("JButton with text '$text' not found in SimulationControlPanel")
+			?: error("JButton with text '$text' not found in SimulationControlPanel.stepControls")
 
 	private fun findSpinner(): JSpinner =
-		findComponent(panel, JSpinner::class.java)
-			?: error("JSpinner not found in SimulationControlPanel")
+		findComponent(panel.stepControls, JSpinner::class.java)
+			?: error("JSpinner not found in SimulationControlPanel.stepControls")
 
 	private fun spinnerModel(): SpinnerNumberModel = findSpinner().model as SpinnerNumberModel
 

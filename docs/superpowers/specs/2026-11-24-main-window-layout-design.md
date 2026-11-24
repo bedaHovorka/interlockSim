@@ -68,10 +68,16 @@ The owner picked **C**. Recommended was B; C was chosen to also free the top row
   preview is one more tab and the right column shows disabled panels.
 - After the first look at the running app: the KPI dashboard goes into the right column, under
   the speed controls (not a tab), and the tab area must start taller than 200 px.
+- The clock must show the current simulated time, moving continuously, not only at events.
+  `SimulationRunner.throttle` records each paced gap with the run's time at its end (read on the
+  simulation thread); the clock interpolates inside the gap and holds at its end while the run
+  waits, so it never runs ahead of the simulation, also while an LLM dispatcher decides.
+- Pause, Step Event, Step Time and the delta sit next to Stop.
 
 ## Builder's calls (can be changed in review)
 
-- NORTH keeps the toolbar and `ControlPanel` only.
+- NORTH keeps the toolbar and a run bar: time, status, Stop, then Pause and the step controls
+  (owner request after the first look).
 - `SideDock` is a vertical `JScrollPane` 320 px wide (`CONFLICT_RESOLUTION_PANEL_WIDTH`), with
   titled sections. In edit mode the speed and dispatcher sections are disabled, not hidden.
   `ConflictResolutionPanel` keeps its own show/hide behaviour inside the dock.
