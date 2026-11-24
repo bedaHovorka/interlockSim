@@ -56,7 +56,6 @@ import javax.swing.JSplitPane
 import javax.swing.JTabbedPane
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
-import javax.swing.Timer
 
 /**
  * Main application window for Railway Interlocking Simulator.
@@ -151,22 +150,17 @@ class Frame internal constructor(
 	internal val controlPanel: ControlPanel = ControlPanel()
 	internal val simulationControlPanel: SimulationControlPanel = SimulationControlPanel()
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
-	private var animationUpdateTimer: Timer? = null
 
 	/**
-	 * Simulated time of the current run, read from the context's event stream for the
-	 * [ControlPanel] clock (Issue #1421). The clock cannot ask kDisco: `Process.time()` reads a
-	 * thread-local context, so off the simulation thread it fails and `currentSimulationTime()`
-	 * returns its 0.0 fallback — the clock stood at 00:00:00.000 for the whole run.
+	 * The clock for [ControlPanel] (Issue #1421): the 10 Hz timer, the [SimulationTimeTracker] and
+	 * the shown time live there; [Frame] keeps only the wiring and the test delegates.
 	 */
-	internal var simulationTimeTracker: SimulationTimeTracker? = null
-		private set
+	private val clock: SimulationClock =
+		SimulationClock(controlPanel, pacedTime = { simulationController.runner?.pacedSimulationTime() ?: 0.0 })
 
-	/** The context [simulationTimeTracker] listens to, so a new tracker can detach the old one. */
-	private var trackedContext: Context<*, *>? = null
-
-	/** The time the clock shows now; reset with each new tracker, i.e. with each run. */
-	private var shownSimulationTime: Double = 0.0
+	/** The current run's time tracker; owned by [clock], kept as a test seam. */
+	internal val simulationTimeTracker: SimulationTimeTracker?
+		get() = clock.tracker
 
 	// Live KPI dashboard (Issue #675, Goal 6 SP3): shown in simulation mode, polls the metrics service
 	// off the EDT between RUNNING and STOPPED.
@@ -840,71 +834,24 @@ class Frame internal constructor(
 		}
 	}
 
-	/**
-	 * Start timer for ControlPanel time updates (Issue #205).
-	 *
-	 * Creates a 10 Hz (100ms) Swing Timer that reads the current simulation time
-	 * from [AnimationController] and updates [ControlPanel].
-	 *
-	 * **Timer Frequency Rationale:**
-	 * - 100ms interval (10 Hz) provides responsive display without excessive CPU overhead
-	 * - Much less frequent than 30 FPS rendering, but frequent enough for smooth time display
-	 * - Swing Timer automatically runs on EDT (thread-safe)
-	 *
-	 * **Must be called from EDT.**
-	 */
-	private fun startAnimationUpdates() {
-		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
-			"startAnimationUpdates must be called from EDT"
-		}
+	// ── The ControlPanel clock; [SimulationClock] owns the details ────────────
 
-		animationUpdateTimer =
-			Timer(100) {
-				// 10 Hz update rate
-				refreshSimulationTime()
-			}
-		animationUpdateTimer?.start()
-	}
+	/** Start the clock's 10 Hz update timer. **Must be called from EDT.** */
+	private fun startAnimationUpdates() = clock.startUpdates()
 
 	/**
-	 * Shows the simulated time of the run in the [ControlPanel] (Issue #1421). EDT only.
-	 *
-	 * The runner's [SimulationRunner.pacedSimulationTime] moves smoothly between events; the
-	 * [simulationTimeTracker] covers what it cannot see (a run without pacing). The shown time never
-	 * goes backward within one run.
+	 * Shows the simulated time of the run in [ControlPanel] (Issue #1421). EDT only. The shown
+	 * time never goes backward within one run; [finalPacedTime] feeds in the run's final paced
+	 * position already captured by [SimulationController] (neutral `0.0` during normal ticks):
+	 * the clock ratchets, keeping both readings.
 	 */
-	internal fun refreshSimulationTime() {
-		val paced = simulationController.runner?.pacedSimulationTime() ?: 0.0
-		val reported = simulationTimeTracker?.lastSimTime ?: 0.0
-		shownSimulationTime = maxOf(shownSimulationTime, paced, reported)
-		controlPanel.updateTime(shownSimulationTime)
-	}
+	internal fun refreshSimulationTime(finalPacedTime: Double = 0.0) = clock.refresh(finalPacedTime)
 
-	/**
-	 * Replaces [simulationTimeTracker] with a fresh one on [context], or with none when [context] is
-	 * `null` (editing mode). A fresh tracker per run starts the clock at zero again (Issue #1421).
-	 */
-	private fun attachSimulationTimeTracker(context: Context<*, *>?) {
-		simulationTimeTracker?.let { old -> trackedContext?.removePropertyChangeListener(old) }
-		val tracker = context?.let { SimulationTimeTracker() }
-		tracker?.let { context.addPropertyChangeListener(it) }
-		simulationTimeTracker = tracker
-		trackedContext = context
-		shownSimulationTime = 0.0
-	}
+	/** Replace the clock's tracker on [context] (or detach it in editing mode). */
+	private fun attachSimulationTimeTracker(context: Context<*, *>?) = clock.attach(context)
 
-	/**
-	 * Stop ControlPanel update timer and clean up resources (Issue #205).
-	 *
-	 * Prevents memory leaks when switching between contexts or exiting simulation mode.
-	 * Safe to call multiple times or when timer is not running.
-	 *
-	 * **Must be called from EDT.**
-	 */
-	private fun stopAnimationUpdates() {
-		animationUpdateTimer?.stop()
-		animationUpdateTimer = null
-	}
+	/** Stop the clock's update timer. Safe to call multiple times. */
+	private fun stopAnimationUpdates() = clock.stopUpdates()
 
 	/**
 	 * Show one collision warning; **must be called from EDT**.
