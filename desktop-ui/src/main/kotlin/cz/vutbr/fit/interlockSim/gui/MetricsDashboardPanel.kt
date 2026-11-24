@@ -15,7 +15,6 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
-import java.awt.FlowLayout
 import java.util.Locale
 import java.util.concurrent.ExecutionException
 import javax.swing.BorderFactory
@@ -229,13 +228,16 @@ class MetricsDashboardPanel : JPanel() {
 		name = PANEL_NAME
 		layout = BorderLayout()
 		border = BorderFactory.createTitledBorder("Metrics")
-		// The rows do not wrap (a FlowLayout reports a one-line height when it wraps); a narrow frame
-		// scrolls them sideways instead, so no figure is clipped.
+		// One figure per line, so the panel fits the narrow side dock of the main window (Issue #1421).
+		// A figure wider than the panel scrolls sideways instead of being clipped.
 		val rows =
 			JPanel().apply {
 				layout = BoxLayout(this, BoxLayout.Y_AXIS)
-				add(row(AVERAGE_WAIT_NAME, CONFLICTS_NAME, THROUGHPUT_NAME, UTILIZATION_NAME))
-				add(row(QUEUED_NAME, BLOCKED_NAME, OPEN_CONTENTIONS_NAME, STALL_NAME, END_CAUSE_NAME, TIME_NAME))
+				border = BorderFactory.createEmptyBorder(0, GAP, 0, GAP)
+				labels.values.forEach { label ->
+					label.alignmentX = LEFT_ALIGNMENT
+					add(label)
+				}
 			}
 		scroll =
 			JScrollPane(rows, ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED)
@@ -246,11 +248,6 @@ class MetricsDashboardPanel : JPanel() {
 		add(scroll, BorderLayout.CENTER)
 		show(DashboardText.EMPTY)
 	}
-
-	private fun row(vararg names: String): JPanel =
-		JPanel(FlowLayout(FlowLayout.LEFT, GAP, 0)).apply {
-			names.forEach { add(labels.getValue(it)) }
-		}
 
 	/**
 	 * Begin polling [metrics] for a run that has just started; the previous run's figures are cleared.

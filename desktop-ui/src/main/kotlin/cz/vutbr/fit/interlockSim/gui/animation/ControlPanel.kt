@@ -121,6 +121,10 @@ class ControlPanel : JPanel() {
 		timeLabel.text = "Time: ${formatTime(simulationTime)}"
 	}
 
+	/** The time label's text, for tests (Issue #1421). */
+	internal val timeText: String
+		get() = timeLabel.text
+
 	/**
 	 * Updates the displayed simulation status.
 	 *

@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.DispatcherRunLifecycle
 import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
+import cz.vutbr.fit.interlockSim.SimulationTimeTracker
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -37,6 +38,8 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.scope.Scope
 import java.awt.BorderLayout
+import java.awt.Dimension
+import java.awt.Rectangle
 import java.awt.Toolkit
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
@@ -45,54 +48,51 @@ import java.awt.event.WindowEvent
 import java.beans.PropertyChangeListener
 import javax.swing.BoxLayout
 import javax.swing.JFrame
+import javax.swing.JLabel
 import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.JScrollPane
+import javax.swing.JSplitPane
+import javax.swing.JTabbedPane
+import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 
 /**
  * Main application window for Railway Interlocking Simulator.
  *
- * Provides dynamic layout that adapts based on context type:
- * - **Editing Mode** ([EditingContext]): StatusBar visible, ControlPanel hidden
- * - **Simulation Mode** ([SimulationContext]): ControlPanel and EventTimelinePanel visible, StatusBar remains visible (speed indicator shown)
+ * One layout for both modes (Issue #1421): the parts stay in place and only their enabled state
+ * changes, so the window never jumps when the mode changes.
+ * - **Editing Mode** ([EditingContext]): Path Preview tab on, side dock speed and dispatcher
+ *   controls disabled, ControlPanel hidden
+ * - **Simulation Mode** ([SimulationContext]): Warnings and Timeline tabs on, side dock
+ *   controls on, KPI dashboard polling, ControlPanel visible
  *
  * ## Layout Structure
  *
- * ### Editing Mode
  * ```
- * ┌─────────────────────────────────┐
- * │ MenuBar                         │
- * ├─────────────────────────────────┤
- * │ ToolBar                         │
- * ├─────────────────────────────────┤
- * │ RailwayNetGridCanvas            │
- * │ (scrollable)                    │
- * ├─────────────────────────────────┤
- * │ StatusBar                       │
- * └─────────────────────────────────┘
+ * ┌──────────────────────────────────────┬──────────────────────┐
+ * │ MenuBar                              │                      │
+ * ├──────────────────────────────────────┤ SideDock (EAST)      │
+ * │ ToolBar                              │ ┌──────────────────┐ │
+ * │ ControlPanel [Time] [Status] [Stop]  │ │ Simulation Speed │ │
+ * │ (simulation mode only)               │ ├──────────────────┤ │
+ * │                                      │ │ Metrics (KPI)    │ │
+ * ├──────────────────────────────────────┤ ├──────────────────┤ │
+ * │                                      │ │ Dispatcher       │ │
+ * │ RailwayNetGridCanvas                 │ ├──────────────────┤ │
+ * │ (scrollable; takes the extra height) │ │ Conflict         │ │
+ * ╞══════════ JSplitPane bar ════════════╡ │ Resolution (#590,│ │
+ * │ [Path Preview][Warnings (n)]         │ │ when a conflict  │ │
+ * │ [Timeline]  – bottomTabs             │ │ needs input)     │ │
+ * │                                      │ └──────────────────┘ │
+ * ├──────────────────────────────────────┴──────────────────────┤
+ * │ StatusBar (speed indicator, warning indicator)              │
+ * └─────────────────────────────────────────────────────────────┘
  * ```
  *
- * ### Simulation Mode
- * ```
- * ┌───────────────────────────────┬─────────────────────┐
- * │ MenuBar                       │                     │
- * ├───────────────────────────────┤                     │
- * │ ToolBar                       │                     │
- * ├───────────────────────────────┤                     │
- * │ ControlPanel (NEW - #205)     │                     │
- * │ [Time] [Status]               │ ConflictResolution  │
- * ├───────────────────────────────┤ Panel (EAST, #590)  │
- * │ RailwayNetGridCanvas          │ (visible only when  │
- * │ (animated, scrollable)        │  a conflict needs   │
- * ├───────────────────────────────┤  dispatcher input)  │
- * │ EventTimelinePanel (NEW)      │                     │
- * │ [Filters] [Event log...]      │                     │
- * ├───────────────────────────────┤                     │
- * │ StatusBar (speed indicator)   │                     │
- * └───────────────────────────────┴─────────────────────┘
- * ```
+ * The start size comes from [WindowGeometry]; with a [WindowStateStore] the frame restores the
+ * saved bounds and tab-area height and saves them again on exit.
  *
  * ## Animation Integration (Issue #205)
  *
@@ -100,11 +100,11 @@ import javax.swing.Timer
  * 1. Creates [EventTimelinePanel] (lazy, reused across simulations)
  * 2. Wires EventTimelinePanel to [RailwayNetGridCanvas] → [cz.vutbr.fit.interlockSim.gui.animation.AnimationController]
  * 3. Starts 10 Hz timer for [ControlPanel] time updates
- * 4. Shows ControlPanel and EventTimelinePanel (above StatusBar); StatusBar remains visible
+ * 4. Shows ControlPanel and puts EventTimelinePanel into the Timeline tab
  *
  * When an [EditingContext] is set, the frame:
- * 1. Hides ControlPanel and EventTimelinePanel
- * 2. Shows StatusBar for mouse position feedback
+ * 1. Hides ControlPanel, disables the Timeline and Warnings tabs, clears the KPI dashboard
+ * 2. Keeps StatusBar for mouse position feedback
  * 3. Stops animation timer (cleanup)
  *
  * ## Thread Safety
@@ -119,7 +119,15 @@ import javax.swing.Timer
  * @see switchToEditingMode
  * @see switchToSimulationMode
  */
-class Frame : JFrame(PROGRAM_FULL_NAME) {
+class Frame internal constructor(
+	private val windowStateStore: WindowStateStore?
+) : JFrame(PROGRAM_FULL_NAME) {
+	/**
+	 * A frame that does not read or write the saved window layout (tests, tools). The application
+	 * frame comes from Koin with a [WindowStateStore] (Issue #1421).
+	 */
+	constructor() : this(null)
+
 	/**
 	 * Base window title, without the file name and dirty marker (Issue #839).
 	 *
@@ -140,10 +148,22 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private val toolBar: ToolBar = ToolBar()
 
 	// Animation UI components (Issue #205)
-	private val controlPanel: ControlPanel = ControlPanel()
+	internal val controlPanel: ControlPanel = ControlPanel()
 	internal val simulationControlPanel: SimulationControlPanel = SimulationControlPanel()
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
+
+	/**
+	 * Simulated time of the current run, read from the context's event stream for the
+	 * [ControlPanel] clock (Issue #1421). The clock cannot ask kDisco: `Process.time()` reads a
+	 * thread-local context, so off the simulation thread it fails and `currentSimulationTime()`
+	 * returns its 0.0 fallback — the clock stood at 00:00:00.000 for the whole run.
+	 */
+	internal var simulationTimeTracker: SimulationTimeTracker? = null
+		private set
+
+	/** The context [simulationTimeTracker] listens to, so a new tracker can detach the old one. */
+	private var trackedContext: Context<*, *>? = null
 
 	// Live KPI dashboard (Issue #675, Goal 6 SP3): shown in simulation mode, polls the metrics service
 	// off the EDT between RUNNING and STOPPED.
@@ -246,11 +266,52 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	@Volatile
 	var soundOnCriticalWarning: Boolean = false
 
-	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
-	private val southPanel: JPanel =
-		JPanel().apply {
-			layout = BoxLayout(this, BoxLayout.Y_AXIS)
+	// ── Main window layout (Issue #1421) ──────────────────────────────────────
+
+	/**
+	 * Scroll pane around the canvas: the top of [splitPane]. Its preferred height is kept small on
+	 * purpose: a large railway grid would otherwise claim more height than the window has, and the
+	 * split pane would squeeze [bottomTabs] to its minimum. The canvas still gets all the free height
+	 * through `resizeWeight = 1.0`.
+	 */
+	private val canvasScrollPane: JScrollPane =
+		JScrollPane(railwayNetGridCanvas).apply {
+			minimumSize = Dimension(0, MIN_CANVAS_HEIGHT)
+			preferredSize = Dimension(0, MIN_CANVAS_HEIGHT)
 		}
+
+	/**
+	 * Tabs under the canvas, in a fixed order: Path Preview, Warnings, Timeline. All three stay in
+	 * both modes; [applyTabMode] enables the tabs that have content in the current mode.
+	 */
+	internal val bottomTabs: JTabbedPane =
+		JTabbedPane().apply {
+			preferredSize = Dimension(0, DEFAULT_BOTTOM_HEIGHT)
+			minimumSize = Dimension(0, MIN_BOTTOM_HEIGHT)
+		}
+
+	/** Placeholder in the Timeline tab until the first simulation context creates [eventTimelinePanel]. */
+	private val timelinePlaceholder: JLabel =
+		JLabel("The event timeline appears when a simulation is loaded.", SwingConstants.CENTER)
+
+	/**
+	 * Canvas above, [bottomTabs] below, with a bar the user can drag. `resizeWeight = 1.0`: when the
+	 * window grows or shrinks, only the canvas changes height.
+	 */
+	internal val splitPane: JSplitPane =
+		JSplitPane(JSplitPane.VERTICAL_SPLIT, canvasScrollPane, bottomTabs).apply {
+			resizeWeight = 1.0
+			isOneTouchExpandable = true
+			isContinuousLayout = true
+			border = null
+		}
+
+	/** Right-hand column: speed, KPI dashboard, dispatcher and conflict panels, in both modes. */
+	internal val sideDock: SideDock =
+		SideDock(simulationControlPanel, metricsDashboardPanel, dispatcherControlPanel, conflictResolutionPanel)
+
+	/** Last bounds while the window was neither maximized nor iconified; saved on exit. */
+	private var lastNormalBounds: Rectangle? = null
 
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
 	internal val simulationController: SimulationController =
@@ -322,6 +383,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// behind the run's real end, because stop() clears the caches a bare
 							// pause never re-captured. The next startSimulation() restarts via
 							// ensureAnimationRunning().
+							// Issue #1421: show the time the run reached before the clock timer stops.
+							refreshSimulationTime()
 							stopAnimationUpdates()
 							railwayNetGridCanvas.captureFinalFrameAndPause()
 							// Issue #675: one last dashboard poll, then stop. It reads the run record after any
@@ -399,32 +462,33 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// SimulationControlPanel + DispatcherControlPanel, Issue #561). Without the extra
 		// height the DispatcherControlPanel line steals vertical space from the scrollable
 		// RailwayNetGridCanvas, hiding station tracks (PR #801 review comment).
-		setSize(1024, 818)
+		// Issue #1421: the start size comes from the screen (or the saved layout), not a fixed 1024x818.
+		applyInitialGeometry()
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE) // Handle close event manually
 		setLayout(BorderLayout())
 		jMenuBar = MenuBar()
-		contentPane.add(JScrollPane(railwayNetGridCanvas), BorderLayout.CENTER)
+		contentPane.add(splitPane, BorderLayout.CENTER)
 
-		// Create north container with ToolBar + ControlPanel (Issue #205)
+		// North container: ToolBar + ControlPanel (Issue #205). The speed and dispatcher panels moved
+		// to the side dock (Issue #1421).
 		val northContainer = JPanel()
 		northContainer.layout = BoxLayout(northContainer, BoxLayout.PAGE_AXIS)
 		northContainer.add(toolBar)
 		controlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
 		northContainer.add(controlPanel)
-		simulationControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
-		northContainer.add(simulationControlPanel)
-		dispatcherControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
-		northContainer.add(dispatcherControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
+
+		// Side dock (Issue #1421): visible in both modes; editing mode disables the speed controls.
+		sideDock.setSimulationMode(false)
+		contentPane.add(sideDock, BorderLayout.EAST)
 
 		// Route speed changes from SimulationControlPanel through SimulationController so
 		// desiredSpeed stays in sync and is applied to the next simulation start.
 		simulationControlPanel.onSpeedChanged = { speed -> simulationController.setSpeed(speed) }
 
-		// South panel contains StatusBar (edit mode) and EventTimelinePanel (simulation mode)
+		// The status bar alone sits at SOUTH; the other bottom panels are tabs (Issue #1421).
 		statusBar.registerProducer(railwayNetGridCanvas)
-		southPanel.add(statusBar)
-		contentPane.add(southPanel, BorderLayout.SOUTH)
+		contentPane.add(statusBar, BorderLayout.SOUTH)
 
 		// Wire PathPreviewPanel callbacks to the canvas (Issue #596)
 		pathPreviewPanel.onRouteSelected = { routes, selectedIndex ->
@@ -433,12 +497,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		pathPreviewPanel.onClear = {
 			railwayNetGridCanvas.clearPathPreview()
 		}
-		// PathPreviewPanel sits above the status bar in the south panel; visible in editing mode
-		pathPreviewPanel.isVisible = true
-		southPanel.add(pathPreviewPanel, PATH_PREVIEW_SOUTH_INDEX)
+		// Bottom tabs (Issue #1421), in the order of the TAB_* constants.
+		bottomTabs.addTab(TAB_TITLE_PATH_PREVIEW, pathPreviewPanel)
+		bottomTabs.addTab(warningsTabTitle(0), warningPanel)
+		bottomTabs.addTab(TAB_TITLE_TIMELINE, timelinePlaceholder)
+		applyTabMode(simulation = false)
 
-		// Warning panel (Issue #616, Goal 3 SP6) – initially hidden; shown in simulation mode
-		warningPanel.isVisible = false
+		// Warning panel (Issue #616, Goal 3 SP6) – the Warnings tab title shows the count.
+		warningPanel.onCountChanged = { count -> bottomTabs.setTitleAt(TAB_WARNINGS, warningsTabTitle(count)) }
 		// Selection highlights the involved block on the canvas when known (Issue #1331: only
 		// a CRITICAL warning gets the collision highlight; an advisory clears it instead -- the
 		// rationale lives on RailwayNetGridCanvas.clearWarningHighlights).
@@ -454,10 +520,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			statusBar.setWarningIndicator(false)
 		}
 
-		// Conflict resolution side panel (Issue #590, Goal 9 SP5) – initially hidden;
-		// shown in the east slot when an active conflict requires dispatcher attention.
+		// Conflict resolution panel (Issue #590, Goal 9 SP5) – initially hidden; it lives in the side
+		// dock (Issue #1421) and shows itself when an active conflict requires dispatcher attention.
 		conflictResolutionPanel.isVisible = false
-		contentPane.add(conflictResolutionPanel, BorderLayout.EAST)
 
 		// Add component listener to refresh canvas when frame is resized
 		addComponentListener(
@@ -465,6 +530,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				override fun componentResized(e: ComponentEvent) {
 					// When frame is resized, refresh grid canvas to handle scrollbar appearance/disappearance
 					railwayNetGridCanvas.revalidate()
+					rememberNormalBounds()
+				}
+
+				override fun componentMoved(e: ComponentEvent) {
+					rememberNormalBounds()
 				}
 			}
 		)
@@ -484,11 +554,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 *
 	 * - StatusBar remains visible (its speed indicator [StatusBar.updateSpeedIndicator] shows
 	 *   non-default speeds; [StatusBar.statusLabel] continues to display simulation events)
-	 * - Adds EventTimelinePanel to south panel (if created)
-	 * - Shows ControlPanel
+	 * - Puts EventTimelinePanel into the Timeline tab (if created)
+	 * - Enables the Warnings and Timeline tabs, selects Warnings (Issue #1421)
+	 * - Shows ControlPanel and enables the side dock's speed controls
 	 * - Disables editing ToolBar
 	 * - Installs global keyboard shortcuts for speed control (Phase 3.1, Issue #193)
-	 * - Shows WarningPanel (Issue #616, Goal 3 SP6)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -497,34 +567,24 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToSimulationMode must be called from EDT"
 		}
 
-		// Add EventTimelinePanel before StatusBar (index 0 = top of south panel, above StatusBar)
+		// Put the EventTimelinePanel into its tab, in place of the placeholder (Issue #1421)
 		eventTimelinePanel?.let { panel ->
-			if (panel.parent == null) {
-				southPanel.add(panel, TIMELINE_PANEL_SOUTH_INDEX)
+			if (bottomTabs.getComponentAt(TAB_TIMELINE) !== panel) {
+				bottomTabs.setComponentAt(TAB_TIMELINE, panel)
 			}
 		}
 
-		// Show the KPI dashboard in simulation mode (Issue #675, Goal 6 SP3). Entering simulation mode
+		// The KPI dashboard (Issue #675, Goal 6 SP3) stays in the side dock. Entering simulation mode
 		// from another simulation context must not keep the previous run's figures or poll.
 		metricsDashboardPanel.detach()
-		if (metricsDashboardPanel.parent == null) {
-			southPanel.add(metricsDashboardPanel, DASHBOARD_PANEL_SOUTH_INDEX)
-		}
 
-		// Show WarningPanel in simulation mode (Goal 3 SP6)
-		if (warningPanel.parent == null) {
-			southPanel.add(warningPanel, WARNING_PANEL_SOUTH_INDEX)
-		}
-		warningPanel.isVisible = true
+		// Warnings and Timeline tabs on; Path Preview off (Issue #1421)
+		applyTabMode(simulation = true)
 
-		// Hide PathPreviewPanel in simulation mode
-		pathPreviewPanel.isVisible = false
-
-		// Show ControlPanel and SimulationControlPanel
+		// Show ControlPanel; enable the side dock's speed controls
 		controlPanel.isVisible = true
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
-		simulationControlPanel.isVisible = true
-		dispatcherControlPanel.isVisible = true
+		sideDock.setSimulationMode(true)
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
@@ -532,8 +592,6 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Install keyboard shortcuts for simulation control (Phase 3.1, Issue #193)
 		simulationKeyBindings.install(rootPane)
 
-		southPanel.revalidate()
-		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
@@ -541,11 +599,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Switch UI layout to editing mode (Issue #205).
 	 *
-	 * - Removes EventTimelinePanel from south panel (StatusBar remains visible throughout)
-	 * - Hides ControlPanel
+	 * - Enables only the Path Preview tab and selects it (Issue #1421)
+	 * - Hides ControlPanel; disables the side dock's speed controls
 	 * - Enables editing ToolBar
 	 * - Uninstalls global keyboard shortcuts (Phase 3.1, Issue #193)
-	 * - Hides WarningPanel (Issue #616, Goal 3 SP6)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -554,28 +611,18 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToEditingMode must be called from EDT"
 		}
 
-		// Remove EventTimelinePanel from south panel (StatusBar stays visible always)
-		eventTimelinePanel?.let { panel ->
-			southPanel.remove(panel)
-		}
-
-		// Remove the KPI dashboard and stop its polling (Issue #675, Goal 6 SP3)
+		// Stop the KPI dashboard's polling and clear it (Issue #675, Goal 6 SP3); it stays in the side dock
 		metricsDashboardPanel.detach()
-		southPanel.remove(metricsDashboardPanel)
 
-		// Hide WarningPanel in editing mode (Goal 3 SP6)
-		warningPanel.isVisible = false
+		// Only the Path Preview tab has content in editing mode (Issue #1421)
+		applyTabMode(simulation = false)
 
 		// Hide ConflictResolutionPanel in editing mode (Goal 9 SP5)
 		conflictResolutionPanel.clearResolutions()
 
-		// Show PathPreviewPanel in editing mode
-		pathPreviewPanel.isVisible = true
-
-		// Hide ControlPanel and SimulationControlPanel
+		// Hide ControlPanel; the side dock stays, with its speed and dispatcher controls disabled
 		controlPanel.isVisible = false
-		simulationControlPanel.isVisible = false
-		dispatcherControlPanel.isVisible = false
+		sideDock.setSimulationMode(false)
 		dispatcherControlPanel.modeState = null
 		dispatcherControlPanel.clearRationale()
 		// Detach the SEMI_AUTO approver in case switchToEditingMode is called without a prior
@@ -589,8 +636,6 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Uninstall keyboard shortcuts (Phase 3.1, Issue #193)
 		simulationKeyBindings.uninstall(rootPane)
 
-		southPanel.revalidate()
-		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
@@ -725,6 +770,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				}
 
 				switchToSimulationMode()
+				attachSimulationTimeTracker(context)
+				refreshSimulationTime()
 				railwayNetGridCanvas.setEventTimelinePanel(eventTimelinePanel)
 				railwayNetGridCanvas.setContext(context)
 				railwayNetGridCanvas.autoCenterViewport()
@@ -739,6 +786,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			is EditingContext -> {
 				currentSimulationContext = null
 				controlPanel.onStop = null
+				attachSimulationTimeTracker(null)
 				switchToEditingMode()
 				railwayNetGridCanvas.setContext(context)
 				context.addPropertyChangeListener(modificationTracker)
@@ -750,6 +798,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				controlPanel.onStop = null
 				// Unknown context type - default to simulation mode (read-only)
 				switchToSimulationMode()
+				attachSimulationTimeTracker(context)
 				railwayNetGridCanvas.setContext(context)
 				// Clear PathPreviewPanel context (Issue #596)
 				pathPreviewPanel.setEditingContext(null)
@@ -786,12 +835,26 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		animationUpdateTimer =
 			Timer(100) {
 				// 10 Hz update rate
-				val controller = railwayNetGridCanvas.animationController
-				controller?.currentState?.let { state ->
-					controlPanel.updateTime(state.simulationTime)
-				}
+				refreshSimulationTime()
 			}
 		animationUpdateTimer?.start()
+	}
+
+	/** Shows the latest simulated time of the run in the [ControlPanel] (Issue #1421). EDT only. */
+	internal fun refreshSimulationTime() {
+		controlPanel.updateTime(simulationTimeTracker?.lastSimTime ?: 0.0)
+	}
+
+	/**
+	 * Replaces [simulationTimeTracker] with a fresh one on [context], or with none when [context] is
+	 * `null` (editing mode). A fresh tracker per run starts the clock at zero again (Issue #1421).
+	 */
+	private fun attachSimulationTimeTracker(context: Context<*, *>?) {
+		simulationTimeTracker?.let { old -> trackedContext?.removePropertyChangeListener(old) }
+		val tracker = context?.let { SimulationTimeTracker() }
+		tracker?.let { context.addPropertyChangeListener(it) }
+		simulationTimeTracker = tracker
+		trackedContext = context
 	}
 
 	/**
@@ -824,6 +887,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		warningPanel.addWarning(warning)
 		if (warning.severity != CollisionWarning.Severity.CRITICAL) return
 		statusBar.setWarningIndicator(true)
+		// A critical warning must not hide behind another tab (Issue #1421)
+		if (bottomTabs.isEnabledAt(TAB_WARNINGS)) {
+			bottomTabs.selectedIndex = TAB_WARNINGS
+		}
 		if (sound) {
 			Toolkit.getDefaultToolkit().beep()
 		}
@@ -923,6 +990,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		conflictResolutionPanel.clearResolutions()
 
 		try {
+			// Issue #1421: a fresh clock source per run, so a second run on this context starts at zero.
+			// Attached before start, so the tracker sees the run's first events too.
+			attachSimulationTimeTracker(context)
+			refreshSimulationTime()
 			simulationController.start(context)
 			// Issue #1072 + #1096 review: a previous STOPPED paused the animation and the 10 Hz
 			// time timer. Restart both so the new run is visible again without requiring a full
@@ -1002,35 +1073,92 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
-		/** Index at which EventTimelinePanel is inserted in [southPanel] (above StatusBar). */
-		private const val TIMELINE_PANEL_SOUTH_INDEX = 0
+		// Bottom tab indices, in the order the tabs are added in init (Issue #1421)
+		internal const val TAB_PATH_PREVIEW = 0
+		internal const val TAB_WARNINGS = 1
+		internal const val TAB_TIMELINE = 2
+
+		internal const val TAB_TITLE_PATH_PREVIEW = "Path Preview"
+		internal const val TAB_TITLE_WARNINGS = "Warnings"
+		internal const val TAB_TITLE_TIMELINE = "Timeline"
+
+		/** Lower limit of the tab-area height at the first start, before the user drags the split bar. */
+		internal const val DEFAULT_BOTTOM_HEIGHT = 200
+
+		/** Share of the window height, in percent, that the tab area gets at the first start. */
+		internal const val BOTTOM_HEIGHT_PERCENT = 30
 
 		/**
-		 * Index at which PathPreviewPanel is inserted in [southPanel] (Issue #596).
-		 *
-		 * Sits above the StatusBar (index 0 is top). When EventTimelinePanel is also present
-		 * it is at index 0, so PathPreviewPanel lands at index 1, just below it. When no
-		 * timeline panel is present it sits at index 0, just above the StatusBar.
+		 * Tab-area height at the first start for a window [windowHeight] pixels high:
+		 * [BOTTOM_HEIGHT_PERCENT] of it, at least [DEFAULT_BOTTOM_HEIGHT].
 		 */
-		private const val PATH_PREVIEW_SOUTH_INDEX = 0
+		internal fun defaultBottomHeight(windowHeight: Int): Int =
+			(windowHeight * BOTTOM_HEIGHT_PERCENT / PERCENT).coerceAtLeast(DEFAULT_BOTTOM_HEIGHT)
 
-		/**
-		 * Index at which WarningPanel is inserted in [southPanel] (Issue #616, Goal 3 SP6).
-		 *
-		 * The WarningPanel appears above the StatusBar (and below the EventTimelinePanel and
-		 * PathPreviewPanel when they are present).  Using index 0 keeps the panel ordering
-		 * consistent with the other south-panel panels added dynamically.
-		 */
-		private const val WARNING_PANEL_SOUTH_INDEX = 0
+		private const val PERCENT = 100
 
-		/**
-		 * Index at which MetricsDashboardPanel is inserted in [southPanel] (Issue #675, Goal 6 SP3).
-		 *
-		 * Index 0 like the other panels, but the WarningPanel is inserted at index 0 after it, so in
-		 * simulation mode the dashboard sits between the WarningPanel (top) and the EventTimelinePanel,
-		 * above the PathPreviewPanel and the StatusBar.
-		 */
-		private const val DASHBOARD_PANEL_SOUTH_INDEX = 0
+		/** Smallest height of the tab area: one tab row and a few lines of content. */
+		private const val MIN_BOTTOM_HEIGHT = 80
+
+		/** Smallest height the split bar leaves to the canvas. */
+		private const val MIN_CANVAS_HEIGHT = 120
+
+		/** Warnings tab title: the plain title with no warnings, else the title with the count. */
+		internal fun warningsTabTitle(count: Int): String =
+			if (count > 0) "$TAB_TITLE_WARNINGS ($count)" else TAB_TITLE_WARNINGS
+	}
+
+	/**
+	 * Enables the bottom tabs that have content in the current mode and selects the main one
+	 * (Issue #1421). Editing mode: Path Preview only. Simulation mode: Warnings and Timeline, with
+	 * Warnings selected. The tabs themselves never come or go, so the layout does not jump.
+	 */
+	private fun applyTabMode(simulation: Boolean) {
+		bottomTabs.setEnabledAt(TAB_PATH_PREVIEW, !simulation)
+		bottomTabs.setEnabledAt(TAB_WARNINGS, simulation)
+		bottomTabs.setEnabledAt(TAB_TIMELINE, simulation)
+		bottomTabs.selectedIndex = if (simulation) TAB_WARNINGS else TAB_PATH_PREVIEW
+	}
+
+	/**
+	 * Sets the start bounds (Issue #1421): the saved layout when it still lies on a connected
+	 * screen, else [WindowGeometry.initialBounds] on the usable screen area.
+	 */
+	private fun applyInitialGeometry() {
+		val saved = windowStateStore?.load()
+		if (saved != null && WindowGeometry.isOnScreen(saved.bounds, WindowGeometry.screenBounds())) {
+			bounds = saved.bounds
+			lastNormalBounds = Rectangle(saved.bounds)
+			if (saved.maximized) {
+				extendedState = extendedState or MAXIMIZED_BOTH
+			}
+			saved.bottomHeight?.let { height ->
+				bottomTabs.preferredSize = Dimension(0, height.coerceAtLeast(MIN_BOTTOM_HEIGHT))
+			}
+		} else {
+			bounds = WindowGeometry.initialBounds(WindowGeometry.usableScreen())
+			bottomTabs.preferredSize = Dimension(0, defaultBottomHeight(height))
+		}
+	}
+
+	/** Records the bounds while the window is in its normal state, so a maximized exit saves them. */
+	private fun rememberNormalBounds() {
+		if (extendedState and (MAXIMIZED_BOTH or ICONIFIED) == 0 && isShowing) {
+			lastNormalBounds = bounds
+		}
+	}
+
+	/** Saves bounds, maximized state and tab-area height on exit (Issue #1421). */
+	private fun saveWindowState() {
+		val store = windowStateStore ?: return
+		val maximized = extendedState and MAXIMIZED_BOTH == MAXIMIZED_BOTH
+		store.save(
+			WindowStateStore.WindowState(
+				bounds = lastNormalBounds ?: bounds,
+				maximized = maximized,
+				bottomHeight = bottomTabs.height.takeIf { it > 0 }
+			)
+		)
 	}
 
 	/**
@@ -1136,6 +1264,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Issue #1072: close the shared Ollama/Koog executor so its worker threads do not outlive
 		// the application. Terminal for this JVM process (System.exit follows immediately).
 		DispatcherRunLifecycle.closeSharedOllamaExecutor()
+		saveWindowState()
 		dispose()
 		System.exit(0)
 	}

@@ -401,13 +401,14 @@ class MetricsDashboardPanelTest {
 		}
 
 		@Test
-		@DisplayName("a narrow panel scrolls its rows sideways instead of clipping a figure")
+		@DisplayName("a panel narrower than a figure scrolls sideways instead of clipping it")
 		fun narrowPanelScrolls() {
 			val p = newPanel()
 			var scrollable = false
 			var rowsWider = false
 			onEdt {
-				p.setSize(200, 120)
+				// One figure per line (Issue #1421): only a panel narrower than a figure must scroll
+				p.setSize(60, 400)
 				p.doLayout()
 				val scroll = p.components.filterIsInstance<JScrollPane>().single()
 				scroll.doLayout()

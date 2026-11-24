@@ -13,7 +13,6 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatcherMode
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import java.awt.Color
-import java.awt.Dimension
 import java.awt.FlowLayout
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
@@ -33,11 +32,12 @@ import javax.swing.JPanel
  *
  * **Layout Structure:**
  * ```
- * ┌─────────────────────────────────────────────────────────┐
- * │ Dispatcher: ┌─────────────┐  [Why this route?]  │ ● ●  │
- * │             │ [AUTO ▼]    │                      │Active│
- * └─────────────────────────────────────────────────────────┘
+ * ┌──────────────────────────────┐
+ * │ Mode: [AUTO ▼]  ● Active     │
+ * │ [Why this route?]            │
+ * └──────────────────────────────┘
  * ```
+ * Two rows without a fixed size, so the panel fits the side dock of [Frame] (Issue #1421).
  *
  * **Integration:**
  * - Direct-constructed by [Frame] (one panel per main window); not Koin-injected.
@@ -130,15 +130,18 @@ class DispatcherControlPanel : JPanel() {
 	init {
 		layout = BoxLayout(this, BoxLayout.PAGE_AXIS)
 		border = BorderFactory.createEtchedBorder()
-		preferredSize = Dimension(400, 50)
 		isOpaque = true
 
-		// Header panel: mode selector + indicator + why button
+		// Two rows, no fixed size: the panel lives in the narrow side dock (Issue #1421). The former
+		// fixed 400x50 size and single FlowLayout row cut the controls off there.
+		// Row 1: mode selector + indicator
 		val headerPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 4))
 		headerPanel.isOpaque = false
+		val buttonRow = JPanel(FlowLayout(FlowLayout.LEFT, 8, 4))
+		buttonRow.isOpaque = false
 
 		// Label
-		val label = JLabel("Dispatcher:")
+		val label = JLabel("Mode:")
 		headerPanel.add(label)
 
 		// Mode combo box
@@ -163,13 +166,14 @@ class DispatcherControlPanel : JPanel() {
 		whyButton.addActionListener {
 			onRationale?.invoke(lastDecisionRationale)
 		}
-		headerPanel.add(whyButton)
+		buttonRow.add(whyButton)
 
 		// Active indicator (disabled by default, matches modeState == null)
 		activeIndicator.foreground = Color.GRAY
 		headerPanel.add(activeIndicator)
 
 		add(headerPanel)
+		add(buttonRow)
 	}
 
 	/**

@@ -52,8 +52,10 @@ The owner picked **C**. Recommended was B; C was chosen to also free the top row
 +------------------------------------+ (EAST,    |
 |        canvas JScrollPane          |  320 px)  |
 |        (resizeWeight = 1.0)        | - Speed   |
+|                                    | - KPI     |
 +=========== JSplitPane bar =========+ - Dispat. |
-| [Path preview][Warnings (n)][KPI][Timeline]    | - Conflict|
+| [Path preview][Warnings (n)]       | - Conflict|
+| [Timeline]                         |           |
 +------------------------------------+-----------+
 | StatusBar (SOUTH)                              |
 +------------------------------------------------+
@@ -64,6 +66,8 @@ The owner picked **C**. Recommended was B; C was chosen to also free the top row
 - Variant C.
 - Same frame in both modes: the right column and the tab area always stay. In edit mode the path
   preview is one more tab and the right column shows disabled panels.
+- After the first look at the running app: the KPI dashboard goes into the right column, under
+  the speed controls (not a tab), and the tab area must start taller than 200 px.
 
 ## Builder's calls (can be changed in review)
 
@@ -73,12 +77,14 @@ The owner picked **C**. Recommended was B; C was chosen to also free the top row
   `ConflictResolutionPanel` keeps its own show/hide behaviour inside the dock.
 - `SimulationControlPanel` presets go into a grid, so the row fits 320 px. `DispatcherControlPanel`
   drops its fixed 400x50 size and stacks its controls.
-- Tabs in this order: Path preview, Warnings, KPI, Timeline. Edit mode: only Path preview is
+- The KPI dashboard shows one figure per line, so it fits the 320 px column.
+- Tabs in this order: Path preview, Warnings, Timeline. Edit mode: only Path preview is
   enabled and selected. Simulation mode: Path preview is disabled, Warnings is selected.
 - The Warnings tab title shows the count. A CRITICAL warning selects the Warnings tab. The
   status-bar indicator stays as before.
-- `JSplitPane`: `resizeWeight = 1.0`, one-touch buttons, default bottom height about 200 px.
+- `JSplitPane`: `resizeWeight = 1.0`, one-touch buttons; the tab area starts at 30% of the window
+  height, at least 200 px.
 - Start size: 85% of the usable screen, at least 1024x818, at most the screen, centered.
   Headless: 1024x818.
-- `java.util.prefs` stores bounds, maximized state and bar position on close. Saved bounds are used
+- `java.util.prefs` stores bounds, maximized state and the tab-area height on close. Saved bounds are used
   only when they still overlap a current screen.

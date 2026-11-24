@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.isProcessControl
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.di.windowLayoutModule
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
@@ -628,7 +629,7 @@ fun main(args: Array<String>) {
 	// Load GUI module (includes Main coordinator and Frame)
 	// Note: Main is always needed for all modes (sim/edit/example)
 	// Frame is only created lazily when actually needed (edit mode)
-	getKoin().loadModules(listOf(guiModule))
+	getKoin().loadModules(listOf(guiModule, windowLayoutModule))
 
 	// Add shutdown hook to clean up Koin when JVM exits
 	Runtime.getRuntime().addShutdownHook(

@@ -65,7 +65,8 @@ and [../docs/SIMULATION_SPEED_CONTROL.md](../docs/SIMULATION_SPEED_CONTROL.md).
 
 ## KPI Dashboard (Goal 6 SP3)
 
-`MetricsDashboardPanel` is docked in `Frame`'s south panel in simulation mode. It polls only
+`MetricsDashboardPanel` sits in `Frame`'s right-hand side dock, under the speed controls, in both
+modes (#1421); it polls only in simulation mode and is cleared in editing mode. It reads only
 `MetricsCollectionService.latestSnapshot()` and `latestOpenContentions()`, and on its final poll the volatile
 `runRecord()`, all cross-thread safe, from a
 `SwingWorker` driven by a `javax.swing.Timer`, never simulation-thread objects. `stop(manual)` at STOPPED,
@@ -74,6 +75,21 @@ after any stop (natural or manual), makes that final poll, which reads the recor
 delivers `RunEnded`, so a final poll without a record re-reads it from a one-shot timer (10 × 100 ms). With
 no record after that, the end cause reads "stopped manually" after a manual stop and "–" otherwise (#1326). With `MetricGroup.TRAIN_WAIT` off, Queued, Blocked and
 Open contentions show "–" (not measured).
+
+## Main Window Layout (Goal 6, #1421)
+
+One layout for both modes, so nothing jumps when the mode changes (design:
+`docs/superpowers/specs/2026-11-24-main-window-layout-design.md`):
+
+- NORTH: toolbar and `ControlPanel` (time, status, Stop; simulation mode only).
+- CENTER: a `JSplitPane` — canvas on top, `bottomTabs` below (Path Preview, Warnings (n),
+  Timeline). The mode enables the tabs that have content; a CRITICAL warning selects Warnings.
+- EAST: `SideDock`, 320 px — Simulation Speed, Metrics (KPI), Dispatcher, Conflict Resolution.
+  Editing mode disables the speed and dispatcher controls instead of hiding them.
+- SOUTH: `StatusBar` only.
+- Start size: `WindowGeometry` (85% of the usable screen, at least 1024x818); the tab area starts at
+  30% of the window height. The application (not tests: `windowLayoutModule` is loaded only by
+  `main`) saves bounds and tab-area height in `java.util.prefs` (`WindowStateStore`) on exit.
 
 ## Run JSON Name of a GUI Run (Goal 6, #1328)
 

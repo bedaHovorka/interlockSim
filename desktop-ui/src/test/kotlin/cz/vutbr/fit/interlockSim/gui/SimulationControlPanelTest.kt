@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -402,5 +403,29 @@ class SimulationControlPanelTest {
 		runner.speedMultiplier = 3.0
 		SwingUtilities.invokeAndWait { /* flush invokeLater from runnerListener */ }
 		assertThat(callbackCount).isEqualTo(0)
+	}
+
+	// ── Side dock editing mode (Issue #1421) ──────────────────────────────────
+
+	@Test
+	@DisplayName("speedControlsEnabled toggles the slider and every preset button, not the step controls")
+	fun speedControlsEnabledTogglesSliderAndPresets() {
+		SwingUtilities.invokeAndWait {
+			val presets =
+				findAllComponents(panel, JButton::class.java)
+					.filter { it.toolTipText?.startsWith("Set speed to") == true }
+			assertThat(presets.size).isEqualTo(SimulationControlPanel.PRESETS.size)
+			val pause = findAllComponents(panel, JButton::class.java).first { it.text == "Pause" }
+
+			panel.speedControlsEnabled = false
+			assertThat(findSlider().isEnabled).isFalse()
+			assertThat(presets.none { it.isEnabled }).isTrue()
+
+			panel.speedControlsEnabled = true
+			assertThat(findSlider().isEnabled).isTrue()
+			assertThat(presets.all { it.isEnabled }).isTrue()
+			// Without a runner the pause control stays off whatever the speed switch says
+			assertThat(pause.isEnabled).isFalse()
+		}
 	}
 }
