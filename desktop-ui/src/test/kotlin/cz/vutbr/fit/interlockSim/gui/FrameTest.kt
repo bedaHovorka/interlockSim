@@ -385,12 +385,12 @@ class FrameTest : AbstractFrameTestBase() {
 			// Default state after Frame construction is editing mode (Issue #1421)
 			val tabs = frame.bottomTabs
 			assertThat(tabs.tabCount).isEqualTo(3)
-			assertThat(tabs.getComponentAt(Frame.TAB_PATH_PREVIEW)).isInstanceOf(PathPreviewPanel::class)
-			assertThat(tabs.getComponentAt(Frame.TAB_WARNINGS)).isSameInstanceAs(frame.warningPanel)
-			assertThat(tabs.getComponentAt(Frame.TAB_TIMELINE)).isInstanceOf(JLabel::class)
-			assertThat(tabs.getTitleAt(Frame.TAB_PATH_PREVIEW)).isEqualTo(Frame.TAB_TITLE_PATH_PREVIEW)
-			assertThat(tabs.getTitleAt(Frame.TAB_WARNINGS)).isEqualTo(Frame.TAB_TITLE_WARNINGS)
-			assertThat(tabs.getTitleAt(Frame.TAB_TIMELINE)).isEqualTo(Frame.TAB_TITLE_TIMELINE)
+			assertThat(tabs.getComponentAt(BottomPane.TAB_PATH_PREVIEW)).isInstanceOf(PathPreviewPanel::class)
+			assertThat(tabs.getComponentAt(BottomPane.TAB_WARNINGS)).isSameInstanceAs(frame.warningPanel)
+			assertThat(tabs.getComponentAt(BottomPane.TAB_TIMELINE)).isInstanceOf(JLabel::class)
+			assertThat(tabs.getTitleAt(BottomPane.TAB_PATH_PREVIEW)).isEqualTo(BottomPane.TAB_TITLE_PATH_PREVIEW)
+			assertThat(tabs.getTitleAt(BottomPane.TAB_WARNINGS)).isEqualTo(BottomPane.TAB_TITLE_WARNINGS)
+			assertThat(tabs.getTitleAt(BottomPane.TAB_TIMELINE)).isEqualTo(BottomPane.TAB_TITLE_TIMELINE)
 			assertTabMode(simulation = false)
 		}
 	}
@@ -408,7 +408,7 @@ class FrameTest : AbstractFrameTestBase() {
 			frame.setContext(context)
 			assertTabMode(simulation = true)
 			// The EventTimelinePanel replaces the placeholder (Issue #1421)
-			assertThat(frame.bottomTabs.getComponentAt(Frame.TAB_TIMELINE)).isInstanceOf(EventTimelinePanel::class)
+			assertThat(frame.bottomTabs.getComponentAt(BottomPane.TAB_TIMELINE)).isInstanceOf(EventTimelinePanel::class)
 		}
 		runOnEDT { frame.stopSimulation() }
 		context.close()
@@ -429,7 +429,7 @@ class FrameTest : AbstractFrameTestBase() {
 			frame.setContext(editContext)
 			// Same frame in both modes (Issue #1421): no tab comes or goes
 			assertThat(frame.bottomTabs.tabCount).isEqualTo(3)
-			assertThat(frame.bottomTabs.getComponentAt(Frame.TAB_TIMELINE)).isInstanceOf(EventTimelinePanel::class)
+			assertThat(frame.bottomTabs.getComponentAt(BottomPane.TAB_TIMELINE)).isInstanceOf(EventTimelinePanel::class)
 			assertTabMode(simulation = false)
 			// StatusBar must still be visible after returning to editing mode
 			assertThat(frame.statusBar.isVisible).isTrue()
@@ -451,9 +451,9 @@ class FrameTest : AbstractFrameTestBase() {
 			frame.setContext(context)
 			frame.showCollisionWarning(advisory, autoPause = true, sound = false)
 			frame.showCollisionWarning(advisory, autoPause = true, sound = false)
-			assertThat(frame.bottomTabs.getTitleAt(Frame.TAB_WARNINGS)).isEqualTo("Warnings (2)")
+			assertThat(frame.bottomTabs.getTitleAt(BottomPane.TAB_WARNINGS)).isEqualTo("Warnings (2)")
 			frame.warningPanel.clearWarnings()
-			assertThat(frame.bottomTabs.getTitleAt(Frame.TAB_WARNINGS)).isEqualTo(Frame.TAB_TITLE_WARNINGS)
+			assertThat(frame.bottomTabs.getTitleAt(BottomPane.TAB_WARNINGS)).isEqualTo(BottomPane.TAB_TITLE_WARNINGS)
 		}
 		runOnEDT { frame.stopSimulation() }
 		context.close()
@@ -470,11 +470,11 @@ class FrameTest : AbstractFrameTestBase() {
 			)
 		runOnEDT {
 			frame.setContext(context)
-			frame.bottomTabs.selectedIndex = Frame.TAB_TIMELINE
+			frame.bottomTabs.selectedIndex = BottomPane.TAB_TIMELINE
 			frame.showCollisionWarning(advisory, autoPause = true, sound = false)
-			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(Frame.TAB_TIMELINE)
+			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(BottomPane.TAB_TIMELINE)
 			frame.showCollisionWarning(critical, autoPause = true, sound = false)
-			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(Frame.TAB_WARNINGS)
+			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(BottomPane.TAB_WARNINGS)
 		}
 		runOnEDT { frame.stopSimulation() }
 		context.close()
@@ -513,10 +513,10 @@ class FrameTest : AbstractFrameTestBase() {
 	/** Checks the bottom tabs' enabled and selected state for one mode (Issue #1421). */
 	private fun assertTabMode(simulation: Boolean) {
 		val tabs = frame.bottomTabs
-		assertThat(tabs.isEnabledAt(Frame.TAB_PATH_PREVIEW)).isEqualTo(!simulation)
-		assertThat(tabs.isEnabledAt(Frame.TAB_WARNINGS)).isEqualTo(simulation)
-		assertThat(tabs.isEnabledAt(Frame.TAB_TIMELINE)).isEqualTo(simulation)
-		assertThat(tabs.selectedIndex).isEqualTo(if (simulation) Frame.TAB_TIMELINE else Frame.TAB_PATH_PREVIEW)
+		assertThat(tabs.isEnabledAt(BottomPane.TAB_PATH_PREVIEW)).isEqualTo(!simulation)
+		assertThat(tabs.isEnabledAt(BottomPane.TAB_WARNINGS)).isEqualTo(simulation)
+		assertThat(tabs.isEnabledAt(BottomPane.TAB_TIMELINE)).isEqualTo(simulation)
+		assertThat(tabs.selectedIndex).isEqualTo(if (simulation) BottomPane.TAB_TIMELINE else BottomPane.TAB_PATH_PREVIEW)
 	}
 
 	@Test
@@ -629,8 +629,8 @@ class FrameTest : AbstractFrameTestBase() {
 	@Test
 	@DisplayName("the tab area starts at 30 percent of the window height, at least 200 px")
 	fun defaultBottomHeightFollowsWindowHeight() {
-		assertThat(Frame.defaultBottomHeight(2000)).isEqualTo(600)
-		assertThat(Frame.defaultBottomHeight(500)).isEqualTo(Frame.DEFAULT_BOTTOM_HEIGHT)
+		assertThat(BottomPane.defaultBottomHeight(2000)).isEqualTo(600)
+		assertThat(BottomPane.defaultBottomHeight(500)).isEqualTo(BottomPane.DEFAULT_BOTTOM_HEIGHT)
 	}
 
 	@Test
