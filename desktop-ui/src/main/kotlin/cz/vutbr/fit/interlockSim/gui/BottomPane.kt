@@ -149,10 +149,28 @@ internal class BottomPane(
 		}
 	}
 
-	/** Applies [height] as the tab-area height, keeping the smallest usable value. */
-	fun setBottomHeight(height: Int) {
-		bottomTabs.preferredSize = Dimension(0, height.coerceAtLeast(MIN_BOTTOM_HEIGHT))
+	/**
+	 * Applies [savedHeight] as the restored tab-area height for a [windowHeight]-pixel-tall window
+	 * (PR #1430 review): clamped between the smallest usable tab height and what still leaves the
+	 * canvas its minimum (the saved height was measured against the window it was saved with, and a
+	 * maximized restore on another screen can come back smaller). A `null` saved height falls back
+	 * to the first-start share of [windowHeight], so a restore never lands on a flat default.
+	 */
+	fun setRestoredBottomHeight(
+		savedHeight: Int?,
+		windowHeight: Int
+	) {
+		val restored =
+			savedHeight
+				?.coerceAtLeast(MIN_BOTTOM_HEIGHT)
+				?.coerceAtMost(maxUsableBottomHeight(windowHeight))
+				?: defaultBottomHeight(windowHeight)
+		bottomTabs.preferredSize = Dimension(0, restored)
 	}
+
+	/** The largest tab-area height a [windowHeight]-pixel-tall window can still use. */
+	private fun maxUsableBottomHeight(windowHeight: Int): Int =
+		(windowHeight - MIN_CANVAS_HEIGHT - MIN_BOTTOM_HEIGHT).coerceAtLeast(MIN_BOTTOM_HEIGHT)
 
 	/** Applies the first-start tab-area height for a window [windowHeight] pixels high. */
 	fun setInitialBottomHeight(windowHeight: Int) {
@@ -188,10 +206,10 @@ internal class BottomPane(
 		private const val PERCENT = 100
 
 		/** Smallest height of the tab area: one tab row and a few lines of content. */
-		private const val MIN_BOTTOM_HEIGHT = 80
+		internal const val MIN_BOTTOM_HEIGHT = 80
 
 		/** Smallest height the split bar leaves to the canvas. */
-		private const val MIN_CANVAS_HEIGHT = 120
+		internal const val MIN_CANVAS_HEIGHT = 120
 
 		/** Warnings tab title: the plain title with no warnings, else the title with the count. */
 		internal fun warningsTabTitle(count: Int): String =

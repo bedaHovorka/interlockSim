@@ -37,6 +37,12 @@ internal class WindowLifecycle(
 	private var lastNormalBounds: Rectangle? = null
 
 	/**
+	 * Terminal JVM exit; replaceable so tests can watch the exit instead of leaving the worker
+	 * (same seam pattern as [SimulationRunner nanoTime]).
+	 */
+	internal var exit: (Int) -> Unit = { System.exit(it) }
+
+	/**
 	 * Sets the start bounds (Issue #1421): the saved layout when it still lies on a connected
 	 * screen, else [WindowGeometry.initialBounds] on the usable screen area.
 	 */
@@ -48,9 +54,7 @@ internal class WindowLifecycle(
 			if (saved.maximized) {
 				frame.extendedState = frame.extendedState or JFrame.MAXIMIZED_BOTH
 			}
-			saved.bottomHeight?.let { height ->
-				bottomPane.setBottomHeight(height)
-			}
+			bottomPane.setRestoredBottomHeight(saved.bottomHeight, frame.height)
 		} else {
 			frame.bounds = WindowGeometry.initialBounds(WindowGeometry.usableScreen())
 			bottomPane.setInitialBottomHeight(frame.height)
@@ -144,6 +148,6 @@ internal class WindowLifecycle(
 		teardown()
 		saveWindowState()
 		frame.dispose()
-		System.exit(0)
+		exit(0)
 	}
 }
