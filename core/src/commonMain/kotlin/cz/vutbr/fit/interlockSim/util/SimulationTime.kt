@@ -26,4 +26,15 @@ import cz.ksimulantenbande.kdisco.Process
  *   folded in the NaN and try/catch variants; issue #1123 made it public so `:desktop-ui`'s
  *   `AnimationStateCapture` shares it instead of keeping its own try/catch copy.
  */
-fun currentSimulationTime(fallback: Double = 0.0): Double = runCatching { Process.time() }.getOrDefault(fallback)
+fun currentSimulationTime(fallback: Double = 0.0): Double = currentSimulationTimeOrNull() ?: fallback
+
+/**
+ * Returns the current simulation time, or `null` when no authoritative timestamp exists on the
+ * calling thread — off a running simulation [Process.time] fails and this catches it, like
+ * [currentSimulationTime], but reports "no reading" instead of a fallback value (issue #1421, PR
+ * #1430 review: the desktop pacing publishes a gap only with an authoritative timestamp, so an
+ * off-thread wall-paced sleep can no longer invent simulation time).
+ *
+ * `runCatching` catches every [Throwable]; [Process.time] throws only a `DiscoException` outside a run.
+ */
+fun currentSimulationTimeOrNull(): Double? = runCatching { Process.time() }.getOrNull()

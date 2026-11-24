@@ -14,7 +14,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationPacing
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.util.currentSimulationTime
+import cz.vutbr.fit.interlockSim.util.currentSimulationTimeOrNull
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -35,8 +35,12 @@ import kotlin.concurrent.withLock
  *    [speedMultiplier] and [isPaused] concurrently with the simulation thread.
  *    [speedMultiplier] is `@Volatile`; [isPaused] and step-request flags are
  *    guarded by [lock].
- *  - [throttle] and [awaitIfPaused] are called from the simulation thread only,
- *    via the [SimulationContext.run] `beforeEvent` hook.
+ *  - [throttle] and [awaitIfPaused] are called from the simulation thread, via the
+ *    [SimulationContext.run] `beforeEvent` hook, and from the dispatcher drivers' own threads
+ *    ([cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] paces the wall budget it has left;
+ *    see the core `SimulationController` threading contract). Only a caller that has an
+ *    authoritative engine timestamp on its own thread publishes a paced gap (issue #1421, PR
+ *    #1430 review).
  */
 class SimulationRunner(
 	private val context: SimulationContext
@@ -96,6 +100,14 @@ class SimulationRunner(
 
 	/** Wall clock for [pacedSimulationTime]; replaceable so tests control it. */
 	internal var nanoTime: () -> Long = System::nanoTime
+
+	/**
+	 * The run's authoritative simulation time on the calling thread, or `null` when none exists
+	 * (off the simulation thread, unit tests). Only a non-null reading publishes a paced gap, so
+	 * the GUI clock can never invent time. Replaceable so tests control it (same seam as
+	 * [nanoTime]); the production default comes from [currentSimulationTimeOrNull].
+	 */
+	internal var authoritativeSimTime: () -> Double? = { currentSimulationTimeOrNull() }
 
 	@Volatile
 	private var speedMultiplierBacking: Double = DEFAULT_SPEED
@@ -363,7 +375,8 @@ class SimulationRunner(
 	/**
 	 * Sleep wall-clock time proportional to the simulation delta scaled by
 	 * [speedMultiplier]. Called from the `beforeEvent` hook after [awaitIfPaused]
-	 * has already handled any pause state for this cycle.
+	 * has already handled any pause state for this cycle, and from the dispatcher
+	 * drivers' own threads with the wall budget they have left.
 	 *
 	 * @param simDeltaSeconds Simulation time advanced since the previous
 	 *     tick, in seconds. Zero or negative values are a no-op.
@@ -373,20 +386,22 @@ class SimulationRunner(
 		if (simDeltaSeconds <= 0.0) return
 		val speed = speedMultiplierBacking
 		val sleepMs = Math.round(simDeltaSeconds / speed * MILLIS_PER_SECOND)
-		// Publish the gap before sleeping through it, so the GUI clock can follow it (Issue #1421).
-		// The gap ends at the run's current time: the run loop advances the clock to the next event
-		// before it throttles, and the dispatcher loops throttle after their own time step. Read on
-		// the simulation thread, where kDisco's thread-local time works; elsewhere (tests) fall back
-		// to adding the gap to the previous one's end.
-		val previous = pacedGap
-		val end = currentSimulationTime(fallback = previous.baseTime + previous.delta + simDeltaSeconds)
-		pacedGap =
-			PacedGap(
-				baseTime = end - simDeltaSeconds,
-				delta = simDeltaSeconds,
-				startNanos = nanoTime(),
-				sleepNanos = (simDeltaSeconds / speed * NANOS_PER_SECOND).toLong()
-			)
+		// Publish the gap before sleeping through it, so the GUI clock can follow it (Issue
+		// #1421). Published only with an authoritative engine timestamp on the calling thread:
+		// the gap ends at the run's current time there (the run loop advances the clock to the
+		// next event before it throttles). The dispatcher drivers pace their residual wall
+		// budget on their own thread, where that read fails -- their sleep is wall pacing, not
+		// sim-time position, so they sleep without publishing and the GUI clock holds at the
+		// last authoritative gap (PR #1430 review).
+		authoritativeSimTime()?.let { end ->
+			pacedGap =
+				PacedGap(
+					baseTime = end - simDeltaSeconds,
+					delta = simDeltaSeconds,
+					startNanos = nanoTime(),
+					sleepNanos = (simDeltaSeconds / speed * NANOS_PER_SECOND).toLong()
+				)
+		}
 		if (sleepMs > 0) {
 			Thread.sleep(sleepMs)
 		}

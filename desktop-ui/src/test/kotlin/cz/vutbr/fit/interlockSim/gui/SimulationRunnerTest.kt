@@ -513,23 +513,109 @@ class SimulationRunnerTest {
 	@DisplayName("pacedSimulationTime moves through each paced gap and stops at its end")
 	fun pacedSimulationTimeFollowsGaps() {
 		var nowNanos = 0L
+		var engineTime = 0.0
 		runner.nanoTime = { nowNanos }
+		runner.authoritativeSimTime = { engineTime }
 		runner.speedMultiplier = SimulationRunner.MAX_SPEED
 		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
 
-		// Off the simulation thread the gaps add up: the first gap covers 0..2 s
+		// The first authoritative gap covers 40..42 s (engine at 42 s, delta 2)
+		engineTime = 42.0
 		runner.throttle(2.0)
 		val gapNanos = (2.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
-		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(40.0)
 		nowNanos += gapNanos / 2
-		assertThat(runner.pacedSimulationTime()).isCloseTo(1.0, 1e-6)
+		assertThat(runner.pacedSimulationTime()).isCloseTo(41.0, 1e-6)
 		nowNanos += gapNanos * 10
-		assertThat(runner.pacedSimulationTime()).isEqualTo(2.0)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(42.0)
 
-		// The next gap starts where the last one ended
+		// The next gap is anchored at the engine clock, not at the last gap's end
+		engineTime = 45.0
 		runner.throttle(3.0)
-		assertThat(runner.pacedSimulationTime()).isEqualTo(2.0)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(42.0)
 		nowNanos += gapNanos * 10
-		assertThat(runner.pacedSimulationTime()).isEqualTo(5.0)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(45.0)
+	}
+
+	@Test
+	@DisplayName("throttle without an authoritative engine timestamp publishes no gap")
+	fun throttleWithoutAuthoritativeTimePublishesNothing() {
+		var nowNanos = 0L
+		runner.nanoTime = { nowNanos }
+		runner.speedMultiplier = SimulationRunner.MAX_SPEED
+
+		// A test thread reads no engine timestamp (the production analog is the dispatcher
+		// thread's residual wall budget, PR #1430 review): the clock must hold at zero.
+		runner.throttle(2.0)
+		val gapNanos = (2.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
+		nowNanos += gapNanos / 2
+		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
+	}
+
+	@Test
+	@DisplayName("an off-thread residual call cannot push the clock past an existing gap")
+	fun offThreadThrottleCannotPushExistingGap() {
+		var nowNanos = 0L
+		var engineTime: Double? = 6.0
+		runner.nanoTime = { nowNanos }
+		runner.authoritativeSimTime = { engineTime }
+		runner.speedMultiplier = SimulationRunner.MAX_SPEED
+		runner.throttle(1.0)
+		val gapNanos = (1.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(6.0)
+
+		// The dispatcher sleeps a 2 s residual off the simulation thread: no gap is published,
+		// so the shown time stays anchored at the authoritative 6 s while the sleep passes.
+		engineTime = null
+		runner.throttle(2.0)
+		nowNanos += (2.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong() * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(6.0)
+	}
+
+	@Test
+	@DisplayName("successive authoritative gaps re-anchor and never stack")
+	fun successiveAuthoritativeGapsReanchor() {
+		var nowNanos = 0L
+		var engineTime = 8.1
+		runner.nanoTime = { nowNanos }
+		runner.authoritativeSimTime = { engineTime }
+		runner.speedMultiplier = SimulationRunner.MAX_SPEED
+		runner.throttle(0.1)
+		val firstNanos = (0.1 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
+		nowNanos += firstNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(8.1)
+
+		// The engine is already at 8.3 while the caller's delta (a residual dispatcher budget)
+		// is only 0.09: the gap must span 8.21..8.3, not stack 0.09 on the old end 8.1.
+		engineTime = 8.3
+		runner.throttle(0.09)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(8.21)
+		nowNanos += firstNanos
+		assertThat(runner.pacedSimulationTime()).isCloseTo(8.3, 1e-6)
+	}
+
+	@Test
+	@DisplayName("a mid-gap off-thread gap holds the previous gap's end")
+	fun offThreadMidGapHoldsPreviousEnd() {
+		var nowNanos = 0L
+		var engineTime: Double? = 6.0
+		runner.nanoTime = { nowNanos }
+		runner.authoritativeSimTime = { engineTime }
+		runner.speedMultiplier = SimulationRunner.MAX_SPEED
+		runner.throttle(1.0)
+		val gapNanos = (1.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(6.0)
+
+		// Same as the push test, but read mid-sleep of the suppressed gap: the clock holds at
+		// the end of the only real gap instead of interpolating a fictional one.
+		engineTime = null
+		runner.throttle(4.0)
+		val suppressedNanos = (4.0 / SimulationRunner.MAX_SPEED * 1_000_000_000).toLong()
+		nowNanos += suppressedNanos / 2
+		assertThat(runner.pacedSimulationTime()).isEqualTo(6.0)
 	}
 }
