@@ -24,7 +24,6 @@ import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
-import java.awt.Rectangle
 import java.awt.Toolkit
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
@@ -33,7 +32,6 @@ import java.awt.event.WindowEvent
 import java.beans.PropertyChangeListener
 import javax.swing.BoxLayout
 import javax.swing.JFrame
-import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.JTabbedPane
 import javax.swing.SwingUtilities
@@ -230,8 +228,28 @@ class Frame internal constructor(
 	internal val sideDock: SideDock =
 		SideDock(simulationControlPanel, metricsDashboardPanel, dispatcherControlPanel, conflictResolutionPanel)
 
-	/** Last bounds while the window was neither maximized nor iconified; saved on exit. */
-	private var lastNormalBounds: Rectangle? = null
+	/**
+	 * Window chrome lifecycle (Issue #1421): the start geometry, the normal-bounds tracking and
+	 * the close path live in [WindowLifecycle]; [Frame] keeps its two event listeners and the
+	 * [requestClose] menu seam.
+	 */
+	private val windowLifecycle: WindowLifecycle =
+		WindowLifecycle(
+			frame = this,
+			store = windowStateStore,
+			bottomPane = bottomPane,
+			isDirty = { modificationTracker.isDirty() },
+			save = { (jMenuBar as MenuBar).triggerSave() },
+			teardown = {
+				stopSimulation() // Stop any running simulation before exit
+				currentSimulationContext?.close() // Release simulation resources before JVM exit
+				stopAnimationUpdates() // Stop Frame's 10 Hz timer
+				railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
+				// Issue #1072: close the shared Ollama/Koog executor so its worker threads do not
+				// outlive the application. Terminal for this JVM process (System.exit follows).
+				DispatcherRunLifecycle.closeSharedOllamaExecutor()
+			}
+		)
 
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
 	internal val simulationController: SimulationController =
@@ -320,7 +338,7 @@ class Frame internal constructor(
 		// height the DispatcherControlPanel line steals vertical space from the scrollable
 		// RailwayNetGridCanvas, hiding station tracks (PR #801 review comment).
 		// Issue #1421: the start size comes from the screen (or the saved layout), not a fixed 1024x818.
-		applyInitialGeometry()
+		windowLifecycle.applyInitialGeometry()
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE) // Handle close event manually
 		setLayout(BorderLayout())
 		jMenuBar = MenuBar()
@@ -392,11 +410,11 @@ class Frame internal constructor(
 				override fun componentResized(e: ComponentEvent) {
 					// When frame is resized, refresh grid canvas to handle scrollbar appearance/disappearance
 					railwayNetGridCanvas.revalidate()
-					rememberNormalBounds()
+					windowLifecycle.rememberNormalBounds()
 				}
 
 				override fun componentMoved(e: ComponentEvent) {
-					rememberNormalBounds()
+					windowLifecycle.rememberNormalBounds()
 				}
 			}
 		)
@@ -405,7 +423,7 @@ class Frame internal constructor(
 		addWindowListener(
 			object : WindowAdapter() {
 				override fun windowClosing(e: WindowEvent) {
-					handleWindowClosing()
+					requestClose()
 				}
 			}
 		)
@@ -770,47 +788,6 @@ class Frame internal constructor(
 	}
 
 	/**
-	 * Sets the start bounds (Issue #1421): the saved layout when it still lies on a connected
-	 * screen, else [WindowGeometry.initialBounds] on the usable screen area.
-	 */
-	private fun applyInitialGeometry() {
-		val saved = windowStateStore?.load()
-		if (saved != null && WindowGeometry.isOnScreen(saved.bounds, WindowGeometry.screenBounds())) {
-			bounds = saved.bounds
-			lastNormalBounds = Rectangle(saved.bounds)
-			if (saved.maximized) {
-				extendedState = extendedState or MAXIMIZED_BOTH
-			}
-			saved.bottomHeight?.let { height ->
-				bottomPane.setBottomHeight(height)
-			}
-		} else {
-			bounds = WindowGeometry.initialBounds(WindowGeometry.usableScreen())
-			bottomPane.setInitialBottomHeight(height)
-		}
-	}
-
-	/** Records the bounds while the window is in its normal state, so a maximized exit saves them. */
-	private fun rememberNormalBounds() {
-		if (extendedState and (MAXIMIZED_BOTH or ICONIFIED) == 0 && isShowing) {
-			lastNormalBounds = bounds
-		}
-	}
-
-	/** Saves bounds, maximized state and tab-area height on exit (Issue #1421). */
-	private fun saveWindowState() {
-		val store = windowStateStore ?: return
-		val maximized = extendedState and MAXIMIZED_BOTH == MAXIMIZED_BOTH
-		store.save(
-			WindowStateStore.WindowState(
-				bounds = lastNormalBounds ?: bounds,
-				maximized = maximized,
-				bottomHeight = bottomPane.rememberBottomHeight()
-			)
-		)
-	}
-
-	/**
 	 * Updates the window title to reflect current file and dirty state.
 	 */
 	private fun updateTitle() {
@@ -840,81 +817,9 @@ class Frame internal constructor(
 	}
 
 	/**
-	 * Handles window closing event.
-	 * Shows confirmation dialog if there are unsaved changes.
-	 *
-	 * Thread safety: Ensures execution on EDT for Swing component access.
+	 * Handles a close request: confirms unsaved changes and exits, or stays open (Issue #1421
+	 * layout save lives in [WindowLifecycle]; PR #1430 review). Also the route menu Exit takes,
+	 * so both exit paths confirm and save the layout.
 	 */
-	private fun handleWindowClosing() {
-		// Defensive programming: ensure we're on the Event Dispatch Thread
-		if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
-			javax.swing.SwingUtilities.invokeLater { handleWindowClosing() }
-			return
-		}
-
-		if (modificationTracker.isDirty()) {
-			val result =
-				JOptionPane.showConfirmDialog(
-					this,
-					"The railway network has unsaved changes.\n\n" +
-						"Do you want to save your changes before closing?",
-					"Unsaved Changes",
-					JOptionPane.YES_NO_CANCEL_OPTION,
-					JOptionPane.WARNING_MESSAGE
-				)
-
-			when (result) {
-				JOptionPane.YES_OPTION -> {
-					// Trigger save action
-					saveAndExit()
-				}
-
-				JOptionPane.NO_OPTION -> {
-					// Exit without saving
-					exitWithoutSaving()
-				}
-
-				JOptionPane.CANCEL_OPTION -> {
-					// Do nothing - keep window open
-					return
-				}
-			}
-		} else {
-			// No unsaved changes - exit immediately
-			exitWithoutSaving()
-		}
-	}
-
-	/**
-	 * Attempts to save the current context and then exits.
-	 * If save fails, the window remains open.
-	 */
-	private fun saveAndExit() {
-		// Get the save action from menu bar and trigger it
-		val menuBar = jMenuBar as MenuBar
-		val saved = menuBar.triggerSave()
-
-		// Only exit if save was successful
-		if (saved) {
-			stopAnimationUpdates() // Stop Frame's 10 Hz timer
-			railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
-			exitWithoutSaving()
-		}
-	}
-
-	/**
-	 * Exits the application without saving.
-	 */
-	private fun exitWithoutSaving() {
-		stopSimulation() // Stop any running simulation before exit
-		currentSimulationContext?.close() // Release simulation resources before JVM exit
-		stopAnimationUpdates() // Stop Frame's 10 Hz timer
-		railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
-		// Issue #1072: close the shared Ollama/Koog executor so its worker threads do not outlive
-		// the application. Terminal for this JVM process (System.exit follows immediately).
-		DispatcherRunLifecycle.closeSharedOllamaExecutor()
-		saveWindowState()
-		dispose()
-		System.exit(0)
-	}
+	internal fun requestClose() = windowLifecycle.requestClose()
 }
