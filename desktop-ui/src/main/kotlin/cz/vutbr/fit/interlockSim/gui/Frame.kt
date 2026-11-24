@@ -270,13 +270,16 @@ class Frame internal constructor(
 			onStateChanged = { state ->
 				// Read synchronously, on the calling thread, before any hand-off to the EDT
 				// (see SimulationController.lastStopWasNatural kdoc for why this ordering is
-				// race-free): captures which RunEndCause produced this STOPPED transition.
+				// race-free): captures which RunEndCause produced this STOPPED transition, and
+				// the run's final paced position the controller kept before it cleared the
+				// runner (PR #1430 review: the clock's final refresh reads it).
 				val runEndCause =
 					if (simulationController.lastStopWasNatural) {
 						RunEndCause.NATURAL_COMPLETION
 					} else {
 						RunEndCause.MANUAL_STOP
 					}
+				val finalPacedTime = simulationController.lastRunFinalPacedTime
 				runOnEdt {
 					when (state) {
 						SimulationController.SimulationStatus.RUNNING -> {
@@ -306,8 +309,9 @@ class Frame internal constructor(
 							// behind the run's real end, because stop() clears the caches a bare
 							// pause never re-captured. The next startSimulation() restarts via
 							// ensureAnimationRunning().
-							// Issue #1421: show the time the run reached before the clock timer stops.
-							refreshSimulationTime()
+							// Issue #1421: show the time the run reached before the clock timer stops;
+							// the final paced position covers the gap's tail the 10 Hz timer never saw.
+							refreshSimulationTime(finalPacedTime)
 							stopAnimationUpdates()
 							railwayNetGridCanvas.captureFinalFrameAndPause()
 							// One last dashboard poll, then stop (Issue #675 + #1326).
