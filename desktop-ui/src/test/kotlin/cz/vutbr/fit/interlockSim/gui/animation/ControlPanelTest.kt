@@ -164,4 +164,12 @@ class ControlPanelTest {
 		(0 until panel.componentCount)
 			.mapNotNull { panel.getComponent(it) as? JLabel }
 			.firstOrNull { it.text.startsWith("Status:") }
+
+	@Test
+	@DisplayName("Stop never takes keyboard focus, so Space pauses instead of stopping the run")
+	fun stopButtonIsNotFocusable() {
+		SwingUtilities.invokeAndWait {
+			assertThat(findStopButton()!!.isFocusable).isFalse()
+		}
+	}
 }

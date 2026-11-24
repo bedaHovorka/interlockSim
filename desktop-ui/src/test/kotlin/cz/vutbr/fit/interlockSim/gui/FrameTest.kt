@@ -665,4 +665,14 @@ class FrameTest : AbstractFrameTestBase() {
 		simContext.close()
 		editContext.close()
 	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("the canvas can take keyboard focus, so the shortcuts are not lost to the Delta field")
+	fun canvasIsFocusable() {
+		runOnEDT {
+			// Issue #1421: SimulationKeyBindings ignore keys while a text field has focus
+			assertThat(frame.railwayNetGridCanvas.isFocusable).isTrue()
+		}
+	}
 }

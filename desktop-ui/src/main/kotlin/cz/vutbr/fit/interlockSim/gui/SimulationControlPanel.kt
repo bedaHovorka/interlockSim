@@ -262,6 +262,10 @@ class SimulationControlPanel : JPanel() {
 		}
 		pauseRow.add(JLabel("Delta:"))
 		pauseRow.add(stepTimeDeltaSpinner)
+
+		// The run buttons never take keyboard focus (Issue #1421): a focused button turns Space into
+		// its own click, which would steal the Space / S / T shortcuts of SimulationKeyBindings.
+		listOf(pauseButton, stepEventButton, stepTimeButton).forEach { it.isFocusable = false }
 	}
 
 	/**

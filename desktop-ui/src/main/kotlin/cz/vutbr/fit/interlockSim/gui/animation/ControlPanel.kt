@@ -78,6 +78,9 @@ class ControlPanel : JPanel() {
 		// Player stop symbol instead of text (Issue #1421); "Stop" stays the accessible name
 		PlayerIcon.apply(stopButton, PlayerIcon.Symbol.STOP, "Stop")
 		stopButton.toolTipText = "Stop the simulation"
+		// Never takes keyboard focus (Issue #1421): a focused button turns Space into its own click,
+		// so the Space pause shortcut stopped the run instead of pausing it.
+		stopButton.isFocusable = false
 		stopButton.isEnabled = false
 		stopButton.addActionListener { onStop?.invoke() }
 		add(stopButton)

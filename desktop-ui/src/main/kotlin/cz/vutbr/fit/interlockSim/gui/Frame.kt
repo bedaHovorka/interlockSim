@@ -534,6 +534,18 @@ class Frame internal constructor(
 		// dock (Issue #1421) and shows itself when an active conflict requires dispatcher attention.
 		conflictResolutionPanel.isVisible = false
 
+		// Keyboard focus rests on the canvas (Issue #1421). The shortcuts of SimulationKeyBindings ignore
+		// keys while a text field has focus, and the Delta spinner was the first focusable component,
+		// so Space did nothing. A click on the canvas takes the focus back from the Delta field.
+		railwayNetGridCanvas.isFocusable = true
+		railwayNetGridCanvas.addMouseListener(
+			object : java.awt.event.MouseAdapter() {
+				override fun mousePressed(e: java.awt.event.MouseEvent) {
+					railwayNetGridCanvas.requestFocusInWindow()
+				}
+			}
+		)
+
 		// Add component listener to refresh canvas when frame is resized
 		addComponentListener(
 			object : ComponentAdapter() {
@@ -602,6 +614,8 @@ class Frame internal constructor(
 
 		// Install keyboard shortcuts for simulation control (Phase 3.1, Issue #193)
 		simulationKeyBindings.install(rootPane)
+		// The shortcuts need the focus outside any text field (Issue #1421)
+		railwayNetGridCanvas.requestFocusInWindow()
 
 		contentPane.revalidate()
 		contentPane.repaint()

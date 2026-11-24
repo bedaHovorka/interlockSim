@@ -312,4 +312,14 @@ class SimulationControlPanelButtonsTest {
 		assertThat(parseException).isNotNull()
 		assertThat(runner.stepTimeDelta).isEqualTo(1.0)
 	}
+
+	@Test
+	@DisplayName("the run buttons never take keyboard focus, so Space, S and T reach the shortcuts")
+	fun runButtonsAreNotFocusable() {
+		SwingUtilities.invokeAndWait {
+			listOf("Pause", "Step Event", "Step Time").forEach { name ->
+				assertThat(findButton(name).isFocusable, name).isFalse()
+			}
+		}
+	}
 }
