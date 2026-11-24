@@ -50,7 +50,7 @@ internal class SimulationRunWiring(
 	private val dashboardPanel: MetricsDashboardPanel,
 	private val conflictResolutionPanel: ConflictResolutionPanel,
 	/** Owner for the modal dialogs; today [Frame] itself (SemiAutoApprovalDialog needs it). */
-	private val dialogOwner: Frame
+	private val dialogOwner: Frame?
 ) {
 	private val logger = KotlinLogging.logger {}
 

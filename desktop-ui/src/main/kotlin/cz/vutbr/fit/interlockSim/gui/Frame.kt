@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
+import java.awt.Rectangle
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
@@ -98,7 +99,25 @@ import javax.swing.SwingUtilities
  */
 class Frame internal constructor(
 	private val windowStateStore: WindowStateStore?
-) : JFrame(PROGRAM_FULL_NAME) {
+) : JFrame(PROGRAM_FULL_NAME),
+	WindowHandle {
+	// The WindowHandle members resolve explicitly: Kotlin does not accept the inherited
+	// Java bean getters/setters as interface property implementations on their own.
+	override var windowBounds: Rectangle
+		get() = bounds
+		set(value) {
+			bounds = value
+		}
+
+	override var windowState: Int
+		get() = extendedState
+		set(value) {
+			extendedState = value
+		}
+
+	override val windowShowing: Boolean
+		get() = isShowing
+
 	/**
 	 * A frame that does not read or write the saved window layout (tests, tools). The application
 	 * frame comes from Koin with a [WindowStateStore] (Issue #1421).
@@ -252,9 +271,10 @@ class Frame internal constructor(
 	 */
 	private val windowLifecycle: WindowLifecycle =
 		WindowLifecycle(
-			frame = this,
+			handle = this,
 			store = windowStateStore,
 			bottomPane = bottomPane,
+			dialogParent = this,
 			isDirty = { modificationTracker.isDirty() },
 			save = { (jMenuBar as MenuBar).triggerSave() },
 			teardown = {

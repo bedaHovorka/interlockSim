@@ -19,16 +19,20 @@ import javax.swing.SwingUtilities
  * maximized window, and the close path — unsaved-changes confirmation, save-and-exit and the
  * teardown exit that saves the window state.
  *
- * [Frame] keeps only the two event listeners (its own canvas revalidation and the close event) and
- * forwards them here. [teardown] bundles Frame's own stop/cleanup lines so this class stays free of
- * Frame internals; [isDirty] and [save] read the tracker and the menu bar lazily at close time.
+ * The window is reached through [WindowHandle], so the headless tests drive the close path on a
+ * fake (PR #1430 coverage). [Frame] keeps only the two event listeners (its own canvas revalidation
+ * and the close event) and forwards them here. [teardown] bundles Frame's own stop/cleanup lines so
+ * this class stays free of Frame internals; [isDirty] and [save] read the tracker and the menu bar
+ * lazily at close time.
  *
  * **All methods are EDT-only.**
  */
 internal class WindowLifecycle(
-	private val frame: JFrame,
+	private val handle: WindowHandle,
 	private val store: WindowStateStore?,
 	private val bottomPane: BottomPane,
+	/** Parent component for the modal unsaved-changes dialog; today [Frame] itself. */
+	private val dialogParent: java.awt.Component?,
 	private val isDirty: () -> Boolean,
 	private val save: () -> Boolean,
 	private val teardown: () -> Unit
@@ -49,32 +53,32 @@ internal class WindowLifecycle(
 	fun applyInitialGeometry() {
 		val saved = store?.load()
 		if (saved != null && WindowGeometry.isOnScreen(saved.bounds, WindowGeometry.screenBounds())) {
-			frame.bounds = saved.bounds
+			handle.windowBounds = saved.bounds
 			lastNormalBounds = Rectangle(saved.bounds)
 			if (saved.maximized) {
-				frame.extendedState = frame.extendedState or JFrame.MAXIMIZED_BOTH
+				handle.windowState = handle.windowState or JFrame.MAXIMIZED_BOTH
 			}
-			bottomPane.setRestoredBottomHeight(saved.bottomHeight, frame.height)
+			bottomPane.setRestoredBottomHeight(saved.bottomHeight, handle.windowBounds.height)
 		} else {
-			frame.bounds = WindowGeometry.initialBounds(WindowGeometry.usableScreen())
-			bottomPane.setRestoredBottomHeight(null, frame.height)
+			handle.windowBounds = WindowGeometry.initialBounds(WindowGeometry.usableScreen())
+			bottomPane.setRestoredBottomHeight(null, handle.windowBounds.height)
 		}
 	}
 
 	/** Records the bounds while the window is in its normal state, so a maximized exit saves them. */
 	fun rememberNormalBounds() {
-		if (frame.extendedState and (JFrame.MAXIMIZED_BOTH or JFrame.ICONIFIED) == 0 && frame.isShowing) {
-			lastNormalBounds = frame.bounds
+		if (handle.windowState and (JFrame.MAXIMIZED_BOTH or JFrame.ICONIFIED) == 0 && handle.windowShowing) {
+			lastNormalBounds = handle.windowBounds
 		}
 	}
 
 	/** Saves bounds, maximized state and tab-area height on exit (Issue #1421). */
 	fun saveWindowState() {
 		val store = store ?: return
-		val maximized = frame.extendedState and JFrame.MAXIMIZED_BOTH == JFrame.MAXIMIZED_BOTH
+		val maximized = handle.windowState and JFrame.MAXIMIZED_BOTH == JFrame.MAXIMIZED_BOTH
 		store.save(
 			WindowStateStore.WindowState(
-				bounds = lastNormalBounds ?: frame.bounds,
+				bounds = lastNormalBounds ?: handle.windowBounds,
 				maximized = maximized,
 				bottomHeight = bottomPane.rememberBottomHeight()
 			)
@@ -97,7 +101,7 @@ internal class WindowLifecycle(
 		if (isDirty()) {
 			val result =
 				JOptionPane.showConfirmDialog(
-					frame,
+					dialogParent,
 					"The railway network has unsaved changes.\n\n" +
 						"Do you want to save your changes before closing?",
 					"Unsaved Changes",
@@ -147,7 +151,7 @@ internal class WindowLifecycle(
 	private fun exitWithoutSaving() {
 		teardown()
 		saveWindowState()
-		frame.dispose()
+		handle.dispose()
 		exit(0)
 	}
 }
