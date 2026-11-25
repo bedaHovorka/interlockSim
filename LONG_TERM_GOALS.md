@@ -66,7 +66,7 @@ several dispatcher agents. See "Goal Stages" above and "Implementation Strategy"
 | 3 | **B** | Snapshot Collision Detection on a Separate Thread | J: Safety & Compliance | High | 🆕 Planned | 2 months |
 | 4 | — | Interlocking Validation and Generation | J: Safety & Compliance | High | 🆕 Open (#660) | 4 months |
 | 5 | — | Save and Restore Simulation State | I: System Operations | High | 🆕 Open (#666) | 3 months |
-| 6 | — | Performance Metrics Collection | F: Research & Analysis | High | 🟡 Replanned 2026-10-31, parallel with Goal 1B (#659) | 2 months |
+| 6 | — | Performance Metrics Collection | F: Research & Analysis | High | ✅ Complete (#659) | 2 months |
 | 7 | — | Simulation Speed Control | I: System Operations | High | ✅ Complete | 1 month |
 | 8 | — | Pause and Single-Step Simulation | I: System Operations | High | ✅ Complete | 1 month |
 | 9 | — | Automatic Conflict Detection and Resolution | A: Intelligent Automation | Critical | ✅ Complete | 4 months |
@@ -83,7 +83,7 @@ several dispatcher agents. See "Goal Stages" above and "Implementation Strategy"
 | 19 | — | Czech Timetable Import | D: Data Integration | High | 🆕 Open (#670) | 4 months |
 | 20 | — | Comprehensive Accessibility | B: User Experience | Medium | 🆕 Open (#671) | 3 months |
 
-**Total Development Estimate: 71 months (27 months complete — Goals 1, 1B, 2, 3, 7, 8, 9, and Goal 10's first stage; 44 months remaining, including the named stages 9B and 3B and the new Goal 12)**
+**Total Development Estimate: 71 months (29 months complete — Goals 1, 1B, 2, 3, 6, 7, 8, 9, and Goal 10's first stage; 42 months remaining, including the named stages 9B and 3B and the new Goal 12)**
 
 ---
 
@@ -225,7 +225,7 @@ Do not schedule Goal 5 as ready to start until these land.
 **Category:** F: Research & Analysis
 **Priority:** High *(re-scoped 2026-07-01 from Critical — not on Goal 10's dependency chain; tracked in #659)*
 **Development Estimate:** 2 months
-**Status:** 🟡 Replanned 2026-10-31 (#659) — runs in parallel with Goal 1B, must finish before Goal 9B starts
+**Status:** ✅ **COMPLETE (2026-11-25)** — parent issue #659; replanned 2026-10-31, ran in parallel with Goal 1B and finished before Goal 9B starts
 
 **User Value:**
 Users can automatically collect key performance indicators during simulation including delays, conflicts, throughput, and utilization. This provides quantitative data for research, capacity analysis, and optimization studies.
@@ -936,7 +936,7 @@ away from this phase.
 
 | Goal | Title | Months | Rationale | Tracking |
 |------|-------|--------|-----------|----------|
-| 6 | Performance Metrics | 2 | 🟡 Replanned 2026-10-31: parallel with Goal 1B (branch `goal-6` on `goal-1B`, #1180), no kDisco changes, SP2+SP4 -> SP6+SP5 -> SP7+SP8 -> SP3, critical path SP2 -> SP6 -> SP5 -> SP8; SP2, SP4, SP5, SP6, SP7, SP8 must merge before Goal 9B starts; foundation for Goals 13, 17, 18 | #659 |
+| 6 | Performance Metrics | 2 | ✅ **Complete 2026-11-25.** Replanned 2026-10-31: parallel with Goal 1B (branch `goal-6` on `goal-1B`, #1180), no kDisco changes, SP2+SP4 -> SP6+SP5 -> SP7+SP8 -> SP3, critical path SP2 -> SP6 -> SP5 -> SP8; SP2, SP4, SP5, SP6, SP7, SP8 must merge before Goal 9B starts; foundation for Goals 13, 17, 18 | #659 |
 | 5 | Save/Restore State | 3 | Dependencies (Goals 7, 8) complete; **blocked upstream** on kdisco#42/#43/#44 (SP1 #677); foundation for Goals 15, 18 | #666 |
 | 4 | Interlocking Validation | 4 | Depends on Goal 2 (done) + Goal 3 (Phase 0) | #660 |
 | 11 | Track Physics: Gradients and Curves | 3 | No dependencies. **Very Low priority** — kept because the differential-equation solver must stay in the application | #664, #665 |
@@ -970,7 +970,7 @@ away from this phase.
 | Phase 1: High-Priority Enhancement | 30 months | ~16-18 months |
 | Phase 2: Medium-Priority Polish | 3 months | ~2 months (absorbed) |
 | **Total (all goals and named stages)** | **71 months** | **~46 months** |
-| **Remaining (excl. complete)** | **44 months** | **~30-32 months** |
+| **Remaining (excl. complete)** | **42 months** | **~30-32 months** |
 
 **Resource Options:**
 - 1 developer: Next Stages alone is a ~1.3-year commitment; full remaining scope ~4 years.
@@ -1166,7 +1166,8 @@ The following categories of goals were deferred for future consideration:
 
 **Document Version:** 1.2
 **Created:** 2026-01-09
-**Last Updated:** 2026-10-31 (#659) — Goal 6 replanned: parallel with Goal 1B on branch `goal-6`, finishes before Goal 9B, no kDisco changes, measuring demands moved from `docs/goal9b-demands/` into Goal 6.
+**Last Updated:** 2026-11-25 (#659) — Goal 6 marked complete.
+**Previously Updated:** 2026-10-31 (#659) — Goal 6 replanned: parallel with Goal 1B on branch `goal-6`, finishes before Goal 9B, no kDisco changes, measuring demands moved from `docs/goal9b-demands/` into Goal 6.
 **Last Revised:** 2026-08-24 (#839, SP2c.16) — restated the **Goal Stages** convention in the owner's own wording (the first stage carries no letter, so "Goal 10 stage A" is now "Goal 10, first stage" throughout); marked **Goal 10's first stage complete** and recorded the amended acceptance contract (#822 §7) together with SP2c.14's measured A4 result, including the LLM arm's failure to reach the ≥ 8/10 gate; corrected the P8 determinism claim (a sampling seed cannot reach Ollama through Koog 1.1.1 — prompt determinism only); **redefined Goal 11** to cover gradients *and* curves at Very Low priority, folding in the old Goal 12; **created a new Goal 12** for inter-station tracks and multiple dispatcher agents, absorbing #821; added brief **Goal 1B, 9B, 3B** sections and the new **Next Stages** block (1B → 9B → 12 → 3B); restructured Implementation Strategy, Total Development Effort, and Risk Assessment accordingly; renamed the "Phase 0B" block to **Next Stages** and the two live dependency chains to **Critical Path A** (closed) and **Critical Path B** (the schedule-critical one), per review on PR #954
 **Previously Revised:** 2026-07-01 — re-prioritized around Goal 10 as the top-priority goal; only its dependency chain (Goal 1 → 2 → 3 → 9 → 10) remained Critical; Goal 9/Goal 10 dependency lines reconciled with the GitHub issue tracker (#531, #532) to include Goal 3
 **Approved By:** traffic-simulation-expert, agent-architect, kotlin-tech-lead, railway-engineer
