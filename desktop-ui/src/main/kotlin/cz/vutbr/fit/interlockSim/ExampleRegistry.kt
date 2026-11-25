@@ -956,7 +956,7 @@ class ExampleRegistry {
 		// its pre-SP2b.4 behaviour (apply everything without consulting the mode state).
 		val modeState = context.scope.getOrNull<DispatcherModeState>()
 		// SP2b.6 follow-up (Issue #806): scoped approval gateway for SEMI_AUTO decisions.
-		// The gateway holds a mutable approver (null until Frame.wireDispatcherControlPanel
+		// The gateway holds a mutable approver (null until SimulationRunWiring.wireDispatcherControlPanel
 		// installs the SemiAutoApprovalDialog). Headless runs leave the approver null, so
 		// gateway.approve() returns false and every SEMI_AUTO actuating decision is dropped
 		// (DispatchDecisionApplier already logs a warning in that case). Null-tolerant here

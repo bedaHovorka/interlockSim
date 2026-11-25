@@ -16,8 +16,11 @@ import assertk.assertions.contains
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.PROGRAM_LLM_FULL_NAME
@@ -25,10 +28,11 @@ import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
-import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.objects.cells.AbstractCell
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
@@ -47,7 +51,10 @@ import java.awt.BorderLayout
 import java.util.AbstractMap.SimpleEntry
 import java.util.concurrent.TimeUnit
 import javax.swing.JFrame
+import javax.swing.JLabel
 import javax.swing.JScrollPane
+import javax.swing.JSplitPane
+import javax.swing.SwingUtilities
 
 /**
  * Tests for Frame GUI component.
@@ -200,13 +207,14 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("frame has correct initial size")
+	@DisplayName("frame starts at the size WindowGeometry gives for this screen")
 	fun frameHasCorrectInitialSize() {
 		runOnEDT {
-			assertThat(frame.width).isEqualTo(1024)
-			// Height reserves room for the DispatcherControlPanel line so station tracks stay
-			// visible (PR #801 review comment, Issue #561).
-			assertThat(frame.height).isEqualTo(818)
+			// Issue #1421: no fixed 1024x818 any more; the test frame has no WindowStateStore, so it
+			// always starts at the screen-based size (never smaller than 1024x818 unless the screen is).
+			val expected = WindowGeometry.initialBounds(WindowGeometry.usableScreen())
+			assertThat(frame.width).isEqualTo(expected.width)
+			assertThat(frame.height).isEqualTo(expected.height)
 		}
 	}
 
@@ -251,17 +259,18 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("frame canvas is in scroll pane")
+	@DisplayName("frame canvas is in a scroll pane above the bottom tabs in a split pane")
 	fun frameCanvasIsInScrollPane() {
 		runOnEDT {
-			// Get center component (should be JScrollPane)
+			// Issue #1421: CENTER is a vertical split pane; canvas scroll pane on top, tabs below
 			val centerComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.CENTER)
-			assertThat(centerComponent).isNotNull()
-			assertThat(centerComponent).isInstanceOf(JScrollPane::class)
-
-			// Verify canvas is in scroll pane
-			val scrollPane = centerComponent as JScrollPane
-			assertThat(scrollPane.viewport.view).isInstanceOf(RailwayNetGridCanvas::class)
+			assertThat(centerComponent).isInstanceOf(JSplitPane::class)
+			val split = centerComponent as JSplitPane
+			assertThat(split.orientation).isEqualTo(JSplitPane.VERTICAL_SPLIT)
+			assertThat(split.resizeWeight).isEqualTo(1.0)
+			assertThat(split.topComponent).isInstanceOf(JScrollPane::class)
+			assertThat((split.topComponent as JScrollPane).viewport.view).isInstanceOf(RailwayNetGridCanvas::class)
+			assertThat(split.bottomComponent).isSameInstanceAs(frame.bottomTabs)
 		}
 	}
 
@@ -270,27 +279,31 @@ class FrameTest : AbstractFrameTestBase() {
 	@DisplayName("frame has toolbar container at north")
 	fun frameHasToolbarContainerAtNorth() {
 		runOnEDT {
-			// North component is now a JPanel containing ToolBar + ControlPanel + SimulationControlPanel
-			// (Issues #205, #190) + DispatcherControlPanel (Issue #561, Goal 10 SP2b.6)
+			// North component is a JPanel with ToolBar + ControlPanel (Issue #205); the speed and
+			// dispatcher panels moved to the side dock (Issue #1421)
 			val northComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.NORTH)
 			assertThat(northComponent).isNotNull()
 			assertThat(northComponent).isInstanceOf(javax.swing.JPanel::class)
 
-			// Verify the container has components (ToolBar, ControlPanel, SimulationControlPanel, DispatcherControlPanel)
 			val panel = northComponent as javax.swing.JPanel
-			assertThat(panel.componentCount).isEqualTo(4)
+			assertThat(panel.componentCount).isEqualTo(2)
+			assertThat(panel.getComponent(0)).isInstanceOf(ToolBar::class)
+			// The run bar holds the step controls next to the ControlPanel's Stop (Issue #1421)
+			assertThat(
+				SwingUtilities.isDescendingFrom(frame.simulationControlPanel.stepControls, panel.getComponent(1))
+			).isTrue()
+			assertThat(SwingUtilities.isDescendingFrom(frame.controlPanel, panel.getComponent(1))).isTrue()
 		}
 	}
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("frame has status bar in south panel")
+	@DisplayName("frame has the status bar alone at south")
 	fun frameHasStatusBarAtSouth() {
 		runOnEDT {
-			// SOUTH now contains a southPanel (JPanel) that wraps StatusBar and EventTimelinePanel
+			// Issue #1421: the other bottom panels are tabs, so SOUTH holds only the StatusBar
 			val southComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.SOUTH)
-			assertThat(southComponent).isNotNull()
-			assertThat(southComponent).isInstanceOf(javax.swing.JPanel::class)
+			assertThat(southComponent).isSameInstanceAs(frame.statusBar)
 			// StatusBar must be accessible and correctly initialised
 			assertThat(frame.statusBar).isInstanceOf(StatusBar::class)
 			assertThat(frame.statusBar.isVisible).isTrue()
@@ -361,28 +374,31 @@ class FrameTest : AbstractFrameTestBase() {
 			assertThat(layout.getLayoutComponent(BorderLayout.CENTER)).isNotNull()
 			assertThat(layout.getLayoutComponent(BorderLayout.NORTH)).isNotNull()
 			assertThat(layout.getLayoutComponent(BorderLayout.SOUTH)).isNotNull()
+			assertThat(layout.getLayoutComponent(BorderLayout.EAST)).isNotNull()
 		}
 	}
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("south panel has PathPreviewPanel and StatusBar in editing mode")
+	@DisplayName("bottom tabs hold three panels in a fixed order; editing mode enables only Path Preview")
 	fun southPanelHasPathPreviewAndStatusBarInEditingMode() {
 		runOnEDT {
-			// Default state after Frame construction is editing mode — PathPreviewPanel + StatusBar
-			val southPanel =
-				(frame.contentPane.layout as BorderLayout)
-					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			assertThat(southPanel.componentCount).isEqualTo(2)
-			assertThat(southPanel.getComponent(0)).isInstanceOf(PathPreviewPanel::class)
-			assertThat((southPanel.getComponent(0) as PathPreviewPanel).isVisible).isTrue()
-			assertThat(southPanel.getComponent(1)).isInstanceOf(StatusBar::class)
+			// Default state after Frame construction is editing mode (Issue #1421)
+			val tabs = frame.bottomTabs
+			assertThat(tabs.tabCount).isEqualTo(3)
+			assertThat(tabs.getComponentAt(BottomPane.TAB_PATH_PREVIEW)).isInstanceOf(PathPreviewPanel::class)
+			assertThat(tabs.getComponentAt(BottomPane.TAB_WARNINGS)).isSameInstanceAs(frame.warningPanel)
+			assertThat(tabs.getComponentAt(BottomPane.TAB_TIMELINE)).isInstanceOf(JLabel::class)
+			assertThat(tabs.getTitleAt(BottomPane.TAB_PATH_PREVIEW)).isEqualTo(BottomPane.TAB_TITLE_PATH_PREVIEW)
+			assertThat(tabs.getTitleAt(BottomPane.TAB_WARNINGS)).isEqualTo(BottomPane.TAB_TITLE_WARNINGS)
+			assertThat(tabs.getTitleAt(BottomPane.TAB_TIMELINE)).isEqualTo(BottomPane.TAB_TITLE_TIMELINE)
+			assertTabMode(simulation = false)
 		}
 	}
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("south panel gains EventTimelinePanel when switching to simulation mode")
+	@DisplayName("simulation mode enables Warnings and Timeline, selects Timeline and shows the timeline")
 	fun southPanelGainsTimelinePanelInSimulationMode() {
 		val context =
 			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
@@ -391,20 +407,9 @@ class FrameTest : AbstractFrameTestBase() {
 			)
 		runOnEDT {
 			frame.setContext(context)
-			// Simulation mode: WarningPanel and EventTimelinePanel are added above
-			// PathPreviewPanel and StatusBar (Goal 3 SP6, Issue #616)
-			val southPanel =
-				(frame.contentPane.layout as BorderLayout)
-					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			// plus the KPI dashboard (Issue #675, Goal 6 SP3), added between them
-			assertThat(southPanel.componentCount).isEqualTo(5)
-			assertThat(southPanel.getComponent(0)).isInstanceOf(WarningPanel::class)
-			assertThat((southPanel.getComponent(0) as WarningPanel).isVisible).isTrue()
-			assertThat(southPanel.getComponent(1)).isInstanceOf(MetricsDashboardPanel::class)
-			assertThat(southPanel.getComponent(2)).isInstanceOf(EventTimelinePanel::class)
-			assertThat(southPanel.getComponent(3)).isInstanceOf(PathPreviewPanel::class)
-			assertThat((southPanel.getComponent(3) as PathPreviewPanel).isVisible).isFalse()
-			assertThat(southPanel.getComponent(4)).isInstanceOf(StatusBar::class)
+			assertTabMode(simulation = true)
+			// The EventTimelinePanel replaces the placeholder (Issue #1421)
+			assertThat(frame.bottomTabs.getComponentAt(BottomPane.TAB_TIMELINE)).isInstanceOf(EventTimelinePanel::class)
 		}
 		runOnEDT { frame.stopSimulation() }
 		context.close()
@@ -412,7 +417,7 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("south panel returns to PathPreviewPanel and StatusBar when switching back to editing mode")
+	@DisplayName("switching back to editing mode keeps all tabs and enables only Path Preview")
 	fun southPanelRestoresPathPreviewAndStatusBarAfterSwitchingToEditingMode() {
 		val simContext =
 			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
@@ -422,24 +427,136 @@ class FrameTest : AbstractFrameTestBase() {
 		val editContext = editingContextFactory.createEmptyContext()
 		runOnEDT {
 			frame.setContext(simContext)
-			// switch back to editing — EventTimelinePanel removed, PathPreviewPanel + StatusBar remain.
-			// WarningPanel stays attached (hidden) just like PathPreviewPanel does in simulation mode
-			// (Goal 3 SP6, Issue #616).
 			frame.setContext(editContext)
-			val southPanel =
-				(frame.contentPane.layout as BorderLayout)
-					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			assertThat(southPanel.componentCount).isEqualTo(3)
-			assertThat(southPanel.getComponent(0)).isInstanceOf(WarningPanel::class)
-			assertThat((southPanel.getComponent(0) as WarningPanel).isVisible).isFalse()
-			assertThat(southPanel.getComponent(1)).isInstanceOf(PathPreviewPanel::class)
-			assertThat((southPanel.getComponent(1) as PathPreviewPanel).isVisible).isTrue()
-			assertThat(southPanel.getComponent(2)).isInstanceOf(StatusBar::class)
+			// Same frame in both modes (Issue #1421): no tab comes or goes
+			assertThat(frame.bottomTabs.tabCount).isEqualTo(3)
+			assertThat(frame.bottomTabs.getComponentAt(BottomPane.TAB_TIMELINE)).isInstanceOf(EventTimelinePanel::class)
+			assertTabMode(simulation = false)
 			// StatusBar must still be visible after returning to editing mode
 			assertThat(frame.statusBar.isVisible).isTrue()
 		}
 		simContext.close()
 		editContext.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("the Warnings tab title shows the number of listed warnings")
+	fun warningsTabTitleShowsCount() {
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		runOnEDT {
+			frame.setContext(context)
+			frame.showCollisionWarning(advisory, autoPause = true, sound = false)
+			frame.showCollisionWarning(advisory, autoPause = true, sound = false)
+			assertThat(frame.bottomTabs.getTitleAt(BottomPane.TAB_WARNINGS)).isEqualTo("Warnings (2)")
+			frame.warningPanel.clearWarnings()
+			assertThat(frame.bottomTabs.getTitleAt(BottomPane.TAB_WARNINGS)).isEqualTo(BottomPane.TAB_TITLE_WARNINGS)
+		}
+		runOnEDT { frame.stopSimulation() }
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("a critical warning selects the Warnings tab; an advisory one does not")
+	fun criticalWarningSelectsWarningsTab() {
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		runOnEDT {
+			frame.setContext(context)
+			frame.bottomTabs.selectedIndex = BottomPane.TAB_TIMELINE
+			frame.showCollisionWarning(advisory, autoPause = true, sound = false)
+			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(BottomPane.TAB_TIMELINE)
+			frame.showCollisionWarning(critical, autoPause = true, sound = false)
+			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(BottomPane.TAB_WARNINGS)
+		}
+		runOnEDT { frame.stopSimulation() }
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("a critical warning expands a collapsed bottom pane and selects Warnings")
+	fun criticalWarningExpandsCollapsedBottomPane() {
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		runOnEDT {
+			frame.setContext(context)
+			frame.bottomTabs.selectedIndex = BottomPane.TAB_TIMELINE
+
+			// The user folded the tab area up with the split pane's one-touch bar: the divider
+			// sits at the very bottom and the tab area keeps no height. The split pane lays out
+			// itself (Swing sizes a never-validated frame at zero, so the frame would report no
+			// geometry at all).
+			val split = frameSplitPane()
+			split.setSize(2560, 900)
+			split.doLayout()
+			assertThat(frame.bottomTabs.height).isGreaterThan(0)
+
+			split.dividerLocation = split.height - split.dividerSize
+			split.doLayout()
+			assertThat(frame.bottomTabs.height).isEqualTo(0)
+
+			frame.showCollisionWarning(critical, autoPause = true, sound = false)
+			assertThat(frame.bottomTabs.selectedIndex).isEqualTo(BottomPane.TAB_WARNINGS)
+			split.doLayout()
+			assertThat(frame.bottomTabs.height).isGreaterThan(0)
+		}
+		runOnEDT { frame.stopSimulation() }
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("the side dock is at EAST in both modes with the KPI dashboard; editing disables speed controls")
+	fun sideDockStaysInBothModes() {
+		val simContext =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		val editContext = editingContextFactory.createEmptyContext()
+		runOnEDT {
+			val east = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.EAST)
+			assertThat(east).isSameInstanceAs(frame.sideDock)
+			assertThat(SwingUtilities.isDescendingFrom(frame.metricsDashboardPanel, frame.sideDock)).isTrue()
+			assertThat(frame.sideDock.isVisible).isTrue()
+			assertThat(frame.simulationControlPanel.speedControlsEnabled).isFalse()
+			assertThat(frame.simulationControlPanel.stepControls.isVisible).isFalse()
+			frame.setContext(simContext)
+			assertThat(frame.sideDock.isVisible).isTrue()
+			assertThat(frame.simulationControlPanel.speedControlsEnabled).isTrue()
+			assertThat(frame.simulationControlPanel.stepControls.isVisible).isTrue()
+			frame.setContext(editContext)
+			assertThat(frame.sideDock.isVisible).isTrue()
+			assertThat(frame.simulationControlPanel.speedControlsEnabled).isFalse()
+			assertThat(frame.simulationControlPanel.stepControls.isVisible).isFalse()
+		}
+		simContext.close()
+		editContext.close()
+	}
+
+	/** The center component of the frame: the vertical split pane holding the bottom tabs. */
+	private fun frameSplitPane(): JSplitPane =
+		(frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.CENTER) as JSplitPane
+
+	/** Checks the bottom tabs' enabled and selected state for one mode (Issue #1421). */
+	private fun assertTabMode(simulation: Boolean) {
+		val tabs = frame.bottomTabs
+		assertThat(tabs.isEnabledAt(BottomPane.TAB_PATH_PREVIEW)).isEqualTo(!simulation)
+		assertThat(tabs.isEnabledAt(BottomPane.TAB_WARNINGS)).isEqualTo(simulation)
+		assertThat(tabs.isEnabledAt(BottomPane.TAB_TIMELINE)).isEqualTo(simulation)
+		assertThat(tabs.selectedIndex).isEqualTo(if (simulation) BottomPane.TAB_TIMELINE else BottomPane.TAB_PATH_PREVIEW)
 	}
 
 	@Test
@@ -483,14 +600,14 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("conflictResolutionPanel is in the EAST slot and initially hidden")
+	@DisplayName("conflictResolutionPanel is in the side dock and initially hidden")
 	fun conflictResolutionPanelIsInEastSlotAndInitiallyHidden() {
 		runOnEDT {
-			val eastComponent =
-				(frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.EAST)
-			assertThat(eastComponent).isNotNull()
-			assertThat(eastComponent).isInstanceOf(ConflictResolutionPanel::class)
-			assertThat(eastComponent.isVisible).isFalse()
+			// Issue #1421: the panel moved from the EAST slot into the side dock, which is at EAST
+			assertThat(frame.sideDock.conflictPanel).isSameInstanceAs(frame.conflictResolutionPanel)
+			assertThat(SwingUtilities.isDescendingFrom(frame.conflictResolutionPanel, frame.sideDock)).isTrue()
+			assertThat(frame.conflictResolutionPanel).isInstanceOf(ConflictResolutionPanel::class)
+			assertThat(frame.conflictResolutionPanel.isVisible).isFalse()
 		}
 	}
 
@@ -547,5 +664,55 @@ class FrameTest : AbstractFrameTestBase() {
 			assertThat(frame.conflictResolutionPanel.listModel.hasNoResolutions).isTrue()
 		}
 		context.close()
+	}
+
+	@Test
+	@DisplayName("the tab area starts at 30 percent of the window height, at least 200 px")
+	fun defaultBottomHeightFollowsWindowHeight() {
+		assertThat(BottomPane.defaultBottomHeight(2000)).isEqualTo(600)
+		assertThat(BottomPane.defaultBottomHeight(500)).isEqualTo(BottomPane.DEFAULT_BOTTOM_HEIGHT)
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("the control panel clock shows the simulated time from the run's events, not 0")
+	fun controlPanelClockFollowsSimulationEvents() {
+		val simContext =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		val editContext = editingContextFactory.createEmptyContext()
+		runOnEDT {
+			frame.setContext(simContext)
+			// Issue #1421: the clock read kDisco's thread-local time off the simulation thread and
+			// always showed 0. It now follows the simulated time the run reports.
+			val tracker = frame.simulationTimeTracker
+			assertThat(tracker).isNotNull()
+			tracker!!.propertyChange(
+				ContextChangeEvent(
+					SimulationContext.ReportType.PATH_SETTING.name,
+					null,
+					"75.5 Train-1 leaves block kB"
+				)
+			)
+			frame.refreshSimulationTime()
+			assertThat(frame.controlPanel.timeText).isEqualTo("Time: 00:01:15.500")
+
+			frame.setContext(editContext)
+			assertThat(frame.simulationTimeTracker).isNull()
+		}
+		simContext.close()
+		editContext.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("the canvas can take keyboard focus, so the shortcuts are not lost to the Delta field")
+	fun canvasIsFocusable() {
+		runOnEDT {
+			// Issue #1421: SimulationKeyBindings ignore keys while a text field has focus
+			assertThat(frame.railwayNetGridCanvas.isFocusable).isTrue()
+		}
 	}
 }

@@ -88,6 +88,20 @@ internal class SimulationController(
 	var lastStopWasNatural: Boolean = false
 		private set
 
+	/**
+	 * The final paced simulation time of the most recent run, captured on the thread performing the
+	 * STOPPED transition before [runner] is cleared (PR #1430 review: the clock's final refresh at
+	 * STOPPED reads it, because `runner` is already gone). `0.0` when the run published no paced
+	 * gap; the clock ratchets over both readings, so the neutral value stays neutral.
+	 *
+	 * Same read protocol as [lastStopWasNatural]: written on the same thread that is about to
+	 * invoke [onStateChanged] with STOPPED, read by the callback synchronously before any
+	 * thread-hopping, so a later run's capture can never leak into an earlier transition.
+	 */
+	@Volatile
+	var lastRunFinalPacedTime: Double = 0.0
+		private set
+
 	/** Listener registered on the active runner for speed changes; removed on stop. */
 	private var speedListener: PropertyChangeListener? = null
 
@@ -226,6 +240,9 @@ internal class SimulationController(
 						// Skip reset to avoid clobbering the new run's state.
 						if (runner === newRunner) {
 							cleanupSpeedListener(newRunner)
+							// Capture the run's final paced position before the runner goes away
+							// (PR #1430 review): the clock's final refresh at STOPPED reads it.
+							lastRunFinalPacedTime = newRunner.pacedSimulationTime()
 							runner = null
 							speedControllable = null
 							detachAgentPacing()
@@ -257,6 +274,10 @@ internal class SimulationController(
 		// Safe casts keep this a no-op for non-ShuntingLoop runs (e.g. MultiTrainLoop).
 		((r.simulationContext as? DefaultSimulationContext)?.mainProcess as? ShuntingLoop)?.signalStopped()
 		r.stop()
+		// Capture the run's final paced position before the runner goes away (PR #1430
+		// review): the interrupt unwinds the sim thread, and the last published gap's end
+		// is the engine's last advanced time, so the clock can show where the run reached.
+		lastRunFinalPacedTime = r.pacedSimulationTime()
 		runner = null
 		speedControllable = null
 		detachAgentPacing()

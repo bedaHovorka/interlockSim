@@ -14,8 +14,7 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isNotNull
-import assertk.assertions.isNull
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.testutil.FakeMetricsCollectionService
@@ -26,6 +25,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.component.inject
 import java.util.concurrent.TimeUnit
+import javax.swing.SwingUtilities
 
 /**
  * The dashboard is docked in the south panel in simulation mode only, and does not poll outside a run.
@@ -46,15 +46,17 @@ class FrameMetricsDashboardTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("is docked in simulation mode, removed in editing mode, and idle before a run")
+	@DisplayName("stays in the side dock in both modes, and is idle before a run and after editing")
 	fun dockedInSimulationModeOnly() {
 		val simulation = createMockShuntingContext()
 		runOnEDT {
-			assertThat(frame.metricsDashboardPanel.parent).isNull()
+			// Issue #1421: the dashboard lives in the side dock, under the speed controls, in both modes
+			assertThat(frame.sideDock.dashboardPanel).isSameInstanceAs(frame.metricsDashboardPanel)
+			assertThat(SwingUtilities.isDescendingFrom(frame.metricsDashboardPanel, frame.sideDock)).isTrue()
 
 			frame.setContext(simulation)
 
-			assertThat(frame.metricsDashboardPanel.parent).isNotNull()
+			assertThat(SwingUtilities.isDescendingFrom(frame.metricsDashboardPanel, frame.sideDock)).isTrue()
 			assertThat(frame.metricsDashboardPanel.isPolling).isFalse()
 			assertThat(frame.metricsDashboardPanel.textOf(MetricsDashboardPanel.CONFLICTS_NAME))
 				.isEqualTo(DashboardText.EMPTY.conflicts)
@@ -64,8 +66,10 @@ class FrameMetricsDashboardTest : AbstractFrameTestBase() {
 			runOnEDT {
 				frame.setContext(editing)
 
-				assertThat(frame.metricsDashboardPanel.parent).isNull()
+				assertThat(SwingUtilities.isDescendingFrom(frame.metricsDashboardPanel, frame.sideDock)).isTrue()
 				assertThat(frame.metricsDashboardPanel.isPolling).isFalse()
+				assertThat(frame.metricsDashboardPanel.textOf(MetricsDashboardPanel.CONFLICTS_NAME))
+					.isEqualTo(DashboardText.EMPTY.conflicts)
 			}
 		}
 		simulation.close()

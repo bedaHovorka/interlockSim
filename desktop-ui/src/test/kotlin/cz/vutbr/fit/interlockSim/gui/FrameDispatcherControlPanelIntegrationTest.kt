@@ -8,7 +8,7 @@
 	Integration test for the DispatcherControlPanel wiring seam in Frame
 	(Issue #561, SP2b.6 — PR #801 review follow-up).
 
-	Verifies that [Frame.wireDispatcherControlPanel] — the seam where the two
+	Verifies that [cz.vutbr.fit.interlockSim.gui.SimulationRunWiring.wireDispatcherControlPanel] — the seam where the two
 	Critical review bugs lived — actually end-to-end wires the panel to the
 	scoped [DispatcherModeState] and [DispatchDecisionListenerHub]:
 	- setContext(SimulationContext) shows the panel.
@@ -56,11 +56,12 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.JLabel
+import javax.swing.SwingUtilities
 
 /**
  * Integration test for the [Frame] ↔ [DispatcherControlPanel] wiring seam (Issue #561, SP2b.6).
  *
- * Uses a real [DefaultSimulationContext] (not a mock — [Frame.wireDispatcherControlPanel]
+ * Uses a real [DefaultSimulationContext] (not a mock — [cz.vutbr.fit.interlockSim.gui.SimulationRunWiring.wireDispatcherControlPanel]
  * casts the runner's context to [DefaultSimulationContext] to reach the Koin scope) with a
  * long-running [ShuntingLoop] main process, mirroring
  * [SimulationControllerAgentPacingLifecycleTest].
@@ -115,13 +116,15 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("setContext(SimulationContext) shows the DispatcherControlPanel")
+	@DisplayName("setContext(SimulationContext) shows the DispatcherControlPanel in the side dock")
 	fun setContextShowsDispatcherControlPanel() {
 		val context = buildContext()
 		context.use {
 			runOnEDT {
 				frame.setContext(it)
 				assertThat(frame.dispatcherControlPanel.isVisible).isTrue()
+				// Issue #1421: the panel lives in the side dock, not in the north container
+				assertThat(SwingUtilities.isDescendingFrom(frame.dispatcherControlPanel, frame.sideDock)).isTrue()
 			}
 		}
 	}
@@ -232,7 +235,7 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("setContext(EditingContext) hides the panel and clears mode state")
+	@DisplayName("setContext(EditingContext) keeps the panel in place, disables it and clears mode state")
 	fun setContextEditingHidesPanelAndClearsModeState() {
 		val context = buildContext()
 		context.use {
@@ -245,7 +248,9 @@ class FrameDispatcherControlPanelIntegrationTest : AbstractFrameTestBase() {
 		editContext.use {
 			runOnEDT {
 				frame.setContext(it)
-				assertThat(frame.dispatcherControlPanel.isVisible).isFalse()
+				// Issue #1421: same frame in both modes; the panel stays visible but its controls are off
+				assertThat(frame.dispatcherControlPanel.isVisible).isTrue()
+				assertThat(findComboBox(frame.dispatcherControlPanel).isEnabled).isFalse()
 				assertThat(frame.dispatcherControlPanel.modeState).isNull()
 			}
 		}

@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.isProcessControl
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.di.windowLayoutModule
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
@@ -536,7 +537,8 @@ class Main {
 	 * management without a raw background thread).
 	 *
 	 * The [SimulationContext] is intentionally not closed here; its lifetime is bound to
-	 * the GUI window — [Frame.exitWithoutSaving] calls `System.exit(0)` on window close.
+	 * the GUI window — the close path ([WindowLifecycle.requestClose]) ends in
+	 * `System.exit(0)` after the layout save.
 	 *
 	 * @param context Simulation context to display; must already have report types added.
 	 * @param sourceFile Optional XML file to show in the window title (null for built-in examples).
@@ -628,7 +630,7 @@ fun main(args: Array<String>) {
 	// Load GUI module (includes Main coordinator and Frame)
 	// Note: Main is always needed for all modes (sim/edit/example)
 	// Frame is only created lazily when actually needed (edit mode)
-	getKoin().loadModules(listOf(guiModule))
+	getKoin().loadModules(listOf(guiModule, windowLayoutModule))
 
 	// Add shutdown hook to clean up Koin when JVM exits
 	Runtime.getRuntime().addShutdownHook(
@@ -666,7 +668,7 @@ fun main(args: Array<String>) {
 			val outcome = main.runExample(args)
 			// Issue #1072: one-shot headless process — close the shared Ollama/Koog executor
 			// after the run so daemon workers do not outlive main. GUI mode leaves it open
-			// until the window closes (see Frame.exitWithoutSaving).
+			// until the window closes (see WindowLifecycle.requestClose).
 			DispatcherRunLifecycle.closeSharedOllamaExecutor()
 			if (outcome == RunOutcome.TERMINATED_EARLY) {
 				exitProcess(outcome.exitCode)

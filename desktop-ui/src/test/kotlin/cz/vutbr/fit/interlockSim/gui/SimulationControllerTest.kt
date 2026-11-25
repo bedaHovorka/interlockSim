@@ -20,6 +20,8 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.testutil.flushEDT
+import cz.vutbr.fit.interlockSim.testutil.pacedGapNanos
+import cz.vutbr.fit.interlockSim.testutil.useMaxSpeedPacedClocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -343,6 +345,55 @@ class SimulationControllerTest {
 
 		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
 		assertThat(controller.lastStopWasNatural).isTrue()
+	}
+
+	// ── lastRunFinalPacedTime (PR #1430 review: the clock's final position) ───
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("stop() captures the run's final paced time before the runner is cleared")
+	fun stopCapturesFinalPacedTime() {
+		val runner = SimulationRunner(context)
+		var engineTime: Double? = 42.0
+		var nowNanos = 0L
+		runner.useMaxSpeedPacedClocks({ nowNanos }, { engineTime })
+		runner.throttle(2.0)
+		nowNanos += pacedGapNanos(2.0) * 10
+
+		val controller = createController()
+		controller.runner = runner // internal setter seam (Issue #1331): install the seeded runner
+		controller.stop()
+
+		// The capture is written once, before the runner clears: the value stays readable.
+		assertThat(controller.runner).isNull()
+		assertThat(controller.lastRunFinalPacedTime).isEqualTo(42.0)
+		assertThat(controller.lastRunFinalPacedTime).isEqualTo(42.0)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("natural completion captures the run's final paced time on the monitor thread")
+	fun naturalCompletionCapturesFinalPacedTime() {
+		val completedLatch = CountDownLatch(1)
+		every { context.run(ofType<CoreSimulationController>()) } answers {
+			// Simulate the run publishing its last authoritative gap on the simulation thread
+			// before returning: the monitor then captures the runner's final paced position.
+			val runner = firstArg<CoreSimulationController>()
+			(runner as? SimulationRunner)?.let {
+				var nowNanos = 0L
+				it.useMaxSpeedPacedClocks({ nowNanos }, { 42.0 })
+				it.throttle(2.0)
+				nowNanos += pacedGapNanos(2.0) * 10
+			}
+		}
+
+		val controller = createController(onCompleted = { completedLatch.countDown() })
+		controller.start(context)
+
+		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
+		assertThat(controller.lastStopWasNatural).isTrue()
+		assertThat(controller.runner).isNull()
+		assertThat(controller.lastRunFinalPacedTime).isEqualTo(42.0)
 	}
 
 	// ── onCompleted callback ──────────────────────────────────────────────────
@@ -786,7 +837,7 @@ class SimulationControllerTest {
 	private fun findStopButton(): JButton? =
 		(0 until controlPanel.componentCount)
 			.mapNotNull { controlPanel.getComponent(it) as? JButton }
-			.firstOrNull { it.text == "Stop" }
+			.firstOrNull { it.accessibleContext.accessibleName == ControlPanel.STOP_ACCESSIBLE_NAME }
 
 	private fun findStatusLabel(): JLabel? =
 		(0 until controlPanel.componentCount)

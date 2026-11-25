@@ -275,7 +275,10 @@ class MenuBar : JMenuBar() {
 
 	private inner class ExitAction : AbstractAction("Exit") {
 		override fun actionPerformed(e: ActionEvent) {
-			System.exit(0)
+			// The frame's close path (PR #1430 review): the unsaved-changes confirmation, the
+			// teardown and the window-layout save all run here, the same route the window
+			// close event takes — so resizing and exiting through this menu keeps the layout.
+			getKoin().get<Frame>().requestClose()
 		}
 	}
 
@@ -294,7 +297,7 @@ class MenuBar : JMenuBar() {
 	 * events and the animation is not visually frozen.
 	 *
 	 * **Modification tracker:** The tracker is cleared before switching to simulation mode
-	 * so that the "unsaved changes" path in [Frame.handleWindowClosing] does not attempt to
+	 * so that the "unsaved changes" path in [Frame.requestClose] does not attempt to
 	 * save a [SimulationContext] through the editor's save logic.
 	 */
 	private inner class StartSimulationAction : AbstractAction("Start...") {
