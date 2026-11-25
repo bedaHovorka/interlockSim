@@ -48,12 +48,20 @@ jobs:
     timeout-minutes: 35  # a workflow_dispatch run builds and tests everything itself
     # Known operational quirk: a workflow_run triggered by a Copilot-authored push sits at
     # "action_required" (new-actor approval) until an owner-pushed commit runs this workflow.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # A workflow_run job has access to secrets, so it must never check out and build code
+    # from a fork (SonarCloud rule githubactions:S7631). Only a run of this repository's own
+    # head commit passes the repository comparison.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
+        # Nothing after the checkout runs git against the remote, so leave no token in .git.
+        persist-credentials: false
         # Check out the exact commit gradle-java21.yml built — github.sha is meaningless
         # for a workflow_run event (it would resolve to the default branch tip instead).
         ref: ${{ github.event.workflow_run.head_sha || github.sha }}
