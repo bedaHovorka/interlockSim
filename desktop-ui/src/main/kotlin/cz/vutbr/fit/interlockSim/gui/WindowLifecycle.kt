@@ -47,12 +47,18 @@ internal class WindowLifecycle(
 	internal var exit: (Int) -> Unit = { System.exit(it) }
 
 	/**
+	 * Bounds of the connected screens for the restore check; replaceable so headless tests can
+	 * supply a screen (a headless JVM reports none, which would reject every saved layout).
+	 */
+	internal var screens: () -> List<Rectangle> = WindowGeometry::screenBounds
+
+	/**
 	 * Sets the start bounds (Issue #1421): the saved layout when it still lies on a connected
 	 * screen, else [WindowGeometry.initialBounds] on the usable screen area.
 	 */
 	fun applyInitialGeometry() {
 		val saved = store?.load()
-		if (saved != null && WindowGeometry.isOnScreen(saved.bounds, WindowGeometry.screenBounds())) {
+		if (saved != null && WindowGeometry.isOnScreen(saved.bounds, screens())) {
 			handle.windowBounds = saved.bounds
 			lastNormalBounds = Rectangle(saved.bounds)
 			if (saved.maximized) {

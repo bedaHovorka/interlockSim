@@ -92,7 +92,7 @@ class WindowLifecycleTest {
 			isDirty = { false },
 			save = { false },
 			teardown = teardown
-		)
+		).also { lifecycle -> lifecycle.screens = { listOf(FAKE_SCREEN) } }
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
@@ -229,5 +229,10 @@ class WindowLifecycleTest {
 		}
 
 		assertThat(node.getInt("bottomHeight", -1)).isEqualTo(-1)
+	}
+
+	private companion object {
+		/** One screen that holds every saved layout these tests restore; a headless JVM reports none. */
+		val FAKE_SCREEN = Rectangle(0, 0, 1920, 1200)
 	}
 }
