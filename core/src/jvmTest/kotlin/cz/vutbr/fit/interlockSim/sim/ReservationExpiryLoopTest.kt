@@ -13,12 +13,14 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultReservationExpiry
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
 import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import org.junit.jupiter.api.Tag
@@ -82,6 +84,75 @@ class ReservationExpiryLoopTest : KoinTestBase() {
 
 		assertThat(context.getRoutingServices().getPathReservationService().getReservedBlocks(PHANTOM)).isEmpty()
 		assertThat(expiryOf(context).expiredHoldingCount).isEqualTo(1)
+		// Issue #1360: the run-end summary reads the expiry's own totals.
+		val summary = context.getMetricsServices().getMetricsCollectionService().runEndSummary()
+		assertThat(summary.expiredHoldingCount, name = "expiries in the run-end summary").isEqualTo(1)
+		assertThat(summary.expiredTailCount, name = "tail expiries in the run-end summary").isEqualTo(0)
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `a raw subscriber throwing on ReservationExpired does not change a ShuntingLoop run`() {
+		// Issue #1310: the counters and the run's outcome are the evidence. Since the delivery guard of
+		// Issue #1361 the subscribers after the throwing one still get the event, so the whole run-end
+		// summary (bar its wall-clock performance row) is compared.
+		val baseline = phantomExpiryRun(throwingRawSubscriber = false)
+		val withThrowing = phantomExpiryRun(throwingRawSubscriber = true)
+
+		assertThat(withThrowing.subscriberCalls, name = "calls of the throwing subscriber").isEqualTo(1)
+		assertThat(withThrowing.expiredHoldingCount, name = "expiries counted").isEqualTo(1)
+		assertThat(withThrowing.phantomBlocksLeft, name = "phantom blocks still reserved").isEqualTo(0)
+		// Issue #1360: the run-end summary reads the expiry's own totals, so the throwing subscriber
+		// registered before the metrics cannot hide the expiry from it.
+		assertThat(withThrowing.summary.expiredHoldingCount, name = "expiries in the run-end summary").isEqualTo(1)
+		assertThat(withThrowing.summary.expiredTailCount, name = "tail expiries in the run-end summary").isEqualTo(0)
+		assertThat(withThrowing.copy(subscriberCalls = 0), name = "run outcome").isEqualTo(baseline)
+	}
+
+	/** What [phantomExpiryRun] observed: the expiry counters, the phantom's holding and the run-end record. */
+	private data class PhantomExpiryOutcome(
+		val subscriberCalls: Int,
+		val expiredHoldingCount: Int,
+		val expiredTailCount: Int,
+		val phantomBlocksLeft: Int,
+		val summary: RunEndSummary
+	)
+
+	/**
+	 * The phantom-route `ShuntingLoop` run of [assertPhantomRouteExpiresOnTicksOnly], optionally with a
+	 * raw `onSimulationEvent` subscriber that throws on every [ReservationExpired].
+	 */
+	private fun phantomExpiryRun(throwingRawSubscriber: Boolean): PhantomExpiryOutcome {
+		val context = loadVyhybnaContext(warmUpDynamicWrappers = true)
+		grantPhantomRoute(context)
+		context.setMainProcess(ShuntingLoop(context, endTime = 100L))
+		var calls = 0
+		if (throwingRawSubscriber) {
+			context.onSimulationEvent { event ->
+				if ((event as? SimulationEvent.Custom)?.payload is ReservationExpired) {
+					calls++
+					error("raw subscriber failure injected by the test")
+				}
+			}
+		}
+
+		context.run()
+
+		val expiry = expiryOf(context)
+		val reservations = context.getRoutingServices().getPathReservationService()
+		return PhantomExpiryOutcome(
+			subscriberCalls = calls,
+			expiredHoldingCount = expiry.expiredHoldingCount,
+			expiredTailCount = expiry.expiredTailCount,
+			phantomBlocksLeft = reservations.getReservedBlocks(PHANTOM).size,
+			// The wall-clock performance row differs run to run.
+			summary =
+				context
+					.getMetricsServices()
+					.getMetricsCollectionService()
+					.runEndSummary()
+					.copy(performance = null)
+		)
 	}
 
 	@Test

@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.sim.metrics
 
+import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
+
 /**
  * Service for collecting and querying simulation performance metrics.
  *
@@ -31,18 +33,25 @@ package cz.vutbr.fit.interlockSim.sim.metrics
  * ## Thread Safety
  *
  * Listeners are invoked synchronously on the simulation thread.
- * [getSnapshot] is safe to call from the simulation thread; external callers
- * must synchronise externally if they read the snapshot from a different thread.
+ * [getSnapshot] is safe to call from the simulation thread; a reader on another
+ * thread uses [latestSnapshot] (Issue #673).
+ *
+ * It is also the run's [RunRecordSource] (Issue #676): [runRecord] is the finished record of the
+ * run, `null` until the run has ended.
  *
  * @since Issue #672 (Goal 6 SP1)
  */
-interface MetricsCollectionService {
+interface MetricsCollectionService : RunRecordSource {
 	/**
 	 * Returns a [MetricsSnapshot] reflecting the current accumulated KPIs.
 	 *
 	 * May be called at any point during or after a simulation run.
 	 * The returned snapshot is an immutable value object; subsequent calls
 	 * return independent instances that reflect the state at the time of the call.
+	 *
+	 * Logging (Issue #1330): an explicit call logs the built snapshot at DEBUG ("Metrics snapshot
+	 * queried"). The snapshot published after every block event and the one [runEndSummary] reads are
+	 * built silently; a caller that must not produce that line reads [latestSnapshot] instead.
 	 *
 	 * @return Current performance KPI snapshot.
 	 */
@@ -90,6 +99,10 @@ interface MetricsCollectionService {
 	 * this method only reports the observed state and logs it for visibility. Called mid-run it simply
 	 * lists the trains under way, which is also not a fault.
 	 *
+	 * Not thread-safe: it copies maps that only the simulation thread writes. A caller on another
+	 * thread (the EDT after a manual stop) calls it only once [runRecord] is non-null, which is set
+	 * after the run-end flush (Issue #1325).
+	 *
 	 * Issue #936 is the failure that motivated it: a granted full-span route froze a train's stored
 	 * path, and every later hop-wise request was refused as non-contiguous, so the reservations were
 	 * never released. Nothing in the metrics surfaced that — `completedTrains` merely failed to
@@ -101,4 +114,95 @@ interface MetricsCollectionService {
 	 * @return Train ids with outstanding reservations; empty when every train settled cleanly.
 	 */
 	fun reportUnreleasedReservations(): Set<String>
+
+	/**
+	 * The snapshot last published by the simulation thread — the one call of this interface that is
+	 * **safe from any thread** (a dashboard, a dispatcher thread).
+	 *
+	 * The simulation thread publishes a new immutable [MetricsSnapshot] after every handled block
+	 * event (journey events publish nothing), through a single volatile reference write, so a reader
+	 * on another thread always sees one whole snapshot of one instant, never fields of two (the
+	 * off-thread tearing of Goal 9B SP9 F5/F9).
+	 * Before the first event it is the all-zero snapshot. Unlike [getSnapshot], it never computes
+	 * anything on the caller's thread.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
+	fun latestSnapshot(): MetricsSnapshot
+
+	/**
+	 * The bounded history of every published snapshot (see [MetricsHistory] for the caps).
+	 * Read it on the simulation thread or after the run; it is not safe to read concurrently.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
+	fun history(): MetricsHistory
+
+	/**
+	 * One [TrainJourneyRecord] per train journey so far, in the order the journeys began.
+	 * Read it on the simulation thread or after the run; it is not safe to read concurrently.
+	 *
+	 * @since Issue #673 (Goal 6 SP2)
+	 */
+	fun journeys(): List<TrainJourneyRecord>
+
+	/**
+	 * The run-end accounting counted from events so far (Issue #1304): trains entered and exited,
+	 * wrong exits, peak trains on the network, route grants, refused reservations and entry failures
+	 * by kind, the watchdog stall, reservation expiries and sweeper releases by kind, the capacity
+	 * shown to the dispatcher, and -- after the run ended -- how it ended
+	 * ([RunEndSummary.classification]). No loop getter is read. Read it on the simulation thread or
+	 * after the run; it is not safe to read concurrently.
+	 *
+	 * @since Issue #1304 (Goal 6 SP6)
+	 */
+	fun runEndSummary(): RunEndSummary
+
+	/**
+	 * Record, once at wiring time (before `run()`, when nothing can be emitted yet), the admission
+	 * cap the dispatcher is given next to the station's topology capacity -- 2 against 4 on the
+	 * Cerveny Ujezd GUI wiring (Issue #1276). Reported in [runEndSummary].
+	 *
+	 * @param shownToDispatcher the cap the dispatcher decides with
+	 * @param topologyCapacity the capacity of the station topology
+	 * @since Issue #1304 (Goal 6 SP6)
+	 */
+	fun recordCapacity(
+		shownToDispatcher: Int,
+		topologyCapacity: Int
+	)
+
+	/**
+	 * The open blocked-path contentions (train, block, owner, since) as last published by the
+	 * simulation thread -- like [latestSnapshot], **safe from any thread** (Issue #1305, Goal 6 SP7):
+	 * one immutable list behind a volatile reference. Refreshed after every handled block event, every
+	 * conflict event, every route grant, refusal and sweeper release, and at a stall report or the end
+	 * time, so a stuck run still shows who waits; the end-of-run flush leaves it as it was just before.
+	 * Empty with [MetricGroup.TRAIN_WAIT] off. Off the simulation thread read only the identity of an
+	 * [OpenContention.block], never its dynamic state.
+	 *
+	 * @since Issue #1305 (Goal 6 SP7)
+	 */
+	fun latestOpenContentions(): List<OpenContention>
+
+	/**
+	 * The admission cap recorded by [recordCapacity], or `null` when none was. Unlike [runEndSummary],
+	 * safe to read while the run is still going: it is written once at wiring time (Issue #676).
+	 *
+	 * @since Issue #676 (Goal 6 SP5)
+	 */
+	fun capacityShownToDispatcher(): Int? = runEndSummary().capacityShownToDispatcher
+
+	/**
+	 * The record of the finished run (Issue #676), built from [runEndSummary]; `null` while the run
+	 * has not ended. An implementation may keep the value it built at run end instead.
+	 *
+	 * This default is **not thread-safe**: it rebuilds the record from the live summary on every call,
+	 * so a reader on another thread can see a half-updated summary, and it reads [runEndSummary] each
+	 * time. It is meant only for single-threaded fakes. [DefaultMetricsCollectionService] overrides it
+	 * with the record it built once at run end, behind a volatile reference.
+	 *
+	 * @since Issue #676 (Goal 6 SP5)
+	 */
+	override fun runRecord(): RunRecord? = runEndSummary().toRunRecord()
 }

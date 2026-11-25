@@ -69,7 +69,7 @@ import javax.swing.Timer
  *
  * Calling `SemiAutoApprovalDialog.promptOnEdt` encapsulates this pattern; the
  * [cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway] approver lambda installed by
- * [cz.vutbr.fit.interlockSim.gui.Frame.wireDispatcherControlPanel] delegates to it.
+ * [cz.vutbr.fit.interlockSim.gui.SimulationRunWiring.wireDispatcherControlPanel] delegates to it.
  *
  * `promptOnEdt` **must not be called on the EDT** — it uses
  * [SwingUtilities.invokeAndWait], which throws on the EDT. A `check` guard fails fast

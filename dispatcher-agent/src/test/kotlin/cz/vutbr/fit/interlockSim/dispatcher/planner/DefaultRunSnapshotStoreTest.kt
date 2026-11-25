@@ -17,6 +17,9 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -278,6 +281,150 @@ class DefaultRunSnapshotStoreTest {
 		assertThat(aggregator.runPassed(legacy)).isFalse()
 	}
 
+	/**
+	 * Issue #676 bumped the schema to 11 with the run-record figures. A version-10 file on disk, which
+	 * has none of their keys, is still read, with its row figures kept and the record figures absent.
+	 */
+	@Test
+	fun `readAll still reads a schema-version-10 file and reports its run-record figures as absent`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val row = RailwayOutcome(journeysCompleted = 15L, trainsEntered = 15L, trainsExited = 15L, unresolvedAtRunEnd = 0L)
+		val current =
+			FUTURE_SCHEMA_JSON_CODEC
+				.parseToJsonElement(
+					FUTURE_SCHEMA_JSON_CODEC.encodeToString(
+						DispatcherRunSnapshot.serializer(),
+						runSnapshot(runId = "legacy-v10-001").copy(railwayOutcome = row)
+					)
+				).jsonObject
+		val rowKeys =
+			setOf(
+				"journeysCompleted",
+				"trainsEntered",
+				"trainsExited",
+				"maxConcurrentTrains",
+				"blockTransitions",
+				"conflicts",
+				"failedReservations",
+				"unresolvedAtRunEnd"
+			)
+		val v10Outcome = JsonObject(current.getValue("railwayOutcome").jsonObject.filterKeys { it in rowKeys })
+		val v10 = JsonObject(current + ("schemaVersion" to JsonPrimitive(10)) + ("railwayOutcome" to v10Outcome))
+		val armDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(armDir)
+		Files.writeString(armDir.resolve("legacy-v10.json"), v10.toString())
+
+		val legacy = store.readAll(tmpDir).single()
+
+		assertThat(legacy.schemaVersion).isEqualTo(10)
+		assertThat(legacy.railwayOutcome).isEqualTo(row)
+		assertThat(legacy.railwayOutcome.endClassification).isNull()
+	}
+
+	/**
+	 * A schema-version-11 run (Issue #1306): written before the performance row and the example
+	 * existed, so it has none of their keys, and is still read with them absent.
+	 */
+	@Test
+	fun `readAll still reads a schema-version-11 file and reports its performance row as absent`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val v11Outcome = RailwayOutcome(journeysCompleted = 15L, trainsExited = 15L, endTime = 601.0)
+		val current =
+			FUTURE_SCHEMA_JSON_CODEC
+				.parseToJsonElement(
+					FUTURE_SCHEMA_JSON_CODEC.encodeToString(
+						DispatcherRunSnapshot.serializer(),
+						runSnapshot(runId = "legacy-v11-001").copy(railwayOutcome = v11Outcome)
+					)
+				).jsonObject
+		val v12Keys =
+			setOf("wallSeconds", "simulationSeconds", "realTimeRatio", "routeSearchBudgetExceeded", "reservePathCalls")
+		val outcome = JsonObject(current.getValue("railwayOutcome").jsonObject.filterKeys { it !in v12Keys })
+		val v11 =
+			JsonObject(
+				current.filterKeys { it != "example" } + ("schemaVersion" to JsonPrimitive(11)) + ("railwayOutcome" to outcome)
+			)
+		val armDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(armDir)
+		Files.writeString(armDir.resolve("legacy-v11.json"), v11.toString())
+
+		val legacy = store.readAll(tmpDir).single()
+
+		assertThat(legacy.schemaVersion).isEqualTo(11)
+		assertThat(legacy.railwayOutcome).isEqualTo(v11Outcome)
+		assertThat(legacy.railwayOutcome.wallSeconds).isNull()
+		assertThat(legacy.example).isNull()
+	}
+
+	/**
+	 * A literal schema-version-10 vyhybna document (Issue #676 fix round 1): the shape of a run JSON
+	 * written on 2026-10-31 by the version-10 code (maps trimmed to a few keys), with the per-run
+	 * railway figures of a vyhybna `shuntingLoop` control-arm run at 600 s on that code (15 exits; it
+	 * is not an #895 file — the #895 control arm exited 11). Not built from the current encoder, so it
+	 * keeps testing the old shape when the encoder changes.
+	 */
+	@Test
+	fun `readAll still decodes a literal schema-version-10 control-arm run`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val armDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(armDir)
+		Files.writeString(armDir.resolve("legacy-v10-literal.json"), SCHEMA_V10_JSON)
+
+		val legacy = store.readAll(tmpDir).single()
+
+		assertThat(legacy.schemaVersion).isEqualTo(10)
+		assertThat(legacy.endCause).isEqualTo(RunEndCause.NATURAL_COMPLETION)
+		assertThat(legacy.railwayOutcome).isEqualTo(
+			RailwayOutcome(
+				journeysCompleted = 15L,
+				trainsEntered = 15L,
+				trainsExited = 15L,
+				maxConcurrentTrains = 2L,
+				blockTransitions = 30L,
+				conflicts = 0L,
+				failedReservations = 2L,
+				unresolvedAtRunEnd = 0L
+			)
+		)
+		assertThat(legacy.railwayOutcome.endClassification).isNull()
+		assertThat(legacy.railwayOutcome.wrongExits).isNull()
+		// Issue #1315: a file without an example keeps the vyhybna bar of #895, so its verdict does not move.
+		assertThat(ExitPassBars.barFor(legacy.example)).isEqualTo(RunReportAggregator.MIN_TRAINS_EXITED)
+		assertThat(RunReportAggregator(store).runPassed(legacy), "runPassed").isTrue()
+	}
+
+	/**
+	 * The exit bar on the old file shape (Issue #1315): a schema-version-10 vyhybna document names no
+	 * example and counts no wrong exits, so it is read against the #895 bar of 6 with nothing
+	 * subtracted. 11 exits (the #895 control arm's figure) pass; 5 exits fail, as they did before.
+	 */
+	@Test
+	fun `a literal schema-version-10 vyhybna document is judged against the 895 bar`(
+		@TempDir tmpDir: Path
+	) {
+		val store = DefaultRunSnapshotStore(root = tmpDir)
+		val aggregator = RunReportAggregator(store)
+		val armDir = tmpDir.resolve("rule_based")
+		Files.createDirectories(armDir)
+
+		for ((exits, passes) in listOf(11 to true, 5 to false)) {
+			val file = armDir.resolve("legacy-v10-exits-$exits.json")
+			Files.writeString(file, SCHEMA_V10_JSON.replace("\"trainsExited\": 15", "\"trainsExited\": $exits"))
+			val legacy = store.readAll(tmpDir).single()
+
+			assertThat(legacy.railwayOutcome.trainsExited, "decoded exits").isEqualTo(exits.toLong())
+			assertThat(aggregator.runPassed(legacy), "runPassed at $exits exits").isEqualTo(passes)
+			// A distinct file per iteration: delete it, so `readAll().single()` sees exactly one again.
+			Files.delete(file)
+		}
+	}
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	/** Builds a raw JSON string with a schemaVersion higher than the current one. */
@@ -305,6 +452,67 @@ class DefaultRunSnapshotStoreTest {
 				prettyPrint = true
 				encodeDefaults = true
 			}
+
+		/** A schema-version-10 run document; see the test that reads it. */
+		private val SCHEMA_V10_JSON =
+			"""
+			{
+				"schemaVersion": 10,
+				"runId": "legacy-v10-895-r01",
+				"arm": "RULE_BASED",
+				"params": {
+					"tickPeriodMs": 0,
+					"historyN": 3,
+					"temperature": 0.0,
+					"maxActionsPerTick": 3,
+					"model": "",
+					"seed": null,
+					"inferenceTimeoutSeconds": 30,
+					"promptVariant": "",
+					"circuitBreakerFailureThreshold": 3,
+					"circuitBreakerCooldownSeconds": 60.0
+				},
+				"totalTicks": 0,
+				"ticksByOutcome": { "LLM_ACTIONS": 0, "RULE_FALLBACK": 0, "LLM_NO_OP": 0 },
+				"timeoutNoOpByCause": { "DEADLINE_MISS": 0 },
+				"llmSuccessRate": 0.0,
+				"actionableTickRate": 0.0,
+				"noOpRate": 0.0,
+				"invalidOutputRate": 0.0,
+				"repairSuccessRate": 0.0,
+				"emittedByActionType": {},
+				"rejectionsByCode": { "UNKNOWN_TRAIN": 0 },
+				"applyFailuresByCode": { "ALL_PATHS_BLOCKED": 0 },
+				"validAt1": 0.0,
+				"correctAt1": null,
+				"oracleAgreementAt1": null,
+				"latencyP50Ms": null,
+				"latencyP95Ms": null,
+				"latencyMaxMs": null,
+				"actionsByAuthor": { "RULE_BASED": 0, "LLM": 0 },
+				"unattributedApplies": 0,
+				"terminalFallbackEngaged": false,
+				"terminalFallbackTickIndex": null,
+				"c7Clean": true,
+				"completedNaturally": true,
+				"endCause": "NATURAL_COMPLETION",
+				"railwayOutcome": {
+					"journeysCompleted": 15,
+					"trainsEntered": 15,
+					"trainsExited": 15,
+					"maxConcurrentTrains": 2,
+					"blockTransitions": 30,
+					"conflicts": 0,
+					"failedReservations": 2,
+					"unresolvedAtRunEnd": 0
+				},
+				"loggedFatalSimExceptionCount": null,
+				"loggedFatalSimExceptionFirstMessage": null,
+				"circuitBreakerState": null,
+				"circuitBreakerTotalSkips": null,
+				"circuitBreakerOpenCount": null
+			}
+			""".trimIndent()
 
 		/**
 		 * A literal schema-version-1 run document, exactly as `DefaultRunSnapshotStore` wrote it

@@ -15,7 +15,9 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -29,6 +31,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.get
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 @Tag("integration-test")
@@ -126,5 +129,58 @@ class SimulationControllerBridgeIntegrationTest : IntegrationKoinTestBase() {
 				controller.stop()
 			}
 		}
+	}
+
+	@Test
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	@DisplayName(
+		"a throttled run publishes paced gaps from the simulation thread and the clock ends at the end time"
+	)
+	fun pacedSimulationTimeFollowsRealThrottledRun() {
+		val factory = get<SimulationContextFactory>()
+		val ctx = TestFixtures.loadShuntingXml().use { factory.createContext(it) as DefaultSimulationContext }
+
+		ctx.use { context ->
+			context.getInOuts()
+			val loop = ShuntingLoop(context, endTime = 20L, enableRealTimeSync = false)
+			context.setMainProcess(loop)
+
+			// 20 simulated seconds at 10x pace ~2 wall seconds. `setSpeed` before `start`
+			// applies the multiplier on the runner (see the pre-start test above).
+			val completion = CountDownLatch(1)
+			val controller = SimulationController(onCompleted = { completion.countDown() })
+			controller.setSpeed(10.0)
+			controller.start(context)
+			val runner = requireNotNull(controller.runner) { "start() must keep the runner" }
+			try {
+				// Mid-run the simulation thread publishes its own authoritative gaps, so two
+				// reads a wall-second apart must advance (PR #1430 review: the unit tests only
+				// drove the throttle off the run's thread).
+				assertMidRunAdvances(runner)
+
+				// Natural completion: the last gap the simulation thread published ends at the
+				// run's end time, and the runner object keeps it after the controller has
+				// dropped its own reference. The controller's own completion notification
+				// replaces a polling loop (the same event shape the controller tests use).
+				assertThat(completion.await(15, TimeUnit.SECONDS)).isTrue()
+				assertThat(controller.isRunning()).isFalse()
+				assertThat(runner.pacedSimulationTime()).isCloseTo(20.0, 1.0)
+			} finally {
+				controller.stop()
+			}
+		}
+	}
+
+	/** Advances the injected runner's paced time by polling until it moved, bounded to 2 s. */
+	private fun assertMidRunAdvances(runner: SimulationRunner) {
+		val first = runner.pacedSimulationTime()
+		val deadline = System.nanoTime() + TimeUnit.NANOSECONDS.convert(2, TimeUnit.SECONDS)
+		var next = first
+		while (next <= first && System.nanoTime() < deadline) {
+			Thread.sleep(100)
+			next = runner.pacedSimulationTime()
+		}
+		assertThat(next).isCloseTo(first, 1.0)
+		assertThat(next > first).isTrue()
 	}
 }

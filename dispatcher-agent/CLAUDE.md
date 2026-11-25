@@ -1,6 +1,6 @@
 # CLAUDE.md — :dispatcher-agent
 
-**Last Updated:** 2026-10-29
+**Last Updated:** 2026-11-22
 
 Guidance for Claude Code when working in `:dispatcher-agent`. Repo-wide rules
 (English-only output, heavy-test policy, Koin rules, code quality) live in the
@@ -44,6 +44,15 @@ deliberately live in `:core` to avoid a dependency cycle. Which
 - This module declares its **own `sonar {}` configuration**, as does every analysed
   module (`:core-test` and `:fast-sim` set `isSkipProject`; Issue #762 — the root Sonar
   config lists no module paths, so no module is indexed twice). Keep it here.
+
+## Run JSON schema changes
+
+A change to the run JSON (`DispatcherRunSnapshot`, `RunParameters`, `RailwayOutcome`, or an enum
+vocabulary they store) bumps `DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION` and its KDoc history,
+and the `:core` writer: `RunRecordJsonWriter` (`:core` `commonMain`, package `persistence`) writes
+the same JSON for a run without an LLM dispatcher (the native `fast-sim --runs-root`, Issue #1327)
+and spells every key and the schema number as strings. `RunRecordJsonReadBackTest` in
+`:desktop-ui` fails until the writer matches the JVM file again.
 
 ## Configuration
 
@@ -129,7 +138,29 @@ java -jar desktop-ui/build/libs/interlockSim.jar aiSweep \
 ```
 
 Each run writes one JSON under `<out>/<arm>/`, and the sweep renders
-`<out>/report.md` when it finishes. A run that exceeds `perRunTimeoutSeconds` is
+`<out>/report.md` when it finishes. Its Arm Comparison pools every run of an arm;
+its Parameter Sweep tables (Decision Hygiene, Railway Outcomes, Performance) have
+one row per cell, and a cell is the run parameters **and** the example (#1333), so
+two examples swept with equal parameters get a row each, with their own `Runs`
+and gate (a split row can fall under the gate's 10-run minimum). A run JSON
+without `example` shows `(unnamed)`.
+
+A run passes only if its trains that left by their **timetabled InOut**
+(trains exited minus wrong exits) reach the **exit bar** of its example (#1315).
+The bars live in `ExitPassBars`, beside `RunReportAggregator`, keyed by the
+`ExampleNames` constants, each with its control-arm source (600 s, provenance, run
+count, figures): half of the deterministic arm's fewest own-InOut exits, rounded
+up. `shuntingLoop`, `shuntingLoopAI` and a run without `example` keep the #895
+bar `MIN_TRAINS_EXITED` = 6 — an unnamed file (before schema 13, e.g. an SP5-era
+`cervenyUjezd` file) is judged as the #895 network whatever it ran, with its
+wrong exits subtracted; an LLM example uses its twin's bar. Wrong exits
+subtract, they never veto. A name with no bar (a GUI run of `vyhybna.xml`, say)
+gets no exit check and the report prints `exit bar not measured` on its Gate.
+The bars are tripwires: re-measure them before reading the gate at another
+horizon, and record a new measurement with its source. Arm Comparison pools runs
+judged against different bars; each run's verdict reads its own.
+
+A run that exceeds `perRunTimeoutSeconds` is
 killed and recorded as `TIMEOUT_ABORT` rather than left absent — an absent failed
 run would silently improve the arm's measured rate.
 

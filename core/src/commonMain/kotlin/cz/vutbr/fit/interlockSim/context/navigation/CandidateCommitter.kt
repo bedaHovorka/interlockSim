@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -22,6 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.sim.emitCustomGuarded
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -348,12 +348,13 @@ internal class CandidateCommitter(
 				"reserved path has ${mergeCandidate.reservedPath.length()} elements"
 		}
 
+		// Resolved -- this train is no longer contending for any block. Cleared before the events below, so
+		// their listeners (the Issue #1305 capacity-pressure sample) never see the resolved contention as open.
+		contention.clearBlockedTracking(trainId)
+
 		// Emit BlockReserved only for the blocks THIS call newly reserved (Issue #1081);
 		// the full rationale moved with the code into [emitForwardBlockReservedEvents].
 		emitForwardBlockReservedEvents(trainId, forwardBlocks)
-
-		// Resolved -- this train is no longer contending for any block.
-		contention.clearBlockedTracking(trainId)
 
 		return PathReservationService.ReservationResult.Success(blocks)
 	}
@@ -380,7 +381,7 @@ internal class CandidateCommitter(
 		// became dispatcher-reachable with Issue #1060).
 		val simTime = currentSimulationTime()
 		forwardBlocks.forEach { block ->
-			emitCustom(BlockEvent.BlockReserved(block, trainId, simTime))
+			emitCustomGuarded(BlockEvent.BlockReserved(block, trainId, simTime))
 			// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
 			registry.emit(
 				BlockOccupancyEvent(
@@ -424,7 +425,7 @@ internal class CandidateCommitter(
 		// cleanup is needed.
 		releaser.rollbackReservation(start, forwardBlocks)
 		val simTime = currentSimulationTime()
-		emitCustom(
+		emitCustomGuarded(
 			BlockEvent.ReservationConflictDetected(
 				block = result.conflictingBlock,
 				trainId = trainId,
@@ -432,7 +433,7 @@ internal class CandidateCommitter(
 				time = simTime
 			)
 		)
-		emitCustom(
+		emitCustomGuarded(
 			ConflictDetectedEvent(
 				block = result.conflictingBlock,
 				trainId = trainId,

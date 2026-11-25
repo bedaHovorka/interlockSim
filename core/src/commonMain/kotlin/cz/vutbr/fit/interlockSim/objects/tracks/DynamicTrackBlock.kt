@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.ksimulantenbande.kdisco.Process
-import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
@@ -20,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
+import cz.vutbr.fit.interlockSim.sim.emitCustomGuarded
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -233,7 +233,7 @@ class DynamicTrackBlock(
 				"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} collision! " +
 					"Existing occupant=${this.occupant}, newOccupant=$occupant"
 			}
-			emitCustom(
+			emitCustomGuarded(
 				CollisionWarning.BlockEntryViolation(
 					trainId = occupant.name,
 					block = this,
@@ -248,7 +248,7 @@ class DynamicTrackBlock(
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
 		this.occupant = occupant
 		reservedFrom = null
-		emitCustom(BlockEvent.OccupancySet(this, occupant, currentSimulationTime()))
+		emitCustomGuarded(BlockEvent.OccupancySet(this, occupant, currentSimulationTime()))
 		emitBlockOccupancyEvent(
 			type = BlockOccupancyEventType.BLOCK_OCCUPIED,
 			previousState = TrackFacility.State.RESERVED,
@@ -289,7 +289,7 @@ class DynamicTrackBlock(
 		)
 		this.occupant = null
 		trainName = null
-		emitCustom(BlockEvent.OccupancyCleared(this, currentSimulationTime()))
+		emitCustomGuarded(BlockEvent.OccupancyCleared(this, currentSimulationTime()))
 	}
 
 	/**

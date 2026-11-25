@@ -25,6 +25,8 @@ import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.ListSelectionModel
 import javax.swing.SwingUtilities
+import javax.swing.event.ListDataEvent
+import javax.swing.event.ListDataListener
 
 /**
  * Warning log panel that lists collision warnings detected during simulation.
@@ -84,6 +86,17 @@ class WarningPanel : JPanel() {
 	 */
 	var onClear: (() -> Unit)? = null
 
+	/**
+	 * Invoked on the EDT with the new number of listed warnings each time a warning is added or the
+	 * log is cleared (Issue #1421: the frame shows the count in the Warnings tab title). `null`
+	 * disables it.
+	 */
+	var onCountChanged: ((Int) -> Unit)? = null
+
+	/** Number of warnings in the log now. */
+	internal val warningCount: Int
+		get() = listModel.size
+
 	init {
 		layout = BorderLayout()
 		border = BorderFactory.createTitledBorder("Collision Warnings")
@@ -97,6 +110,16 @@ class WarningPanel : JPanel() {
 				onWarningSelected?.invoke(selected)
 			}
 		}
+
+		listModel.addListDataListener(
+			object : ListDataListener {
+				override fun intervalAdded(e: ListDataEvent) = notifyCount()
+
+				override fun intervalRemoved(e: ListDataEvent) = notifyCount()
+
+				override fun contentsChanged(e: ListDataEvent) = notifyCount()
+			}
+		)
 
 		val scrollPane = JScrollPane(warningList)
 		add(scrollPane, BorderLayout.CENTER)
@@ -128,6 +151,10 @@ class WarningPanel : JPanel() {
 		require(SwingUtilities.isEventDispatchThread()) { "clearWarnings must be called from EDT" }
 		listModel.clearWarnings()
 		onClear?.invoke()
+	}
+
+	private fun notifyCount() {
+		onCountChanged?.invoke(listModel.size)
 	}
 
 	/** Returns `true` when the model contains at least one unacknowledged [CollisionWarning.Severity.CRITICAL] warning. */

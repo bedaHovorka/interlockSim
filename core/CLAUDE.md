@@ -125,6 +125,7 @@ core/src/
 │   ├── lang/          - Dispatcher vocabulary (lang/vocab)
 │   ├── objects/       - Domain model (tracks, cells, paths)
 │   ├── pathfinding/   - Automatic path finding (`DefaultRouteFinder`, path cost); `RouteSearch` is in context/navigation
+│   ├── persistence/   - Run JSON writer of a run without an LLM dispatcher (`RunRecordJsonWriter`, Issue #1327)
 │   ├── ports/         - Ports for the dispatcher seam
 │   ├── sim/           - Simulation engine and scenarios (+ collision, conflict, events, metrics)
 │   ├── util/          - Utilities

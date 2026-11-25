@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import java.time.ZoneOffset
@@ -27,7 +28,9 @@ import java.util.Locale
  * ```
  * runPassed  = completedNaturally && !terminalFallbackEngaged && c7Clean &&
  *              (arm == RULE_BASED || actionableTickRate >= MIN_ACTIONABLE_RATE) &&
- *              (trainsExited == null || trainsExited >= MIN_TRAINS_EXITED)
+ *              exitTermAcceptable
+ * exitTermAcceptable = bar == null || trainsExited == null ||
+ *              trainsExited - (wrongExits ?: 0) >= bar      // bar = ExitPassBars.barFor(example)
  * gatePassed = runCount >= 10 && passingRuns >= 8 && snapshots.all { it.c7Clean }
  * ```
  *
@@ -38,8 +41,10 @@ import java.util.Locale
  * *actionable-rate AND railway outcome*, after a measured run at `tickPeriodMs=20000` scored
  * `llmSuccessRate=0.846` on a railway that moved nothing (journeys 0/7). Issue #895 measured that
  * both of its terms were decision-hygiene terms and that neither read the railway, so the outcome
- * half is now [MIN_TRAINS_EXITED]. Both constants are measured — see their own KDoc, and
- * `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md` §12.2 for how each was derived.
+ * half is now the exit bar. Issue #1315 made that bar per example ([ExitPassBars]): it counts exits
+ * by the timetabled InOut, and [MIN_TRAINS_EXITED] is the #895 vyhybna entry of that table. Both
+ * thresholds are measured — see their own KDoc, and `docs/GOAL_10_SP2C14_RELIABILITY_REPORT.md`
+ * §12.2 for how the #895 values were derived.
  *
  * ## Sections rendered
  *
@@ -53,7 +58,7 @@ import java.util.Locale
  * | Author Attribution | [ActionAuthor] × arm |
  * | Skipped NEXT SECTION Offers | per arm, offered hops the LLM left unrequested on fallback-skipping cycles |
  * | Latency | arm × tick period, p50/p95/max and deadline-miss count |
- * | Parameter Sweep | one row per [RunParameters] cell |
+ * | Parameter Sweep | one row per cell: [RunParameters] and example ([ParameterSweepCellKey], Issue #1333) |
  *
  * @param store Used to load per-run JSON snapshots for the Gradle task entry point.
  *
@@ -94,7 +99,10 @@ class RunReportAggregator(
 		const val MIN_ACTIONABLE_RATE: Double = 0.8
 
 		/**
-		 * Minimum [RailwayOutcome.trainsExited] a run must reach to pass [runPassed] (Issue #895).
+		 * The #895 exit bar of the vyhybna examples (`shuntingLoop`, `shuntingLoopAI`, and a run file
+		 * without an example) in [ExitPassBars]: the minimum count of trains that left by their
+		 * **timetabled InOut** a run must reach to pass [runPassed]. Since Issue #1315 every other
+		 * example has a bar of its own, measured the same way, or none.
 		 *
 		 * This is the gate's **railway-outcome** term. #927 described the gate as "actionable rate
 		 * AND railway outcome", but both of its terms measured decision hygiene; nothing in the
@@ -112,18 +120,26 @@ class RunReportAggregator(
 		 * reads decision records.
 		 *
 		 * **Network- and horizon-specific.** `11` is a property of `vyhybna.xml` at 600 s with
-		 * `RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS = 2`. Re-derive this constant from the
-		 * control arm before reading the gate on a different network or horizon.
+		 * `RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS = 2`. Issue #1315 measured the same arm
+		 * at 15 exits (all by the own InOut); the bar stays `6` by ruling, so the #895 verdicts do
+		 * not move. It stays a tripwire.
 		 *
 		 * An absent exit count is "not measured", never "zero" — see [runPassed].
 		 */
 		const val MIN_TRAINS_EXITED: Long = 6
 
+		/**
+		 * The text a verdict carries when the run's example has no measured exit bar in [ExitPassBars]
+		 * (Issue #1315): such a run gets no exit check, and the report must not let that read as a
+		 * pass against a bar.
+		 */
+		const val EXIT_BAR_NOT_MEASURED = "exit bar not measured"
+
 		/** Column count of the Parameter Sweep "Decision Hygiene" table (for its separator row). */
-		private const val HYGIENE_TABLE_COLUMNS = 24
+		private const val HYGIENE_TABLE_COLUMNS = 25
 
 		/** Column count of the Parameter Sweep "Railway Outcomes" table (for its separator row). */
-		private const val OUTCOMES_TABLE_COLUMNS = 20
+		private const val OUTCOMES_TABLE_COLUMNS = 25
 
 		/**
 		 * Column headers of the "Arm Comparison" table — the single source for both its header row
@@ -214,7 +230,9 @@ class RunReportAggregator(
 		val passingRuns = snapshots.count { runPassed(it) }
 		val allC7Clean = snapshots.all { it.c7Clean }
 		val runCount = snapshots.size
-		val gatePassed = runCount >= MIN_RUN_COUNT && passingRuns >= MIN_PASSING_RUNS && allC7Clean
+		// Issue #676: a run without a dispatcher measures no dispatcher, so its arm never passes.
+		val gatePassed =
+			arm.hasDispatcher && runCount >= MIN_RUN_COUNT && passingRuns >= MIN_PASSING_RUNS && allC7Clean
 
 		val llmSuccessRates = snapshots.map { it.llmSuccessRate }.sorted()
 		val actionableTickRates = snapshots.map { it.actionableTickRate }.sorted()
@@ -273,6 +291,24 @@ class RunReportAggregator(
 	}
 
 	/**
+	 * One [ArmReport] per arm, in [DispatcherArm] order: every arm with a dispatcher, even one
+	 * without runs (shown with zero runs), and [DispatcherArm.NO_DISPATCHER] only when it has runs
+	 * (Issue #676), so a report over dispatcher runs keeps its layout.
+	 *
+	 * @since Issue #676 (Goal 6 SP5)
+	 */
+	fun aggregateByArm(snapshots: List<DispatcherRunSnapshot>): List<ArmReport> {
+		val byArm = snapshots.groupBy { it.arm }
+		return DispatcherArm.entries
+			.filter { it.hasDispatcher || it in byArm }
+			.map { arm ->
+				// aggregate() reports RULE_BASED for an empty list, having no snapshot to read the
+				// arm from; put the right arm back so an empty arm does not misreport itself.
+				aggregate(byArm[arm] ?: emptyList()).let { if (it.runCount == 0) it.copy(arm = arm) else it }
+			}
+	}
+
+	/**
 	 * Renders a Markdown report from [reports] — one [ArmReport] per arm.
 	 *
 	 * Contains the seven sections specified in SP2c.23 (Issue #846).
@@ -304,7 +340,15 @@ class RunReportAggregator(
 	/**
 	 * Per-run pass predicate: the run completed naturally, the terminal fallback never engaged, no
 	 * C7 violation was observed, its decision rate cleared [MIN_ACTIONABLE_RATE] (Issue #927) and
-	 * its railway moved at least [MIN_TRAINS_EXITED] trains out (Issue #895).
+	 * its railway moved at least its example's exit bar of trains out by their timetabled InOut
+	 * (Issue #895, per example since Issue #1315).
+	 *
+	 * **The exit term (Issue #1315 ruling).** The bar is [ExitPassBars.barFor] of
+	 * [DispatcherRunSnapshot.example]. Wrong exits count against a pass by **subtraction**, not as a
+	 * veto: `trainsExited - (wrongExits ?: 0) >= bar`. A veto is wrong because the own-exit fallback
+	 * (#1299) is designed degraded operation, and the bar was derived from the control arm's correctly
+	 * delivered exits. An example without a bar gets no exit check; the report then shows
+	 * [EXIT_BAR_NOT_MEASURED] on its verdict, never a silent pass against the vyhybna bar.
 	 *
 	 * Two scoping rules, both measured by #895:
 	 *
@@ -312,7 +356,10 @@ class RunReportAggregator(
 	 *   consults no LLM, so it records `totalTicks = 0` and an `actionableTickRate` of `0.0`.
 	 *   Applying an LLM decision-quality clause to it failed a control arm that had just delivered
 	 *   eleven exits on every one of ten runs — #895 printed `| RULE_BASED | 10 | 0 | FAIL |` where
-	 *   #847 and #834 had both published the same arm as 10/10 PASS.
+	 *   #847 and #834 had both published the same arm as 10/10 PASS. [DispatcherArm.NO_DISPATCHER]
+	 *   is exempt for the same reason (Issue #676): with no dispatcher at all its runs always record
+	 *   `0.0`. Its arm gate never passes anyway; the exemption keeps its per-run verdict about the
+	 *   railway only.
 	 * - **An absent [RailwayOutcome.trainsExited] does not fail the outcome term.** Absent is "not
 	 *   measured", never "zero", the same rule [RailwayProgress] follows. That counter is absent for
 	 *   any example whose main process is not a `ShuntingLoop`.
@@ -324,13 +371,33 @@ class RunReportAggregator(
 			actionableRateAcceptable(snapshot) &&
 			railwayOutcomeAcceptable(snapshot)
 
-	/** See [runPassed] for why the rule-based arm is exempt. */
+	/** See [runPassed] for why the rule-based arm and the no-dispatcher arm are exempt. */
 	private fun actionableRateAcceptable(snapshot: DispatcherRunSnapshot): Boolean =
-		snapshot.arm == DispatcherArm.RULE_BASED || snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
+		snapshot.arm == DispatcherArm.RULE_BASED ||
+			!snapshot.arm.hasDispatcher ||
+			snapshot.actionableTickRate >= MIN_ACTIONABLE_RATE
 
-	/** See [runPassed] for why an absent exit count cannot fail a run. */
-	private fun railwayOutcomeAcceptable(snapshot: DispatcherRunSnapshot): Boolean =
-		snapshot.railwayOutcome.trainsExited?.let { it >= MIN_TRAINS_EXITED } ?: true
+	/**
+	 * The exit term: see [runPassed] for why an example without a bar and an absent exit count
+	 * cannot fail a run, and why wrong exits are subtracted.
+	 */
+	private fun railwayOutcomeAcceptable(snapshot: DispatcherRunSnapshot): Boolean {
+		val bar = ExitPassBars.barFor(snapshot.example) ?: return true
+		val exited = snapshot.railwayOutcome.trainsExited ?: return true
+		return exited - (snapshot.railwayOutcome.wrongExits ?: 0L) >= bar
+	}
+
+	/** Exits by the timetabled InOut: `null` when the exit count was not measured. */
+	private fun ownInOutExits(outcome: RailwayOutcome): Long? =
+		outcome.trainsExited?.let { it - (outcome.wrongExits ?: 0L) }
+
+	/**
+	 * Exits by the timetabled InOut, summed over the runs that measured an exit count: `null` when none
+	 * did. Per run, not over the composite outcome -- a run whose exits were absent must contribute
+	 * neither exits nor a subtraction to the measured runs' total (Issue #1315 thread of 2026-11-23).
+	 */
+	private fun ownInOutExits(snapshots: List<DispatcherRunSnapshot>): Long? =
+		snapshots.mapNotNull { ownInOutExits(it.railwayOutcome) }.reduceOrNull(Long::plus)
 
 	// ── Table renderers ───────────────────────────────────────────────────────
 
@@ -347,7 +414,7 @@ class RunReportAggregator(
 				"| ${r.arm} " +
 					"| ${r.runCount} " +
 					"| ${r.passingRuns} " +
-					"| ${gateSymbol(r.gatePassed)} " +
+					"| ${verdictText(r)} " +
 					"| ${fmtRate(r.medianLlmSuccessRate)} " +
 					"| ${fmtRate(r.medianActionableTickRate)} " +
 					"| ${fmtRate(r.medianNoOpRate)} " +
@@ -656,8 +723,18 @@ class RunReportAggregator(
 	}
 
 	/**
-	 * One row per distinct `(arm, params)` combination — the grid cells, not the arms — split
-	 * across two tables that share the same parameter-identity columns as their join key.
+	 * One row per distinct `(arm, params, example)` combination — the grid cells, not the arms —
+	 * split across tables that share the same parameter-identity columns, Example included, as their
+	 * join key.
+	 *
+	 * ## Why the example is part of the cell (Issue #1333)
+	 *
+	 * [RunParameters] has no example field, so a cell keyed by it alone pooled two networks run with
+	 * equal parameters (`shuntingLoop` and `cervenyUjezd` on the rule-based arm; `multiTrainLoop` and
+	 * `threeTrainLoop` without a dispatcher) into one row. The cell is now a [ParameterSweepCellKey]:
+	 * a cell's `Runs`, `Passing` and `Gate` are read per example, so a split row can fall under the
+	 * gate's run-count minimum where the pooled row did not. Arm Comparison still pools the examples
+	 * of an arm.
 	 *
 	 * ## Why two tables (Issue #834, SP2c.11, Task 5)
 	 *
@@ -668,7 +745,9 @@ class RunReportAggregator(
 	 * columns stopped being legible, so this renders **Decision Hygiene** (tick/action
 	 * bookkeeping, the existing gate columns) and **Railway Outcomes** (what the railway actually
 	 * did) as two tables built from the identical [paramsRowPrefix] columns, so a reader can join
-	 * a row in one to its counterpart in the other without guessing.
+	 * a row in one to its counterpart in the other without guessing. A third, **Performance**
+	 * ([PerformanceReportSection], Issue #1306), renders the same cells and starts with the same
+	 * columns.
 	 *
 	 * ## Why this is not one row per arm (Issue #847, SP2c.24)
 	 *
@@ -695,67 +774,76 @@ class RunReportAggregator(
 	) {
 		sb.appendLine("## Parameter Sweep")
 		sb.appendLine()
-		sb.appendLine("> One row per distinct parameter cell. `Runs`/`Passing` are that cell's own.")
+		sb.appendLine(
+			"> One row per distinct parameter cell and example. `Runs`/`Passing`/`Gate` are that cell's own."
+		)
 		sb.appendLine()
 
-		val cellReports =
-			reports.flatMap { report ->
-				if (report.snapshots.isEmpty()) {
-					// An arm with no snapshots still renders a placeholder Parameter Sweep row:
-					// [aggregate] fills its `params` with the default RunParameters (rule-based arm,
-					// unset seed), and the railway figures render as `n/a`. This is the intentional
-					// fallback pinned by `renderMarkdown falls back to placeholders …` and `… zero
-					// runs renders both tables without throwing` — an empty arm must show it exists
-					// with defaults, not vanish from the sweep.
-					listOf(report)
-				} else {
-					report.snapshots
-						.groupBy { it.params }
-						.entries
-						.sortedBy { it.key.toString() }
-						.map { (_, cellSnapshots) -> aggregate(cellSnapshots) }
-				}
-			}
-
-		val ranked =
-			cellReports
-				.map { it to aggregateRailwayOutcome(it.snapshots) }
-				.sortedWith(
-					compareByDescending<Pair<ArmReport, RailwayOutcome>> { it.second.trainsExited ?: Long.MIN_VALUE }
-						.thenBy { it.first.params.toString() }
-				)
+		val ranked = parameterSweepCells(reports)
 
 		appendParameterSweepLegend(sb)
 		appendHygieneTable(sb, ranked)
 		appendOutcomesTable(sb, ranked)
+		// Issue #1306, #1333: the same cells, so wall time is never pooled across networks.
+		PerformanceReportSection.append(sb, ranked, ::paramsRowPrefix)
 	}
+
+	/**
+	 * The Parameter Sweep cells of [reports], ranked: every arm's runs grouped by
+	 * [ParameterSweepCellKey] (Issue #1333) and each group aggregated alone, ordered by summed
+	 * [RailwayOutcome.trainsExited] descending (unmeasured last), then by parameters and example.
+	 *
+	 * An arm with no snapshots still yields a placeholder cell: [aggregate] fills its `params` with
+	 * the default RunParameters (rule-based arm, unset seed), its example is unnamed and its railway
+	 * figures render as `n/a`. This is the intentional fallback pinned by `renderMarkdown falls back
+	 * to placeholders …` and `… zero runs renders both tables without throwing` — an empty arm must
+	 * show it exists with defaults, not vanish from the sweep.
+	 */
+	private fun parameterSweepCells(reports: List<ArmReport>): List<ParameterSweepCell> =
+		reports
+			.flatMap { report ->
+				if (report.snapshots.isEmpty()) {
+					listOf(ParameterSweepCell(ParameterSweepCellKey(report.params, null), report, RailwayOutcome.UNMEASURED))
+				} else {
+					report.snapshots
+						.groupBy(ParameterSweepCellKey::of)
+						.map { (key, cellSnapshots) ->
+							ParameterSweepCell(key, aggregate(cellSnapshots), aggregateRailwayOutcome(cellSnapshots))
+						}
+				}
+			}.sortedWith(
+				compareByDescending<ParameterSweepCell> { it.outcome.trainsExited ?: Long.MIN_VALUE }
+					.thenBy { it.key.params.toString() }
+					.thenBy(nullsLast()) { it.key.example }
+			)
 
 	private fun appendHygieneTable(
 		sb: StringBuilder,
-		ranked: List<Pair<ArmReport, RailwayOutcome>>
+		ranked: List<ParameterSweepCell>
 	) {
 		sb.appendLine("### Decision Hygiene")
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
-				"Breaker Threshold | Breaker Cooldown s | " +
+				"Breaker Threshold | Breaker Cooldown s | Example | " +
 				"Runs | Passing | Gate | LLM Success | Invalid-action rate | No-op rate | " +
 				"Repair-success rate † | validAt1 | correctAt1 | p50 latency ms | p95 latency ms | " +
 				"C7 clean | RULE_FALLBACK ticks |"
 		)
 		sb.appendLine("|" + "---|".repeat(HYGIENE_TABLE_COLUMNS))
 
-		for ((r, _) in ranked) {
+		for (cell in ranked) {
+			val r = cell.report
 			val invalidActionRate = medianInvalidActionRate(r.snapshots)
 			val repairRate = median(r.snapshots.map { it.repairSuccessRate }.sorted())
 			val p50s = r.snapshots.mapNotNull { it.latencyP50Ms }.sorted()
 			val p50 = if (p50s.isEmpty()) null else percentile50(p50s)
 			val ruleFallbackTicks = r.snapshots.sumOf { it.ticksByOutcome[TickOutcome.RULE_FALLBACK.name] ?: 0L }
 			sb.appendLine(
-				paramsRowPrefix(r) +
+				paramsRowPrefix(cell) +
 					"| ${r.runCount} " +
 					"| ${r.passingRuns} " +
-					"| ${gateSymbol(r.gatePassed)} " +
+					"| ${verdictText(r)} " +
 					"| ${fmtRate(r.medianLlmSuccessRate)} " +
 					"| ${fmtRateNullable(invalidActionRate)} " +
 					"| ${fmtRate(r.medianNoOpRate)} " +
@@ -773,21 +861,24 @@ class RunReportAggregator(
 
 	private fun appendOutcomesTable(
 		sb: StringBuilder,
-		ranked: List<Pair<ArmReport, RailwayOutcome>>
+		ranked: List<ParameterSweepCell>
 	) {
 		sb.appendLine("### Railway Outcomes")
 		sb.appendLine()
 		sb.appendLine(
 			"| Arm | Model | Temperature | Tick ms | historyN | maxActions | Seed | Timeout s | Prompt Variant | " +
-				"Breaker Threshold | Breaker Cooldown s | " +
+				"Breaker Threshold | Breaker Cooldown s | Example | " +
 				"Runs | Journeys completed | Trains entered | Trains exited (authoritative) | Max concurrent | " +
-				"Block transitions | Conflicts | Failed reservations | Unresolved at run end |"
+				"Block transitions | Conflicts | Failed reservations | Unresolved at run end | Wrong exits | Cutoff runs | " +
+				"Exits by own InOut | Exit bar (per run) |"
 		)
 		sb.appendLine("|" + "---|".repeat(OUTCOMES_TABLE_COLUMNS))
 
-		for ((r, outcome) in ranked) {
+		for (cell in ranked) {
+			val r = cell.report
+			val outcome = cell.outcome
 			sb.appendLine(
-				paramsRowPrefix(r) +
+				paramsRowPrefix(cell) +
 					"| ${r.runCount} " +
 					"| ${fmtNullableLong(outcome.journeysCompleted)} " +
 					"| ${fmtNullableLong(outcome.trainsEntered)} " +
@@ -796,14 +887,28 @@ class RunReportAggregator(
 					"| ${fmtNullableLong(outcome.blockTransitions)} " +
 					"| ${fmtNullableLong(outcome.conflicts)} " +
 					"| ${fmtNullableLong(outcome.failedReservations)} " +
-					"| ${fmtNullableLong(outcome.unresolvedAtRunEnd)} |"
+					"| ${fmtNullableLong(outcome.unresolvedAtRunEnd)} " +
+					"| ${fmtNullableLong(outcome.wrongExits)} " +
+					"| ${fmtNullableLong(cutoffRuns(r.snapshots))} " +
+					"| ${fmtNullableLong(ownInOutExits(r.snapshots))} " +
+					"| ${exitBarText(cell.key.example)} |"
 			)
 		}
 		sb.appendLine()
 	}
 
 	/**
-	 * Legend for the two Parameter Sweep tables. Several of these metrics have names that sound
+	 * Runs of the cell classified [RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS]; `null` when
+	 * no run carries an end classification (files before schema version 11), Issue #676.
+	 */
+	private fun cutoffRuns(snapshots: List<DispatcherRunSnapshot>): Long? {
+		val classified = snapshots.mapNotNull { it.railwayOutcome.endClassification }
+		if (classified.isEmpty()) return null
+		return classified.count { it == RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS }.toLong()
+	}
+
+	/**
+	 * Legend for the Parameter Sweep tables. Several of these metrics have names that sound
 	 * interchangeable and are not — see each bullet for the exact numerator and denominator.
 	 */
 	private fun appendParameterSweepLegend(sb: StringBuilder) {
@@ -863,7 +968,28 @@ class RunReportAggregator(
 				"schema version 10 counted both in Conflicts and show `n/a` for Unresolved at run end."
 		)
 		sb.appendLine(
-			"- **Ranking (issue #906)** — both tables are ranked by **Trains exited**, descending, cells " +
+			"- **Wrong exits / Cutoff runs (issue #676)** — **Wrong exits** sums the trains that left " +
+				"through another InOut than the one they were queued for. **Cutoff runs** counts the runs " +
+				"that reached their end time with admitted trains still on the network " +
+				"(`CUTOFF_WITH_UNFINISHED_JOURNEYS`). A cutoff never fails a run or the gate; wrong exits " +
+				"count only through Exits by own InOut (issue #1315). Runs written before schema version 11 " +
+				"show `n/a`."
+		)
+		appendExitBarLegend(sb)
+		sb.appendLine(
+			"- **Example (issue #1333)** — the example the cell's runs ran; `(unnamed)` is a run that named " +
+				"none or a blank name (a GUI run, or a file before schema version 13). A cell is its parameters **and** its " +
+				"example, so two networks run with equal parameters get a row each, and each row's `Runs`, " +
+				"`Passing` and `Gate` are that example's own: a row can show `FAIL` on fewer than 10 runs where " +
+				"the arm's pooled row in Arm Comparison, which still pools the examples, shows enough runs."
+		)
+		sb.appendLine(
+			"- **NO_DISPATCHER arm (issue #676)** — runs with no dispatcher at all (for example " +
+				"`multiTrainLoop`), persisted because a sweep configured a store for them. Their railway " +
+				"figures are shown; the gate is `n/a`, because they measure no dispatcher."
+		)
+		sb.appendLine(
+			"- **Ranking (issue #906)** — the Parameter Sweep tables are ranked by **Trains exited**, descending, cells " +
 				"with no measured `trainsExited` sorted last. Not by `journeysCompleted`: that counter " +
 				"increments whenever a train's reservation count reaches zero, with no termination or " +
 				"movement predicate, so a stale swept route can credit a journey to a train that never " +
@@ -871,7 +997,26 @@ class RunReportAggregator(
 				"termination-gated and is the authoritative per-cell outcome figure; `journeysCompleted` is " +
 				"still reported alongside it, for comparison only."
 		)
+		sb.appendLine(PerformanceReportSection.legend())
 		sb.appendLine()
+	}
+
+	/** The legend bullet of the Exits by own InOut and Exit bar columns (Issue #1315). */
+	private fun appendExitBarLegend(sb: StringBuilder) {
+		sb.appendLine(
+			"- **Exits by own InOut / Exit bar (issue #1315)** — **Exits by own InOut** is Trains exited " +
+				"minus Wrong exits, summed: the trains that left by their timetabled InOut. **Exit bar** is " +
+				"the minimum of those a single run of the example must reach to pass, measured per example " +
+				"from its deterministic arm at 600 s (half of its fewest own-InOut exits, rounded up; " +
+				"`shuntingLoop`, its LLM twin and an unnamed run keep the #895 bar of 6; an LLM example uses " +
+				"its twin's bar). It is a tripwire. Wrong exits subtract from a pass, they never veto it. " +
+				"`$EXIT_BAR_NOT_MEASURED` — on the bar and on the Gate — marks an example with no measured " +
+				"bar (an XML file run from the GUI, say): its runs had no exit check. A run without an example " +
+				"(a file before schema version 13) is judged against the bar of 6 whatever network it ran. " +
+				"Runs written before schema version 11 counted no wrong exits, so there Exits by own InOut " +
+				"equals Trains exited. Arm Comparison pools runs judged against different bars, one per " +
+				"example; each run's verdict reads its own bar."
+		)
 	}
 
 	/**
@@ -891,7 +1036,8 @@ class RunReportAggregator(
 			blockTransitions = reduceOrNull(outcomes.map { it.blockTransitions }) { it.sum() },
 			conflicts = reduceOrNull(outcomes.map { it.conflicts }) { it.sum() },
 			failedReservations = reduceOrNull(outcomes.map { it.failedReservations }) { it.sum() },
-			unresolvedAtRunEnd = reduceOrNull(outcomes.map { it.unresolvedAtRunEnd }) { it.sum() }
+			unresolvedAtRunEnd = reduceOrNull(outcomes.map { it.unresolvedAtRunEnd }) { it.sum() },
+			wrongExits = reduceOrNull(outcomes.map { it.wrongExits }) { it.sum() }
 		)
 	}
 
@@ -928,14 +1074,16 @@ class RunReportAggregator(
 	}
 
 	/**
-	 * Shared parameter-identity columns rendered identically, in the same order, in both
-	 * Parameter Sweep tables — the join key a reader uses to match a [ArmReport]'s hygiene row to
-	 * its outcomes row without guessing.
+	 * Shared cell-identity columns rendered identically, in the same order, in every Parameter
+	 * Sweep table — the join key a reader uses to match a cell's hygiene row to its outcomes and
+	 * performance rows without guessing: the arm, the [RunParameters] and, last, the example
+	 * (Issue #1333), escaped because it is free text (a GUI run can be named after its XML file).
 	 */
-	private fun paramsRowPrefix(r: ArmReport): String {
-		val p = r.params
+	private fun paramsRowPrefix(cell: ParameterSweepCell): String {
+		val r = cell.report
+		val p = cell.key.params
 		return "| ${r.arm} " +
-			"| ${p.model.ifEmpty { "rule-based" }} " +
+			"| ${p.model.ifEmpty { if (r.arm.hasDispatcher) "rule-based" else "none" }} " +
 			"| ${p.temperature} " +
 			"| ${p.tickPeriodMs} " +
 			"| ${p.historyN} " +
@@ -944,7 +1092,8 @@ class RunReportAggregator(
 			"| ${p.inferenceTimeoutSeconds} " +
 			"| ${p.promptVariant} " +
 			"| ${p.circuitBreakerFailureThreshold} " +
-			"| ${p.circuitBreakerCooldownSeconds} "
+			"| ${p.circuitBreakerCooldownSeconds} " +
+			"| ${mdEscapeCell(cell.key.exampleLabel)} "
 	}
 
 	// ── Statistics helpers ────────────────────────────────────────────────────
@@ -1023,6 +1172,26 @@ class RunReportAggregator(
 	private fun fmtLatency(value: Long?): String = value?.toString() ?: "—"
 
 	private fun gateSymbol(passed: Boolean): String = if (passed) "✅ PASS" else "❌ FAIL"
+
+	/** The gate cell: `n/a` for an arm without a dispatcher, which the gate does not judge (Issue #676). */
+	private fun gateText(r: ArmReport): String =
+		if (r.arm.hasDispatcher) gateSymbol(r.gatePassed) else "n/a (no dispatcher)"
+
+	/**
+	 * The gate cell plus, when some of [r]'s runs have no measured exit bar, [EXIT_BAR_NOT_MEASURED]
+	 * (Issue #1315): their `Passing` count did not read the railway's exits.
+	 */
+	private fun verdictText(r: ArmReport): String {
+		val unmeasured = r.snapshots.count { ExitPassBars.barFor(it.example) == null }
+		return when (unmeasured) {
+			0 -> gateText(r)
+			r.snapshots.size -> "${gateText(r)} · $EXIT_BAR_NOT_MEASURED"
+			else -> "${gateText(r)} · $EXIT_BAR_NOT_MEASURED for $unmeasured of ${r.snapshots.size} runs"
+		}
+	}
+
+	/** The Exit bar cell of a sweep row: the bar of its [example], or [EXIT_BAR_NOT_MEASURED]. */
+	private fun exitBarText(example: String?): String = ExitPassBars.barFor(example)?.toString() ?: EXIT_BAR_NOT_MEASURED
 
 	private fun boolSymbol(v: Boolean): String = if (v) "yes" else "no"
 

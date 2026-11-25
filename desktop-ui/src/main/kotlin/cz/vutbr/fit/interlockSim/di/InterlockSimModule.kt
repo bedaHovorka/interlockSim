@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule
 import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.gui.WindowStateStore
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationStateCapture
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
@@ -110,7 +111,9 @@ val simulationDesktopModule: Module =
  */
 val guiModule: Module =
 	module {
-		single<Frame> { Frame() }
+		// The saved window layout (Issue #1421) only when windowLayoutModule is loaded too: the
+		// application loads it, tests do not, so a test never reads the user's saved layout.
+		single<Frame> { Frame(getOrNull<WindowStateStore>()) }
 		// Main application launcher as singleton
 		single<Main> { Main() }
 	}
@@ -135,6 +138,15 @@ val animationModule: Module =
 		// AnimationController is NOT a singleton - it depends on specific
 		// SimulationContext and Component instances, which vary per use case.
 		// Instantiate directly: AnimationController(context, canvas)
+	}
+
+/**
+ * Saved main-window layout (Issue #1421): bounds, maximized state and the bottom tab-area height,
+ * in the user's `java.util.prefs` node. Loaded by `main` beside [guiModule], never by tests.
+ */
+val windowLayoutModule: Module =
+	module {
+		single { WindowStateStore() }
 	}
 
 /**

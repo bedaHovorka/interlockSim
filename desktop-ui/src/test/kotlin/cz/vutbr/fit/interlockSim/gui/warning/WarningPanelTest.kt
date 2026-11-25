@@ -230,4 +230,24 @@ class WarningPanelTest {
 		assertThat(cell.toolTipText).contains("Unresolved at run end")
 		assertThat(cell.toolTipText).contains("Block: k4")
 	}
+
+	// ── Warning count (Issue #1421) ───────────────────────────────────────────
+
+	@Test
+	@DisplayName("onCountChanged reports the count after each add and after clear")
+	fun onCountChangedReportsCount() {
+		val counts = mutableListOf<Int>()
+		SwingUtilities.invokeAndWait {
+			panel.onCountChanged = { counts.add(it) }
+			panel.addWarning(reservation)
+			panel.addWarning(advisory)
+			assertThat(panel.warningCount).isEqualTo(2)
+			panel.clearWarnings()
+			assertThat(panel.warningCount).isEqualTo(0)
+		}
+
+		assertThat(counts.first()).isEqualTo(1)
+		assertThat(counts[1]).isEqualTo(2)
+		assertThat(counts.last()).isEqualTo(0)
+	}
 }

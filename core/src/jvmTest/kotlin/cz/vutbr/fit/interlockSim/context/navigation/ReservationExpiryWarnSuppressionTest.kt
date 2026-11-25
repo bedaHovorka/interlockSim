@@ -17,6 +17,7 @@ import assertk.assertions.isNotInstanceOf
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -77,17 +78,15 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 	}
 
 	@Test
-	fun `a throwing ReservationExpired listener is contained and cannot undo the expiry`() {
-		withExpiryLog { appender ->
+	fun `a throwing raw subscriber is contained and cannot undo the expiry`() {
+		// Issue #1310: the expiry sends ReservationExpired through the guarded emit of the journey events.
+		busListeners += { event ->
+			if ((event as? SimulationEvent.Custom)?.payload is ReservationExpired) {
+				error("raw subscriber failure injected by the test")
+			}
+		}
+		withLogOf(GUARDED_EMIT_LOGGER) { appender ->
 			val zA = findSemaphoreByName("zA")
-			val throwingListener =
-				DefaultReservationExpiry(
-					registry = registry,
-					candidateScreen = (service as DefaultPathReservationService).candidateScreen,
-					ttlSimSeconds = TTL,
-					expiryRelease = service::releasePathDetailed,
-					emitExpired = { throw IllegalStateException("listener") }
-				)
 			lateinit var blocks: List<DynamicTrackBlock>
 			val returned = mutableListOf<Int>()
 
@@ -99,17 +98,17 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 					// No proceed aspect at the head, so one call frees the whole holding.
 					zA.signal = Signal.STOP
 				},
-				TTL to { returned += throwingListener.expireStale(null) }
+				TTL to { returned += service.expireStaleReservations() }
 			)
 
 			// The expiry completed all the same: counted, and the blocks are free ...
 			assertThat(returned.single()).isEqualTo(1)
-			assertThat(throwingListener.expiredHoldingCount).isEqualTo(1)
+			assertThat(expiry.expiredHoldingCount).isEqualTo(1)
 			assertBlocksFreeAndUnowned(blocks)
-			// ... and the listener's failure was logged at WARN.
+			// ... and the subscriber's failure was logged at WARN.
 			val undelivered =
 				appender.list.filter { event ->
-					event.level == Level.WARN && event.formattedMessage.contains("could not be delivered")
+					event.level == Level.WARN && event.formattedMessage.contains("raw simulation event listener failed")
 				}
 			assertThat(undelivered.size).isEqualTo(1)
 		}
@@ -127,7 +126,7 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 			received += it
 			countsAtDelivery += expiry.expiredHoldingCount
 		}
-		withLogOf(ReservationExpired::class.java.name) { appender ->
+		withLogOf(DELIVERY_GUARD_LOGGER) { appender ->
 			val zA = findSemaphoreByName("zA")
 			lateinit var blocks: List<DynamicTrackBlock>
 
@@ -291,4 +290,18 @@ class ReservationExpiryWarnSuppressionTest : ReservationExpiryTestBase() {
 		appender.list.filter {
 			it.level == Level.WARN && it.formattedMessage.startsWith("Reservation expiry of '$trainId' failed")
 		}
+
+	private companion object {
+		/**
+		 * The logger of the shared guarded emit (`emitCustomGuarded`, file `TrainJourneyEvent.kt`):
+		 * kotlin-logging names a file-level logger after the file, without the `Kt` suffix.
+		 */
+		const val GUARDED_EMIT_LOGGER = "cz.vutbr.fit.interlockSim.sim.TrainJourneyEvent"
+
+		/**
+		 * The logger of the one listener guard (`deliverContained`, file `SimulationEventGuard.kt`), which
+		 * every typed lane delivers through since Issue #1324.
+		 */
+		const val DELIVERY_GUARD_LOGGER = "cz.vutbr.fit.interlockSim.context.SimulationEventGuard"
+	}
 }

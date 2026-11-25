@@ -10,31 +10,20 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.DispatcherRunLifecycle
-import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
+import cz.vutbr.fit.interlockSim.SimulationTimeTracker
 import cz.vutbr.fit.interlockSim.context.Context
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
-import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
-import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
-import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
-import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
-import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
-import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.koin.core.scope.Scope
 import java.awt.BorderLayout
-import java.awt.Toolkit
+import java.awt.Rectangle
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
@@ -42,54 +31,46 @@ import java.awt.event.WindowEvent
 import java.beans.PropertyChangeListener
 import javax.swing.BoxLayout
 import javax.swing.JFrame
-import javax.swing.JOptionPane
 import javax.swing.JPanel
-import javax.swing.JScrollPane
+import javax.swing.JSplitPane
+import javax.swing.JTabbedPane
 import javax.swing.SwingUtilities
-import javax.swing.Timer
 
 /**
  * Main application window for Railway Interlocking Simulator.
  *
- * Provides dynamic layout that adapts based on context type:
- * - **Editing Mode** ([EditingContext]): StatusBar visible, ControlPanel hidden
- * - **Simulation Mode** ([SimulationContext]): ControlPanel and EventTimelinePanel visible, StatusBar remains visible (speed indicator shown)
+ * One layout for both modes (Issue #1421): the parts stay in place and only their enabled state
+ * changes, so the window never jumps when the mode changes.
+ * - **Editing Mode** ([EditingContext]): Path Preview tab on, side dock speed and dispatcher
+ *   controls disabled, ControlPanel hidden
+ * - **Simulation Mode** ([SimulationContext]): Warnings and Timeline tabs on, side dock
+ *   controls on, KPI dashboard polling, ControlPanel visible
  *
  * ## Layout Structure
  *
- * ### Editing Mode
  * ```
- * ┌─────────────────────────────────┐
- * │ MenuBar                         │
- * ├─────────────────────────────────┤
- * │ ToolBar                         │
- * ├─────────────────────────────────┤
- * │ RailwayNetGridCanvas            │
- * │ (scrollable)                    │
- * ├─────────────────────────────────┤
- * │ StatusBar                       │
- * └─────────────────────────────────┘
+ * ┌──────────────────────────────────────┬──────────────────────┐
+ * │ MenuBar                              │                      │
+ * ├──────────────────────────────────────┤ SideDock (EAST)      │
+ * │ ToolBar                              │ ┌──────────────────┐ │
+ * │ [Time] [Status] [Stop] [Pause] [Step]│ │ Simulation Speed │ │
+ * │ (simulation mode only)               │ ├──────────────────┤ │
+ * │                                      │ │ Metrics (KPI)    │ │
+ * ├──────────────────────────────────────┤ ├──────────────────┤ │
+ * │                                      │ │ Dispatcher       │ │
+ * │ RailwayNetGridCanvas                 │ ├──────────────────┤ │
+ * │ (scrollable; takes the extra height) │ │ Conflict         │ │
+ * ╞══════════ JSplitPane bar ════════════╡ │ Resolution (#590,│ │
+ * │ [Path Preview][Warnings (n)]         │ │ when a conflict  │ │
+ * │ [Timeline]  – bottomTabs             │ │ needs input)     │ │
+ * │                                      │ └──────────────────┘ │
+ * ├──────────────────────────────────────┴──────────────────────┤
+ * │ StatusBar (speed indicator, warning indicator)              │
+ * └─────────────────────────────────────────────────────────────┘
  * ```
  *
- * ### Simulation Mode
- * ```
- * ┌───────────────────────────────┬─────────────────────┐
- * │ MenuBar                       │                     │
- * ├───────────────────────────────┤                     │
- * │ ToolBar                       │                     │
- * ├───────────────────────────────┤                     │
- * │ ControlPanel (NEW - #205)     │                     │
- * │ [Time] [Status]               │ ConflictResolution  │
- * ├───────────────────────────────┤ Panel (EAST, #590)  │
- * │ RailwayNetGridCanvas          │ (visible only when  │
- * │ (animated, scrollable)        │  a conflict needs   │
- * ├───────────────────────────────┤  dispatcher input)  │
- * │ EventTimelinePanel (NEW)      │                     │
- * │ [Filters] [Event log...]      │                     │
- * ├───────────────────────────────┤                     │
- * │ StatusBar (speed indicator)   │                     │
- * └───────────────────────────────┴─────────────────────┘
- * ```
+ * The start size comes from [WindowGeometry]; with a [WindowStateStore] the frame restores the
+ * saved bounds and tab-area height and saves them again on exit.
  *
  * ## Animation Integration (Issue #205)
  *
@@ -97,11 +78,11 @@ import javax.swing.Timer
  * 1. Creates [EventTimelinePanel] (lazy, reused across simulations)
  * 2. Wires EventTimelinePanel to [RailwayNetGridCanvas] → [cz.vutbr.fit.interlockSim.gui.animation.AnimationController]
  * 3. Starts 10 Hz timer for [ControlPanel] time updates
- * 4. Shows ControlPanel and EventTimelinePanel (above StatusBar); StatusBar remains visible
+ * 4. Shows ControlPanel and puts EventTimelinePanel into the Timeline tab
  *
  * When an [EditingContext] is set, the frame:
- * 1. Hides ControlPanel and EventTimelinePanel
- * 2. Shows StatusBar for mouse position feedback
+ * 1. Hides ControlPanel, disables the Timeline and Warnings tabs, clears the KPI dashboard
+ * 2. Keeps StatusBar for mouse position feedback
  * 3. Stops animation timer (cleanup)
  *
  * ## Thread Safety
@@ -116,7 +97,33 @@ import javax.swing.Timer
  * @see switchToEditingMode
  * @see switchToSimulationMode
  */
-class Frame : JFrame(PROGRAM_FULL_NAME) {
+class Frame internal constructor(
+	private val windowStateStore: WindowStateStore?
+) : JFrame(PROGRAM_FULL_NAME),
+	WindowHandle {
+	// The WindowHandle members resolve explicitly: Kotlin does not accept the inherited
+	// Java bean getters/setters as interface property implementations on their own.
+	override var windowBounds: Rectangle
+		get() = bounds
+		set(value) {
+			bounds = value
+		}
+
+	override var windowState: Int
+		get() = extendedState
+		set(value) {
+			extendedState = value
+		}
+
+	override val windowShowing: Boolean
+		get() = isShowing
+
+	/**
+	 * A frame that does not read or write the saved window layout (tests, tools). The application
+	 * frame comes from Koin with a [WindowStateStore] (Issue #1421).
+	 */
+	constructor() : this(null)
+
 	/**
 	 * Base window title, without the file name and dirty marker (Issue #839).
 	 *
@@ -137,46 +144,27 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private val toolBar: ToolBar = ToolBar()
 
 	// Animation UI components (Issue #205)
-	private val controlPanel: ControlPanel = ControlPanel()
+	internal val controlPanel: ControlPanel = ControlPanel()
 	internal val simulationControlPanel: SimulationControlPanel = SimulationControlPanel()
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
-	private var animationUpdateTimer: Timer? = null
+
+	/**
+	 * The clock for [ControlPanel] (Issue #1421): the 10 Hz timer, the [SimulationTimeTracker] and
+	 * the shown time live there; [Frame] keeps only the wiring and the test delegates.
+	 */
+	private val clock: SimulationClock =
+		SimulationClock(controlPanel, pacedTime = { simulationController.runner?.pacedSimulationTime() ?: 0.0 })
+
+	/** The current run's time tracker; owned by [clock], kept as a test seam. */
+	internal val simulationTimeTracker: SimulationTimeTracker?
+		get() = clock.tracker
+
+	// Live KPI dashboard (Issue #675, Goal 6 SP3): shown in simulation mode, polls the metrics service
+	// off the EDT between RUNNING and STOPPED.
+	internal val metricsDashboardPanel: MetricsDashboardPanel = MetricsDashboardPanel()
 
 	// Dispatcher control panel (Issue #561, Goal 10 SP2b.6)
 	internal val dispatcherControlPanel: DispatcherControlPanel = DispatcherControlPanel()
-
-	// Decision-listener hub wired to the active context's Koin scope (Issue #561, SP2b.6).
-	// Held so the STOPPED transition can detach the sink and stop the sim thread from
-	// pushing applied decisions into a stale panel.
-	private var wiredDecisionHub: DispatchDecisionListenerHub? = null
-
-	// SEMI_AUTO approval gateway wired to the active context's Koin scope (Issue #806, SP2b.6 follow-up).
-	// Held so the STOPPED transition can detach the approver and prevent the sim thread from
-	// calling a stale dialog after the GUI is torn down.
-	private var wiredSemiAutoGateway: SemiAutoApprovalGateway? = null
-
-	// MeasuringPlanAdapter wired to the active context's Koin scope, captured at RUNNING time
-	// (Issue tracking: none — internal polish from final review) so the STOPPED transition
-	// logs metrics for the run that just ended, not whatever context happens to be current
-	// when STOPPED is (asynchronously) delivered on the EDT. Only the shuntingLoopAI example
-	// registers one; every other example leaves this null.
-	private var wiredMeasuringAdapter: MeasuringPlanAdapter? = null
-
-	// DispatcherRunRecorder wired to the active context's Koin scope, captured at RUNNING time
-	// (SP2c.22, Issue #845) so the STOPPED transition calls finish() and logFinalSummary() for
-	// the run that just ended. Present for any context that has one scoped (all contexts with
-	// the dispatcherAgentModule wired). Null for contexts without the dispatcher module.
-	private var wiredRunRecorder: DispatcherRunRecorder? = null
-
-	/**
-	 * Koin scope of the run captured at RUNNING, used at STOPPED to persist the run snapshot.
-	 *
-	 * Captured alongside [wiredRunRecorder] and for the same reason: the current context may have
-	 * changed by the time STOPPED fires, and the snapshot must belong to the run that just ended.
-	 *
-	 * @since Issue #847 round 4 (PR #891 — R4-5)
-	 */
-	private var wiredRunScope: Scope? = null
 
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
@@ -186,6 +174,21 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 	// Conflict resolution side panel (Issue #590, Goal 9 SP5) – visible when a conflict is active
 	internal val conflictResolutionPanel: ConflictResolutionPanel = ConflictResolutionPanel()
+
+	/**
+	 * The run's scope-bound wiring (issues #561/#806/#845/#1328/#930, Goal 9 SP5): the
+	 * scope captures, the run-record finish and the panel wiring live in [SimulationRunWiring];
+	 * [Frame]'s STOPPED transition calls it in the original order.
+	 *
+	 * Declared after its three panels so the initializer reads non-null fields.
+	 */
+	private val runWiring: SimulationRunWiring =
+		SimulationRunWiring(
+			dispatcherControlPanel = dispatcherControlPanel,
+			dashboardPanel = metricsDashboardPanel,
+			conflictResolutionPanel = conflictResolutionPanel,
+			dialogOwner = this
+		)
 
 	// ── Collision Response settings (Goal 3 SP6) ──────────────────────────────
 
@@ -225,11 +228,65 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	@Volatile
 	var soundOnCriticalWarning: Boolean = false
 
-	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
-	private val southPanel: JPanel =
-		JPanel().apply {
-			layout = BoxLayout(this, BoxLayout.Y_AXIS)
-		}
+	// ── Main window layout (Issue #1421) ──────────────────────────────────────
+
+	/**
+	 * The bottom pane under the canvas (Issue #1421): the vertical split with the three tabs, their
+	 * titles and the tab-area height live in [BottomPane]; [Frame] keeps the assembly and the seams
+	 * ([bottomTabs] as a test delegate, the split pane at CENTER).
+	 */
+	private val bottomPane: BottomPane =
+		BottomPane(railwayNetGridCanvas, pathPreviewPanel, warningPanel)
+
+	/** The bottom tabs under the canvas; owned by [bottomPane], kept as a test seam. */
+	internal val bottomTabs: JTabbedPane
+		get() = bottomPane.bottomTabs
+
+	/** The vertical split above [bottomTabs]; owned by [bottomPane], kept as a test seam. */
+	internal val splitPane: JSplitPane
+		get() = bottomPane.splitPane
+
+	/**
+	 * The collision-warning presentation (Issue #616, Goal 3 SP6): the selection highlight and the
+	 * clear wiring and [showCollisionWarning] live in [WarningPresenter]; the volatile settings stay
+	 * here, where MenuBar's toggles write them and the simulation-thread listener reads them.
+	 */
+	private val warningPresenter: WarningPresenter =
+		WarningPresenter(
+			warningPanel = warningPanel,
+			statusBar = statusBar,
+			canvas = railwayNetGridCanvas,
+			bottomPane = bottomPane,
+			resumeRun = { simulationController.runner?.isPaused = false }
+		)
+
+	/** Right-hand column: speed, KPI dashboard, dispatcher and conflict panels, in both modes. */
+	internal val sideDock: SideDock =
+		SideDock(simulationControlPanel, metricsDashboardPanel, dispatcherControlPanel, conflictResolutionPanel)
+
+	/**
+	 * Window chrome lifecycle (Issue #1421): the start geometry, the normal-bounds tracking and
+	 * the close path live in [WindowLifecycle]; [Frame] keeps its two event listeners and the
+	 * [requestClose] menu seam.
+	 */
+	private val windowLifecycle: WindowLifecycle =
+		WindowLifecycle(
+			handle = this,
+			store = windowStateStore,
+			bottomPane = bottomPane,
+			dialogParent = this,
+			isDirty = { modificationTracker.isDirty() },
+			save = { (jMenuBar as MenuBar).triggerSave() },
+			teardown = {
+				stopSimulation() // Stop any running simulation before exit
+				currentSimulationContext?.close() // Release simulation resources before JVM exit
+				clock.stopUpdates() // Stop Frame's 10 Hz timer
+				railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
+				// Issue #1072: close the shared Ollama/Koog executor so its worker threads do not
+				// outlive the application. Terminal for this JVM process (System.exit follows).
+				DispatcherRunLifecycle.closeSharedOllamaExecutor()
+			}
+		)
 
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
 	internal val simulationController: SimulationController =
@@ -237,47 +294,34 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			onStateChanged = { state ->
 				// Read synchronously, on the calling thread, before any hand-off to the EDT
 				// (see SimulationController.lastStopWasNatural kdoc for why this ordering is
-				// race-free): captures which RunEndCause produced this STOPPED transition.
+				// race-free): captures which RunEndCause produced this STOPPED transition, and
+				// the run's final paced position the controller kept before it cleared the
+				// runner (PR #1430 review: the clock's final refresh reads it).
 				val runEndCause =
 					if (simulationController.lastStopWasNatural) {
 						RunEndCause.NATURAL_COMPLETION
 					} else {
 						RunEndCause.MANUAL_STOP
 					}
+				val finalPacedTime = simulationController.lastRunFinalPacedTime
 				runOnEdt {
 					when (state) {
 						SimulationController.SimulationStatus.RUNNING -> {
 							toolBar.showSimulationControls()
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 							controlPanel.setStopEnabled(true)
-							// Capture now so the STOPPED transition logs metrics for the run that just
-							// ended, not whatever context happens to be current when STOPPED fires.
-							wiredMeasuringAdapter = currentSimulationContext?.scope?.publishedOrNull<MeasuringPlanAdapter>()
-							// SP2c.22 (#845): capture DispatcherRunRecorder at RUNNING so the STOPPED
-							// transition can call finish() and logFinalSummary() for this specific run.
-							wiredRunRecorder = currentSimulationContext?.scope?.getOrNull<DispatcherRunRecorder>()
-							// Issue #847 round 4 (R4-5): capture the scope alongside the recorder so
-							// STOPPED can also persist the run snapshot. Until round 4 the GUI called
-							// finish() but nothing ever wrote the result, and nothing fed onTick or
-							// onActionOutcome — so what it froze and discarded was an all-zero snapshot.
-							wiredRunScope = currentSimulationContext?.scope
-							// Wire DispatcherControlPanel with DispatcherModeState from the active context (Issue #561)
-							wireDispatcherControlPanel()
+							// Capture this run's scope-bound collaborators, wire the panel and
+							// start the dashboard (issues #561, #675, #845, #847, #1328).
+							runWiring.onRunning(currentSimulationContext, simulationController.runner)
 						}
 
 						SimulationController.SimulationStatus.STOPPED -> {
 							toolBar.hideSimulationControls()
 							simulationControlPanel.runner = null
-							// Detach the decision sink first so the sim thread can no longer push
-							// applied decisions into the panel, then clear panel state (Issue #561).
-							wiredDecisionHub?.setSink(null)
-							wiredDecisionHub = null
-							// Detach the SEMI_AUTO approver so the sim thread cannot call a stale
-							// dialog after the GUI is torn down (Issue #806, SP2b.6 follow-up).
-							wiredSemiAutoGateway?.setApprover(null)
-							wiredSemiAutoGateway = null
-							dispatcherControlPanel.modeState = null
-							dispatcherControlPanel.clearRationale()
+							// Detach the decision-listener sink, the SEMI_AUTO approver and the
+							// dispatcher panel state first: a failure later in this branch can
+							// never skip the safety-motivated detach calls (issues #561, #806).
+							runWiring.detachFromStaleRun()
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 							// Issue #1072: stop the 10 Hz time-update timer and the 30 FPS animation
@@ -289,48 +333,22 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 							// behind the run's real end, because stop() clears the caches a bare
 							// pause never re-captured. The next startSimulation() restarts via
 							// ensureAnimationRunning().
-							stopAnimationUpdates()
+							// Issue #1421: show the time the run reached before the clock timer stops;
+							// the final paced position covers the gap's tail the 10 Hz timer never saw.
+							refreshSimulationTime(finalPacedTime)
+							clock.stopUpdates()
 							railwayNetGridCanvas.captureFinalFrameAndPause()
-							// Log the dispatcher's final PlannerMetricsSnapshot for the run that just
-							// ended (captured at RUNNING time above). Null for every example except
-							// shuntingLoopAI (see ExampleRegistry.createShuntingLoopAIGuiExample).
-							// Placed last so a failure here can never skip the safety-motivated
-							// detach calls above.
-							wiredMeasuringAdapter?.logFinalSummary()
-							wiredMeasuringAdapter = null
-							// SP2c.22 (#845): finish the run recorder and log its final summary.
+							// One last dashboard poll, then stop (Issue #675 + #1326).
+							runWiring.stopDashboard(manual = runEndCause != RunEndCause.NATURAL_COMPLETION)
+							// Finish the run record, release the Koog agent (issues #830, #930).
 							// runEndCause was captured above, before this runOnEdt block, from
 							// SimulationController.lastStopWasNatural — see that property's kdoc for
 							// why the read is race-free with respect to which thread produced this
 							// STOPPED transition (manual stop() vs. the monitor thread's natural
 							// completion path both reach the identical STOPPED emission here).
-							// Round 4 (R4-5): finishAndPersist performs finish() + logFinalSummary() and
-							// then writes the snapshot under build/reports/dispatcher-runs/<arm>/, giving
-							// SP2c.23's aggregator (#846) a producer. Until round 4 the GUI called finish()
-							// but nothing wrote the result, and nothing fed onTick/onActionOutcome, so the
-							// frozen snapshot was all zeroes and was then discarded. It is a no-op for a
-							// context that wired no dispatcher, and idempotent per run.
-							// Issue #930: finishAndPersist decides the cause actually recorded — a natural
-							// completion over a railway that achieved nothing becomes STARVED — and hands
-							// it back so the verdict reaches the user instead of only the log file.
-							val runScope = wiredRunScope
-							if (runScope != null) {
-								val persisted = DispatcherRunSummaries.finishAndPersist(runScope, runEndCause)
-								statusBar.setStarvedIndicator(persisted.endCause == RunEndCause.STARVED)
-							} else {
-								// No scope captured (a context set outside the RUNNING transition): fall back to
-								// the recorder alone so the run is still finished and summarised.
-								wiredRunRecorder?.finish(runEndCause)
-								wiredRunRecorder?.logFinalSummary()
+							runWiring.finishRun(runEndCause)?.let { endedCause ->
+								statusBar.setStarvedIndicator(endedCause == RunEndCause.STARVED)
 							}
-							// #1096 review: release the cached Koog agent AFTER persistence, through
-							// DispatcherRunLifecycle (falls back to a bare KoogAgentPlanAdapter,
-							// swallows exceptions) and off the EDT — a throwing release can no
-							// longer lose the run JSON or the STARVED verdict (#930), and the EDT
-							// never blocks on the agent's runBlocking close bridge (Issue #1072).
-							DispatcherRunLifecycle.releaseKoogAgentInBackground(runScope)
-							wiredRunRecorder = null
-							wiredRunScope = null
 						}
 					}
 				}
@@ -360,65 +378,59 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// SimulationControlPanel + DispatcherControlPanel, Issue #561). Without the extra
 		// height the DispatcherControlPanel line steals vertical space from the scrollable
 		// RailwayNetGridCanvas, hiding station tracks (PR #801 review comment).
-		setSize(1024, 818)
+		// Issue #1421: the start size comes from the screen (or the saved layout), not a fixed 1024x818.
+		windowLifecycle.applyInitialGeometry()
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE) // Handle close event manually
 		setLayout(BorderLayout())
 		jMenuBar = MenuBar()
-		contentPane.add(JScrollPane(railwayNetGridCanvas), BorderLayout.CENTER)
+		contentPane.add(bottomPane.splitPane, BorderLayout.CENTER)
 
-		// Create north container with ToolBar + ControlPanel (Issue #205)
+		// North container: ToolBar + ControlPanel (Issue #205). The speed and dispatcher panels moved
+		// to the side dock (Issue #1421).
 		val northContainer = JPanel()
 		northContainer.layout = BoxLayout(northContainer, BoxLayout.PAGE_AXIS)
 		northContainer.add(toolBar)
 		controlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
-		northContainer.add(controlPanel)
-		simulationControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
-		northContainer.add(simulationControlPanel)
-		dispatcherControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
-		northContainer.add(dispatcherControlPanel)
+		// Run bar (Issue #1421): time, status and Stop, then Pause, Step Event, Step Time and the delta.
+		// A left-aligned FlowLayout without gaps: each part keeps its own width (a BoxLayout let the
+		// ControlPanel take the whole row), and the bar takes no height while both parts are hidden.
+		val runBar = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0))
+		runBar.add(controlPanel)
+		simulationControlPanel.stepControls.isVisible = false
+		runBar.add(simulationControlPanel.stepControls)
+		northContainer.add(runBar)
 		contentPane.add(northContainer, BorderLayout.NORTH)
+
+		// Side dock (Issue #1421): visible in both modes; editing mode disables the speed controls.
+		sideDock.setSimulationMode(false)
+		contentPane.add(sideDock, BorderLayout.EAST)
 
 		// Route speed changes from SimulationControlPanel through SimulationController so
 		// desiredSpeed stays in sync and is applied to the next simulation start.
 		simulationControlPanel.onSpeedChanged = { speed -> simulationController.setSpeed(speed) }
 
-		// South panel contains StatusBar (edit mode) and EventTimelinePanel (simulation mode)
+		// The status bar alone sits at SOUTH; the other bottom panels are tabs (Issue #1421).
 		statusBar.registerProducer(railwayNetGridCanvas)
-		southPanel.add(statusBar)
-		contentPane.add(southPanel, BorderLayout.SOUTH)
+		contentPane.add(statusBar, BorderLayout.SOUTH)
 
-		// Wire PathPreviewPanel callbacks to the canvas (Issue #596)
-		pathPreviewPanel.onRouteSelected = { routes, selectedIndex ->
-			railwayNetGridCanvas.setPathPreview(routes, selectedIndex)
-		}
-		pathPreviewPanel.onClear = {
-			railwayNetGridCanvas.clearPathPreview()
-		}
-		// PathPreviewPanel sits above the status bar in the south panel; visible in editing mode
-		pathPreviewPanel.isVisible = true
-		southPanel.add(pathPreviewPanel, PATH_PREVIEW_SOUTH_INDEX)
+		// Bottom pane assembles its tabs itself (Issue #1421); the count wiring travels with it,
+		// the selection highlight and clear wiring live in [WarningPresenter].
 
-		// Warning panel (Issue #616, Goal 3 SP6) – initially hidden; shown in simulation mode
-		warningPanel.isVisible = false
-		// Selection highlights the involved block on the canvas when known (Issue #1331: only
-		// a CRITICAL warning gets the collision highlight; an advisory clears it instead -- the
-		// rationale lives on RailwayNetGridCanvas.clearWarningHighlights).
-		warningPanel.onWarningSelected = { warning ->
-			if (warning.severity == CollisionWarning.Severity.CRITICAL) {
-				railwayNetGridCanvas.highlightWarningBlock(warning)
-			} else {
-				railwayNetGridCanvas.clearWarningHighlights()
-			}
-		}
-		// Clearing the log also silences the status-bar warning indicator (Issue #616 follow-up).
-		warningPanel.onClear = {
-			statusBar.setWarningIndicator(false)
-		}
-
-		// Conflict resolution side panel (Issue #590, Goal 9 SP5) – initially hidden;
-		// shown in the east slot when an active conflict requires dispatcher attention.
+		// Conflict resolution panel (Issue #590, Goal 9 SP5) – initially hidden; it lives in the side
+		// dock (Issue #1421) and shows itself when an active conflict requires dispatcher attention.
 		conflictResolutionPanel.isVisible = false
-		contentPane.add(conflictResolutionPanel, BorderLayout.EAST)
+
+		// Keyboard focus rests on the canvas (Issue #1421). The shortcuts of SimulationKeyBindings ignore
+		// keys while a text field has focus, and the Delta spinner was the first focusable component,
+		// so Space did nothing. A click on the canvas takes the focus back from the Delta field.
+		railwayNetGridCanvas.isFocusable = true
+		railwayNetGridCanvas.addMouseListener(
+			object : java.awt.event.MouseAdapter() {
+				override fun mousePressed(e: java.awt.event.MouseEvent) {
+					railwayNetGridCanvas.requestFocusInWindow()
+				}
+			}
+		)
 
 		// Add component listener to refresh canvas when frame is resized
 		addComponentListener(
@@ -426,6 +438,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				override fun componentResized(e: ComponentEvent) {
 					// When frame is resized, refresh grid canvas to handle scrollbar appearance/disappearance
 					railwayNetGridCanvas.revalidate()
+					windowLifecycle.rememberNormalBounds()
+				}
+
+				override fun componentMoved(e: ComponentEvent) {
+					windowLifecycle.rememberNormalBounds()
 				}
 			}
 		)
@@ -434,7 +451,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		addWindowListener(
 			object : WindowAdapter() {
 				override fun windowClosing(e: WindowEvent) {
-					handleWindowClosing()
+					requestClose()
 				}
 			}
 		)
@@ -445,11 +462,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 *
 	 * - StatusBar remains visible (its speed indicator [StatusBar.updateSpeedIndicator] shows
 	 *   non-default speeds; [StatusBar.statusLabel] continues to display simulation events)
-	 * - Adds EventTimelinePanel to south panel (if created)
-	 * - Shows ControlPanel
+	 * - Puts EventTimelinePanel into the Timeline tab (if created)
+	 * - Enables the Warnings and Timeline tabs, selects Timeline (Issue #1421)
+	 * - Shows ControlPanel and enables the side dock's speed controls
 	 * - Disables editing ToolBar
 	 * - Installs global keyboard shortcuts for speed control (Phase 3.1, Issue #193)
-	 * - Shows WarningPanel (Issue #616, Goal 3 SP6)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -458,36 +475,30 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToSimulationMode must be called from EDT"
 		}
 
-		// Add EventTimelinePanel before StatusBar (index 0 = top of south panel, above StatusBar)
-		eventTimelinePanel?.let { panel ->
-			if (panel.parent == null) {
-				southPanel.add(panel, TIMELINE_PANEL_SOUTH_INDEX)
-			}
-		}
+		// Put the EventTimelinePanel into its tab, in place of the placeholder (Issue #1421)
+		bottomPane.showTimelinePanel(eventTimelinePanel)
 
-		// Show WarningPanel in simulation mode (Goal 3 SP6)
-		if (warningPanel.parent == null) {
-			southPanel.add(warningPanel, WARNING_PANEL_SOUTH_INDEX)
-		}
-		warningPanel.isVisible = true
+		// The KPI dashboard (Issue #675, Goal 6 SP3) stays in the side dock. Entering simulation mode
+		// from another simulation context must not keep the previous run's figures or poll.
+		metricsDashboardPanel.detach()
 
-		// Hide PathPreviewPanel in simulation mode
-		pathPreviewPanel.isVisible = false
+		// Warnings and Timeline tabs on; Path Preview off (Issue #1421)
+		bottomPane.applyTabMode(simulation = true)
 
-		// Show ControlPanel and SimulationControlPanel
+		// Show ControlPanel; enable the side dock's speed controls
 		controlPanel.isVisible = true
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
-		simulationControlPanel.isVisible = true
-		dispatcherControlPanel.isVisible = true
+		simulationControlPanel.stepControls.isVisible = true
+		sideDock.setSimulationMode(true)
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
 
 		// Install keyboard shortcuts for simulation control (Phase 3.1, Issue #193)
 		simulationKeyBindings.install(rootPane)
+		// The shortcuts need the focus outside any text field (Issue #1421)
+		railwayNetGridCanvas.requestFocusInWindow()
 
-		southPanel.revalidate()
-		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
@@ -495,11 +506,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Switch UI layout to editing mode (Issue #205).
 	 *
-	 * - Removes EventTimelinePanel from south panel (StatusBar remains visible throughout)
-	 * - Hides ControlPanel
+	 * - Enables only the Path Preview tab and selects it (Issue #1421)
+	 * - Hides ControlPanel; disables the side dock's speed controls
 	 * - Enables editing ToolBar
 	 * - Uninstalls global keyboard shortcuts (Phase 3.1, Issue #193)
-	 * - Hides WarningPanel (Issue #616, Goal 3 SP6)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -508,30 +518,23 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToEditingMode must be called from EDT"
 		}
 
-		// Remove EventTimelinePanel from south panel (StatusBar stays visible always)
-		eventTimelinePanel?.let { panel ->
-			southPanel.remove(panel)
-		}
+		// Stop the KPI dashboard's polling and clear it (Issue #675, Goal 6 SP3); it stays in the side dock
+		metricsDashboardPanel.detach()
 
-		// Hide WarningPanel in editing mode (Goal 3 SP6)
-		warningPanel.isVisible = false
+		// Only the Path Preview tab has content in editing mode (Issue #1421)
+		bottomPane.applyTabMode(simulation = false)
 
 		// Hide ConflictResolutionPanel in editing mode (Goal 9 SP5)
 		conflictResolutionPanel.clearResolutions()
 
-		// Show PathPreviewPanel in editing mode
-		pathPreviewPanel.isVisible = true
-
-		// Hide ControlPanel and SimulationControlPanel
+		// Hide ControlPanel; the side dock stays, with its speed and dispatcher controls disabled
 		controlPanel.isVisible = false
-		simulationControlPanel.isVisible = false
-		dispatcherControlPanel.isVisible = false
-		dispatcherControlPanel.modeState = null
-		dispatcherControlPanel.clearRationale()
-		// Detach the SEMI_AUTO approver in case switchToEditingMode is called without a prior
-		// STOPPED transition (e.g. a context swap while the simulation is not running).
-		wiredSemiAutoGateway?.setApprover(null)
-		wiredSemiAutoGateway = null
+		simulationControlPanel.stepControls.isVisible = false
+		sideDock.setSimulationMode(false)
+		// Detach the SEMI_AUTO approver and the dispatcher panel state in case
+		// switchToEditingMode is called without a prior STOPPED transition (e.g. a context
+		// swap while the simulation is not running).
+		runWiring.detachFromStaleRun()
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
@@ -539,107 +542,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Uninstall keyboard shortcuts (Phase 3.1, Issue #193)
 		simulationKeyBindings.uninstall(rootPane)
 
-		southPanel.revalidate()
-		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
-	}
-
-	/**
-	 * Wire the [DispatcherControlPanel] to the active simulation context (Issue #561, SP2b.6).
-	 *
-	 * Resolves four things from the context's Koin scope (when the dispatcher-agent
-	 * module is loaded):
-	 * 1. [cz.vutbr.fit.interlockSim.sim.DispatcherModeState] → drives the panel's mode
-	 *    combo box and indicator.
-	 * 2. [cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub] → the panel's
-	 *    `onModeChanged` callback propagates the operator's selection to
-	 *    [cz.vutbr.fit.interlockSim.sim.DispatcherModeState.setOverride]; the hub's
-	 *    sink feeds every applied [cz.vutbr.fit.interlockSim.sim.DispatchDecision]'s rationale into the panel so
-	 *    the "Why this route?" button can display it.
-	 * 3. The panel's `onRationale` callback → shows the rationale in a dialog.
-	 * 4. [cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway] → installs a
-	 *    [SemiAutoApprovalDialog]-based blocking approver on the gateway so that
-	 *    decisions in [cz.vutbr.fit.interlockSim.sim.DispatcherMode.SEMI_AUTO] mode
-	 *    wait for the operator to click Approve or Dismiss (Issue #806, SP2b.6 follow-up).
-	 *
-	 * If any lookup fails (e.g. the context is not a [DefaultSimulationContext], or the
-	 * dispatcher-agent module is not loaded) the panel remains disabled but the GUI is
-	 * still functional (backward compatibility).
-	 *
-	 * **Must be called from EDT.**
-	 */
-	private fun wireDispatcherControlPanel() {
-		val runner = simulationController.runner ?: return
-		val simContext = runner.simulationContext
-		// Cast to DefaultSimulationContext is necessary to access the Koin scope.
-		// SimulationContext interface does not expose the scope (by design);
-		// only DefaultSimulationContext provides Koin DI bindings like DispatcherModeState.
-		// This is acceptable because the dispatcher-agent module is only used with
-		// DefaultSimulationContext implementations created by DefaultSimulationContextFactory.
-		val context = simContext as? DefaultSimulationContext
-		if (context == null) {
-			logger.debug {
-				"Context type ${simContext::class.simpleName} is not DefaultSimulationContext; " +
-					"dispatcher control panel remains disabled (backward compatible)"
-			}
-			return
-		}
-		try {
-			val modeState = context.scope.getOrNull<DispatcherModeState>()
-			if (modeState != null) {
-				dispatcherControlPanel.modeState = modeState
-				// The operator's combo-box selection propagates to the shared DispatcherModeState override.
-				// In SEMI_AUTO mode, the SemiAutoApprovalGateway (wired below) will prompt the
-				// operator to approve or dismiss each decision (Issue #806, SP2b.6 follow-up).
-				dispatcherControlPanel.onModeChanged = { mode -> modeState.setOverride(mode) }
-				// The "Why this route?" button shows the last decision's rationale in a modal dialog.
-				dispatcherControlPanel.onRationale = { rationale ->
-					JOptionPane.showMessageDialog(
-						this@Frame,
-						formatRationale(rationale),
-						"Dispatcher decision rationale",
-						JOptionPane.INFORMATION_MESSAGE
-					)
-				}
-				// The sim-thread applier pushes every applied decision through the hub;
-				// marshal the update onto the EDT before touching the panel.
-				val hub = context.scope.getOrNull<DispatchDecisionListenerHub>()
-				if (hub != null) {
-					hub.setSink { decision ->
-						SwingUtilities.invokeLater {
-							dispatcherControlPanel.updateDecisionRationale(decision)
-						}
-					}
-					wiredDecisionHub = hub
-				} else {
-					logger.debug { "DispatchDecisionListenerHub not available in context scope; rationale button will have no feed" }
-				}
-				// SP2b.6 follow-up (Issue #806): install a blocking SemiAutoApprovalDialog
-				// as the SEMI_AUTO approver. The gateway bridges the sim-thread call to this
-				// EDT-side dialog via SwingUtilities.invokeAndWait inside SemiAutoApprovalDialog.promptOnEdt.
-				// On stop, the STOPPED transition calls setApprover(null) to detach.
-				val semiAutoGateway = context.scope.getOrNull<SemiAutoApprovalGateway>()
-				if (semiAutoGateway != null) {
-					semiAutoGateway.setApprover { decision ->
-						// Called on the sim thread; invokeAndWait hands off to EDT to show modal dialog.
-						SemiAutoApprovalDialog.promptOnEdt(this@Frame, decision)
-					}
-					wiredSemiAutoGateway = semiAutoGateway
-				} else {
-					logger.debug {
-						"SemiAutoApprovalGateway not available in context scope; SEMI_AUTO mode will drop decisions with warning"
-					}
-				}
-			} else {
-				logger.debug { "DispatcherModeState not available in context scope; dispatcher control panel remains disabled" }
-			}
-		} catch (e: Exception) {
-			logger.debug(e) {
-				"Failed to wire DispatcherModeState to control panel; dispatcher control panel remains disabled " +
-					"(backward compatible)"
-			}
-		}
 	}
 
 	/**
@@ -661,7 +565,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"setContext must be called from EDT"
 		}
 		stopSimulation() // Stop any running simulation before switching context
-		stopAnimationUpdates() // Cleanup existing timer
+		clock.stopUpdates() // Cleanup existing timer
 
 		val previousSimulationContext = currentSimulationContext
 
@@ -675,10 +579,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				}
 
 				switchToSimulationMode()
+				clock.attach(context)
+				refreshSimulationTime()
 				railwayNetGridCanvas.setEventTimelinePanel(eventTimelinePanel)
 				railwayNetGridCanvas.setContext(context)
 				railwayNetGridCanvas.autoCenterViewport()
-				startAnimationUpdates()
+				clock.startUpdates()
 
 				// Wire stop button to stopSimulation()
 				controlPanel.onStop = { stopSimulation() }
@@ -689,6 +595,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			is EditingContext -> {
 				currentSimulationContext = null
 				controlPanel.onStop = null
+				clock.attach(null)
 				switchToEditingMode()
 				railwayNetGridCanvas.setContext(context)
 				context.addPropertyChangeListener(modificationTracker)
@@ -700,6 +607,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				controlPanel.onStop = null
 				// Unknown context type - default to simulation mode (read-only)
 				switchToSimulationMode()
+				clock.attach(context)
 				railwayNetGridCanvas.setContext(context)
 				// Clear PathPreviewPanel context (Issue #596)
 				pathPreviewPanel.setEditingContext(null)
@@ -715,47 +623,15 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		}
 	}
 
-	/**
-	 * Start timer for ControlPanel time updates (Issue #205).
-	 *
-	 * Creates a 10 Hz (100ms) Swing Timer that reads the current simulation time
-	 * from [AnimationController] and updates [ControlPanel].
-	 *
-	 * **Timer Frequency Rationale:**
-	 * - 100ms interval (10 Hz) provides responsive display without excessive CPU overhead
-	 * - Much less frequent than 30 FPS rendering, but frequent enough for smooth time display
-	 * - Swing Timer automatically runs on EDT (thread-safe)
-	 *
-	 * **Must be called from EDT.**
-	 */
-	private fun startAnimationUpdates() {
-		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
-			"startAnimationUpdates must be called from EDT"
-		}
-
-		animationUpdateTimer =
-			Timer(100) {
-				// 10 Hz update rate
-				val controller = railwayNetGridCanvas.animationController
-				controller?.currentState?.let { state ->
-					controlPanel.updateTime(state.simulationTime)
-				}
-			}
-		animationUpdateTimer?.start()
-	}
+	// ── The ControlPanel clock; [SimulationClock] owns the details ────────────
 
 	/**
-	 * Stop ControlPanel update timer and clean up resources (Issue #205).
-	 *
-	 * Prevents memory leaks when switching between contexts or exiting simulation mode.
-	 * Safe to call multiple times or when timer is not running.
-	 *
-	 * **Must be called from EDT.**
+	 * Shows the simulated time of the run in [ControlPanel] (Issue #1421). EDT only. The shown
+	 * time never goes backward within one run; [finalPacedTime] feeds in the run's final paced
+	 * position already captured by [SimulationController] (neutral `0.0` during normal ticks):
+	 * the clock ratchets, keeping both readings.
 	 */
-	private fun stopAnimationUpdates() {
-		animationUpdateTimer?.stop()
-		animationUpdateTimer = null
-	}
+	internal fun refreshSimulationTime(finalPacedTime: Double = 0.0) = clock.refresh(finalPacedTime)
 
 	/**
 	 * Show one collision warning; **must be called from EDT**.
@@ -770,18 +646,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		warning: CollisionWarning,
 		autoPause: Boolean,
 		sound: Boolean
-	) {
-		warningPanel.addWarning(warning)
-		if (warning.severity != CollisionWarning.Severity.CRITICAL) return
-		statusBar.setWarningIndicator(true)
-		if (sound) {
-			Toolkit.getDefaultToolkit().beep()
-		}
-		// If auto-pause is OFF, resume the simulation immediately.
-		if (!autoPause) {
-			simulationController.runner?.isPaused = false
-		}
-	}
+	) = warningPresenter.show(warning, autoPause, sound)
 
 	/**
 	 * Launch the simulation on a background thread via [SimulationController] (Issue #189).
@@ -798,9 +663,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * listener to populate [conflictResolutionPanel] with ranked resolution candidates whenever
 	 * a spatial conflict is detected (Issue #590, Goal 9 SP5).
 	 *
+	 * [runName] is what the run JSON records as `example` when the run ends (Issue #1328): the
+	 * example name for an example run, or the XML file's base name with its extension
+	 * was loaded from. `null` records no name.
+	 *
 	 * **Must be called from EDT.**
 	 */
-	fun startSimulation() {
+	fun startSimulation(runName: String? = null) {
 		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
 			"startSimulation must be called from EDT"
 		}
@@ -810,6 +679,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				logger.warn { "startSimulation called without a SimulationContext — ignoring" }
 				return
 			}
+		runWiring.stageRunName(runName)
 
 		// Register collision warning listener BEFORE context.run() is called (Issue #616).
 		// The listener is delivered on the simulation thread; all UI updates are dispatched
@@ -824,39 +694,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Apply the current auto-halt setting to the newly created service (Goal 3 SP6).
 		applyAutoHaltSetting(autoHaltTrainOnViolation)
 
-		// Register conflict-detected listener to drive ConflictResolutionPanel (Goal 9 SP5).
-		// Listener is delivered on the simulation thread; UI updates dispatched to EDT.
-		// Resolver + preference stores are retrieved from the context's Koin scope so every
-		// collaborator shares the same scoped instances (Goal 9 SC3 + SC4 wiring).
-		val resolver = context.scope.get<ConflictResolver>()
-		val dispatcherStore = context.scope.get<DispatcherPreferenceStore>()
-		val strategyStore = context.scope.get<StrategyPreferenceStore>()
-
-		// Operator Apply: record the chosen resolution (SC3) and feed the choice into the
-		// preference-learning store so future rankings reflect it (SC4). Invoked on the EDT.
-		conflictResolutionPanel.onResolutionApplied = { conflict, resolution ->
-			dispatcherStore.record(
-				conflict,
-				resolution,
-				DispatcherPreferenceStore.ApplicationSource.OPERATOR
-			)
-			val conflictTypeKey = conflict.block.name ?: "unknown-block"
-			strategyStore.recordChoice(conflictTypeKey, resolution.strategy)
-			logger.debug {
-				"Operator applied ${resolution.strategy} to conflict " +
-					"(${conflict.trainId} vs ${conflict.conflictingTrainId}) " +
-					"on block ${conflict.block.name} — recorded for preference learning"
-			}
-		}
-
-		context.onConflictDetectedEvent { conflict ->
-			val resolutions = resolver.generateResolutions(conflict)
-			conflictResolutionPanel.showResolutions(conflict, resolutions)
-			logger.debug {
-				"ConflictDetectedEvent: ${conflict.trainId} vs ${conflict.conflictingTrainId} " +
-					"on block ${conflict.block.name} — ${resolutions.size} resolution candidates shown"
-			}
-		}
+		// Register conflict-detected listener to drive ConflictResolutionPanel (Goal 9 SP5, SC3 + SC4).
+		runWiring.wireConflictResolution(context)
 
 		// Clear any stale warnings from a previous run.
 		warningPanel.clearWarnings()
@@ -868,14 +707,18 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		conflictResolutionPanel.clearResolutions()
 
 		try {
+			// Issue #1421: a fresh clock source per run, so a second run on this context starts at zero.
+			// Attached before start, so the tracker sees the run's first events too.
+			clock.attach(context)
+			refreshSimulationTime()
 			simulationController.start(context)
 			// Issue #1072 + #1096 review: a previous STOPPED paused the animation and the 10 Hz
 			// time timer. Restart both so the new run is visible again without requiring a full
 			// setContext cycle — moved here, after a successful start, so a failed start leaves
 			// the previous run's animation paused instead of resurrecting it with no run behind it.
 			railwayNetGridCanvas.ensureAnimationRunning()
-			stopAnimationUpdates()
-			startAnimationUpdates()
+			clock.stopUpdates()
+			clock.startUpdates()
 			val activeRunner = simulationController.runner?.takeIf { it.isRunning() }
 			simulationControlPanel.runner = activeRunner
 
@@ -925,7 +768,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		statusBar.setWarningIndicator(false)
 		// Clear and hide the conflict resolution panel when the simulation stops (Goal 9 SP5).
 		// Drop the operator-Apply callback so it can no longer reference this run's stores.
-		conflictResolutionPanel.onResolutionApplied = null
+		runWiring.unwireConflictResolution()
 		conflictResolutionPanel.clearResolutions()
 	}
 
@@ -946,27 +789,6 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		/** Index at which EventTimelinePanel is inserted in [southPanel] (above StatusBar). */
-		private const val TIMELINE_PANEL_SOUTH_INDEX = 0
-
-		/**
-		 * Index at which PathPreviewPanel is inserted in [southPanel] (Issue #596).
-		 *
-		 * Sits above the StatusBar (index 0 is top). When EventTimelinePanel is also present
-		 * it is at index 0, so PathPreviewPanel lands at index 1, just below it. When no
-		 * timeline panel is present it sits at index 0, just above the StatusBar.
-		 */
-		private const val PATH_PREVIEW_SOUTH_INDEX = 0
-
-		/**
-		 * Index at which WarningPanel is inserted in [southPanel] (Issue #616, Goal 3 SP6).
-		 *
-		 * The WarningPanel appears above the StatusBar (and below the EventTimelinePanel and
-		 * PathPreviewPanel when they are present).  Using index 0 keeps the panel ordering
-		 * consistent with the other south-panel panels added dynamically.
-		 */
-		private const val WARNING_PANEL_SOUTH_INDEX = 0
 	}
 
 	/**
@@ -999,80 +821,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	}
 
 	/**
-	 * Handles window closing event.
-	 * Shows confirmation dialog if there are unsaved changes.
-	 *
-	 * Thread safety: Ensures execution on EDT for Swing component access.
+	 * Handles a close request: confirms unsaved changes and exits, or stays open (Issue #1421
+	 * layout save lives in [WindowLifecycle]; PR #1430 review). Also the route menu Exit takes,
+	 * so both exit paths confirm and save the layout.
 	 */
-	private fun handleWindowClosing() {
-		// Defensive programming: ensure we're on the Event Dispatch Thread
-		if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
-			javax.swing.SwingUtilities.invokeLater { handleWindowClosing() }
-			return
-		}
-
-		if (modificationTracker.isDirty()) {
-			val result =
-				JOptionPane.showConfirmDialog(
-					this,
-					"The railway network has unsaved changes.\n\n" +
-						"Do you want to save your changes before closing?",
-					"Unsaved Changes",
-					JOptionPane.YES_NO_CANCEL_OPTION,
-					JOptionPane.WARNING_MESSAGE
-				)
-
-			when (result) {
-				JOptionPane.YES_OPTION -> {
-					// Trigger save action
-					saveAndExit()
-				}
-
-				JOptionPane.NO_OPTION -> {
-					// Exit without saving
-					exitWithoutSaving()
-				}
-
-				JOptionPane.CANCEL_OPTION -> {
-					// Do nothing - keep window open
-					return
-				}
-			}
-		} else {
-			// No unsaved changes - exit immediately
-			exitWithoutSaving()
-		}
-	}
-
-	/**
-	 * Attempts to save the current context and then exits.
-	 * If save fails, the window remains open.
-	 */
-	private fun saveAndExit() {
-		// Get the save action from menu bar and trigger it
-		val menuBar = jMenuBar as MenuBar
-		val saved = menuBar.triggerSave()
-
-		// Only exit if save was successful
-		if (saved) {
-			stopAnimationUpdates() // Stop Frame's 10 Hz timer
-			railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
-			exitWithoutSaving()
-		}
-	}
-
-	/**
-	 * Exits the application without saving.
-	 */
-	private fun exitWithoutSaving() {
-		stopSimulation() // Stop any running simulation before exit
-		currentSimulationContext?.close() // Release simulation resources before JVM exit
-		stopAnimationUpdates() // Stop Frame's 10 Hz timer
-		railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
-		// Issue #1072: close the shared Ollama/Koog executor so its worker threads do not outlive
-		// the application. Terminal for this JVM process (System.exit follows immediately).
-		DispatcherRunLifecycle.closeSharedOllamaExecutor()
-		dispose()
-		System.exit(0)
-	}
+	internal fun requestClose() = windowLifecycle.requestClose()
 }

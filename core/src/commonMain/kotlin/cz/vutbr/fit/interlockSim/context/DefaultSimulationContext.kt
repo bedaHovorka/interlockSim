@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationTargetQuery
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.exceptions.MainProcessFailedException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -45,6 +46,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
+import cz.vutbr.fit.interlockSim.sim.RunEnded
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
@@ -59,6 +62,7 @@ import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.monotonicNanosKMP
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
@@ -262,6 +266,15 @@ open class DefaultSimulationContext(
 	final override var lastRunEndTime: Double? = null
 		private set
 
+	/** Whether the main loop announced its end time in the current run (Issue #1304). */
+	private var endTimeReachedThisRun: Boolean = false
+
+	/**
+	 * The failure [run] throws when the main process died in this run (Issue #1361), built by
+	 * [stopOnMainProcessFailure]; `null` otherwise. Reset at the start of each run.
+	 */
+	private var mainProcessFailure: MainProcessFailedException? = null
+
 	/** Collision warning listeners registered before run(); wired into the service at run() time. */
 	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
 
@@ -301,8 +314,18 @@ open class DefaultSimulationContext(
 	 * init{} block so KPI counters are active for the full simulation run.
 	 */
 	private val metricsCollectionServiceInstance: MetricsCollectionService by lazy {
-		scope.get<MetricsCollectionService>()
+		val firstOwn = pendingSimEventListeners.size
+		scope.get<MetricsCollectionService>().also {
+			metricsListenerIndices = firstOwn until pendingSimEventListeners.size
+		}
 	}
+
+	/**
+	 * Where in [pendingSimEventListeners] the metrics service registered its own listeners. The service is
+	 * built lazily, so an observer registered earlier sits before them; [deliverRunEnded] hands
+	 * [RunEnded] to them first, so that an observer reading the run-end summary sees it finished.
+	 */
+	private var metricsListenerIndices: IntRange = IntRange.EMPTY
 
 	/**
 	 * Grouped performance-metrics services facade for this simulation context.
@@ -404,6 +427,9 @@ open class DefaultSimulationContext(
 		 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
 		 */
 		private val simulationLogger = KotlinLogging.logger("cz.vutbr.fit.interlockSim.simulation")
+
+		/** Nanoseconds per second, for the wall time of a run (Issue #1306). */
+		private const val NANOS_PER_SECOND: Double = 1_000_000_000.0
 
 		/**
 		 * Factory method to create SimulationContext from EditingContext.
@@ -1398,10 +1424,18 @@ open class DefaultSimulationContext(
 				Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
 			}
 		simulation = sim
-		// Wire pre-registered listeners into kdisco simulation
-		pendingSimEventListeners.forEach { sim.onEvent(it) }
+		endTimeReachedThisRun = false
+		mainProcessFailure = null
+		sim.onEvent(::noteEndTimeReached) // Issue #1304
+		sim.onEvent(::stopOnMainProcessFailure) // Issue #1361
+		// Wire pre-registered listeners into kdisco simulation, each behind the delivery guard (Issue #1361)
+		pendingSimEventListeners.forEach { sim.onEvent(customPayloadGuarded(it)) }
 		wireCustomEventListeners(sim, pendingBlockEventListeners)
 		wireCustomEventListeners(sim, pendingConflictEventListeners)
+		// Issue #1306 (Goal 6 SP8): the one wall clock of every harness, read around the kernel run.
+		val kernelStartNanos = monotonicNanosKMP()
+		// The run's own failure, kept so a throwable of the run end that takes its place still carries it.
+		var runFailure: Throwable? = null
 		try {
 			var stepState = StepControlState(prevTime = 0.0)
 			runBlocking {
@@ -1409,12 +1443,44 @@ open class DefaultSimulationContext(
 					stepState = advanceControlledStep(sim, controller, stepState)
 				}
 			}
+			mainProcessFailure?.let { throw it }
 		} catch (e: DiscoException) {
-			logger.error(e) { "Simulation run failed" }
-			throw SimulationException(e)
+			// A kernel-level failure must not shadow the recorded main-process one (PR #1419): the
+			// wrapped SimulationException would make headless report a failed run as NOT_STARTED.
+			val failure =
+				mainProcessFailure ?: SimulationException(e).also { logger.error(e) { "Simulation run failed" } }
+			runFailure = failure
+			throw failure
+		} catch (t: Throwable) {
+			runFailure = t
+			throw t
 		} finally {
-			val kernelEndTime = sim.time()
+			endRun(sim, (monotonicNanosKMP() - kernelStartNanos) / NANOS_PER_SECOND, runFailure)
+		}
+	}
+
+	/**
+	 * The run end of [run], from its `finally`: the contention flush, the delivery of [RunEnded], then the
+	 * cleanup, which nothing skips. A run-end subscriber's [Error] or kDisco process control propagates
+	 * (Issue #1324) and takes the place of the run's own failure [runFailure], so it carries that failure as
+	 * suppressed -- a headless report can still read the main-process failure.
+	 */
+	private fun endRun(
+		sim: Simulation,
+		wallSeconds: Double,
+		runFailure: Throwable?
+	) {
+		val kernelEndTime = sim.time()
+		try {
 			flushUnresolvedReservationConflicts(kernelEndTime)
+			// An Error or process control from a run-end subscriber propagates, but never skips the cleanup below.
+			deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
+		} catch (t: Throwable) {
+			// Never added to itself: a run failure thrown again stays one throwable (explicit, because the JVM
+			// member Throwable.addSuppressed throws on self-suppression; only Kotlin's extension skips it).
+			if (runFailure != null && runFailure !== t) t.addSuppressed(runFailure)
+			throw t
+		} finally {
 			lastRunEndTime = kernelEndTime
 			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
 			currentController = null
@@ -1428,18 +1494,125 @@ open class DefaultSimulationContext(
 	 * once `Process.activeContext` is null, which is exactly the state here -- the run
 	 * has already fully stopped, so there is nothing left to pause.
 	 *
+	 * Each listener sits behind [deliverContained] (Issue #1361): one that throws neither keeps the event from
+	 * the listeners after it nor skips [deliverRunEnded], so the run record is still built.
+	 *
 	 * Extracted out of [run] purely to keep that method's cyclomatic complexity within
 	 * budget; carries no logic of its own beyond the guard + delivery.
 	 */
 	private fun flushUnresolvedReservationConflicts(simulationEndTime: Double) {
 		runCatching { pathReservationServiceInstance.flushUnresolvedConflicts(simulationEndTime) }
-			.onSuccess { events -> events.forEach { event -> pendingBlockEventListeners.forEach { it(event) } } }
-			.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
+			.onSuccess { events ->
+				events.forEach { event -> pendingBlockEventListeners.forEach { deliverContained(it, event) } }
+			}.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
+	}
+
+	/**
+	 * The raw [listener] as it goes on the kDisco bus (Issue #1361): a `SimulationEvent.Custom` reaches it
+	 * through [deliverContained], so a plain failure on a payload neither ends the emitting process nor keeps
+	 * the event from the listeners after it. The built-in kDisco events reach it as they are: a failure there
+	 * still propagates, as before.
+	 */
+	private fun customPayloadGuarded(listener: (KDiscoSimulationEvent) -> Unit): (KDiscoSimulationEvent) -> Unit =
+		{ event ->
+			if (event is KDiscoSimulationEvent.Custom) deliverContained(listener, event) else listener(event)
+		}
+
+	/**
+	 * Stop the kernel when the main process has died of a plain failure (Issue #1361). The main loop is the
+	 * only process that ends a run -- the kernel runs to `Double.MAX_VALUE` -- and kDisco reports a process
+	 * that threw as an ordinary [KDiscoSimulationEvent.ProcessTerminated], keeping the others running, so
+	 * without this stop the train generator went on making trains until the heap ran out. [run] throws
+	 * [mainProcessFailure] once the kernel has returned, after the run end has been delivered. The exception
+	 * is built here, while the run is still active, so its [MainProcessFailedException.time] is the model time of
+	 * the failure.
+	 *
+	 * The recording happens only while no stop has been requested yet (PR #1419): a graceful stop
+	 * ([stop], with the process terminations that follow it) can surface a plain failure during its
+	 * unwind, and that failure is the consequence of the stop that was asked for, not a failure of a
+	 * run the user did not ask to stop. On a record, the end-time marker and a [ShuntingLoop] main
+	 * process's liveness flag are cleared before the kernel itself is stopped: an end time announced
+	 * before the failure is revoked (Issue #1304), and by the time [run] throws, the async dispatcher
+	 * driver's next poll already sees [ShuntingLoop.isSimActive] as `false` (Issue #1032).
+	 */
+	private fun stopOnMainProcessFailure(event: KDiscoSimulationEvent) {
+		val main = mainProcess
+		val failure = main?.failure
+		if (event is KDiscoSimulationEvent.ProcessTerminated &&
+			event.process === main &&
+			failure != null &&
+			simulation?.isStopRequested() == false
+		) {
+			mainProcessFailure = MainProcessFailedException(failure, main)
+			// The run-end marker only -- the accounting event counters stay untouched, they are
+			// the metrics record (Issue #1304).
+			endTimeReachedThisRun = false
+			// Flag first, kernel stop last (Issue #1032): the dispatcher driver's next poll must
+			// already see the stopped run. `is` check, not an `as?` cast: Sonar's S6530 flags the
+			// cast as one that can never succeed, although ShuntingLoop IS-A LoopProcess via
+			// Interlocking (on the local `main`, a `var` property cannot be smart-cast). A no-op
+			// for a non-ShuntingLoop main process.
+			if (main is ShuntingLoop) {
+				main.signalStopped()
+			}
+			simulation?.stop()
+		}
+	}
+
+	/**
+	 * Remember that the main loop announced [RunAccountingEvent.EndTimeReached] in this run
+	 * (Issue #1304), so [deliverRunEnded] can tell an end-time stop from an early one.
+	 */
+	private fun noteEndTimeReached(event: KDiscoSimulationEvent) {
+		if ((event as? KDiscoSimulationEvent.Custom)?.payload is RunAccountingEvent.EndTimeReached) {
+			endTimeReachedThisRun = true
+		}
+	}
+
+	/**
+	 * Deliver [runEnded] to the raw listeners registered before [run] (Issue #1304, Goal 6 SP6), as a
+	 * `SimulationEvent.Custom` payload so that [onRunEnded][cz.vutbr.fit.interlockSim.sim.onRunEnded]
+	 * filters it like any other payload. The metrics service's own listeners come first, so an observer finds
+	 * the run-end accounting finished. Delivered directly, after the contention flush, for the same
+	 * reason as [flushUnresolvedReservationConflicts]: the kernel has stopped and `emitCustom` is a
+	 * no-op. A listener that throws an [Exception] is logged at WARN and the ones after it still
+	 * receive the event; an [Error] is never caught.
+	 *
+	 * kDisco's process control ([isProcessControl]) follows the one listener-guard contract (Issue #1324):
+	 * it is not a failure, so it is not logged and not swallowed. The catch stays per listener, so it
+	 * cannot skip the run-end listeners after it: the first one is kept, later ones are added to it as
+	 * suppressed, and it is rethrown once every listener has had the event. It then leaves [run] after the
+	 * cleanup of its `finally` and, like an [Error] here, takes the place of a failure the run itself
+	 * threw -- a cancellation means the caller no longer waits for the run's own outcome.
+	 */
+	private fun deliverRunEnded(runEnded: RunEnded) {
+		val event = KDiscoSimulationEvent.Custom(runEnded.time, runEnded)
+		val inOrder =
+			metricsListenerIndices.map { pendingSimEventListeners[it] } +
+				pendingSimEventListeners.filterIndexed { index, _ -> index !in metricsListenerIndices }
+		var processControl: Exception? = null
+		inOrder.forEach { listener ->
+			try {
+				listener(event)
+			} catch (e: Exception) {
+				val first = processControl
+				when {
+					!isProcessControl(e) ->
+						logger.warn(e) { "A simulation event listener failed on $runEnded during run() cleanup" }
+					first == null -> processControl = e
+					// The same instance from two listeners (one shared cancellation) is not added to itself.
+					first !== e -> first.addSuppressed(e)
+				}
+			}
+		}
+		processControl?.let { throw it }
 	}
 
 	/**
 	 * Wire a buffered listener list for one `SimulationEvent.Custom` payload type into [sim],
-	 * filtering by payload type at delivery time. No-op if [listeners] is empty.
+	 * filtering by payload type at delivery time. No-op if [listeners] is empty. Each listener sits
+	 * behind [deliverContained] (Issue #1361), so one that throws does not keep the payload from the
+	 * listeners after it.
 	 *
 	 * Extracted out of [run] to eliminate the block-event/conflict-event wiring duplication
 	 * introduced in PR #580 (Goal 9 SP1) and to keep [run]'s cyclomatic complexity within
@@ -1455,7 +1628,7 @@ open class DefaultSimulationContext(
 			if (event is KDiscoSimulationEvent.Custom) {
 				val payload = event.payload
 				if (payload is T) {
-					snapshot.forEach { it(payload) }
+					snapshot.forEach { deliverContained(it, payload) }
 				}
 			}
 		}
@@ -1518,8 +1691,11 @@ open class DefaultSimulationContext(
 		// by InOutWorker/Train on a fatal simulation error) as well as any other caller of
 		// stop() — both terminate mainProcess without ever reaching ShuntingLoop.interLoopSleep's
 		// end-time branch, so without this the flag would stay true forever after such a stop.
-		// Safe cast keeps this a no-op for non-ShuntingLoop main processes (e.g. MultiTrainLoop).
-		(mainProcess as? ShuntingLoop)?.signalStopped()
+		// A no-op for non-ShuntingLoop main processes (e.g. MultiTrainLoop). `is` check, not an `as?` cast:
+		// Sonar's S6530 flags the cast as one that can never succeed, although ShuntingLoop IS-A LoopProcess
+		// (as in stopOnMainProcessFailure; a `var` property cannot be smart-cast, hence the local).
+		val main = mainProcess
+		if (main is ShuntingLoop) main.signalStopped()
 		logger.info { "Stopping simulation: terminating ${workers.size} workers and main process" }
 
 		val exceptions = mutableListOf<Throwable>()

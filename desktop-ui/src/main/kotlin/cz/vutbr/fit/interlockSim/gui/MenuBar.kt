@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -274,7 +275,10 @@ class MenuBar : JMenuBar() {
 
 	private inner class ExitAction : AbstractAction("Exit") {
 		override fun actionPerformed(e: ActionEvent) {
-			System.exit(0)
+			// The frame's close path (PR #1430 review): the unsaved-changes confirmation, the
+			// teardown and the window-layout save all run here, the same route the window
+			// close event takes — so resizing and exiting through this menu keeps the layout.
+			getKoin().get<Frame>().requestClose()
 		}
 	}
 
@@ -293,7 +297,7 @@ class MenuBar : JMenuBar() {
 	 * events and the animation is not visually frozen.
 	 *
 	 * **Modification tracker:** The tracker is cleared before switching to simulation mode
-	 * so that the "unsaved changes" path in [Frame.handleWindowClosing] does not attempt to
+	 * so that the "unsaved changes" path in [Frame.requestClose] does not attempt to
 	 * save a [SimulationContext] through the editor's save logic.
 	 */
 	private inner class StartSimulationAction : AbstractAction("Start...") {
@@ -328,11 +332,7 @@ class MenuBar : JMenuBar() {
 							return
 						}
 
-					val frame = getKoin().get<Frame>()
-					frame.modificationTracker.markClean()
-					frame.modificationTracker.setCurrentFile(null)
-					frame.setContext(simContext)
-					frame.startSimulation()
+					startSimulationFromFile(getKoin().get<Frame>(), simContext, selectedFile)
 				}
 			}.execute()
 		}
@@ -535,4 +535,24 @@ class MenuBar : JMenuBar() {
 		)
 		return menu
 	}
+}
+
+/**
+ * Starts [simContext], loaded from [sourceFile], on [frame] — the tail of `MenuBar`'s
+ * Simulation → Start... action, on the EDT.
+ *
+ * The run name is taken from [sourceFile] before the modification tracker's current file is
+ * cleared (the tracker must not hold a file in simulation mode, see `StartSimulationAction`), so
+ * the run JSON names the file the run came from (Issue #1328).
+ */
+internal fun startSimulationFromFile(
+	frame: Frame,
+	simContext: SimulationContext,
+	sourceFile: File
+) {
+	val runName = DispatcherRunSummaries.fileRunName(sourceFile)
+	frame.modificationTracker.markClean()
+	frame.modificationTracker.setCurrentFile(null)
+	frame.setContext(simContext)
+	frame.startSimulation(runName)
 }

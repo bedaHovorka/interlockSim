@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import java.awt.FlowLayout
+import java.awt.GridLayout
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 import java.util.Locale
@@ -74,6 +75,16 @@ class SimulationControlPanel : JPanel() {
 
 	/** Spinner that configures the time delta used by [stepTimeButton]. */
 	private val stepTimeDeltaSpinner: JSpinner
+
+	/**
+	 * Pause, Step Event, Step Time and the step-time delta, in one row. They are not children of
+	 * this panel: the frame puts the row in the top bar, next to the Stop button (Issue #1421). This
+	 * panel still owns and drives them (their enabled state follows [runner]).
+	 */
+	val stepControls: JPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
+
+	/** The preset buttons, in [PRESETS] order; toggled together by [speedControlsEnabled]. */
+	private val presetButtons: MutableList<JButton> = mutableListOf()
 
 	/**
 	 * The [SimulationRunner] currently wired to this panel, or `null` when no
@@ -180,21 +191,31 @@ class SimulationControlPanel : JPanel() {
 		add(sliderRow)
 
 		// ── Row 2: preset buttons ─────────────────────────────────────────────
-		val buttonRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
-		buttonRow.add(JLabel("Presets:"))
+		// A fixed grid, not a FlowLayout row: the panel lives in the narrow side dock (Issue #1421),
+		// and a wrapping FlowLayout reports a one-row height, so its second row would be cut off.
+		val presetLabelRow = JPanel(FlowLayout(FlowLayout.LEFT, 6, 2))
+		presetLabelRow.add(JLabel("Presets:"))
+		add(presetLabelRow)
+		val buttonGrid = JPanel(GridLayout(0, PRESET_COLUMNS, 4, 4))
+		buttonGrid.border = BorderFactory.createEmptyBorder(0, 6, 2, 6)
 		PRESETS.forEach { speed ->
 			val btn = JButton(formatPresetLabel(speed))
 			btn.toolTipText = "Set speed to ${formatPresetLabel(speed)}"
 			btn.addActionListener { applyPreset(speed) }
-			buttonRow.add(btn)
+			presetButtons.add(btn)
+			buttonGrid.add(btn)
 		}
 
-		add(buttonRow)
+		add(buttonGrid)
 
-		// ── Row 3: pause / step controls (Goal 8, Issue #501) ───────────────────
-		val pauseRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
+		// ── Pause / step controls (Goal 8, Issue #501) ────────────────────────────
+		// Built here, where their logic lives, but shown by the frame in the top bar next to Stop
+		// (Issue #1421): see [stepControls].
+		val pauseRow = stepControls
 
-		pauseButton = JButton(LABEL_PAUSE)
+		pauseButton = JButton()
+		// Player symbol instead of text (Issue #1421): pause while the run plays, play while paused
+		PlayerIcon.apply(pauseButton, PlayerIcon.Symbol.PAUSE, LABEL_PAUSE)
 		pauseButton.toolTipText = "Pause/resume the simulation (Space)"
 		pauseButton.isEnabled = false
 		pauseButton.addActionListener {
@@ -242,8 +263,26 @@ class SimulationControlPanel : JPanel() {
 		pauseRow.add(JLabel("Delta:"))
 		pauseRow.add(stepTimeDeltaSpinner)
 
-		add(pauseRow)
+		// The run buttons never take keyboard focus (Issue #1421): a focused button turns Space into
+		// its own click, which would steal the Space / S / T shortcuts of SimulationKeyBindings.
+		listOf(pauseButton, stepEventButton, stepTimeButton).forEach { it.isFocusable = false }
 	}
+
+	/**
+	 * Enables or disables the speed slider and the preset buttons (Issue #1421).
+	 *
+	 * The panel stays in the side dock in editing mode too, so the frame disables these controls
+	 * there instead of hiding the panel. The pause and step controls are not touched: they already
+	 * follow [runner] and are disabled while no simulation runs.
+	 *
+	 * Must be called from the EDT.
+	 */
+	var speedControlsEnabled: Boolean = true
+		set(value) {
+			field = value
+			slider.isEnabled = value
+			presetButtons.forEach { it.isEnabled = value }
+		}
 
 	// ── Internal helpers ───────────────────────────────────────────────────────
 
@@ -294,7 +333,8 @@ class SimulationControlPanel : JPanel() {
 		if (speed >= 1.0) "%.0fx".format(Locale.ROOT, speed) else "%.1fx".format(Locale.ROOT, speed)
 
 	/**
-	 * Synchronise the pause button text and the step buttons' enabled state to [paused].
+	 * Synchronise the pause button symbol and accessible name, and the step buttons' enabled state,
+	 * to [paused].
 	 *
 	 * Called from [pausedListener] (which runs on EDT via [SwingUtilities.invokeLater]) and
 	 * from the [runner] setter when a non-null runner is attached.
@@ -302,7 +342,11 @@ class SimulationControlPanel : JPanel() {
 	 */
 	private fun syncUiToPaused(paused: Boolean) {
 		val simRunning = runner != null
-		pauseButton.text = if (paused) LABEL_RESUME else LABEL_PAUSE
+		if (paused) {
+			PlayerIcon.apply(pauseButton, PlayerIcon.Symbol.PLAY, LABEL_RESUME)
+		} else {
+			PlayerIcon.apply(pauseButton, PlayerIcon.Symbol.PAUSE, LABEL_PAUSE)
+		}
 		pauseButton.isEnabled = simRunning
 		stepEventButton.isEnabled = simRunning && paused
 		stepTimeButton.isEnabled = simRunning && paused
@@ -339,6 +383,9 @@ class SimulationControlPanel : JPanel() {
 
 		/** Seven preset speed multipliers. Values above 10× exceed the slider range. */
 		val PRESETS: List<Double> = listOf(0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0)
+
+		/** Columns of the preset-button grid: 7 presets give two rows that fit the side dock. */
+		private const val PRESET_COLUMNS = 4
 
 		/** Button labels for the pause/resume toggle. */
 		private const val LABEL_PAUSE = "Pause"

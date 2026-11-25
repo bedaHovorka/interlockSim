@@ -48,7 +48,7 @@ class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
 	 * Verify that Frame exit methods unregister AnimationController's PropertyChangeListener.
 	 *
 	 * Tests the complete cleanup chain:
-	 * Frame.exitWithoutSaving() → RailwayNetGridCanvas.cleanupAnimation() → AnimationController.stop()
+	 * the window teardown (WindowLifecycle) → RailwayNetGridCanvas.cleanupAnimation() → AnimationController.stop()
 	 */
 	@Test
 	fun frameCleanupUnregistersListener() {

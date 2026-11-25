@@ -11,12 +11,15 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.testutil.pacedGapNanos
+import cz.vutbr.fit.interlockSim.testutil.useMaxSpeedPacedClocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -504,5 +507,92 @@ class SimulationRunnerTest {
 		assertThat(producer.isAlive).isFalse()
 		assertThat(consumer.isAlive).isFalse()
 		assertThat(runner.pollStepEvent()).isFalse()
+	}
+
+	// ── Paced simulation time for the GUI clock (Issue #1421) ─────────────────
+
+	@Test
+	@DisplayName("pacedSimulationTime moves through each paced gap and stops at its end")
+	fun pacedSimulationTimeFollowsGaps() {
+		var nowNanos = 0L
+		var engineTime = 0.0
+		runner.useMaxSpeedPacedClocks({ nowNanos }, { engineTime })
+		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
+
+		// The first authoritative gap covers 40..42 s (engine at 42 s, delta 2)
+		engineTime = 42.0
+		runner.throttle(2.0)
+		val gapNanos = pacedGapNanos(2.0)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(40.0)
+		nowNanos += gapNanos / 2
+		assertThat(runner.pacedSimulationTime()).isCloseTo(41.0, 1e-6)
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(42.0)
+
+		// The next gap is anchored at the engine clock, not at the last gap's end
+		engineTime = 45.0
+		runner.throttle(3.0)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(42.0)
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(45.0)
+	}
+
+	@Test
+	@DisplayName("throttle without an authoritative engine timestamp publishes no gap")
+	fun throttleWithoutAuthoritativeTimePublishesNothing() {
+		var nowNanos = 0L
+		runner.useMaxSpeedPacedClocks({ nowNanos }, { null })
+
+		// A test thread reads no engine timestamp (the production analog is the dispatcher
+		// thread's residual wall budget, PR #1430 review): the clock must hold at zero.
+		runner.throttle(2.0)
+		val gapNanos = pacedGapNanos(2.0)
+		nowNanos += gapNanos / 2
+		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(0.0)
+	}
+
+	@Test
+	@DisplayName("successive authoritative gaps re-anchor and never stack")
+	fun successiveAuthoritativeGapsReanchor() {
+		var nowNanos = 0L
+		var engineTime = 8.1
+		runner.useMaxSpeedPacedClocks({ nowNanos }, { engineTime })
+		runner.throttle(0.1)
+		val firstNanos = pacedGapNanos(0.1)
+		nowNanos += firstNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(8.1)
+
+		// The engine is already at 8.3 while the caller's delta (a residual dispatcher budget)
+		// is only 0.09: the gap must span 8.21..8.3, not stack 0.09 on the old end 8.1.
+		engineTime = 8.3
+		runner.throttle(0.09)
+		assertThat(runner.pacedSimulationTime()).isEqualTo(8.21)
+		nowNanos += firstNanos
+		assertThat(runner.pacedSimulationTime()).isCloseTo(8.3, 1e-6)
+	}
+
+	@Test
+	@DisplayName("an off-thread residual call cannot push the clock, mid-sleep or after it")
+	fun offThreadThrottleCannotPushExistingGap() {
+		var nowNanos = 0L
+		var engineTime: Double? = 6.0
+		runner.useMaxSpeedPacedClocks({ nowNanos }, { engineTime })
+		runner.throttle(1.0)
+		val gapNanos = pacedGapNanos(1.0)
+		nowNanos += gapNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(6.0)
+
+		// The dispatcher sleeps a residual off the simulation thread: no gap is published, so
+		// the shown time stays anchored at the authoritative 6 s - read mid-sleep and after
+		// the whole suppressed sleep window.
+		engineTime = null
+		runner.throttle(4.0)
+		val suppressedNanos = pacedGapNanos(4.0)
+		nowNanos += suppressedNanos / 2
+		assertThat(runner.pacedSimulationTime()).isEqualTo(6.0)
+		nowNanos += suppressedNanos * 10
+		assertThat(runner.pacedSimulationTime()).isEqualTo(6.0)
 	}
 }

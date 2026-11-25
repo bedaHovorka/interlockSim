@@ -19,18 +19,23 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.context.isProcessControl
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.di.windowLayoutModule
+import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.AiSweepDriver
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGrid
 import cz.vutbr.fit.interlockSim.dispatcher.sweep.SweepGridException
+import cz.vutbr.fit.interlockSim.exceptions.MainProcessFailedException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
+import cz.vutbr.fit.interlockSim.sim.metrics.performanceLine
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -162,58 +167,7 @@ class Main {
 
 		return try {
 			val simulationContextFactory = getKoin().get<SimulationContextFactory>()
-			val context = exampleFactory(simulationContextFactory, args)
-			val reporter = TextReporter(Verbosity.DEFAULT)
-			context.addPropertyChangeListener(reporter)
-			val simTimeTracker = SimulationTimeTracker()
-			context.addPropertyChangeListener(simTimeTracker)
-			// Issue #847 cleanup pass: an example may declare its own SimulationController in
-			// scope (e.g. createShuntingLoopAIExample's ThrottlingSimulationController, needed
-			// to pace the async LLM planner). Without retrieving it here, run() would silently
-			// default to NoOpSimulationController and the declared controller would never reach
-			// the kDisco kernel loop it was built to pace.
-			val controller = context.scope.publishedOrNull<SimulationController>() ?: NoOpSimulationController
-			var outcome = RunOutcome.NOT_STARTED
-			context.use {
-				it.run(controller)
-				reporter.printSummary()
-				// A dispatcher that gave up (AgentDriverLoop.stoppedByFailures) leaves the kDisco
-				// kernel ticking on to the horizon with nobody dispatching, so sim-time alone
-				// would report COMPLETED and the aggregator would count a dead run as a passing
-				// data point. Read inside `use` -- the scope is gone once the context closes.
-				val dispatcherGaveUp = it.scope.agentDriverLoopOrNull()?.stoppedByFailures == true
-				val reachedSimTime = resolveReachedSimTime(simTimeTracker.lastSimTime, it.lastRunEndTime)
-				outcome = classifyRun(reachedSimTime, requestedEndTime, dispatcherGaveUp)
-				// Issue #847 rounds 3 and 4: report what the dispatcher actually did — routes the
-				// orphan sweeper reclaimed, the planner's final cycle counts, and the
-				// control-tick-to-decision chain. Read inside `use`: the scope is gone once the
-				// context closes. Examples that wire no dispatcher agent report nothing.
-				//
-				// Round 4 (R4-2): logFinalSummary() previously had exactly one caller, the GUI
-				// Frame, so a headless run emitted only the modulo-10 periodic lines — two per run
-				// at the observed cycle counts, and none at the end. #847's sweep is headless by
-				// definition, so every per-run number it needs has to be produced here.
-				DispatcherRunSummaries.log(it.scope)
-				// Round 4 (R4-5): persist the run as JSON so SP2c.23's aggregator (#846) has a
-				// producer. SP2c.22 (#845) deferred the headless finish() to "the sweep driver",
-				// but that driver is #847 — the task blocked on this pipeline producing anything —
-				// so build/reports/dispatcher-runs/ was never created by any run at all.
-				//
-				// TERMINATED_EARLY maps to RunEndCause.TERMINATED_EARLY: a run that stopped short
-				// of its requested horizon is not a natural completion, and #846's pass criterion is
-				// `completedNaturally && !terminalFallbackEngaged && c7Clean`.
-				//
-				// Issue #930: finishAndPersist may downgrade a NATURAL_COMPLETION to STARVED when the
-				// railway achieved nothing. The process exit code is deliberately left alone — it is
-				// already decided above from reached-versus-requested sim time, and a starved run did
-				// reach its horizon. The sweep reads the verdict from the run JSON, not from `$?`.
-				DispatcherRunSummaries.finishAndPersist(it.scope, outcome.toRunEndCause())
-				// Issue #1072: release the cached Koog agent before the context/scope closes so
-				// agent workers do not outlive the run. The shared Ollama executor stays open
-				// here — headless one-shot main closes it after the run returns (see loadExample).
-				DispatcherRunLifecycle.releaseKoogAgent(it.scope)
-			} // context closed after simulation
-			outcome
+			runExampleContext(exampleFactory(simulationContextFactory, args), requestedEndTime, name)
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Example context creation failed" }
 			RunOutcome.NOT_STARTED
@@ -227,6 +181,137 @@ class Main {
 			logger.error(e) { "Example initialization failed" }
 			RunOutcome.NOT_STARTED
 		}
+	}
+
+	/**
+	 * Runs the example [context] that [runExample] built and classifies the run (Issue #1361: extracted so a
+	 * test can hand it a context whose main process fails). Exceptions propagate to [runExample].
+	 */
+	internal fun runExampleContext(
+		context: SimulationContext,
+		requestedEndTime: Double?,
+		name: String
+	): RunOutcome {
+		val reporter = TextReporter(Verbosity.DEFAULT)
+		context.addPropertyChangeListener(reporter)
+		val simTimeTracker = SimulationTimeTracker()
+		context.addPropertyChangeListener(simTimeTracker)
+		// Issue #847 cleanup pass: an example may declare its own SimulationController in
+		// scope (e.g. createShuntingLoopAIExample's ThrottlingSimulationController, needed
+		// to pace the async LLM planner). Without retrieving it here, run() would silently
+		// default to NoOpSimulationController and the declared controller would never reach
+		// the kDisco kernel loop it was built to pace.
+		val controller = context.scope.publishedOrNull<SimulationController>() ?: NoOpSimulationController
+		// runAndReport always returns or throws, so `use` itself yields the outcome (PR #1419).
+		val outcome =
+			context.use {
+				try {
+					runAndReport(it, controller, reporter, simTimeTracker, requestedEndTime, name)
+				} finally {
+					// Issue #1072: release the cached Koog agent before the context/scope closes so
+					// agent workers do not outlive the run -- also when the run threw (Issue #1361). The
+					// shared Ollama executor stays open here — headless one-shot main closes it after the run
+					// returns (see loadExample).
+					DispatcherRunLifecycle.releaseKoogAgent(it.scope)
+				}
+			} // context closed after simulation
+		return outcome
+	}
+
+	/**
+	 * The body of [runExampleContext] inside the context's `use`: runs [context], prints the summary and the
+	 * run record, classifies the run and persists its JSON. A run whose main process died
+	 * ([MainProcessFailedException], Issue #1361) is reported as [RunOutcome.TERMINATED_EARLY] and still
+	 * persisted: the context delivered its run end, so the run record exists. The same outcome covers the
+	 * run-end process control the listener-guard contract lets leave [SimulationContext.run] (Issue #1324):
+	 * a cancellation that escaped the run-end delivery, bare or carrying the main-process failure as its
+	 * suppressed throwable. Any other failure propagates.
+	 */
+	private fun runAndReport(
+		context: SimulationContext,
+		controller: SimulationController,
+		reporter: TextReporter,
+		simTimeTracker: SimulationTimeTracker,
+		requestedEndTime: Double?,
+		name: String
+	): RunOutcome {
+		val endedByProcessControl =
+			try {
+				context.run(controller)
+				false
+			} catch (e: MainProcessFailedException) {
+				logger.error(e) {
+					"Example simulation ended early: its main process failed. " +
+						"Exiting ${RunOutcome.TERMINATED_EARLY.exitCode}."
+				}
+				true
+			} catch (e: Exception) {
+				// The run-end process control of the listener-guard contract (Issue #1324): the escapee of the
+				// run-end delivery, either a bare cancellation of a listener or one that carries the
+				// main-process failure the run itself threw as its suppressed throwable -- `endRun` added it
+				// there, and the promise of its KDoc is that a headless report can still read the failure.
+				val runFailure =
+					e.suppressed.firstOrNull { it is MainProcessFailedException } as? MainProcessFailedException
+				if (runFailure == null && !isProcessControl(e)) {
+					// Any other failure keeps its classification: it propagates and `runExample` reports it (Issue #1361).
+					throw e
+				}
+				logger.error(e) {
+					val detail =
+						if (runFailure == null) {
+							"the run end delivered kDisco process control (Issue #1324)"
+						} else {
+							"its main process failed behind the run-end process control (Issue #1324)"
+						}
+					"Example simulation ended early: $detail. " +
+						"Exiting ${RunOutcome.TERMINATED_EARLY.exitCode}."
+				}
+				true
+			}
+		reporter.printSummary()
+		// Issue #676 / #1306 (Goal 6 SP5, SP8): the run record and its performance row, the same two
+		// lines the native CLI prints after its summary.
+		context.getMetricsServices().getRunRecordSource().runRecord()?.let { record ->
+			println(record.summaryLine())
+			println(record.performanceLine())
+		}
+		// A dispatcher that gave up (AgentDriverLoop.stoppedByFailures) leaves the kDisco
+		// kernel ticking on to the horizon with nobody dispatching, so sim-time alone
+		// would report COMPLETED and the aggregator would count a dead run as a passing
+		// data point. Read inside `use` -- the scope is gone once the context closes.
+		val dispatcherGaveUp = context.scope.agentDriverLoopOrNull()?.stoppedByFailures == true
+		val reachedSimTime = resolveReachedSimTime(simTimeTracker.lastSimTime, context.lastRunEndTime)
+		val outcome =
+			if (endedByProcessControl) {
+				RunOutcome.TERMINATED_EARLY
+			} else {
+				classifyRun(reachedSimTime, requestedEndTime, dispatcherGaveUp)
+			}
+		// Issue #847 rounds 3 and 4: report what the dispatcher actually did — routes the
+		// orphan sweeper reclaimed, the planner's final cycle counts, and the
+		// control-tick-to-decision chain. Read inside `use`: the scope is gone once the
+		// context closes. Examples that wire no dispatcher agent report nothing.
+		//
+		// Round 4 (R4-2): logFinalSummary() previously had exactly one caller, the GUI
+		// Frame, so a headless run emitted only the modulo-10 periodic lines — two per run
+		// at the observed cycle counts, and none at the end. #847's sweep is headless by
+		// definition, so every per-run number it needs has to be produced here.
+		DispatcherRunSummaries.log(context.scope)
+		// Round 4 (R4-5): persist the run as JSON so SP2c.23's aggregator (#846) has a
+		// producer. SP2c.22 (#845) deferred the headless finish() to "the sweep driver",
+		// but that driver is #847 — the task blocked on this pipeline producing anything —
+		// so build/reports/dispatcher-runs/ was never created by any run at all.
+		//
+		// TERMINATED_EARLY maps to RunEndCause.TERMINATED_EARLY: a run that stopped short
+		// of its requested horizon is not a natural completion, and #846's pass criterion is
+		// `completedNaturally && !terminalFallbackEngaged && c7Clean`.
+		//
+		// Issue #930: finishAndPersist may downgrade a NATURAL_COMPLETION to STARVED when the
+		// railway achieved nothing. The process exit code is deliberately left alone — it is
+		// already decided above from reached-versus-requested sim time, and a starved run did
+		// reach its horizon. The sweep reads the verdict from the run JSON, not from `$?`.
+		DispatcherRunSummaries.finishAndPersist(context.scope, outcome.toRunEndCause(), name)
+		return outcome
 	}
 
 	/**
@@ -379,7 +464,7 @@ class Main {
 			context.addReportTypes(*ReportType.values())
 
 			val sourceFile = if (args.size > 1) File(args[1]).canonicalFile else null
-			showContextInGui(context, sourceFile)
+			showContextInGui(context, sourceFile, runName = sourceFile?.let(DispatcherRunSummaries::fileRunName))
 		} catch (e: ContextCreationException) {
 			logger.error(e) { MSG_CONTEXT_CREATION_FAILED }
 		} catch (e: EmptyContextException) {
@@ -433,7 +518,7 @@ class Main {
 			// Reuse the same GUI launch path as loadSimWithGui (no sourceFile for examples).
 			// LLM-driven examples get their own window title (Issue #839).
 			val appTitle = if (exampleRegistry.usesLlmDispatcher(name)) PROGRAM_LLM_FULL_NAME else null
-			showContextInGui(context, appTitle = appTitle)
+			showContextInGui(context, appTitle = appTitle, runName = name)
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "GUI example context creation failed" }
 		} catch (e: EmptyContextException) {
@@ -452,16 +537,20 @@ class Main {
 	 * management without a raw background thread).
 	 *
 	 * The [SimulationContext] is intentionally not closed here; its lifetime is bound to
-	 * the GUI window — [Frame.exitWithoutSaving] calls `System.exit(0)` on window close.
+	 * the GUI window — the close path ([WindowLifecycle.requestClose]) ends in
+	 * `System.exit(0)` after the layout save.
 	 *
 	 * @param context Simulation context to display; must already have report types added.
 	 * @param sourceFile Optional XML file to show in the window title (null for built-in examples).
 	 * @param appTitle Optional base window title; null keeps [Frame]'s default (Issue #839).
+	 * @param runName What the run JSON records as `example` (Issue #1328): the example name, or the
+	 *   XML file's [DispatcherRunSummaries.fileRunName]; null records none.
 	 */
 	private fun showContextInGui(
 		context: SimulationContext,
 		sourceFile: File? = null,
-		appTitle: String? = null
+		appTitle: String? = null,
+		runName: String? = null
 	) {
 		javax.swing.SwingUtilities.invokeLater {
 			appTitle?.let { frame.appTitle = it }
@@ -470,7 +559,7 @@ class Main {
 			// File->Save uses that state to enter editing-only save flow.
 			sourceFile?.let { frame.title = it.name }
 			frame.isVisible = true
-			frame.startSimulation()
+			frame.startSimulation(runName)
 		}
 	}
 }
@@ -541,7 +630,7 @@ fun main(args: Array<String>) {
 	// Load GUI module (includes Main coordinator and Frame)
 	// Note: Main is always needed for all modes (sim/edit/example)
 	// Frame is only created lazily when actually needed (edit mode)
-	getKoin().loadModules(listOf(guiModule))
+	getKoin().loadModules(listOf(guiModule, windowLayoutModule))
 
 	// Add shutdown hook to clean up Koin when JVM exits
 	Runtime.getRuntime().addShutdownHook(
@@ -579,7 +668,7 @@ fun main(args: Array<String>) {
 			val outcome = main.runExample(args)
 			// Issue #1072: one-shot headless process — close the shared Ollama/Koog executor
 			// after the run so daemon workers do not outlive main. GUI mode leaves it open
-			// until the window closes (see Frame.exitWithoutSaving).
+			// until the window closes (see WindowLifecycle.requestClose).
 			DispatcherRunLifecycle.closeSharedOllamaExecutor()
 			if (outcome == RunOutcome.TERMINATED_EARLY) {
 				exitProcess(outcome.exitCode)
@@ -600,6 +689,7 @@ fun main(args: Array<String>) {
 					"\tsimgui [file]     - Run simulation from XML file with animated GUI\n" +
 					"\tedit [file]       - Launch graphical editor\n" +
 					"\texample <name> <endTime> - Run console-based example\n" +
+					"\t    (with -D${DispatcherRunConfig.PROP_RUNS_ROOT}=<dir> it writes its run JSON under <dir>)\n" +
 					"\texampleGui <name> <endTime> - Run GUI-based animated example"
 			}
 	}

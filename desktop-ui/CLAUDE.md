@@ -1,6 +1,6 @@
 # CLAUDE.md — :desktop-ui
 
-**Last Updated:** 2026-10-29
+**Last Updated:** 2026-11-24
 
 Guidance for Claude Code when working in `:desktop-ui`. Repo-wide rules
 (English-only output, heavy-test policy, Koin rules, code quality) live in the
@@ -16,6 +16,15 @@ simulation GUI, the Koin bootstrap, and the `Main` entry point.
 The `aiSweep` mode is documented in
 [dispatcher-agent/CLAUDE.md](../dispatcher-agent/CLAUDE.md) — it is manual-only
 and never runs in CI.
+
+**Run JSON of an `example` run (Issue #1327):** with
+`-Dinterlocksim.dispatcher.runsRoot=<dir>` (`DispatcherRunConfig.PROP_RUNS_ROOT`) an
+`example` run writes its run JSON to `<dir>/<arm>/`, whatever its wiring, for example
+`java -Dinterlocksim.dispatcher.runsRoot=build/runs -jar desktop-ui/build/libs/interlockSim.jar example cervenyUjezd 600`.
+Without the property only a run with a dispatcher agent writes one, to
+`build/reports/dispatcher-runs/`. The native `fast-sim` writes the same JSON with
+`--runs-root=<dir>`, filed under the `*Sync` twin's name (see [fast-sim/CLAUDE.md](../fast-sim/CLAUDE.md));
+`RunRecordJsonReadBackTest` holds the two equal.
 
 ## Run and Package Tasks
 
@@ -53,6 +62,50 @@ or the shortcuts above.
 
 Details: [../docs/ANIMATION_ARCHITECTURE.md](../docs/ANIMATION_ARCHITECTURE.md)
 and [../docs/SIMULATION_SPEED_CONTROL.md](../docs/SIMULATION_SPEED_CONTROL.md).
+
+## KPI Dashboard (Goal 6 SP3)
+
+`MetricsDashboardPanel` sits in `Frame`'s right-hand side dock, under the speed controls, in both
+modes (#1421); it polls only in simulation mode and is cleared in editing mode. It reads only
+`MetricsCollectionService.latestSnapshot()` and `latestOpenContentions()`, and on its final poll the volatile
+`runRecord()`, all cross-thread safe, from a
+`SwingWorker` driven by a `javax.swing.Timer`, never simulation-thread objects. `stop(manual)` at STOPPED,
+after any stop (natural or manual), makes that final poll, which reads the record (set at
+`RunEnded`) for the stall and the end cause. A manual stop reports STOPPED before the simulation thread
+delivers `RunEnded`, so a final poll without a record re-reads it from a one-shot timer (10 × 100 ms). With
+no record after that, the end cause reads "stopped manually" after a manual stop and "–" otherwise (#1326). With `MetricGroup.TRAIN_WAIT` off, Queued, Blocked and
+Open contentions show "–" (not measured).
+
+## Main Window Layout (Goal 6, #1421)
+
+One layout for both modes, so nothing jumps when the mode changes (design:
+`docs/superpowers/specs/2026-11-24-main-window-layout-design.md`):
+
+- NORTH: toolbar and a run bar (simulation mode only): `ControlPanel` (time, status, Stop), then
+  `SimulationControlPanel.stepControls` (Pause, Step Event, Step Time, delta). The clock shows
+  `SimulationRunner.pacedSimulationTime()`, which moves smoothly between events.
+- CENTER: a `JSplitPane` — canvas on top, `bottomTabs` below (Path Preview, Warnings (n),
+  Timeline). The mode enables the tabs that have content; simulation mode opens on Timeline, and a
+  CRITICAL warning selects Warnings.
+- EAST: `SideDock`, 320 px — Simulation Speed, Metrics (KPI), Dispatcher, Conflict Resolution.
+  Editing mode disables the speed and dispatcher controls instead of hiding them.
+- SOUTH: `StatusBar` only.
+- Start size: `WindowGeometry` (85% of the usable screen, at least 1024x818); the tab area starts at
+  30% of the window height. The application (not tests: `windowLayoutModule` is loaded only by
+  `main`) saves bounds and tab-area height in `java.util.prefs` (`WindowStateStore`) on exit.
+
+## Run JSON Name of a GUI Run (Goal 6, #1328)
+
+Every GUI start hands a run name to `Frame.startSimulation(runName)`; the STOPPED handler passes it to
+`DispatcherRunSummaries.finishAndPersist`, which writes it as the run JSON's `example`:
+
+- `exampleGui <name>` (`Main.runExampleGui`) records the example name (`ExampleNames` constant).
+- `simgui <file>` (`Main.loadSimWithGui`) and **Simulation → Start...** (`startSimulationFromFile` in
+  `MenuBar.kt`, which takes the name before it clears the current file) record
+  `DispatcherRunSummaries.fileRunName`: the file's base name **with** its extension, never a path.
+  No example name contains a dot (pinned), so a file with an extension (`vyhybna.xml`) never pools with
+  an example; an extensionless file named like an example would. Two files with the same name in
+  different directories do pool in the sweep report.
 
 ## Verification and Benchmark Tasks
 

@@ -13,9 +13,11 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEqualTo
+import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.agents.PromptVariant
 import cz.vutbr.fit.interlockSim.dispatcher.di.ruleBasedRunParameters
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import org.junit.jupiter.api.DisplayName
@@ -27,8 +29,9 @@ import org.junit.jupiter.api.Test
  * The property under test is agreement: [SweepCell.runParameters] is used for a killed/aborted
  * run's snapshot, and the live recording path is used for one that finishes naturally. If the two
  * ever produced different [RunParameters] for the same cell,
- * [cz.vutbr.fit.interlockSim.dispatcher.planner.RunReportAggregator.appendParameterSweep]'s
- * `groupBy { it.params }` would split a single grid cell's runs into two report rows, silently
+ * [cz.vutbr.fit.interlockSim.dispatcher.planner.RunReportAggregator.appendParameterSweep],
+ * which groups runs by `ParameterSweepCellKey` (the parameters and the example, Issue #1333), would
+ * split a single grid cell's runs into two report rows, silently
  * halving each row's sample size.
  *
  * @since Issue #834 (SP2c.11 — inferenceTimeoutSeconds/promptVariant threading)
@@ -57,6 +60,27 @@ class SweepCellTest {
 			maxActionsPerTick = 2,
 			inferenceTimeoutSeconds = inferenceTimeoutSeconds
 		)
+
+	/**
+	 * Issue #676 fix round 2: [SweepCell.arm] is the arm of an aborted run's snapshot, so it must be
+	 * the arm the completed runs of the cell record -- `multiTrainLoop` and `threeTrainLoop` wire no
+	 * dispatcher and are recorded under NO_DISPATCHER. `:desktop-ui`'s `SweepCellArmAgreementTest`
+	 * checks this mapping against every registered example.
+	 */
+	@Test
+	@DisplayName("a dispatcher-free example maps to the NO_DISPATCHER arm, with the rule-based parameters")
+	fun dispatcherFreeExamplesHaveTheirArm() {
+		for (example in listOf(ExampleNames.MULTI_TRAIN_LOOP, ExampleNames.THREE_TRAIN_LOOP)) {
+			val cell = ruleBasedCell().copy(example = example)
+
+			assertThat(cell.arm, example).isEqualTo(DispatcherArm.NO_DISPATCHER)
+			// Its live recorder is the DI-built rule-based one, so the abort snapshot uses the same parameters.
+			assertThat(cell.runParameters(), example).isEqualTo(ruleBasedCell().runParameters())
+		}
+		assertThat(ruleBasedCell().copy(example = ExampleNames.CERVENY_UJEZD).arm).isEqualTo(DispatcherArm.RULE_BASED)
+		assertThat(ruleBasedCell().arm).isEqualTo(DispatcherArm.RULE_BASED)
+		assertThat(llmCell().arm).isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
+	}
 
 	@Test
 	@DisplayName("a null inferenceTimeoutSeconds records KoogAgentPlanAdapter's own default, not null")
@@ -202,5 +226,22 @@ class SweepCellTest {
 			)
 
 		assertThat(fromAbortPath).isEqualTo(fromLivePath)
+	}
+
+	/**
+	 * The live rule-based recorder (`ruleBasedRunParameters`) ignores the model and temperature axes, so a
+	 * cell that pins them must not split its aborted runs from its completed ones in the report grouping.
+	 */
+	@Test
+	@DisplayName("a cell without a prompt records the live sentinels even when it pins model and temperature")
+	fun promptlessCellsIgnorePinnedModelAndTemperature() {
+		for (example in listOf(ExampleNames.SHUNTING_LOOP, ExampleNames.MULTI_TRAIN_LOOP)) {
+			val pinned =
+				ruleBasedCell().copy(example = example, model = "qwen2.5:7b-instruct", temperature = 0.7)
+
+			assertThat(pinned.runParameters(), example).isEqualTo(ruleBasedCell().runParameters())
+			assertThat(pinned.runParameters().model, example).isEqualTo("")
+			assertThat(pinned.runParameters().temperature, example).isEqualTo(0.0)
+		}
 	}
 }
