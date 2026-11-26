@@ -40,7 +40,7 @@ Since 2026 it is rewritten in Kotlin. kDisco, the jDisco-based engine of this pr
 - **Simulation speed control** - Slider from 0.1x to 10x, presets up to 50x, and keyboard shortcuts
 - **Metrics panel** - Live KPIs such as average wait, conflicts, throughput, utilization, queued and blocked trains
 - **Dispatcher** - Rule-based dispatcher, with an optional LLM dispatcher (needs [Ollama](https://ollama.com))
-- **Run summaries** - A JSON summary for each run that has a dispatcher agent, or for any run when `-Dinterlocksim.dispatcher.runsRoot=<dir>` is set
+- **Run summaries** - One JSON summary per run in the `example`, `simgui` and `exampleGui` modes: always when the run has a dispatcher agent, and for the other runs when `-Dinterlocksim.dispatcher.runsRoot=<dir>` is set
 - **Swing GUI** for visualization and editing
 - **Assertion-based validation** for simulation integrity
 - **Dynamic state visualization** - Track coloring (FREE/RESERVED/OCCUPIED), signal states, switch positions
@@ -257,7 +257,7 @@ java -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 1024
 
 | Name | What it shows | Network (XML) | Needs Ollama |
 |------|---------------|---------------|--------------|
-| `shuntingLoop` | The original example: one train on a small passing loop (*výhybna*) | `vyhybna.xml` | no |
+| `shuntingLoop` | The original example. Trains arrive until the run ends; the two-track passing loop (*výhybna*) runs up to two trains at the same time | `vyhybna.xml` | no |
 | `multiTrainLoop` | Three trains on the same loop (A to B, B to A, A to B). Each train reserves its whole path before it starts. | `vyhybna.xml` | no |
 | `threeTrainLoop` | The fixed three-train prototype of the same scenario. At least one block is contested and queued. | `vyhybna.xml` | no |
 | `cervenyUjezd` | A small passing station with a rule-based dispatcher. 2 entry points on the west side, 2 exit points on the east side, 12 switches (*výhybky*), 12 signals (*návěstidla*). | `cerveny_ujezd.xml` | no |
@@ -284,14 +284,16 @@ java -ea -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoopAI 333
 
 For the Docker route, see "Quick Start with Docker" above and the AI dispatcher notes in `CLAUDE.md`.
 
-**Run summaries.** A run writes one JSON summary when it stops, in two cases:
+**Run summaries.** The `example`, `simgui` and `exampleGui` modes write one JSON summary per run when it stops, in two cases:
 
 - The run has a dispatcher agent. This is true for `shuntingLoop`, `cervenyUjezd`, `prahaHlavniNadrazi` and the `*AI` examples.
   The file goes to `build/reports/dispatcher-runs/<arm>/`, for example `rule_based`.
-- You set `-Dinterlocksim.dispatcher.runsRoot=<dir>`. Then any run writes its file to `<dir>/<arm>/`.
-  A run without a dispatcher agent uses the arm name `no_dispatcher`. The same rules apply to `exampleGui`.
+- You set `-Dinterlocksim.dispatcher.runsRoot=<dir>`. Then those modes write every run's file to `<dir>/<arm>/`.
 
-Runs without a dispatcher agent (`multiTrainLoop`, `threeTrainLoop`, `shuntingLoopSync`) write nothing unless you set the property.
+The arm name follows the dispatcher wiring. The `*Sync` twins use a synchronous rule-based dispatcher, so they also file under
+`rule_based` when the property is set. Only `multiTrainLoop` and `threeTrainLoop` have no dispatcher at all, and they use `no_dispatcher`.
+Runs that do not go through a dispatcher agent (`multiTrainLoop`, `threeTrainLoop`, and the `*Sync` twins)
+write nothing unless you set the property.
 Put the property before `-jar`:
 
 ```bash
