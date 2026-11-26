@@ -98,6 +98,7 @@ class FaultInjectionProcessFixtureTest : CommonKoinTestBase() {
 		assertThat(exception.severity).isEqualTo(Severity.FATAL)
 		assertThat(exception.message.orEmpty()).contains("injected-fault")
 		assertThat(fixture.name).isEqualTo("injected-fault")
+		assertThat(exception.time).isEqualTo(FAIL_AT)
 	}
 
 	@Test

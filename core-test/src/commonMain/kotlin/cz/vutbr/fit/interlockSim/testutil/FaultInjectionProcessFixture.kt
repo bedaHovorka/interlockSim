@@ -31,8 +31,14 @@ class FaultInjectionProcessFixture(
 	throwable: Throwable? = null,
 	val name: String = DEFAULT_NAME
 ) : Process() {
-	/** What [actions] throws: the configured throwable, else the default fault naming [name]. */
-	val throwable: Throwable = throwable ?: defaultFault(name)
+	private val configured: Throwable? = throwable
+
+	/**
+	 * What [actions] throws: the configured throwable, else the default fault naming [name]. The
+	 * default is built at the first read, which [actions] does at time [failAt], so its model time is
+	 * the time of the fault.
+	 */
+	val throwable: Throwable by lazy { configured ?: defaultFault(name) }
 
 	init {
 		require(failAt >= 0.0) { "failAt must not be negative, got $failAt" }
