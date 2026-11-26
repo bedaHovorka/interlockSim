@@ -56,9 +56,16 @@ import kotlinx.coroutines.Job
  * factory at each separate construction site would rely on memory, and one forgotten site silently
  * reverts to the Apache5 default again. `DispatcherOllamaClientTripwireTest` fails the build when
  * any `OllamaClient` construction appears outside this file.
+ *
+ * ## The reply observer (Issue #1342)
+ *
+ * The base client also carries [OllamaReplyObserver], which reads Ollama's `done_reason` (dropped
+ * by Koog 1.1.1) from every `/api/chat` reply, so a cycle can tell a generation cut by `num_predict`.
  */
 internal fun cancellableOllamaHttpClientFactory(): Pair<KtorKoogHttpClient.Factory, HttpClient> {
-	val baseClient = HttpClient(CIO)
+	// Issue #1342: the reply observer rides on the base client; `baseClient.config(...)` inside the
+	// Koog factory copies it onto the served client.
+	val baseClient = HttpClient(CIO) { installOllamaReplyObserver() }
 	return KtorKoogHttpClient.Factory(baseClient = baseClient) to baseClient
 }
 
