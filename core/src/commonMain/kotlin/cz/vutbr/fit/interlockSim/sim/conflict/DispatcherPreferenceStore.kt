@@ -12,17 +12,17 @@ package cz.vutbr.fit.interlockSim.sim.conflict
 /**
  * Persistent record of every [ConflictResolution] applied during a simulation run.
  *
- * Both the automated dispatcher ([AutoConflictResolutionService]) and a future operator
- * UI can write to this store via [record].  The accumulated history is consumed by the
- * Goal 9 preference-learning sub-task (Issue #592) to improve the ranking of future
- * candidates.
+ * The operator-selection UI writes to this store via [record]; no automated writer exists
+ * (the headless auto-resolution picker was removed by Goal 9B, Issue #1453). The accumulated
+ * history is consumed by the Goal 9 preference-learning sub-task (Issue #592) to improve the
+ * ranking of future candidates.
  *
  * ## Usage
  *
  * ```kotlin
  * val store: DispatcherPreferenceStore = DefaultDispatcherPreferenceStore()
  *
- * // Record an auto-applied resolution (written by AutoConflictResolutionService):
+ * // Record an auto-applied resolution (no production writer since Issue #1453):
  * store.record(event, resolution, DispatcherPreferenceStore.ApplicationSource.AUTO)
  *
  * // Record an operator-selected resolution (written by the UI layer):
@@ -41,8 +41,8 @@ interface DispatcherPreferenceStore {
 	 */
 	enum class ApplicationSource {
 		/**
-		 * Resolution was applied automatically by [AutoConflictResolutionService].
-		 * No human was in the loop.
+		 * Resolution was applied automatically, with no human in the loop. No production
+		 * writer uses it since the headless auto-resolution picker was removed (Issue #1453).
 		 */
 		AUTO,
 

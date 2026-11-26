@@ -30,9 +30,7 @@ import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
-import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService
 import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
@@ -274,13 +272,6 @@ val navigationModule: Module =
 			// DispatcherPreferenceStore: scoped to simulation context (Issue #568 Goal 9 SP5)
 			// One history per simulation run; scoped (not single) so concurrent runs don't mix.
 			scoped<DispatcherPreferenceStore> { DefaultDispatcherPreferenceStore() }
-
-			// AutoConflictResolutionService: scoped to simulation context (Issue #568 Goal 9 SP5)
-			// Headless picker: takes the top-ranked resolution and records it in the store.
-			// Advisory-only — enactment is a later slice (see #568).
-			scoped<AutoConflictResolutionService> {
-				DefaultAutoConflictResolutionService(get<ConflictResolver>(), get<DispatcherPreferenceStore>())
-			}
 
 			// MetricsCollectionService: scoped to simulation context (Issue #672 Goal 6 SP1)
 			// Subscribes to block events in its init{} block to derive all KPIs.

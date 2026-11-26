@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AffordanceAnnotator
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ConflictHintLatch
-import cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -22,27 +22,35 @@ import org.junit.jupiter.api.Test
  *
  * ## C7 ruling summary (from Issue #822 investigation)
  *
- * `AutoConflictResolutionService` and `ConflictResolver` are advisory, pure-read components:
- * - The public API is one advisory method: `applyTopRanked(event): ConflictResolution?`
- * - It mutates nothing simulation-related — no reservation, no cancellation, no signal change.
- * - KDoc says the result is *"purely advisory … the caller is responsible for enacting the
- *   simulation effect"*.
- * - It has zero production call sites in the dispatcher agent loop (only test call sites).
- * - `wireDispatcherAgent` never resolves `ConflictResolver` or `AutoConflictResolutionService`
- *   as direct fields of the dispatcher-agent classes below.
+ * `ConflictResolver` is an advisory, pure-read component:
+ * - It generates ranked candidates and mutates nothing simulation-related — no reservation,
+ *   no cancellation, no signal change.
+ * - It has zero production call sites in the dispatcher agent loop.
+ * - `wireDispatcherAgent` never resolves `ConflictResolver` as a direct field of the
+ *   dispatcher-agent classes below.
  *
  * **Option (a) adopted:** demote to information source — `ConflictDetectedEvent` feeds
  * affordance reasons via [ConflictHintLatch]. The LLM remains the only actor.
  *
+ * ## Goal 9B revision (Issue #1453, SP2.1)
+ *
+ * The SP2c.4 ruling also froze the headless auto-resolution picker
+ * (`AutoConflictResolutionService`, its `applyTopRanked` and its default implementation) as an
+ * inert information source, pinned by this test. Owner ruling R1 (#1434) reverses that freeze:
+ * Goal 9B takes conflict resolution to the dispatcher thread, so the picker was deleted. Its
+ * checks were dropped here; that it stays deleted is pinned by `Goal9ARemovedSymbolsTripwireTest`
+ * (`:core`). The `ConflictResolver` checks stay, and the actuator-isolation check that guarded the
+ * picker now guards [DefaultConflictResolver], the conflict engine that remains.
+ *
  * ## What this test enforces
  *
  * 1. **Dispatcher-agent non-conflict classes** (`DispatchDecisionApplier`, `AgentLoopDriver`,
- *    `ActuatorCommandQueue`) hold **no direct field** of type `ConflictResolver` or
- *    `AutoConflictResolutionService` (no direct field ownership). The reflection check below
+ *    `ActuatorCommandQueue`) hold **no direct field** of type `ConflictResolver`
+ *    (no direct field ownership). The reflection check below
  *    inspects `Class.declaredFields` field-type names only — reachability via DI/Koin scope,
  *    constructor parameters, or call chains is **not** asserted here.
  *
- * 2. **Goal 9 conflict classes** (`DefaultAutoConflictResolutionService`) hold **no field** of
+ * 2. **Goal 9 conflict classes** ([DefaultConflictResolver]) hold **no field** of
  *    actuator types (`ActuatorCommandQueue`, `NetworkActuatorPort`, `DispatchLoopActuatorPort`)
  *    — prevents the conflict-resolution engine from ever enacting decisions.
  *
@@ -63,7 +71,7 @@ class Goal9C7ArchitectureTest {
 
 	/** Forbidden conflict-resolution types accessible from :dispatcher-agent only via the annotator path. */
 	private val conflictOrchestratorNames =
-		listOf("ConflictResolver", "AutoConflictResolutionService")
+		listOf("ConflictResolver")
 
 	// ── Helper ──────────────────────────────────────────────────────────────────
 
@@ -83,79 +91,61 @@ class Goal9C7ArchitectureTest {
 	// ── 1. DispatchDecisionApplier: no conflict orchestrator fields ──────────
 
 	@Nested
-	@DisplayName("DispatchDecisionApplier: no ConflictResolver or AutoConflictResolutionService fields")
+	@DisplayName("DispatchDecisionApplier: no ConflictResolver fields")
 	inner class DispatchDecisionApplierConflictIsolation {
 		@Test
 		@DisplayName("DispatchDecisionApplier holds no ConflictResolver field")
 		fun dispatchDecisionApplierHoldsNoConflictResolverField() {
 			assertNoForbiddenFields(DispatchDecisionApplier::class.java, listOf("ConflictResolver"))
 		}
-
-		@Test
-		@DisplayName("DispatchDecisionApplier holds no AutoConflictResolutionService field")
-		fun dispatchDecisionApplierHoldsNoAutoConflictResolutionServiceField() {
-			assertNoForbiddenFields(DispatchDecisionApplier::class.java, listOf("AutoConflictResolutionService"))
-		}
 	}
 
 	// ── 2. AgentLoopDriver: no conflict orchestrator fields ──────────────────
 
 	@Nested
-	@DisplayName("AgentLoopDriver: no ConflictResolver or AutoConflictResolutionService fields")
+	@DisplayName("AgentLoopDriver: no ConflictResolver fields")
 	inner class AgentLoopDriverConflictIsolation {
 		@Test
 		@DisplayName("AgentLoopDriver holds no ConflictResolver field")
 		fun agentLoopDriverHoldsNoConflictResolverField() {
 			assertNoForbiddenFields(AgentLoopDriver::class.java, listOf("ConflictResolver"))
 		}
-
-		@Test
-		@DisplayName("AgentLoopDriver holds no AutoConflictResolutionService field")
-		fun agentLoopDriverHoldsNoAutoConflictResolutionServiceField() {
-			assertNoForbiddenFields(AgentLoopDriver::class.java, listOf("AutoConflictResolutionService"))
-		}
 	}
 
 	// ── 3. ActuatorCommandQueue: no conflict orchestrator fields ─────────────
 
 	@Nested
-	@DisplayName("ActuatorCommandQueue: no ConflictResolver or AutoConflictResolutionService fields")
+	@DisplayName("ActuatorCommandQueue: no ConflictResolver fields")
 	inner class ActuatorCommandQueueConflictIsolation {
 		@Test
 		@DisplayName("ActuatorCommandQueue holds no ConflictResolver field")
 		fun actuatorCommandQueueHoldsNoConflictResolverField() {
 			assertNoForbiddenFields(ActuatorCommandQueue::class.java, listOf("ConflictResolver"))
 		}
-
-		@Test
-		@DisplayName("ActuatorCommandQueue holds no AutoConflictResolutionService field")
-		fun actuatorCommandQueueHoldsNoAutoConflictResolutionServiceField() {
-			assertNoForbiddenFields(ActuatorCommandQueue::class.java, listOf("AutoConflictResolutionService"))
-		}
 	}
 
-	// ── 4. DefaultAutoConflictResolutionService: no actuator fields ───────────
+	// ── 4. DefaultConflictResolver: no actuator fields ───────────
 
 	@Nested
-	@DisplayName("DefaultAutoConflictResolutionService: no ActuatorCommandQueue or NetworkActuatorPort fields")
-	inner class DefaultAutoConflictResolutionServiceActuatorIsolation {
+	@DisplayName("DefaultConflictResolver: no ActuatorCommandQueue or NetworkActuatorPort fields")
+	inner class DefaultConflictResolverActuatorIsolation {
 		@Test
-		@DisplayName("DefaultAutoConflictResolutionService holds no ActuatorCommandQueue field")
-		fun defaultAutoConflictResolutionServiceHoldsNoActuatorCommandQueueField() {
-			assertNoForbiddenFields(DefaultAutoConflictResolutionService::class.java, listOf("ActuatorCommandQueue"))
+		@DisplayName("DefaultConflictResolver holds no ActuatorCommandQueue field")
+		fun defaultConflictResolverHoldsNoActuatorCommandQueueField() {
+			assertNoForbiddenFields(DefaultConflictResolver::class.java, listOf("ActuatorCommandQueue"))
 		}
 
 		@Test
-		@DisplayName("DefaultAutoConflictResolutionService holds no NetworkActuatorPort field")
-		fun defaultAutoConflictResolutionServiceHoldsNoNetworkActuatorPortField() {
-			assertNoForbiddenFields(DefaultAutoConflictResolutionService::class.java, listOf("NetworkActuatorPort"))
+		@DisplayName("DefaultConflictResolver holds no NetworkActuatorPort field")
+		fun defaultConflictResolverHoldsNoNetworkActuatorPortField() {
+			assertNoForbiddenFields(DefaultConflictResolver::class.java, listOf("NetworkActuatorPort"))
 		}
 
 		@Test
-		@DisplayName("DefaultAutoConflictResolutionService holds no DispatchLoopActuatorPort field")
-		fun defaultAutoConflictResolutionServiceHoldsNoDispatchLoopActuatorPortField() {
+		@DisplayName("DefaultConflictResolver holds no DispatchLoopActuatorPort field")
+		fun defaultConflictResolverHoldsNoDispatchLoopActuatorPortField() {
 			assertNoForbiddenFields(
-				DefaultAutoConflictResolutionService::class.java,
+				DefaultConflictResolver::class.java,
 				listOf("DispatchLoopActuatorPort")
 			)
 		}
@@ -176,12 +166,6 @@ class Goal9C7ArchitectureTest {
 		@DisplayName("ConflictHintLatch holds no ConflictResolver field (not an orchestrator)")
 		fun conflictHintLatchHoldsNoConflictResolverField() {
 			assertNoForbiddenFields(ConflictHintLatch::class.java, listOf("ConflictResolver"))
-		}
-
-		@Test
-		@DisplayName("ConflictHintLatch holds no AutoConflictResolutionService field (not an orchestrator)")
-		fun conflictHintLatchHoldsNoAutoConflictResolutionServiceField() {
-			assertNoForbiddenFields(ConflictHintLatch::class.java, listOf("AutoConflictResolutionService"))
 		}
 	}
 

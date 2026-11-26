@@ -91,15 +91,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Wiring the engine into multi-route selection here remains open — the SP2b.2/SP2b.3 stage is
  * dormant, not dead (Issue #978; see [CandidatePathRuleEngine]'s KDoc).
  *
- * ## Goal 9 integration hook
- * This class is also the designated place for wiring Goal 9's
- * [cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService] and
- * [cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker]: when the
- * shell's path reservation attempt returns a
- * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict],
- * conflict resolution can be applied in a future iteration without touching
- * [ShuntingLoop].
- *
  * @param maxConcurrentTrains Maximum number of simultaneously approved trains.
  *   Defaults to [DEFAULT_MAX_CONCURRENT_TRAINS] which matches the physical capacity
  *   of the `vyhybna.xml` shunting loop (2 parallel tracks). [wireSynchronousDispatcher] passes
