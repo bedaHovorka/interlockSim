@@ -32,7 +32,8 @@ tripwire of Issue #1011 (see Contents).
   its model time equals `failAt`, while a read before the throw returns an uncached preview; on Kotlin/Native
   an uncaught process exception kills the test process, so native tests configure a `CancellationException`, as
   `:core` commonTest `FaultInjectionProcessFixtureThrowTimeTest` does), `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
-  (sampling-regression helpers), and others.
+  (sampling-regression helpers), `PrahaPeakTimetable` (the Goal 9B SP13.1 Praha hl.n.
+  peak-hour test data, Issue #1489, see `docs/PRAHA_PEAK_TIMETABLE.md`), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
   `NavigationDecoratingContext`, `FirstTrainOwnershipConflict` (holds one train in an
   ownership-conflict wait, Issues #943/#1244), `TrainErrorStopMessages` (the `Train`
