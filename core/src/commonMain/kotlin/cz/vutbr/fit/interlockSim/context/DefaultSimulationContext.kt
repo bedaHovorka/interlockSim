@@ -46,6 +46,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.RefusedEntry
 import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
 import cz.vutbr.fit.interlockSim.sim.RunEnded
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -1474,7 +1475,7 @@ open class DefaultSimulationContext(
 		try {
 			flushUnresolvedReservationConflicts(kernelEndTime)
 			// An Error or process control from a run-end subscriber propagates, but never skips the cleanup below.
-			deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds))
+			deliverRunEnded(RunEnded(kernelEndTime, endTimeReachedThisRun, wallSeconds, refusedEntries()))
 		} catch (t: Throwable) {
 			// Never added to itself: a run failure thrown again stays one throwable (explicit, because the JVM
 			// member Throwable.addSuppressed throws on self-suppression; only Kotlin's extension skips it).
@@ -1486,6 +1487,13 @@ open class DefaultSimulationContext(
 			currentController = null
 		}
 	}
+
+	/**
+	 * The refused-entry states of this context's InOut workers when the kernel stopped (Issue #1457),
+	 * sorted by train name, for [RunEnded.refusedEntries]: each one a train still waiting at its InOut.
+	 */
+	private fun refusedEntries(): List<RefusedEntry> =
+		workers.values.mapNotNull { it.refusedEntry }.sortedBy { it.trainId }
 
 	/**
 	 * Surface any reservation contention that was still unresolved when the run ended

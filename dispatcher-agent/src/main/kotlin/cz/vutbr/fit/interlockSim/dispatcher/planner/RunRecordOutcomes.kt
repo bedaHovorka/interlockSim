@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.planner
 
+import cz.vutbr.fit.interlockSim.sim.RefusedEntry
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
 import cz.vutbr.fit.interlockSim.sim.metrics.RunStall
@@ -29,6 +30,25 @@ data class StallOutcome(
 	val knot: List<String>,
 	val persistedTicks: Long,
 	val simTime: Double
+)
+
+/**
+ * A train still waiting at its InOut on a refused entry route when the run ended (Issue #1457):
+ * `RefusedEntry` in a stable JSON shape.
+ *
+ * @property trainId Name of the refused train.
+ * @property inOut Name of the InOut the train waits at.
+ * @property kind Why the entry was refused: the `EntryRefusalKind` name (`NON_CONTIGUOUS`: "entry
+ *   refused: non-contiguous").
+ * @property since Simulation time of the first refusal of the wait.
+ * @since Issue #1457 (Goal 9B SP3.2)
+ */
+@Serializable
+data class RefusedEntryOutcome(
+	val trainId: String,
+	val inOut: String,
+	val kind: String,
+	val since: Double
 )
 
 /**
@@ -67,7 +87,8 @@ fun RunRecord.toRailwayOutcome(): RailwayOutcome =
 		simulationSeconds = performance?.simulationSeconds,
 		realTimeRatio = performance?.realTimeRatio,
 		routeSearchBudgetExceeded = performance?.routeSearchBudgetExceeded?.toLong(),
-		reservePathCalls = performance?.reservePathCalls?.toLong()
+		reservePathCalls = performance?.reservePathCalls?.toLong(),
+		refusedEntriesAtRunEnd = refusedEntriesAtRunEnd.map { it.toRefusedEntryOutcome() }
 	)
 
 /**
@@ -87,6 +108,9 @@ fun MetricsSnapshot.toUnfinishedRunOutcome(): RailwayOutcome =
 
 private fun <K : Enum<K>> Map<K, Int>.byName(): Map<String, Long> =
 	entries.associate { (kind, count) -> kind.name to count.toLong() }
+
+private fun RefusedEntry.toRefusedEntryOutcome(): RefusedEntryOutcome =
+	RefusedEntryOutcome(trainId = trainId, inOut = inOutName, kind = kind.name, since = since)
 
 private fun RunStall.toStallOutcome(): StallOutcome =
 	StallOutcome(cycle = cycle, knot = knot.sorted(), persistedTicks = persistedTicks.toLong(), simTime = simTime)

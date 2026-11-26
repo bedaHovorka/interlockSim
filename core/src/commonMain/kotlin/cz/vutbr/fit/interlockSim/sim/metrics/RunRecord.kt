@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.RefusedEntry
 
 /**
  * The record of one finished run (Issue #676, Goal 6 SP5): the one shape every harness produces --
@@ -61,6 +62,9 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
  * @property performance The performance row (Issue #1306, Goal 6 SP8): wall against simulated time,
  *   route-search budget stops and `reservePath` calls; `null` when [MetricGroup.PERFORMANCE] was off.
  *   [performanceLine] prints it.
+ * @property refusedEntriesAtRunEnd Trains still waiting at their InOut on a refused entry route when the
+ *   run ended, with the InOut, the reason and the time of the first refusal (Issue #1457): a train an
+ *   unresolved dispatcher error kept out of the network. Empty when none waited.
  * @since Issue #676 (Goal 6 SP5)
  */
 data class RunRecord(
@@ -87,7 +91,8 @@ data class RunRecord(
 	val endTime: Double,
 	val endTimeReached: Boolean,
 	val classification: RunEndClassification,
-	val performance: RunPerformance? = null
+	val performance: RunPerformance? = null,
+	val refusedEntriesAtRunEnd: List<RefusedEntry> = emptyList()
 ) {
 	/**
 	 * The record as one console line, starting `Run record:` -- printed by the native CLI after its
@@ -108,8 +113,18 @@ data class RunRecord(
 			"unresolved at run end $unresolvedAtRunEnd, entry failures $entryFailures $entryFailuresByKind, " +
 			"stall $stallText, expiries holding $expiredHoldingCount tail $expiredTailCount, " +
 			"sweeper releases stale $staleReleaseCount partial $partialReleaseCount, " +
-			"capacity shown ${capacityShownToDispatcher ?: NONE} of topology ${topologyCapacity ?: NONE}"
+			"capacity shown ${capacityShownToDispatcher ?: NONE} of topology ${topologyCapacity ?: NONE}, " +
+			"refused entries ${refusedEntriesAtRunEnd.size}${refusedEntriesText()}"
 	}
+
+	private fun refusedEntriesText(): String =
+		if (refusedEntriesAtRunEnd.isEmpty()) {
+			""
+		} else {
+			refusedEntriesAtRunEnd.joinToString(prefix = " [", postfix = "]") {
+				it.describe()
+			}
+		}
 
 	private companion object {
 		const val NONE = "none"
@@ -149,6 +164,7 @@ fun RunEndSummary.toRunRecord(): RunRecord? {
 		endTime = endedAt,
 		endTimeReached = endTimeReached,
 		classification = endedAs,
-		performance = performance
+		performance = performance,
+		refusedEntriesAtRunEnd = refusedEntriesAtRunEnd
 	)
 }

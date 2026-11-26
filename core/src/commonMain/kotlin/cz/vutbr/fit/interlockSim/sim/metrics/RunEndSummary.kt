@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.metrics
 
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.RefusedEntry
 
 /**
  * The run-end accounting of one run, counted by the metrics service from events alone, for every
@@ -56,6 +57,9 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
  * @property classification How the run ended; `null` before the run ended.
  * @property performance The performance row (Issue #1306, Goal 6 SP8); `null` before the run ended
  *   and whenever [MetricGroup.PERFORMANCE] is off.
+ * @property refusedEntriesAtRunEnd Trains still waiting at their InOut on a refused entry route when the
+ *   run ended ([cz.vutbr.fit.interlockSim.sim.RunEnded.refusedEntries], Issue #1457); empty before the
+ *   run ended and when none waits.
  * @since Issue #1304 (Goal 6 SP6)
  */
 data class RunEndSummary(
@@ -82,7 +86,8 @@ data class RunEndSummary(
 	val endTime: Double?,
 	val endTimeReached: Boolean,
 	val classification: RunEndClassification?,
-	val performance: RunPerformance? = null
+	val performance: RunPerformance? = null,
+	val refusedEntriesAtRunEnd: List<RefusedEntry> = emptyList()
 )
 
 /**

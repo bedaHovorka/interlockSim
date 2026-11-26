@@ -15,8 +15,10 @@ import assertk.assertions.isNotEqualTo
 import assertk.assertions.matches
 import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.ExampleNames
+import cz.vutbr.fit.interlockSim.sim.EntryRefusalKind
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.RefusedEntry
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import cz.vutbr.fit.interlockSim.sim.metrics.RunPerformance
 import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
@@ -92,7 +94,8 @@ class RunRecordJsonWriterTest {
 					realTimeRatio = 400.0,
 					routeSearchBudgetExceeded = 0,
 					reservePathCalls = 77
-				)
+				),
+			refusedEntriesAtRunEnd = listOf(RefusedEntry("T3", "west_entry_1", EntryRefusalKind.NON_CONTIGUOUS, since = 42.0))
 		)
 
 	private fun run(
@@ -230,6 +233,9 @@ class RunRecordJsonWriterTest {
 		// The JVM mapping sorts the knot (RunRecordOutcomes.toStallOutcome).
 		assertThat(stall.getValue("knot").toString()).isEqualTo("""["T1","T2"]""")
 		assertThat(stall.getValue("cycle").toString()).isEqualTo("""["T1","T2"]""")
+		// Issue #1457 (schema version 14), as RunRecordOutcomes.toRefusedEntryOutcome maps it.
+		assertThat(outcome.getValue("refusedEntriesAtRunEnd").toString())
+			.isEqualTo("""[{"trainId":"T3","inOut":"west_entry_1","kind":"NON_CONTIGUOUS","since":42.0}]""")
 	}
 
 	@Test
@@ -288,6 +294,6 @@ class RunRecordJsonWriterTest {
 
 	@Test
 	fun `the schema version is a number the store accepts`() {
-		assertThat(JsonPrimitive(RunRecordJsonWriter.SCHEMA_VERSION).int).isEqualTo(13)
+		assertThat(JsonPrimitive(RunRecordJsonWriter.SCHEMA_VERSION).int).isEqualTo(14)
 	}
 }

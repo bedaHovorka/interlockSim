@@ -12,8 +12,10 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.sim.EntryRefusalKind
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.RefusedEntry
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsSnapshot
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndSummary
@@ -84,8 +86,21 @@ class RunRecordOutcomesTest {
 				topologyCapacity = 4L,
 				endTime = 600.0,
 				endTimeReached = true,
-				endClassification = RunEndClassification.STALLED
+				endClassification = RunEndClassification.STALLED,
+				refusedEntriesAtRunEnd = emptyList()
 			)
+		)
+	}
+
+	/** Issue #1457 (schema version 14): the trains a refused entry kept waiting are persisted by name. */
+	@Test
+	fun `the refused entries at run end are persisted with train InOut kind and time`() {
+		val refused = RefusedEntry("Train #10", "east_exit_1", EntryRefusalKind.NON_CONTIGUOUS, since = 2.0)
+
+		val outcome = checkNotNull(ended.copy(refusedEntriesAtRunEnd = listOf(refused)).toRunRecord()).toRailwayOutcome()
+
+		assertThat(outcome.refusedEntriesAtRunEnd).isEqualTo(
+			listOf(RefusedEntryOutcome(trainId = "Train #10", inOut = "east_exit_1", kind = "NON_CONTIGUOUS", since = 2.0))
 		)
 	}
 

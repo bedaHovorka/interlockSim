@@ -54,10 +54,14 @@ class InOutWorker(
 		internal const val STALE_ORIGIN_RETRY_SECONDS = 2.0
 
 		/**
-		 * Issue #1295: the longest a stale-origin episode may last, counted from its first denial,
-		 * before the run stops with a [SimulationException] — the bounded-retry precedent of
-		 * [Train.MAX_ORIGIN_NO_PATH_RETRIES]. Assumes the stale reservation expires within one
-		 * reservation TTL plus one control period, which must stay at most this value.
+		 * Issue #1295: how long a stale-origin episode may last, counted from its first denial, before
+		 * it is suspicious. Assumes the stale reservation expires within one reservation TTL plus one
+		 * control period, which must stay at most this value.
+		 *
+		 * Issue #1457: a one-time WARNING threshold, no longer a FATAL. [checkStaleOriginDeadline] logs
+		 * the one WARNING of the train once the episode passes it and throws nothing; the train keeps
+		 * waiting at its InOut, with simulated time advancing, until its entry route is granted or the
+		 * run ends.
 		 */
 		internal const val STALE_ORIGIN_MAX_WAIT_SECONDS =
 			2 * DefaultPathReservationService.DEFAULT_RESERVATION_TTL_SIM_SECONDS
@@ -77,10 +81,28 @@ class InOutWorker(
 	private var staleOriginSince: Double = 0.0
 
 	/**
-	 * Reason of the running episode's first denial (Issue #1295). The episode deadline throws with
-	 * this reason when the entry path stays unavailable and no denial arrives to supply a fresh one.
+	 * Reason of the running episode's first denial (Issue #1295). The episode threshold WARNING
+	 * names this reason when the entry path stays unavailable and no denial arrives to supply a fresh
+	 * one.
 	 */
 	private var staleOriginReason: String = ""
+
+	/**
+	 * Issue #1457: the trains this worker has logged its threshold WARNING for — one WARNING per
+	 * train, however many episodes the train's wait splits into.
+	 */
+	private val staleOriginWarnedTrains: MutableSet<String> = mutableSetOf()
+
+	/**
+	 * Issue #1457: the refused-entry state of this worker — the train at the head of its queue whose
+	 * entry route the running stale-origin episode refuses as non-contiguous, this InOut and the time
+	 * of the episode's first refusal — or `null` when no episode runs. The train waits at the InOut
+	 * with simulated time advancing; the route that blocks it is the dispatcher's to cancel, so a
+	 * watchdog can read this as actionable work. Read on the simulation thread or after the run.
+	 */
+	val refusedEntry: RefusedEntry?
+		get() =
+			staleOriginTrainId?.let { RefusedEntry(it, inOut.name, EntryRefusalKind.NON_CONTIGUOUS, staleOriginSince) }
 
 	private val queqe = Head()
 	private var myIdle = true
@@ -116,12 +138,9 @@ class InOutWorker(
 			logger.debug { "InOutWorker ${inOut.name} queue non-empty, processing train" }
 			env.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS)
 			// Issue #1295 review fix: with no stale-origin episode the plain waitUntil stays (ordinary
-			// contention must never be timed out); with one running, the poll keeps the deadline armed
-			if (waitUntilPathFreeBoundedByStaleOrigin()) {
-				// The deadline fired mid-wait: the poll restored occupancy and error-stopped the run
-				// already, so terminate this worker exactly like the reservation catch below does.
-				return
-			}
+			// contention must never be timed out); with one running, the poll keeps the WARNING
+			// threshold armed (Issue #1457: it no longer stops the run)
+			waitUntilPathFreeBoundedByStaleOrigin()
 			val first = queqe.first()
 			if (first == null) {
 				logger.debug {
@@ -188,12 +207,13 @@ class InOutWorker(
 						throw SimulationException(errorMsg)
 					}
 					is PathReservationService.ReservationResult.NonContiguousStart -> {
-						// Issue #1295: retried while the train holds a stale reservation, FATAL otherwise.
-						waitForStaleOriginOrFail(trainId, result.reason)
+						// Issue #1457: a refused route the train waits out at this InOut, never a FATAL;
+						// the wait holds simulated time before the caller's retry (Issue #1295).
+						waitOutNonContiguousEntry(trainId, result.reason)
 						continue
 					}
 					is PathReservationService.ReservationResult.GeometricallyImpossible -> {
-						// Issue #903, same reasoning as the NonContiguousStart branch above: this
+						// Issue #903: this
 						// is a permanent impossibility (the non-oriented endpoint classes cannot arise here,
 						// because the origin is an InOut and every target a semaphore), not ordinary
 						// contention (classes: see ReservationResult.GeometricallyImpossible), so
@@ -207,7 +227,7 @@ class InOutWorker(
 						throw SimulationException(errorMsg)
 					}
 					is PathReservationService.ReservationResult.DivergesFromHeldRoute -> {
-						// Issue #1066. Unreachable by construction, like NonContiguousStart above: a
+						// Issue #1066. Unreachable by construction: a
 						// train at the head of this InOut's admission queue has no stored PathInfo, so
 						// there is no held route a candidate could diverge from. Failing loudly beats
 						// `continue`, which would re-attempt the same refused request without
@@ -238,88 +258,85 @@ class InOutWorker(
 			logger.debug { "InOutWorker ${inOut.name} train left queue" }
 		}
 		inOut.setOccupied(!queqe.empty())
+		// Issue #1457: an empty queue has no head train, so no refused entry can still run.
+		staleOriginTrainId = null
 		myIdle = true
 	}
 
 	/**
-	 * Issue #1295: handles an entry route refused as non-contiguous with the footprint of [trainId].
+	 * Issue #1457: waits out an entry route refused as non-contiguous with the footprint of [trainId]
+	 * — a refused route, never a FATAL `SimulationException` (1B-SP10.1 G1: a dispatcher error must
+	 * not kill the railway).
 	 *
-	 * Recoverable only while the train still holds a stale reservation of its own (for example a route
-	 * set up from the wrong InOut): the reservation expiry releases it, so this waits
-	 * [STALE_ORIGIN_RETRY_SECONDS] (the caller's `continue` then retries with simulation time advanced).
-	 * The first denial of an episode (a new train, or the first after a success) is logged at WARN,
-	 * reported and counted in [staleOriginDenials]; retries log at DEBUG. The stale reservation is
-	 * not released here — [cz.vutbr.fit.interlockSim.context.navigation.ReservationExpiry] does that.
+	 * The usual cause is a stale reservation the train still holds (Issue #1295; for example a route
+	 * set up from the wrong InOut): the reservation expiry or the dispatcher releases it. A train that
+	 * holds no reservation (Issue #893 deemed that unreachable) waits the same way. Either way this
+	 * waits [STALE_ORIGIN_RETRY_SECONDS] and the caller's `continue` retries with simulation time
+	 * advanced — on EVERY refusal, also the first one of a new episode: re-entering `waitUntil(pathFree)`
+	 * without the `hold` would spin, because a non-contiguous origin leaves the path perfectly free, so
+	 * the condition is true at once and the reservation is re-attempted and re-refused at a frozen
+	 * instant.
 	 *
-	 * @throws SimulationException when the train holds no reservation (a real invariant violation),
-	 *   or when the episode has lasted [STALE_ORIGIN_MAX_WAIT_SECONDS]
+	 * The first denial of an episode (a new train, or the first after a success or a void premise) is
+	 * logged at INFO, reported, counted in [staleOriginDenials] and exposed as [refusedEntry]; retries
+	 * log at DEBUG and check the one-time WARNING threshold ([checkStaleOriginDeadline]). The stale
+	 * reservation is not released here — the dispatcher or
+	 * [cz.vutbr.fit.interlockSim.context.navigation.ReservationExpiry] does that.
 	 */
-	private suspend fun waitForStaleOriginOrFail(
+	private suspend fun waitOutNonContiguousEntry(
 		trainId: String,
 		reason: String
 	) {
-		if (pathReservationService.getReservedBlocks(trainId).isEmpty()) {
-			// Issue #893. Unreachable by construction: the refusal only comes for the train at
-			// the head of THIS InOut's admission queue, i.e. one that has not entered the
-			// network. Holding no registry block (checked above), it occupies none either
-			// (it has never entered a block), so its footprint is empty and the contiguity
-			// predicate passes vacuously.
-			//
-			// NOTE the failure mode if that reasoning is ever wrong: the throw is
-			// caught in iteration() and turned into env.errorStop(e) + return -- a HARD stop of
-			// the simulation and permanent termination of this worker, not a retry.
-			// That is nevertheless the right choice here, and the AllPathsBlocked
-			// `continue` is NOT a usable alternative: `continue` re-enters
-			// waitUntil(pathFree), whose condition is about path AVAILABILITY. A
-			// non-contiguous origin leaves the path perfectly free, so the condition
-			// would be immediately true, the reservation would be re-attempted and
-			// re-rejected, and the loop would spin without advancing simulation time --
-			// a silent hang, which is strictly worse to diagnose than a named stop.
-			// Same reasoning as the Conflict branch above.
-			val errorMsg = "InOut ${inOut.name} - Route origin rejected as non-contiguous for train $trainId: $reason"
-			logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
-			throw SimulationException(errorMsg)
-		}
 		val now = time()
 		if (staleOriginTrainId != trainId) {
 			staleOriginTrainId = trainId
 			staleOriginSince = now
 			staleOriginDenials++
 			staleOriginReason = reason
+			val holding =
+				if (pathReservationService.getReservedBlocks(trainId).isEmpty()) {
+					"it holds no reservation"
+				} else {
+					"it still holds a stale reservation"
+				}
 			val message =
-				"InOut ${inOut.name} - Entry route for train $trainId refused as non-contiguous with " +
-					"the stale reservation it still holds: $reason; waiting for the reservation to expire"
-			logger.warn { "$now APPROVAL_DENIED: $message" }
+				"InOut ${inOut.name} - ${EntryRefusalKind.NON_CONTIGUOUS.text} for train $trainId ($holding): " +
+					"$reason; the train waits at its InOut"
+			logger.info { "$now APPROVAL_DENIED: $message" }
 			env.report(message, inOut, ReportType.NODE_EVENTS)
 		} else {
 			val waited = checkStaleOriginDeadline(trainId, reason)
 			logger.debug {
-				"$now APPROVAL_WAIT: InOut ${inOut.name} - train $trainId still holds a stale " +
-					"reservation after $waited s, will retry"
+				"$now APPROVAL_WAIT: InOut ${inOut.name} - train $trainId still refused as non-contiguous " +
+					"after $waited s, will retry"
 			}
 		}
 		hold(STALE_ORIGIN_RETRY_SECONDS)
 	}
 
 	/**
-	 * Issue #1295 review fix: the one deadline check for a running stale-origin episode, shared by
-	 * [waitForStaleOriginOrFail] (a further denial arrived) and the blocked-path poll in [iteration]
+	 * Issue #1295 review fix: the one threshold check for a running stale-origin episode, shared by
+	 * [waitOutNonContiguousEntry] (a further denial arrived) and the blocked-path poll in [iteration]
 	 * (with the entry path unavailable the reservation is never re-attempted, so no denial — and
-	 * with the previously inline check alone, no deadline check — can arrive there).
+	 * with the previously inline check alone, no threshold check — can arrive there).
+	 *
+	 * Issue #1457: once the episode has lasted [STALE_ORIGIN_MAX_WAIT_SECONDS] this logs one WARNING
+	 * — the one WARNING of the train, never repeated for it — and throws nothing.
 	 *
 	 * @return the seconds already waited since the episode's first denial ([staleOriginSince])
-	 * @throws SimulationException when the episode has lasted [STALE_ORIGIN_MAX_WAIT_SECONDS]
 	 */
 	private fun checkStaleOriginDeadline(
 		trainId: String,
 		reason: String
 	): Double {
-		val waited = time() - staleOriginSince
-		if (waited >= STALE_ORIGIN_MAX_WAIT_SECONDS) {
-			throw SimulationException(
-				"InOut ${inOut.name} - train $trainId waited $waited s for its entry route: " +
-					"stale reservation not expired. $reason"
-			)
+		val now = time()
+		val waited = now - staleOriginSince
+		if (waited >= STALE_ORIGIN_MAX_WAIT_SECONDS && staleOriginWarnedTrains.add(trainId)) {
+			logger.warn {
+				"$now APPROVAL_WAIT: InOut ${inOut.name} - ${EntryRefusalKind.NON_CONTIGUOUS.text} for train " +
+					"$trainId for $waited s (threshold $STALE_ORIGIN_MAX_WAIT_SECONDS s); the train keeps waiting " +
+					"at its InOut until the route that blocks it is released: $reason"
+			}
 		}
 		return waited
 	}
@@ -330,74 +347,53 @@ class InOutWorker(
 	 * Issue #1295 review fix: with no stale-origin episode running this is the plain
 	 * `waitUntil(pathFree)` — ordinary contention must NEVER be timed out. With an episode running,
 	 * pathFree may stay false for a reason the episode never sees — another train occupying the
-	 * entry — and the bare waitUntil would park past the episode bound, whose check otherwise only
-	 * runs when a further denial arrives (a denial cannot arrive: the reservation is never
+	 * entry — and the bare waitUntil would park past the episode threshold, whose check otherwise
+	 * only runs when a further denial arrives (a denial cannot arrive: the reservation is never
 	 * re-attempted while the path is unavailable). The poll then steps by
-	 * [STALE_ORIGIN_RETRY_SECONDS] and re-arms the episode deadline through
-	 * [checkStaleOriginDeadline] each pass, so a stale reservation that cannot expire still stops
-	 * the run at [STALE_ORIGIN_MAX_WAIT_SECONDS]; a path that frees while the reservation is still
-	 * unexpired simply lets the loop pass and the caller re-attempts the reservation. Each pass also
-	 * re-reads the episode's premise and ends the episode when it has become void — the full rule
-	 * (and why the registry's own bookkeeping cannot answer it) sits with the check in
-	 * [waitUntilPathFreeBoundedByStaleOrigin]: a still-blocked entry without the premise is ordinary
-	 * contention, which must never be timed out.
+	 * [STALE_ORIGIN_RETRY_SECONDS] and re-checks the episode threshold through
+	 * [checkStaleOriginDeadline] each pass, so a stale reservation that cannot expire still gets its
+	 * one WARNING at [STALE_ORIGIN_MAX_WAIT_SECONDS] (Issue #1457: a WARNING, no longer a stop); a
+	 * path that frees while the reservation is still unexpired simply lets the loop pass and the
+	 * caller re-attempts the reservation. Each pass also re-reads the episode's premise and ends the
+	 * episode when it has become void — the full rule (and why the registry's own bookkeeping cannot
+	 * answer it) sits with the check below: a still-blocked entry without the premise is ordinary
+	 * contention, which must never be timed out. A refusal after the episode ended starts a new
+	 * episode through [waitOutNonContiguousEntry], whose `hold` keeps simulated time advancing.
 	 *
-	 * The poll sits before the reservation `try` in [iteration], so a deadline thrown here cannot
-	 * reach any caller catch: this method restores occupancy, reports the fire to the environment
-	 * ([SimulationEnvironment.errorStop]) and returns `true` for the caller to terminate the worker
-	 * the way its own catch does. [SimulationException] is the only thing the poll can throw — the
-	 * [pathFree] condition handles its own [TrackOperationException] and [hold] cannot fail on the
-	 * retry constant.
-	 *
-	 * @return `true` when the stale-origin deadline fired and the run was error-stopped, `false`
-	 *   when the path became free, there is no episode, or the episode ended because its premise
-	 *   turned void — in every `false` case the caller may continue.
+	 * Nothing here can throw: the [pathFree] condition handles its own [TrackOperationException],
+	 * [checkStaleOriginDeadline] only logs and [hold] cannot fail on the retry constant.
 	 */
-	private suspend fun waitUntilPathFreeBoundedByStaleOrigin(): Boolean {
+	private suspend fun waitUntilPathFreeBoundedByStaleOrigin() {
 		val staleTrainId = staleOriginTrainId
 		if (staleTrainId == null) {
 			waitUntil(pathFree)
-			return false
+			return
 		}
-		return try {
-			while (!pathFree.test()) {
-				// Issue #1295 review fix (round 4): end the episode once its premise is observably
-				// void. The stale wrong-origin holding was the only thing between the head train and
-				// its entry, so the episode ends when any of these holds:
-				// - the holding is gone (expired or cancelled): what remains is ordinary contention;
-				// - the train no longer heads this admission queue: it departed on a grant booked
-				//   without this reservation attempt; or
-				// - the train already holds usable entry authority FROM THIS InOut: a fresh VALID
-				//   grant (cancellation + re-request inside one control step) replaced the stale
-				//   holding, which keeps getReservedBlocks non-empty — the registry cannot tell the
-				//   two holdings apart, the train-side view can.
-				// Healthy operation in all three shapes must never be timed out; any re-attempt the
-				// caller makes right after runs the normal path (self-owned blocks accept, so the
-				// entry route completes, and real refusals keep their own handling).
-				if (
-					pathReservationService.getReservedBlocks(staleTrainId).isEmpty() ||
-					(queqe.first() as? Train)?.name != staleTrainId ||
-					trainNavigationService.isPathReservedForTrain(staleTrainId, inOut)
-				) {
-					// Disarm only: the deadline arm's own catch owns the occupancy restore and the
-					// errorStop; a premise that turned void never reaches them.
-					staleOriginTrainId = null
-					waitUntil(pathFree)
-					return false
-				}
-				checkStaleOriginDeadline(staleTrainId, staleOriginReason)
-				hold(STALE_ORIGIN_RETRY_SECONDS)
+		while (!pathFree.test()) {
+			// Issue #1295 review fix (round 4): end the episode once its premise is observably
+			// void. The stale wrong-origin holding was the only thing between the head train and
+			// its entry, so the episode ends when any of these holds:
+			// - the holding is gone (expired or cancelled): what remains is ordinary contention;
+			// - the train no longer heads this admission queue: it departed on a grant booked
+			//   without this reservation attempt; or
+			// - the train already holds usable entry authority FROM THIS InOut: a fresh VALID
+			//   grant (cancellation + re-request inside one control step) replaced the stale
+			//   holding, which keeps getReservedBlocks non-empty — the registry cannot tell the
+			//   two holdings apart, the train-side view can.
+			// Healthy operation in all three shapes must never be timed out; any re-attempt the
+			// caller makes right after runs the normal path (self-owned blocks accept, so the
+			// entry route completes, and real refusals keep their own handling).
+			if (
+				pathReservationService.getReservedBlocks(staleTrainId).isEmpty() ||
+				(queqe.first() as? Train)?.name != staleTrainId ||
+				trainNavigationService.isPathReservedForTrain(staleTrainId, inOut)
+			) {
+				staleOriginTrainId = null
+				waitUntil(pathFree)
+				return
 			}
-			false
-		} catch (e: SimulationException) {
-			logger.warn {
-				"${Process.time()} APPROVAL_DENIED: InOut ${inOut.name} - " +
-					"stale-origin deadline passed while the entry path stayed unavailable: ${e.message}"
-			}
-			logger.error(e) { "InOutWorker ${inOut.name} path setup failed with exception" }
-			env.errorStop(e)
-			inOut.setOccupied(!queqe.empty())
-			true
+			checkStaleOriginDeadline(staleTrainId, staleOriginReason)
+			hold(STALE_ORIGIN_RETRY_SECONDS)
 		}
 	}
 

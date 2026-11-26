@@ -24,7 +24,7 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing. Current version: **12** (version 2 added
+ * handle old JSON files without crashing. Current version: **14** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
@@ -35,7 +35,8 @@ import kotlinx.serialization.Serializable
  * [staleOriginRefusalsAfterSilentCycle], Issue #1365, persisted the run record figures in
  * [railwayOutcome], Issue #676; version 12 added the skipped NEXT SECTION offer figures
  * from [skippedNextSectionOffers] to [longestSkippedOfferStreakSimSeconds], Issue #1302; version 13
- * added the performance row and [example], Issue #1306).
+ * added the performance row and [example], Issue #1306; version 14 added
+ * [RailwayOutcome.refusedEntriesAtRunEnd], Issue #1457).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -348,10 +349,15 @@ data class DispatcherRunSnapshot(
 		 *   [processWallSeconds]. Every new field
 		 *   defaults to `null`, so every version 1-12 file still decodes, with them absent; no existing
 		 *   field changed meaning.
+		 * - **14** — Issue #1457 (Goal 9B SP3.2), [railwayOutcome] gained
+		 *   [RailwayOutcome.refusedEntriesAtRunEnd]: the trains a non-contiguous entry refusal kept
+		 *   waiting at their InOut to the end of the run, which used to end the run with a FATAL
+		 *   `SimulationException` instead. It defaults to `null`, so every version 1-13 file still
+		 *   decodes, with it absent (not measured).
 		 *
 		 * A bump also changes `RunRecordJsonWriter.SCHEMA_VERSION` (`:core`) and its keys (Issue #1327).
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 13
+		const val CURRENT_SCHEMA_VERSION: Int = 14
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded
