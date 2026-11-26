@@ -25,7 +25,9 @@ tripwire of Issue #1011 (see Contents).
 - `src/commonMain/kotlin/.../testutil/` — `CommonTestFixtures`, `TestTopologies`,
   `TestContextBuilder`, `MockSimulationContext`, `CommonKoinTestBase`,
   `SharedSimulationTestScopesModule` (shared Koin test bindings, Issue #1029),
-  `ContextTracker`, `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
+  `ContextTracker`, `FaultInjectionProcessFixture` (a kDisco process that holds until simulated time `failAt`
+  and throws a configurable throwable, default a FATAL `SimulationException`; Issue #1451, pinned by
+  `FaultInjectionProcessFixtureTest` in `jvmTest`), `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
   (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
   `NavigationDecoratingContext`, `FirstTrainOwnershipConflict` (holds one train in an
