@@ -46,6 +46,13 @@ object PrahaPeakTimetable {
 	/** Upper bound of the target train count per hour (estimate; scaled by the track-count ratio). */
 	const val TARGET_TRAINS_PER_HOUR_MAX: Int = 27
 
+	/**
+	 * Minimum time between one train leaving a planned station track and the next train arriving on
+	 * it, in minutes: the reoccupation time of a platform track (estimate, domain practice). The
+	 * departure counts the dwell from the entry InOut, so the gap also covers the run-in time.
+	 */
+	const val MIN_TRACK_REUSE_GAP_MINUTES: Int = 3
+
 	/** Lower bound of the trains present at once (estimate; scaled by the track-count ratio). */
 	const val TARGET_PRESENT_AT_ONCE_MIN: Int = 5
 
@@ -96,6 +103,22 @@ object PrahaPeakTimetable {
 		TURNAROUND
 	}
 
+	/** Where a train's time comes from. */
+	enum class TimeBasis {
+		/** The entry time is an arrival at Praha hl.n. read from PID booklet 221 (trains from Vršovice). */
+		ARRIVAL_SOURCED,
+
+		/**
+		 * PID booklet 221 gives the departure from Praha hl.n. (southbound, towards Strančice/Benešov):
+		 * [PlannedTrain.departureMinute] is that sourced time, and the entry time is that departure
+		 * minus the dwell, an estimate.
+		 */
+		DEPARTURE_SOURCED,
+
+		/** Not read from a timetable: a clock-face offset chosen to spread the arrivals (estimate). */
+		ESTIMATE
+	}
+
 	/**
 	 * One planned train.
 	 *
@@ -106,8 +129,9 @@ object PrahaPeakTimetable {
 	 * @property entry entry InOut name
 	 * @property exit exit InOut name; for a [Kind.TURNAROUND] the modelled opposite-side exit
 	 * @property plannedTrack planned station track, a `Station` platform-track name
-	 * @property timeSourced `true` when the time is read from a public timetable (PID booklet 221);
-	 *   `false` marks the time as an estimate
+	 * @property timeBasis which of the train's times is read from PID booklet 221, if any: the
+	 *   arrival ([TimeBasis.ARRIVAL_SOURCED]), the departure with an estimated entry time
+	 *   ([TimeBasis.DEPARTURE_SOURCED]), or none ([TimeBasis.ESTIMATE])
 	 */
 	data class PlannedTrain(
 		val number: Int,
@@ -119,7 +143,7 @@ object PrahaPeakTimetable {
 		val entry: String,
 		val exit: String,
 		val plannedTrack: String,
-		val timeSourced: Boolean,
+		val timeBasis: TimeBasis,
 		val length: Double = TRAIN_LENGTH
 	) {
 		/** Planned arrival at the entry InOut, simulation seconds after 07:00. */
@@ -127,6 +151,9 @@ object PrahaPeakTimetable {
 
 		/** Planned standing time on [plannedTrack] in seconds. */
 		val dwellSeconds: Double get() = dwellMinutes * SECONDS_PER_MINUTE
+
+		/** Planned departure from [plannedTrack], minutes after 07:00. */
+		val departureMinute: Int get() = arrivalMinute + dwellMinutes
 
 		/** Planned departure from [plannedTrack], seconds after 07:00. */
 		val departureSecond: Double get() = arrivalSecond + dwellSeconds
@@ -145,30 +172,30 @@ object PrahaPeakTimetable {
 	 */
 	val trains: List<PlannedTrain> =
 		listOf(
-			PlannedTrain(1, "S9", Category.OS_SP, Kind.THROUGH, 1, 2, N_VYS_1, S_VRS_1, "k5", timeSourced = true),
-			PlannedTrain(2, "S9", Category.OS_SP, Kind.THROUGH, 5, 2, S_VRS_1, N_VYS_2, "k7", timeSourced = true),
-			PlannedTrain(3, "S9", Category.OS_SP, Kind.THROUGH, 21, 2, N_VYS_2, S_VRS_2, "k7", timeSourced = true),
-			PlannedTrain(4, "S9", Category.OS_SP, Kind.THROUGH, 25, 2, S_VRS_2, N_VYS_1, "k5", timeSourced = true),
-			PlannedTrain(5, "S9", Category.OS_SP, Kind.THROUGH, 31, 2, N_VYS_1, S_VRS_1, "k5", timeSourced = true),
-			PlannedTrain(6, "S9", Category.OS_SP, Kind.THROUGH, 51, 2, N_VYS_2, S_VRS_2, "k8", timeSourced = true),
-			PlannedTrain(7, "S9", Category.OS_SP, Kind.THROUGH, 55, 2, S_VRS_1, N_VYS_1, "k6", timeSourced = true),
-			PlannedTrain(8, "S7", Category.OS_SP, Kind.THROUGH, 12, 3, S_VIN_2, N_LIB_2, "k4", timeSourced = false),
-			PlannedTrain(9, "S7", Category.OS_SP, Kind.THROUGH, 42, 3, N_LIB_1, S_VIN_1, "k1", timeSourced = false),
-			PlannedTrain(10, "R49", Category.R, Kind.THROUGH, 46, 4, N_LIB_2, S_VRS_3, "k4", timeSourced = true),
-			PlannedTrain(11, "R49", Category.R, Kind.TURNAROUND, 38, 20, S_VRS_3, N_VYS_1, "k5", timeSourced = true),
-			PlannedTrain(12, "S8", Category.OS_SP, Kind.TURNAROUND, 40, 15, S_VRS_2, N_VYS_1, "k6", timeSourced = true),
-			PlannedTrain(13, "R16", Category.R, Kind.TURNAROUND, 10, 20, S_VIN_1, N_LIB_2, "k3", timeSourced = false),
-			PlannedTrain(14, "R26", Category.R, Kind.TURNAROUND, 45, 20, S_VIN_2, N_LIB_1, "k1", timeSourced = false),
-			PlannedTrain(15, "R17", Category.R, Kind.TURNAROUND, 20, 20, S_VRS_1, N_LIB_2, "k4", timeSourced = false),
-			PlannedTrain(16, "R20", Category.R, Kind.TURNAROUND, 2, 20, N_VYS_1, S_VRS_3, "k6", timeSourced = false),
-			PlannedTrain(17, "EC", Category.EX_EC, Kind.TURNAROUND, 22, 25, N_VYS_2, S_VRS_2, "k8", timeSourced = false),
-			PlannedTrain(18, "R19", Category.R, Kind.TURNAROUND, 15, 25, N_LIB_1, S_VIN_1, "k1", timeSourced = false),
-			PlannedTrain(19, "R18", Category.R, Kind.TURNAROUND, 35, 25, N_LIB_2, S_VIN_1, "k3", timeSourced = false),
-			PlannedTrain(20, "R10", Category.R, Kind.TURNAROUND, 48, 20, N_LIB_1, S_VIN_1, "k2", timeSourced = false),
-			PlannedTrain(21, "R9", Category.R, Kind.TURNAROUND, 28, 15, N_LIB_1, S_VIN_1, "k2", timeSourced = false),
-			PlannedTrain(22, "S2", Category.OS_SP, Kind.TURNAROUND, 8, 15, N_VYS_1, S_VRS_1, "k5", timeSourced = false),
-			PlannedTrain(23, "R41", Category.R, Kind.TURNAROUND, 55, 15, N_LIB_2, S_VIN_2, "k4", timeSourced = false),
-			PlannedTrain(24, "R21", Category.R, Kind.TURNAROUND, 32, 20, N_VYS_2, S_VRS_3, "k7", timeSourced = false)
+			PlannedTrain(1, "S9", Category.OS_SP, Kind.THROUGH, 0, 1, N_VYS_1, S_VRS_1, "k5", TimeBasis.DEPARTURE_SOURCED),
+			PlannedTrain(2, "S9", Category.OS_SP, Kind.THROUGH, 5, 2, S_VRS_1, N_VYS_1, "k5", TimeBasis.ARRIVAL_SOURCED),
+			PlannedTrain(3, "S9", Category.OS_SP, Kind.THROUGH, 19, 2, N_VYS_1, S_VRS_2, "k5", TimeBasis.DEPARTURE_SOURCED),
+			PlannedTrain(4, "S9", Category.OS_SP, Kind.THROUGH, 25, 2, S_VRS_2, N_VYS_1, "k5", TimeBasis.ARRIVAL_SOURCED),
+			PlannedTrain(5, "S9", Category.OS_SP, Kind.THROUGH, 29, 2, N_VYS_2, S_VRS_1, "k7", TimeBasis.DEPARTURE_SOURCED),
+			PlannedTrain(6, "S9", Category.OS_SP, Kind.THROUGH, 49, 2, N_VYS_1, S_VRS_2, "k6", TimeBasis.DEPARTURE_SOURCED),
+			PlannedTrain(7, "S9", Category.OS_SP, Kind.THROUGH, 55, 2, S_VRS_1, N_VYS_2, "k8", TimeBasis.ARRIVAL_SOURCED),
+			PlannedTrain(8, "S7", Category.OS_SP, Kind.THROUGH, 12, 3, S_VIN_2, N_LIB_2, "k4", TimeBasis.ESTIMATE),
+			PlannedTrain(9, "S7", Category.OS_SP, Kind.THROUGH, 42, 3, N_LIB_1, S_VIN_1, "k1", TimeBasis.ESTIMATE),
+			PlannedTrain(10, "R49", Category.R, Kind.THROUGH, 42, 4, N_LIB_2, S_VRS_3, "k4", TimeBasis.DEPARTURE_SOURCED),
+			PlannedTrain(11, "R49", Category.R, Kind.TURNAROUND, 38, 20, S_VRS_3, N_VYS_1, "k5", TimeBasis.ARRIVAL_SOURCED),
+			PlannedTrain(12, "S8", Category.OS_SP, Kind.TURNAROUND, 40, 15, S_VRS_2, N_VYS_2, "k7", TimeBasis.ARRIVAL_SOURCED),
+			PlannedTrain(13, "R16", Category.R, Kind.TURNAROUND, 10, 20, S_VIN_1, N_LIB_2, "k3", TimeBasis.ESTIMATE),
+			PlannedTrain(14, "R26", Category.R, Kind.TURNAROUND, 48, 20, S_VIN_2, N_LIB_1, "k1", TimeBasis.ESTIMATE),
+			PlannedTrain(15, "R17", Category.R, Kind.TURNAROUND, 18, 20, S_VRS_1, N_LIB_2, "k4", TimeBasis.ESTIMATE),
+			PlannedTrain(16, "R20", Category.R, Kind.TURNAROUND, 2, 20, N_VYS_1, S_VRS_3, "k6", TimeBasis.ESTIMATE),
+			PlannedTrain(17, "EC", Category.EX_EC, Kind.TURNAROUND, 22, 20, N_VYS_2, S_VRS_2, "k8", TimeBasis.ESTIMATE),
+			PlannedTrain(18, "R19", Category.R, Kind.TURNAROUND, 13, 25, N_LIB_1, S_VIN_1, "k1", TimeBasis.ESTIMATE),
+			PlannedTrain(19, "R18", Category.R, Kind.TURNAROUND, 35, 25, N_LIB_2, S_VIN_1, "k3", TimeBasis.ESTIMATE),
+			PlannedTrain(20, "R10", Category.R, Kind.TURNAROUND, 48, 20, N_LIB_1, S_VIN_1, "k2", TimeBasis.ESTIMATE),
+			PlannedTrain(21, "R9", Category.R, Kind.TURNAROUND, 28, 15, N_LIB_1, S_VIN_1, "k2", TimeBasis.ESTIMATE),
+			PlannedTrain(22, "S2", Category.OS_SP, Kind.TURNAROUND, 8, 15, N_VYS_2, S_VRS_1, "k7", TimeBasis.ESTIMATE),
+			PlannedTrain(23, "R41", Category.R, Kind.TURNAROUND, 55, 15, N_LIB_2, S_VIN_2, "k4", TimeBasis.ESTIMATE),
+			PlannedTrain(24, "R21", Category.R, Kind.TURNAROUND, 26, 20, N_VYS_1, S_VRS_3, "k6", TimeBasis.ESTIMATE)
 		)
 
 	/** The trains as [MultiTrainLoop.TrainSpec]s in arrival order. */

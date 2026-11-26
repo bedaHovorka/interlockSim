@@ -39,7 +39,7 @@ model conventions; Vinohrady and Vršovice are district names, not line names.
 
 | InOut | Real counterpart | Lines in this timetable |
 |---|---|---|
-| `N-Lib-1`, `N-Lib-2` | Nové spojení, northern Vítkov tunnel, towards Libeň (Kolín corridor) | S7 (Český Brod), R9, R10, R18, R19, R41, R49 (through) |
+| `N-Lib-1`, `N-Lib-2` | Nové spojení, northern Vítkov tunnel, towards Libeň (Kolín corridor) | S7 (Český Brod), R9, R10, R18, R19, R41, R49 (through; origin on the Libeň side is an estimate) |
 | `N-Vys-1`, `N-Vys-2` | Nové spojení, southern Vítkov tunnel, towards Holešovice (Kralupy, Děčín) and Vysočany (Lysá) | S9, S2, R20, R21, EC via Děčín |
 | `N-Bypass` | no real counterpart verified (the old single-track Vítkov tunnel is the only candidate, its use is not confirmed) — **marked fictional, unused** | none |
 | `S-Vin-1`, `S-Vin-2` | Vinohrady tunnel I, towards Smíchov (Beroun, Plzeň) | S7 (Beroun), R16, R26 |
@@ -58,11 +58,12 @@ source reading (the PID booklet lists it with the Vršovice times); it is mapped
 | Quantity | Real (estimate) | Scaled, × 9/22 ≈ 0.41 (estimate) | In the data |
 |---|---|---|---|
 | Trains in the peak hour 07:00–08:00 | about 50–65 (estimate: 7–8 % of the 784 daily trains; about 59 at 7.5 %) | 20–27 (estimate) | 24 |
-| Trains present at once | 12–18 (estimate) | 5–7 (estimate) | peak 7; mean about 5 (sum of dwell times / 60 min) |
+| Trains present at once | 12–18 (estimate, issue #1489; basis: about 59 trains per hour times a mean stay of 12–18 min, domain practice) | 5–7 (estimate) | peak 7; mean about 5 (sum of dwell times, 293 min, / 60 min) |
 | Terminating share | 40–60 % (estimate, low confidence; no published figure) | — | 14 of 24 = 58 % |
-| Dwell, through regional | 1–3 min (estimate, domain practice) | — | 2–3 min |
-| Dwell, through long-distance or R | 3–10 min (estimate) | — | 4 min |
-| Dwell, terminating turnaround | 15–60 min (estimate) | — | 15–25 min |
+| Dwell, through regional | 1–3 min (estimate, domain practice; issue #1489) | — | 1–3 min |
+| Dwell, through long-distance or R | 3–10 min (estimate, domain practice; issue #1489: longer stops for boarding and a crew change) | — | 4 min |
+| Dwell, terminating turnaround | 15–60 min (estimate, domain practice; issue #1489: about 15 min for a push-pull set or unit, up to an hour for a long-distance set with cleaning) | — | 15–25 min |
+| Reuse gap of one platform track | 2–3 min reoccupation time (estimate, domain practice) | — | at least 3 min (`PrahaPeakTimetable.MIN_TRACK_REUSE_GAP_MINUTES`) |
 
 The target train count and the presence range are **scaled by the track-count ratio**. The data test checks the count
 against `PrahaPeakTimetable.TARGET_TRAINS_PER_HOUR_MIN`/`TARGET_TRAINS_PER_HOUR_MAX` (20–27) and the peak presence against
@@ -70,40 +71,50 @@ against `PrahaPeakTimetable.TARGET_TRAINS_PER_HOUR_MIN`/`TARGET_TRAINS_PER_HOUR_
 
 ## 4. The train list
 
-Times are minutes after 07:00 at the entry InOut. "Sourced" means the time is read from PID booklet 221; every other time is
-an **estimate** (a clock-face offset chosen to spread the arrivals, not read from a timetable). Planned station tracks are the
-names `Station` derives for the platform tracks of the Station variant, `k1`–`k8` from north to south (y = 4 … 18); `k9`, the
-bypass station track (y = 20), is unused. Categories: Os/Sp, R, Ex/EC.
+Times are minutes after 07:00: "Entry" is the time at the entry InOut (`PlannedTrain.arrivalMinute`), "Dep." the planned
+departure from the station track (`PlannedTrain.departureMinute`, entry plus dwell). The last column is
+`PlannedTrain.timeBasis`:
 
-| # | Arr. | Line | Cat. | Kind | Entry | Exit | Dwell | Track | Time |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | 07:01 | S9 | Os | through | N-Vys-1 | S-Vrs-1 | 2 | k5 | sourced |
-| 2 | 07:05 | S9 | Os | through | S-Vrs-1 | N-Vys-2 | 2 | k7 | sourced |
-| 3 | 07:21 | S9 | Os | through | N-Vys-2 | S-Vrs-2 | 2 | k7 | sourced |
-| 4 | 07:25 | S9 | Os | through | S-Vrs-2 | N-Vys-1 | 2 | k5 | sourced |
-| 5 | 07:31 | S9 | Os | through | N-Vys-1 | S-Vrs-1 | 2 | k5 | sourced |
-| 6 | 07:51 | S9 | Os | through | N-Vys-2 | S-Vrs-2 | 2 | k8 | sourced |
-| 7 | 07:55 | S9 | Os | through | S-Vrs-1 | N-Vys-1 | 2 | k6 | sourced |
-| 8 | 07:12 | S7 | Os | through | S-Vin-2 | N-Lib-2 | 3 | k4 | estimate |
-| 9 | 07:42 | S7 | Os | through | N-Lib-1 | S-Vin-1 | 3 | k1 | estimate |
-| 10 | 07:46 | R49 | R | through | N-Lib-2 | S-Vrs-3 | 4 | k4 | sourced (attribution estimate) |
-| 11 | 07:38 | R49 | R | turnaround | S-Vrs-3 | N-Vys-1 | 20 | k5 | sourced (attribution estimate) |
-| 12 | 07:40 | S8 | Os | turnaround | S-Vrs-2 | N-Vys-1 | 15 | k6 | sourced (attribution estimate) |
-| 13 | 07:10 | R16 | R | turnaround | S-Vin-1 | N-Lib-2 | 20 | k3 | estimate |
-| 14 | 07:45 | R26 | R | turnaround | S-Vin-2 | N-Lib-1 | 20 | k1 | estimate |
-| 15 | 07:20 | R17 | R | turnaround | S-Vrs-1 | N-Lib-2 | 20 | k4 | estimate |
-| 16 | 07:02 | R20 | R | turnaround | N-Vys-1 | S-Vrs-3 | 20 | k6 | estimate |
-| 17 | 07:22 | EC | Ex/EC | turnaround | N-Vys-2 | S-Vrs-2 | 25 | k8 | estimate |
-| 18 | 07:15 | R19 | R | turnaround | N-Lib-1 | S-Vin-1 | 25 | k1 | estimate |
-| 19 | 07:35 | R18 | R | turnaround | N-Lib-2 | S-Vin-1 | 25 | k3 | estimate |
-| 20 | 07:48 | R10 | R | turnaround | N-Lib-1 | S-Vin-1 | 20 | k2 | estimate |
-| 21 | 07:28 | R9 | R | turnaround | N-Lib-1 | S-Vin-1 | 15 | k2 | estimate |
-| 22 | 07:08 | S2 | Os | turnaround | N-Vys-1 | S-Vrs-1 | 15 | k5 | estimate |
-| 23 | 07:55 | R41 | R | turnaround | N-Lib-2 | S-Vin-2 | 15 | k4 | estimate |
-| 24 | 07:32 | R21 | R | turnaround | N-Vys-2 | S-Vrs-3 | 20 | k7 | estimate |
+- **sourced arrival** — the entry time is an arrival at Praha hl.n. from Vršovice read from PID booklet 221 (#2, #4, #7, #11,
+  #12; for #11 and #12 the line attribution is an estimate);
+- **sourced departure; entry time estimate** — PID booklet 221 gives the departure from Praha hl.n. southbound (the S9
+  departures 07:01, 07:21, 07:31, 07:51 and the :46 R49). That sourced time is the "Dep." column; the entry time is that
+  departure minus the dwell, an estimate (#1, #3, #5, #6, #10). The run-in time from the InOut to the platform is not
+  modelled. For #1 the dwell is 1 min so that its entry falls inside the window;
+- **estimate** — not read from a timetable: a clock-face offset chosen to spread the arrivals.
 
-Entries per InOut: `N-Lib-1` 4, `N-Lib-2` 3, `N-Vys-1` 4, `N-Vys-2` 4, `S-Vin-1` 1, `S-Vin-2` 2, `S-Vrs-1` 3, `S-Vrs-2` 2,
-`S-Vrs-3` 1; the bypass InOuts 0.
+Planned station tracks are the names `Station` derives for the platform tracks of the Station variant, `k1`–`k8` from north
+to south (y = 4 … 18); `k9`, the bypass station track (y = 20), is unused. Categories: Os/Sp, R, Ex/EC.
+
+| # | Entry | Dep. | Line | Cat. | Kind | Entry InOut | Exit InOut | Dwell | Track | Time |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 07:00 | 07:01 | S9 | Os | through | N-Vys-1 | S-Vrs-1 | 1 | k5 | sourced departure; entry time estimate |
+| 2 | 07:05 | 07:07 | S9 | Os | through | S-Vrs-1 | N-Vys-1 | 2 | k5 | sourced arrival |
+| 3 | 07:19 | 07:21 | S9 | Os | through | N-Vys-1 | S-Vrs-2 | 2 | k5 | sourced departure; entry time estimate |
+| 4 | 07:25 | 07:27 | S9 | Os | through | S-Vrs-2 | N-Vys-1 | 2 | k5 | sourced arrival |
+| 5 | 07:29 | 07:31 | S9 | Os | through | N-Vys-2 | S-Vrs-1 | 2 | k7 | sourced departure; entry time estimate |
+| 6 | 07:49 | 07:51 | S9 | Os | through | N-Vys-1 | S-Vrs-2 | 2 | k6 | sourced departure; entry time estimate |
+| 7 | 07:55 | 07:57 | S9 | Os | through | S-Vrs-1 | N-Vys-2 | 2 | k8 | sourced arrival |
+| 8 | 07:12 | 07:15 | S7 | Os | through | S-Vin-2 | N-Lib-2 | 3 | k4 | estimate |
+| 9 | 07:42 | 07:45 | S7 | Os | through | N-Lib-1 | S-Vin-1 | 3 | k1 | estimate |
+| 10 | 07:42 | 07:46 | R49 | R | through | N-Lib-2 | S-Vrs-3 | 4 | k4 | sourced departure; entry time estimate |
+| 11 | 07:38 | 07:58 | R49 | R | turnaround | S-Vrs-3 | N-Vys-1 | 20 | k5 | sourced arrival |
+| 12 | 07:40 | 07:55 | S8 | Os | turnaround | S-Vrs-2 | N-Vys-2 | 15 | k7 | sourced arrival |
+| 13 | 07:10 | 07:30 | R16 | R | turnaround | S-Vin-1 | N-Lib-2 | 20 | k3 | estimate |
+| 14 | 07:48 | 08:08 | R26 | R | turnaround | S-Vin-2 | N-Lib-1 | 20 | k1 | estimate |
+| 15 | 07:18 | 07:38 | R17 | R | turnaround | S-Vrs-1 | N-Lib-2 | 20 | k4 | estimate |
+| 16 | 07:02 | 07:22 | R20 | R | turnaround | N-Vys-1 | S-Vrs-3 | 20 | k6 | estimate |
+| 17 | 07:22 | 07:42 | EC | Ex/EC | turnaround | N-Vys-2 | S-Vrs-2 | 20 | k8 | estimate |
+| 18 | 07:13 | 07:38 | R19 | R | turnaround | N-Lib-1 | S-Vin-1 | 25 | k1 | estimate |
+| 19 | 07:35 | 08:00 | R18 | R | turnaround | N-Lib-2 | S-Vin-1 | 25 | k3 | estimate |
+| 20 | 07:48 | 08:08 | R10 | R | turnaround | N-Lib-1 | S-Vin-1 | 20 | k2 | estimate |
+| 21 | 07:28 | 07:43 | R9 | R | turnaround | N-Lib-1 | S-Vin-1 | 15 | k2 | estimate |
+| 22 | 07:08 | 07:23 | S2 | Os | turnaround | N-Vys-2 | S-Vrs-1 | 15 | k7 | estimate |
+| 23 | 07:55 | 08:10 | R41 | R | turnaround | N-Lib-2 | S-Vin-2 | 15 | k4 | estimate |
+| 24 | 07:26 | 07:46 | R21 | R | turnaround | N-Vys-1 | S-Vrs-3 | 20 | k6 | estimate |
+
+Entries per InOut: `N-Lib-1` 4, `N-Lib-2` 3, `N-Vys-1` 5, `N-Vys-2` 3, `S-Vin-1` 1, `S-Vin-2` 2, `S-Vrs-1` 3, `S-Vrs-2` 2,
+`S-Vrs-3` 1; the bypass InOuts 0. **15 trains enter from the north and 9 from the south** (see section 5).
 
 ### Switch legality and the changes it forced
 
@@ -128,19 +139,25 @@ the line family and the side of the real arrival:
 - #8 and #9 (S7 Beroun – Český Brod): north end `N-Vys` → `N-Lib`. This also matches the mapping, since the Kolín corridor
   towards Český Brod runs via Libeň.
 - #10 (R49 through): entry `N-Lib-1` → `N-Lib-2`, the only Libeň InOut with a route to `S-Vrs`.
-- #12 (S8): exit `N-Lib-1` → `N-Vys-1`; #13 (R16): exit `N-Vys-1` → `N-Lib-2`; #14 (R26): exit `N-Vys-2` → `N-Lib-1`.
+- #12 (S8): exit `N-Lib-1` → `N-Vys-2`; #13 (R16): exit `N-Vys-1` → `N-Lib-2`; #14 (R26): exit `N-Vys-2` → `N-Lib-1`.
 - #23 (R41/R42 Kolín): exit `S-Vrs-2` → `S-Vin-2`, entry `N-Lib-1` → `N-Lib-2` (track capacity).
 
 Further changes, not forced by legality: #18 R19, #19 R18 and #20 R10 moved from `N-Vys` to `N-Lib` (Kolín corridor via
 Libeň, as the issue's mapping states); #22 became S2 via Vysočany and #24 became R21 Mladá Boleslav via Vysočany (estimate),
-so the Libeň side is not overloaded; #11's exit is `N-Vys-1` (the only `N-Lib-2` track to `S-Vrs`, k4, is taken by #10). To
-fit eight usable station tracks without two trains on one track at once, some turnaround dwell times were shortened inside
-the 15–60 min range (EC 40 → 25, R16 and R26 25 → 20, R17 30 → 20, R18 and R19 30 → 25, R9 25 → 15). The placeholder tracks
-T1–T8 were replaced by the real `Station` names `k1`–`k8`, each chosen from the legal-route tracks of its pair.
+so the Libeň side is not overloaded; #11's exit is `N-Vys-1` (the only `N-Lib-2` track to `S-Vrs`, k4, is taken by #10).
+Which of the InOuts of one tunnel group a train uses (`N-Vys-1` or `N-Vys-2`, `S-Vrs-1`, `-2` or `-3`) is a model choice,
+made by the free station track. To fit eight usable station tracks with the reuse gap of section 3, some turnaround dwell
+times were shortened inside the 15–60 min range (EC 40 → 20, R16 and R26 25 → 20, R17 30 → 20, R18 and R19 30 → 25, R9
+25 → 15) and four estimated times moved by a few minutes (R19 07:15 → 07:13, R17 07:20 → 07:18, R26 07:45 → 07:48, R21
+07:32 → 07:26); no sourced time moved. The placeholder tracks T1–T8 were replaced by the real `Station` names `k1`–`k8`,
+each chosen from the legal-route tracks of its pair. The track table above comes from enumerating `RouteFinder.findRoutes`
+for all 60 cross pairs of the Station variant (2026-11-26); the data test checks only the tracks the list uses.
 
 What the data test checks (`PrahaPeakTimetableDataTest`): every pair is opposite-sided and switch-legal; no train uses a
-bypass InOut; every planned track is a `Station.platformTracks` name **and** lies on a switch-legal route of the pair; no two
-trains stand on one planned track at once; the train count is 24 and inside 20–27; the peak presence is inside 5–7 and at
+bypass InOut; every planned track is a `Station.platformTracks` name **and** lies on a switch-legal route of the pair; a
+train arrives on a planned track at least `MIN_TRACK_REUSE_GAP_MINUTES` (3 min) after the previous one left it; the sourced
+departures are the booklet's southbound departures (departure-sourced trains enter from the north and leave towards
+Vršovice) and the sourced arrivals the booklet's arrivals from Vršovice; the train count is 24 and inside 20–27; the peak presence is inside 5–7 and at
 most the topology capacity; dwell times follow section 3; the turnaround count is 14; `PrahaPeakTimetable.trainSpecs` gives
 one `MultiTrainLoop.TrainSpec` per train in arrival order.
 
@@ -150,6 +167,11 @@ one `MultiTrainLoop.TrainSpec` per train in arrival order.
 - No locomotive change; no empty-stock moves to the depot or stabling sidings.
 - The three Vinohrady tunnel tubes and the two Vítkov tunnels are plain InOuts; there is no open-line occupancy behind an
   InOut (an InOut is an open line end).
+- **Direction imbalance:** 15 trains enter from the north and 9 from the south. This is a by-product of the
+  legality-forced swaps and of the line mapping (most turnarounds of the list arrive from the Kolín corridor and from
+  Vysočany/Holešovice), not a sourced figure; the real balance at the station was not measured.
+- One train arriving on a track at least 3 min after the previous one left it (reoccupation time, estimate). The departure
+  counts the dwell from the entry InOut, so in a run the platform frees later by the run-in time; the gap covers that.
 - The hour starts with an empty station: trains that arrived before 07:00 and still stand at 07:00 are not modelled.
 - Real platform allocation is not in any data read; the planned tracks are assigned by line family and legal route.
 - **Turnarounds.** A real terminating train arrives and later leaves from the same side, often reversing as a push-pull set
@@ -181,8 +203,9 @@ figure lies inside that band, so the normal range is consistent with it. No Spr�
 
 1. The disturbance draws run on the simulation thread, so one seed gives one event list.
 2. A no-disturbance setting reproduces this timetable exactly.
-3. Every seed still passes the Goal 1B seed rule on the control arm (an accepted seed has blind class A = 0, see
-   `goal9b-demands/SP10-praha-llm-dispatcher.md`).
+3. Every seed still passes the Goal 1B seed rule on the control arm: an accepted seed has every train entered and every
+   train exited, and blind class A = 0 (`goal9b-demands/SP10-praha-llm-dispatcher.md`, narrowed seed rule of the
+   traffic-simulation-expert, 2026-11-17).
 
 ## 7. Who writes what, and what is not here
 

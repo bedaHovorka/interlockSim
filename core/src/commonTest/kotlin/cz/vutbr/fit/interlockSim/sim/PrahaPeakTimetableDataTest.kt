@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.testutil.PrahaPeakTimetable
 import cz.vutbr.fit.interlockSim.testutil.PrahaPeakTimetable.Category
 import cz.vutbr.fit.interlockSim.testutil.PrahaPeakTimetable.Kind
 import cz.vutbr.fit.interlockSim.testutil.PrahaPeakTimetable.PlannedTrain
+import cz.vutbr.fit.interlockSim.testutil.PrahaPeakTimetable.TimeBasis
 import org.koin.core.component.get
 import kotlin.test.Test
 
@@ -46,6 +47,12 @@ class PrahaPeakTimetableDataTest : CommonKoinTestBase() {
 		const val TURNAROUNDS: Int = 14
 
 		const val SECONDS_PER_MINUTE: Double = 60.0
+
+		/** PID booklet 221, weekday 07:00-08:00: departures from Praha hl.n. southbound (S9 and the :46 R49). */
+		val PID_SOUTHBOUND_DEPARTURES: List<Int> = listOf(1, 21, 31, 46, 51)
+
+		/** PID booklet 221, weekday 07:00-08:00: arrivals at Praha hl.n. from Vršovice. */
+		val PID_ARRIVALS_FROM_VRSOVICE: List<Int> = listOf(5, 25, 38, 40, 55)
 	}
 
 	private val trains: List<PlannedTrain> = PrahaPeakTimetable.trains
@@ -118,16 +125,46 @@ class PrahaPeakTimetableDataTest : CommonKoinTestBase() {
 	}
 
 	@Test
-	fun noTwoTrainsStandOnOneTrackAtOnceAndPresenceStaysInTheTargetRange() {
-		val overlaps =
+	fun sourcedTimesAreTheBookletDeparturesSouthboundAndTheBookletArrivalsNorthbound() {
+		val departureSourced = trains.filter { it.timeBasis == TimeBasis.DEPARTURE_SOURCED }
+		val arrivalSourced = trains.filter { it.timeBasis == TimeBasis.ARRIVAL_SOURCED }
+
+		assertThat(departureSourced.map { it.departureMinute }.sorted(), name = "sourced departure minutes")
+			.isEqualTo(PID_SOUTHBOUND_DEPARTURES)
+		assertThat(
+			departureSourced
+				.filterNot {
+					it.entry.startsWith("N-") && it.exit.startsWith("S-Vrs")
+				}.map(::label),
+			name = "departure-sourced trains not southbound to Vršovice"
+		).isEmpty()
+		assertThat(arrivalSourced.map { it.arrivalMinute }.sorted(), name = "sourced arrival minutes")
+			.isEqualTo(PID_ARRIVALS_FROM_VRSOVICE)
+		assertThat(
+			arrivalSourced
+				.filterNot {
+					it.entry.startsWith("S-Vrs")
+				}.map(::label),
+			name = "arrival-sourced trains not from Vršovice"
+		).isEmpty()
+	}
+
+	@Test
+	fun everyReuseOfAPlannedTrackLeavesTheMinimumGap() {
+		val gap = PrahaPeakTimetable.MIN_TRACK_REUSE_GAP_MINUTES * SECONDS_PER_MINUTE
+		val tooClose =
 			trains.groupBy { it.plannedTrack }.flatMap { (track, onTrack) ->
 				val sorted = onTrack.sortedBy { it.arrivalSecond }
-				sorted.zipWithNext().filter { (a, b) -> b.arrivalSecond < a.departureSecond }.map { (a, b) ->
+				sorted.zipWithNext().filter { (a, b) -> b.arrivalSecond < a.departureSecond + gap }.map { (a, b) ->
 					"$track: ${label(a)} until ${a.departureSecond}, ${label(b)} from ${b.arrivalSecond}"
 				}
 			}
-		assertThat(overlaps, name = "trains overlapping on one planned track").isEmpty()
+		assertThat(tooClose, name = "planned-track reuses closer than the minimum gap").isEmpty()
+	}
 
+	@Test
+	fun presenceStaysInTheTargetRangeAndWithinTheTopologyCapacity() {
+		val capacity = Station.from(load()).topologyCapacity
 		// Departures sort before arrivals at the same second: the track is free again.
 		val events =
 			trains
@@ -138,7 +175,7 @@ class PrahaPeakTimetableDataTest : CommonKoinTestBase() {
 		assertThat(peak, name = "trains present at once (target range, estimate)")
 			.isBetween(PrahaPeakTimetable.TARGET_PRESENT_AT_ONCE_MIN, PrahaPeakTimetable.TARGET_PRESENT_AT_ONCE_MAX)
 		assertThat(peak, name = "trains present at once against the topology capacity")
-			.isLessThanOrEqualTo(Station.from(load()).topologyCapacity)
+			.isLessThanOrEqualTo(capacity)
 	}
 
 	@Test
