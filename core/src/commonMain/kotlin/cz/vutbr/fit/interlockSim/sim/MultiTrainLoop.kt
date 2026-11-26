@@ -1054,20 +1054,30 @@ open class MultiTrainLoop(
 	 * Register this method as the snapshot provider via
 	 * `collisionDetectionService.registerTrainSnapshotProvider(multiTrainLoop::getTrainSnapshot)`.
 	 *
-	 * **Threading (Issue #1028):** in production this runs on the kDisco simulation thread. Its
-	 * only production caller is `DefaultCollisionDetectionService.evaluatePredictiveTtc`, reached
-	 * from `handleBlockEvent` for [cz.vutbr.fit.interlockSim.sim.events.BlockEvent.BlockReserved]
+	 * **Threading (Issue #1028, Issue #1449):** call this only on the simulation thread. The rule
+	 * holds while `run` is driven by `runBlocking` (`DefaultSimulationContext.run`): the engine
+	 * then runs on the one thread that `runBlocking` drives, so every event handler and process
+	 * body sees the train's live values between engine steps, consistently. The only production
+	 * caller is `DefaultCollisionDetectionService.evaluatePredictiveTtc`, reached from
+	 * `handleBlockEvent` for [cz.vutbr.fit.interlockSim.sim.events.BlockEvent.BlockReserved]
 	 * and `BlockReleased` — block events emitted through kDisco `emitCustom` while a simulation
-	 * process runs. There it reads the train's live values between events, consistently.
+	 * process runs.
 	 *
-	 * Safe to call from any other thread too (only tests do so, e.g.
-	 * `ExampleRegistryCollisionWiringTest` and `MultiTrainLoopSnapshotRaceTest`): the lookup walks
-	 * the immutable copy-on-write snapshot described on [approvedTrains], and the returned
-	 * [TrainSnapshot] is already an immutable value. Its velocity is a continuous value read live.
-	 * Its totalDistance adds the traversed-blocks length (a discrete field) to the live integrated
-	 * position, so an off-thread caller can catch that pair torn — off by up to one section
-	 * length — not only stale: a point-in-time estimate, not a value consistent with any one
-	 * simulation instant.
+	 * The velocity and distance pair is not published to other threads. Velocity is a
+	 * continuous value (`Variable.state`) read live. Its totalDistance adds the traversed-blocks
+	 * length (a discrete field) to the live integrated position, and the two are separate reads.
+	 * An off-thread caller can therefore catch that pair torn — off by up to one section
+	 * length — so the [TrainSnapshot] describes a state the train never had, not merely a stale
+	 * one. Only the lookup is thread-safe: it walks the immutable copy-on-write snapshot described
+	 * on [approvedTrains] and returns an immutable [TrainSnapshot] value, so an off-thread call
+	 * (today only tests, e.g. `ExampleRegistryCollisionWiringTest` and
+	 * `MultiTrainLoopSnapshotRaceTest`) cannot throw, but it does not get a consistent pair.
+	 *
+	 * Off-thread readers must not read engine fields. They get one immutable value built on the
+	 * simulation thread and published through a `@Volatile` or atomic field — the planning
+	 * snapshot of #1472, which takes the train sample inside the snapshot. The two rules sit side
+	 * by side: the "Threading contract" of [approvedTrains] makes the membership lookup safe
+	 * off-thread; this rule keeps the live velocity and distance on the simulation thread.
 	 *
 	 * @param trainId The identifier of the queried train (matches [Train.name]).
 	 * @return A [TrainSnapshot] capturing the train's current velocity, position, and length;
