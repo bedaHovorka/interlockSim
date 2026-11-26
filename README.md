@@ -21,9 +21,12 @@ Author: Bedrich Hovorka
 - **Discrete Event Simulation** - Simulate train movements and interlocking logic using the kDisco framework
 - **Continuous Simulation** - Model continuous train positions and speeds
 - **XML Configuration** - Define and save railway networks in a structured XML format
-- **Process-Oriented Modeling** - Built-in examples demonstrate shunting yard operations
+- **Process-Oriented Modeling** - Built-in examples demonstrate train movements under interlocking control: a passing loop, a small passing station and a large through station
 
 The simulator uses a combined discrete-continuous simulation approach powered by the kDisco library (Keld Helsgaun, Roskilde University).
+
+The project started as a 2006/2007 BSc thesis at Brno University of Technology (FIT). It was written in Java with the jDisco library.
+Since 2026 it is rewritten in Kotlin. kDisco, the jDisco-based engine of this project, replaced jDisco on 2026-03-20.
 
 ---
 
@@ -33,7 +36,11 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 - **Animated GUI simulation** - Real-time train movement visualization with event logging (30 FPS)
 - **XML schema-validated** railway network definitions
 - **Discrete event simulation engine** (kDisco-based)
-- **Built-in examples** including shunting loop scenarios
+- **Built-in examples** - shunting loop scenarios, a small passing station (Červený Újezd) and a large through station (Praha hlavní nádraží)
+- **Simulation speed control** - Slider from 0.1x to 10x, presets up to 50x, and keyboard shortcuts
+- **Metrics panel** - Live KPIs such as average wait, conflicts, throughput, utilization, queued and blocked trains
+- **Dispatcher** - Rule-based dispatcher, with an optional LLM dispatcher (needs [Ollama](https://ollama.com))
+- **Run summaries** - One JSON summary per run in the `example`, `simgui` and `exampleGui` modes: always when the run has a dispatcher (rule-based or LLM), and for the other runs when `-Dinterlocksim.dispatcher.runsRoot=<dir>` is set
 - **Swing GUI** for visualization and editing
 - **Assertion-based validation** for simulation integrity
 - **Dynamic state visualization** - Track coloring (FREE/RESERVED/OCCUPIED), signal states, switch positions
@@ -217,7 +224,7 @@ java -jar desktop-ui/build/libs/interlockSim.jar edit [xmlFile]
 
 ![InterlockSim Editor](text/img/Screenshot%20at%202026-01-03%2009-09-58.png)
 
-*The graphical track editor showing a simple shunting loop layout with entry/exit points and rail switches.*
+*The graphical track editor with a simple passing loop layout (`vyhybna.xml`, used by the shunting loop example). The toolbar on top holds the track elements. The side dock on the right is visible in editing mode too, but the speed and dispatcher controls are disabled. The tabs below the canvas show Path Preview, Warnings and Timeline.*
 
 ### 2. Simulation Mode
 
@@ -246,6 +253,55 @@ java -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 1024
 java -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 1024
 ```
 
+**Available examples:**
+
+| Name | What it shows | Network (XML) | Needs Ollama |
+|------|---------------|---------------|--------------|
+| `shuntingLoop` | The original example. Trains arrive until the run ends; the two-track passing loop (*výhybna*) holds up to two trains at the same time | `vyhybna.xml` | no |
+| `multiTrainLoop` | Three trains on the same loop (A to B, B to A, A to B). Each train reserves its whole path before it starts. | `vyhybna.xml` | no |
+| `threeTrainLoop` | The fixed three-train prototype of the same scenario. At least one block is contested, so a train has to queue for it. | `vyhybna.xml` | no |
+| `cervenyUjezd` | A small passing station with a rule-based dispatcher. 2 entry points on the west side, 2 exit points on the east side, 12 switches (*výhybky*), 12 signals (*návěstidla*). | `cerveny_ujezd.xml` | no |
+| `prahaHlavniNadrazi` | A large through station with 8 platform tracks and a bypass, with a throat on the north and on the south side. Low traffic: at most 4 trains at once, 8 trains per run. 5 entry/exit points on the north side, 6 on the south side, 50 switches, 29 signals. | `praha-hlavni-nadrazi-station.xml` | no |
+| `shuntingLoopAI`, `cervenyUjezdAI`, `prahaHlavniNadraziAI` | The same networks, driven by the LLM dispatcher. JVM only. | same as above | **yes** |
+
+- The network of `cervenyUjezd` and `prahaHlavniNadrazi` is a simplified model. The Praha file is **not** the real station plan (the real Praha hl.n. is a terminus; the model runs it as a through station).
+  The interlocking is also simplified on purpose. See [docs/INTERLOCKING_SCOPE_LIMITATIONS.md](docs/INTERLOCKING_SCOPE_LIMITATIONS.md).
+- `prahaHlavniNadrazi` and `prahaHlavniNadraziAI` take an optional third argument: the seed of the train generator (default `0`),
+  for example `example prahaHlavniNadrazi 600 42`.
+- `shuntingLoopSync` and `cervenyUjezdSync` are parity twins for the console `example` mode only.
+  The `exampleGui` mode does not accept them.
+- Run `example` without a name to list the names that your build accepts.
+- The native `fast-sim` command-line binary (Linux x64) runs examples without a JVM and never uses the LLM dispatcher.
+  See [fast-sim/CLAUDE.md](fast-sim/CLAUDE.md).
+
+**AI dispatcher examples.** The three `*AI` examples need a running [Ollama](https://ollama.com).
+The default address is `http://localhost:11434`. Set the `OLLAMA_BASE_URL` environment variable to change it.
+The default model is `qwen2.5:7b-instruct`. The first pull is about 4.7 GB.
+
+```bash
+java -ea -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoopAI 333
+```
+
+For the Docker route, see "Quick Start with Docker" above and the AI dispatcher notes in `CLAUDE.md`.
+
+**Run summaries.** The `example`, `simgui` and `exampleGui` modes write one JSON summary per run when it stops, in two cases:
+
+- The run has a dispatcher (the built-in rule-based dispatcher or the LLM one). This is true for `shuntingLoop`, `cervenyUjezd`,
+  `prahaHlavniNadrazi` and the `*AI` examples.
+  The file goes to `build/reports/dispatcher-runs/<arm>/` — the arm names the dispatcher the run used, for example `rule_based`.
+- You set `-Dinterlocksim.dispatcher.runsRoot=<dir>`. Then those modes write every run's file to `<dir>/<arm>/`.
+
+The arm name follows how the run drives its trains: `rule_based` for the built-in rule-based dispatcher — the `*Sync` twins drive
+the same rules synchronously inside the scenario, so they file under `rule_based` too — and `no_dispatcher` for the two scenarios
+that reserve their paths without a dispatcher at all (`multiTrainLoop`, `threeTrainLoop`). The `*AI` examples file under
+`llm_tool_calling`.
+Runs outside the first case (`multiTrainLoop`, `threeTrainLoop`, and the `*Sync` twins) write nothing unless you set the property.
+Put the property before `-jar`:
+
+```bash
+java -Dinterlocksim.dispatcher.runsRoot=./runs -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 60
+```
+
 ### 4. Animated GUI Simulation
 
 **AnimatedSim Milestone** - Real-time visual simulation with animated trains and event logging.
@@ -262,7 +318,40 @@ java -jar desktop-ui/build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 
 ![AnimatedSim GUI](text/img/Screenshot%20at%202026-02-04%2013-47-30.png)
 
-*The animated GUI showing real-time train movement with dynamic track coloring (Gray/Yellow/Red), signal states (RED/GREEN), and event timeline with simulation time display.*
+*The animated GUI (`exampleGui shuntingLoop`) in the main window: run bar on top, track canvas in the middle, event timeline below, and the side dock on the right with simulation speed, metrics and dispatcher.*
+
+![prahaHlavniNadrazi example in the animated GUI](text/img/readme-praha-hlavni-nadrazi-gui.png)
+
+*The large `prahaHlavniNadrazi` example while it runs: trains move through the throats and platform tracks of the station, and the metrics panel shows the live KPIs.*
+
+![cervenyUjezd example in the animated GUI](text/img/readme-cerveny-ujezd-gui.png)
+
+*The `cervenyUjezd` example. A train runs through the station and the timeline lists each block it enters and leaves.*
+
+**Main window.** The editor and the simulation use the same layout:
+
+- **Top:** the toolbar. In simulation mode, a run bar sits below it with the clock, the status, Stop, Pause, Step Event, Step Time and the time delta.
+- **Middle:** the track canvas. Below it, tabs show Path Preview, Warnings and Timeline. Simulation mode opens on Timeline.
+  A critical warning switches to the Warnings tab.
+- **Right:** the side dock (320 px wide) with Simulation Speed, Metrics, Dispatcher and Conflict Resolution.
+  The screenshots show the first three panels only. In editing mode the speed and dispatcher controls are disabled, not hidden.
+- **Bottom:** the status bar. It shows the latest message, and the speed on its right side when the speed is not 1.0x.
+  The screenshots above are cropped or taken at 1.0x, so they do not show the speed label.
+
+The window opens at 85% of the screen size (at least 1024x818, clamped to the screen). It remembers its size and position.
+
+**Speed control.** Use the slider (0.1x to 10x) or the preset buttons (0.1x up to 50x).
+You can also use the keyboard:
+
+| Key | Action |
+|-----|--------|
+| `1` `2` `3` `4` `5` | Speed 0.5x, 1x, 2x, 5x, 10x |
+| `+` (Shift+`=` or numpad) / `-` | Faster / slower (by a factor of 1.5) |
+| `Space` | Pause or resume |
+| `S` | Step one event |
+| `T` | Step by the time delta |
+
+If a text field has focus (for example the Delta field), the keys go into that field.
 
 **Features:**
 - **Real-time train animation** - Watch trains move smoothly across the track network (30 FPS)
@@ -278,6 +367,9 @@ java -jar desktop-ui/build/libs/interlockSim.jar exampleGui shuntingLoop 1024
   - Train events (stop, exit, arrival)
   - Continuous updates (position/velocity at 1 Hz)
 - **Time display** - Current simulation time in HH:MM:SS.mmm format
+- **Metrics panel** - Avg wait, Conflicts, Throughput, Utilization, Queued, Blocked, Open contentions, Stall and End cause, plus a time row.
+  It updates only while a simulation runs.
+- **Dispatcher panel** - Mode selector (AUTO, SEMI_AUTO, MANUAL) and a **Why this route?** button
 
 **Example Usage:**
 
@@ -287,6 +379,9 @@ java -jar desktop-ui/build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 
 # Run specific example with custom duration
 java -jar desktop-ui/build/libs/interlockSim.jar exampleGui shuntingLoop 600
+
+# Run the large through station example (Praha hlavní nádraží)
+java -jar desktop-ui/build/libs/interlockSim.jar exampleGui prahaHlavniNadrazi 600
 
 # Docker users
 docker compose run app java -jar interlockSim.jar exampleGui shuntingLoop 1024
@@ -316,7 +411,7 @@ java -jar desktop-ui/build/libs/interlockSim.jar (sim|simgui|edit|example|exampl
 - `simgui [file.xml]` - Run simulation from XML file with the animated GUI
 - `edit [file.xml]` - Open editor (optionally load file)
 - `example [name] [endTime]` - Run built-in example (console output)
-- `exampleGui [name] [endTime]` - Run built-in example with animated GUI
+- `exampleGui [name] [endTime]` - Run built-in example with animated GUI. `prahaHlavniNadrazi` also takes an optional seed as third argument.
 - `aiSweep --grid <grid.json> [--out <dir>] [--dry-run]` - Run the dispatcher reliability sweep.
   Manual only, never in CI; the LLM arm needs a live Ollama. No grid files are committed —
   write the grid for the campaign you run. See CLAUDE.md for an example grid.
