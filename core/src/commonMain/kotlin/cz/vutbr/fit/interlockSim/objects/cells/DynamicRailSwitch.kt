@@ -68,7 +68,10 @@ class DynamicRailSwitch(
 	 *
 	 * Mutable during simulation as trains set paths through the switch.
 	 * Access via `conf` property. Use `changeConf()` to toggle position.
+	 * Single writer (the simulation thread); @Volatile publishes it to the Swing EDT renderer and
+	 * any other reader thread (Issue #1128).
 	 */
+	@kotlin.concurrent.Volatile
 	var conf: Conf = Conf.MAIN
 		private set
 
@@ -77,7 +80,9 @@ class DynamicRailSwitch(
 	 *
 	 * When locked, switch cannot change configuration (safety property SI-5:
 	 * switch cannot toggle during train movement).
+	 * Single writer; @Volatile for cross-thread readers (Issue #1128).
 	 */
+	@kotlin.concurrent.Volatile
 	var locked: Boolean = false
 		private set
 
