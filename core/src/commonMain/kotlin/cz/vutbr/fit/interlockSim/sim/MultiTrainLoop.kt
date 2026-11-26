@@ -305,10 +305,12 @@ open class MultiTrainLoop(
 	 * **Threading contract:** written only on the kDisco simulation thread, one whole-list
 	 * replacement at a time; read from any thread. `@Volatile` publishes each replacement, so a
 	 * reader always walks a frozen list and can never observe a half-applied mutation. This is what
-	 * makes [getApprovedTrains] and [getTrainSnapshot] safe off the simulation thread — before the
-	 * copy-on-write conversion both walked the live mutable list and could raise
-	 * `ConcurrentModificationException` (or read a nulled-out slot) out of the collision-detection
-	 * path while the simulation admitted or retired a train.
+	 * makes [getApprovedTrains] and the train lookup inside [getTrainSnapshot] safe off the
+	 * simulation thread — before the copy-on-write conversion both walked the live mutable list and
+	 * could raise `ConcurrentModificationException` (or read a nulled-out slot) out of the
+	 * collision-detection path while the simulation admitted or retired a train. The list is the
+	 * only thing this contract covers: the live velocity and distance pair that [getTrainSnapshot]
+	 * reads is not safe off the simulation thread (see [getTrainSnapshot] and #1472).
 	 *
 	 * A lock was deliberately not used: [getTrainSnapshot] can be re-entered on the simulation
 	 * thread itself from inside the collision-warning emit path, and the non-reentrant
