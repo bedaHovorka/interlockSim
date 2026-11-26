@@ -21,7 +21,7 @@ Author: Bedrich Hovorka
 - **Discrete Event Simulation** - Simulate train movements and interlocking logic using the kDisco framework
 - **Continuous Simulation** - Model continuous train positions and speeds
 - **XML Configuration** - Define and save railway networks in a structured XML format
-- **Process-Oriented Modeling** - Built-in examples demonstrate shunting yard operations
+- **Process-Oriented Modeling** - Built-in examples demonstrate train movements under interlocking control: a passing loop, a small passing station and a large through station
 
 The simulator uses a combined discrete-continuous simulation approach powered by the kDisco library (Keld Helsgaun, Roskilde University).
 
@@ -40,7 +40,7 @@ Since 2026 it is rewritten in Kotlin. kDisco, the jDisco-based engine of this pr
 - **Simulation speed control** - Slider from 0.1x to 10x, presets up to 50x, and keyboard shortcuts
 - **Metrics panel** - Live KPIs such as average wait, conflicts, throughput, utilization, queued and blocked trains
 - **Dispatcher** - Rule-based dispatcher, with an optional LLM dispatcher (needs [Ollama](https://ollama.com))
-- **Run summaries** - One JSON summary per run in the `example`, `simgui` and `exampleGui` modes: always when the run has a dispatcher agent, and for the other runs when `-Dinterlocksim.dispatcher.runsRoot=<dir>` is set
+- **Run summaries** - One JSON summary per run in the `example`, `simgui` and `exampleGui` modes: always when the run has a dispatcher (rule-based or LLM), and for the other runs when `-Dinterlocksim.dispatcher.runsRoot=<dir>` is set
 - **Swing GUI** for visualization and editing
 - **Assertion-based validation** for simulation integrity
 - **Dynamic state visualization** - Track coloring (FREE/RESERVED/OCCUPIED), signal states, switch positions
@@ -257,16 +257,16 @@ java -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 1024
 
 | Name | What it shows | Network (XML) | Needs Ollama |
 |------|---------------|---------------|--------------|
-| `shuntingLoop` | The original example. Trains arrive until the run ends; the two-track passing loop (*výhybna*) runs up to two trains at the same time | `vyhybna.xml` | no |
+| `shuntingLoop` | The original example. Trains arrive until the run ends; the two-track passing loop (*výhybna*) holds up to two trains at the same time | `vyhybna.xml` | no |
 | `multiTrainLoop` | Three trains on the same loop (A to B, B to A, A to B). Each train reserves its whole path before it starts. | `vyhybna.xml` | no |
-| `threeTrainLoop` | The fixed three-train prototype of the same scenario. At least one block is contested and queued. | `vyhybna.xml` | no |
+| `threeTrainLoop` | The fixed three-train prototype of the same scenario. At least one block is contested, so a train has to queue for it. | `vyhybna.xml` | no |
 | `cervenyUjezd` | A small passing station with a rule-based dispatcher. 2 entry points on the west side, 2 exit points on the east side, 12 switches (*výhybky*), 12 signals (*návěstidla*). | `cerveny_ujezd.xml` | no |
-| `prahaHlavniNadrazi` | A large through station with 8 platform tracks and a bypass, with a throat on the north and on the south side. Low traffic: at most 4 trains at once, 8 trains per run. 11 entry/exit points, 50 switches, 29 signals. | `praha-hlavni-nadrazi-station.xml` | no |
+| `prahaHlavniNadrazi` | A large through station with 8 platform tracks and a bypass, with a throat on the north and on the south side. Low traffic: at most 4 trains at once, 8 trains per run. 5 entry/exit points on the north side, 6 on the south side, 50 switches, 29 signals. | `praha-hlavni-nadrazi-station.xml` | no |
 | `shuntingLoopAI`, `cervenyUjezdAI`, `prahaHlavniNadraziAI` | The same networks, driven by the LLM dispatcher. JVM only. | same as above | **yes** |
 
-- The network of `cervenyUjezd` and `prahaHlavniNadrazi` is a simplified model. The Praha file is **not** the real station plan.
+- The network of `cervenyUjezd` and `prahaHlavniNadrazi` is a simplified model. The Praha file is **not** the real station plan (the real Praha hl.n. is a terminus; the model runs it as a through station).
   The interlocking is also simplified on purpose. See [docs/INTERLOCKING_SCOPE_LIMITATIONS.md](docs/INTERLOCKING_SCOPE_LIMITATIONS.md).
-- `prahaHlavniNadrazi` takes an optional third argument: the seed of the train generator (default `0`),
+- `prahaHlavniNadrazi` and `prahaHlavniNadraziAI` take an optional third argument: the seed of the train generator (default `0`),
   for example `example prahaHlavniNadrazi 600 42`.
 - `shuntingLoopSync` and `cervenyUjezdSync` are parity twins for the console `example` mode only.
   The `exampleGui` mode does not accept them.
@@ -286,14 +286,16 @@ For the Docker route, see "Quick Start with Docker" above and the AI dispatcher 
 
 **Run summaries.** The `example`, `simgui` and `exampleGui` modes write one JSON summary per run when it stops, in two cases:
 
-- The run has a dispatcher agent. This is true for `shuntingLoop`, `cervenyUjezd`, `prahaHlavniNadrazi` and the `*AI` examples.
-  The file goes to `build/reports/dispatcher-runs/<arm>/`, for example `rule_based`.
+- The run has a dispatcher (the built-in rule-based dispatcher or the LLM one). This is true for `shuntingLoop`, `cervenyUjezd`,
+  `prahaHlavniNadrazi` and the `*AI` examples.
+  The file goes to `build/reports/dispatcher-runs/<arm>/` — the arm names the dispatcher the run used, for example `rule_based`.
 - You set `-Dinterlocksim.dispatcher.runsRoot=<dir>`. Then those modes write every run's file to `<dir>/<arm>/`.
 
-The arm name follows the dispatcher wiring. The `*Sync` twins use a synchronous rule-based dispatcher, so they also file under
-`rule_based` when the property is set. Only `multiTrainLoop` and `threeTrainLoop` have no dispatcher at all, and they use `no_dispatcher`.
-Runs that do not go through a dispatcher agent (`multiTrainLoop`, `threeTrainLoop`, and the `*Sync` twins)
-write nothing unless you set the property.
+The arm name follows how the run drives its trains: `rule_based` for the built-in rule-based dispatcher — the `*Sync` twins drive
+the same rules synchronously inside the scenario, so they file under `rule_based` too — and `no_dispatcher` for the two scenarios
+that reserve their paths without a dispatcher at all (`multiTrainLoop`, `threeTrainLoop`). The `*AI` examples file under
+`llm_tool_calling`.
+Runs outside the first case (`multiTrainLoop`, `threeTrainLoop`, and the `*Sync` twins) write nothing unless you set the property.
 Put the property before `-jar`:
 
 ```bash
@@ -336,7 +338,7 @@ java -jar desktop-ui/build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 - **Bottom:** the status bar. It shows the latest message, and the speed on its right side when the speed is not 1.0x.
   The screenshots above are cropped or taken at 1.0x, so they do not show the speed label.
 
-The window opens at 85% of the screen size (at least 1024x818). It remembers its size and position.
+The window opens at 85% of the screen size (at least 1024x818, clamped to the screen). It remembers its size and position.
 
 **Speed control.** Use the slider (0.1x to 10x) or the preset buttons (0.1x up to 50x).
 You can also use the keyboard:
@@ -365,7 +367,7 @@ If a text field has focus (for example the Delta field), the keys go into that f
   - Train events (stop, exit, arrival)
   - Continuous updates (position/velocity at 1 Hz)
 - **Time display** - Current simulation time in HH:MM:SS.mmm format
-- **Metrics panel** - Avg wait, Conflicts, Throughput, Utilization, Queued, Blocked, Open contentions, Stall and End cause.
+- **Metrics panel** - Avg wait, Conflicts, Throughput, Utilization, Queued, Blocked, Open contentions, Stall and End cause, plus a time row.
   It updates only while a simulation runs.
 - **Dispatcher panel** - Mode selector (AUTO, SEMI_AUTO, MANUAL) and a **Why this route?** button
 
