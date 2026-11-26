@@ -32,7 +32,11 @@ import kotlin.test.Test
 class FaultInjectionProcessFixtureThrowTimeTest {
 	@Test
 	fun `the fixture throws at the configured time exactly`() {
-		val fixture = FaultInjectionProcessFixture(failAt = 4.5, throwable = CancellationException("fault injected by the test"))
+		val fixture =
+			FaultInjectionProcessFixture(
+				failAt = 4.5,
+				throwable = CancellationException("fault injected by the test")
+			)
 		val bystander =
 			object : Process() {
 				override suspend fun actions() {
