@@ -27,7 +27,9 @@ tripwire of Issue #1011 (see Contents).
   `SharedSimulationTestScopesModule` (shared Koin test bindings, Issue #1029),
   `ContextTracker`, `FaultInjectionProcessFixture` (a kDisco process that holds until simulated time `failAt`
   and throws a configurable throwable, default a FATAL `SimulationException`; Issue #1451, pinned by
-  `FaultInjectionProcessFixtureTest` in `jvmTest`), `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
+  `FaultInjectionProcessFixtureTest` in `jvmTest`; the default fault is built when thrown, so its model time
+  equals `failAt`; on Kotlin/Native an uncaught process exception kills the test process, so native tests
+  configure a `CancellationException`, as `:core` commonTest `FaultInjectionProcessFixtureThrowTimeTest` does), `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
   (sampling-regression helpers), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
   `NavigationDecoratingContext`, `FirstTrainOwnershipConflict` (holds one train in an
