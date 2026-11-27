@@ -46,6 +46,11 @@ private val logger = KotlinLogging.logger {}
  *
  * Rule: a cycle is [generationCut] when ANY of its replies was cut — a cycle can make several
  * `/api/chat` calls (a tool call, then the final reply).
+ *
+ * Second flag for the actuator gate (the emission fix of the 2026-11-27 round): [lastReplyCut]
+ * says whether the reply just observed — the one whose payload Koog's tool loop is executing —
+ * was cut, and is re-set on every [record]. A complete reply of the same cycle keeps acting: only
+ * the cut reply's payload is sealed (see `agents.tools.ToolArgs.cutReplyToolRefusal`).
  */
 class OllamaCycleReplies : AbstractCoroutineContextElement(Key) {
 	/** The context key of [OllamaCycleReplies]. */
@@ -54,6 +59,7 @@ class OllamaCycleReplies : AbstractCoroutineContextElement(Key) {
 	private val cut = AtomicBoolean(false)
 	private val replies = AtomicInteger(0)
 	private val evalCount = AtomicReference<Int?>(null)
+	private val lastReplyCutFlag = AtomicBoolean(false)
 
 	/** `true` when at least one `/api/chat` reply of the cycle ended with `done_reason == "length"`. */
 	val generationCut: Boolean
@@ -67,12 +73,23 @@ class OllamaCycleReplies : AbstractCoroutineContextElement(Key) {
 	val lastEvalCount: Int?
 		get() = evalCount.get()
 
+	/**
+	 * `true` when the reply just observed was cut. Koog's tool loop executes a reply's tool calls
+	 * after that reply's response has run through the hook, so at tool-execution time this is the
+	 * cut state of the reply whose payload is on stage.
+	 */
+	val lastReplyCut: Boolean
+		get() = lastReplyCutFlag.get()
+
 	internal fun record(
 		doneReason: String?,
 		evalCount: Int?
 	) {
 		replies.incrementAndGet()
 		this.evalCount.set(evalCount)
+		// Re-set per reply, not cleared only on a cut: a complete reply after an earlier cut must
+		// not be sealed by the actuator gate.
+		lastReplyCutFlag.set(doneReason == OllamaReplyObserver.DONE_REASON_LENGTH)
 		if (doneReason == OllamaReplyObserver.DONE_REASON_LENGTH) {
 			cut.set(true)
 		}

@@ -141,6 +141,19 @@ import kotlin.time.TimeSource
  * After [LlmCircuitBreaker]'s threshold of consecutive cuts the breaker opens and its skip falls
  * back as today — the stall bound of this ending until the R7 watchdog exists.
  *
+ * **A cut reply's own payload acts on nothing.** Ollama's default branch can deliver a
+ * `done_reason == "length"` reply that still carries a complete actuator tool call, and Koog's tool
+ * loop would execute it inside [attemptInference] — the cap stops that generation before the model
+ * finished reasoning, so its calls must not reach the queue. The actuator tools' emission funnel
+ * (`agents.tools.emitOrRejectForCap` and `NoOpTool`) therefore refuses a call while
+ * [OllamaCycleReplies.lastReplyCut] holds (the reply whose payload is on stage was cut), sealing
+ * the cut reply's payload at the emission. A decision the model made in a *complete* reply of the
+ * same cycle — before the cut reply or after the cut reply's calls were refused — was fully
+ * generated and still stands: sealing those would turn a cut ending into no-act-and-fall-back and
+ * double-dispatch. The refusal carries no rejection code (a cut is a generation fault, not an
+ * argument error) and the loop may still send the refusal back as tool traffic under the pinned
+ * Koog 1.1.1; the breaker failure below bounds that overhead.
+ *
  * ## Fallback decision input (Issue #1343)
  *
  * The fallback always decides on ONE whole observation, never on fields of one combined with

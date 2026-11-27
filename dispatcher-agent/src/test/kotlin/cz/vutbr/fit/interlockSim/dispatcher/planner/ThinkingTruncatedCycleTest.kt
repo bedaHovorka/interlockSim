@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
@@ -20,10 +21,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
+import cz.vutbr.fit.interlockSim.dispatcher.agents.EmittedActionSink
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
+import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaCycleReplies
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -69,6 +72,10 @@ class ThinkingTruncatedCycleTest {
 		const val MODEL_NAME = "qwen2.5:7b-instruct"
 		const val DONE_REASON_LENGTH = "length"
 		const val DONE_REASON_STOP = "stop"
+
+		/** The endpoints of the scripted actuator call. */
+		const val ENTRY = "zB"
+		const val TARGET = "doA1"
 	}
 
 	private lateinit var server: MockWebServer
@@ -149,11 +156,14 @@ class ThinkingTruncatedCycleTest {
 		val queue: ActuatorCommandQueue,
 		val recorder: DefaultDispatcherRunRecorder,
 		val ticks: MutableList<TickRecord>,
-		val executor: OllamaSimpleExecutor
+		val executor: OllamaSimpleExecutor,
+		val sinkHolder: SinkHolder
 	)
 
 	private fun <T> withStack(
 		tools: List<DomainTool> = emptyList(),
+		sinkHolder: SinkHolder = SinkHolder(),
+		toolEmissionsReachQueue: Boolean = false,
 		block: (Stack) -> T
 	): T {
 		val config = OllamaExecutorConfig(ollamaEndpoint = server.url("/").toString().trimEnd('/'))
@@ -172,6 +182,30 @@ class ThinkingTruncatedCycleTest {
 			val fallback = mockk<Dispatcher>()
 			every { fallback.decide(any()) } returns listOf(DispatchDecision.ApproveTrain("Train #1"))
 			val queue = ActuatorCommandQueue()
+			// The queue-posting wrapper KoogAgentFactory installs in production, so a test that
+			// drives a real actuator tool asserts exactly what reaches the command queue.
+			if (toolEmissionsReachQueue) {
+				sinkHolder.current =
+					EmittedActionSink { action ->
+						val decisions: List<DispatchDecision> =
+							when (action) {
+								is DispatchAction.ApproveTrain ->
+									listOf(DispatchDecision.ApproveTrain(trainId = action.trainId))
+								is DispatchAction.RequestRoute ->
+									listOf(
+										DispatchDecision.RequestRoute(
+											action.trainId,
+											action.fromEndpointName,
+											action.toEndpointName
+										)
+									)
+								is DispatchAction.CancelRoute ->
+									listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
+								is DispatchAction.NoOp -> emptyList()
+							}
+						queue.postAll(decisions)
+					}
+			}
 			val adapter =
 				KoogAgentPlanAdapter(
 					agentFactory,
@@ -179,7 +213,7 @@ class ThinkingTruncatedCycleTest {
 					fallback,
 					Duration.ofSeconds(10),
 					queue,
-					SinkHolder()
+					sinkHolder
 				)
 			val recorder = recorder()
 			val ticks = mutableListOf<TickRecord>()
@@ -187,7 +221,7 @@ class ThinkingTruncatedCycleTest {
 				ticks.add(record)
 				recorder.onTick(record)
 			}
-			return block(Stack(adapter, fallback, queue, recorder, ticks, executor))
+			return block(Stack(adapter, fallback, queue, recorder, ticks, executor, sinkHolder))
 		} finally {
 			executor.close()
 		}
@@ -247,6 +281,62 @@ class ThinkingTruncatedCycleTest {
 				.containsExactly(TickOutcome.TIMEOUT_NOOP to TimeoutNoOpCause.THINKING_TRUNCATED)
 			verify(exactly = 0) { stack.fallback.decide(any()) }
 			assertThat(stack.adapter.circuitBreaker.consecutiveFailures).isEqualTo(1)
+		}
+	}
+
+	/**
+	 * The dangerous order the cap produces most often (Copilot review finding, 2026-11-27): the
+	 * FIRST reply of the loop is already cut and still carries a complete, valid actuator call.
+	 * Before the emission gate, Koog executed that call inside its loop and posted the command to
+	 * the queue, so the cycle acted on a payload the model never finished generating and recorded
+	 * as a normal `LLM_ACTIONS` tick with no cut anywhere in the run JSON.
+	 */
+	@Test
+	fun `a cut reply that carries a complete actuator call emits nothing`() {
+		scriptedReplies.add(
+			"""{"model":"$MODEL_NAME","message":{"role":"assistant","content":"",""" +
+				""""tool_calls":[{"function":{"name":"request_route","arguments":{"trainName":"Train #1",""" +
+				""""fromEndpointName":"$ENTRY","toEndpointName":"$TARGET"}}}]},""" +
+				""""done":true,"done_reason":"$DONE_REASON_LENGTH","prompt_eval_count":900,"eval_count":2047}"""
+		)
+		val sinkHolder = SinkHolder()
+		val routeTool = RequestRouteTool(sinkHolder, validEndpointNames = setOf(ENTRY, TARGET))
+		// Every later reply is a cut thinking-only answer, so Koog's tool loop ends after it.
+		withStack(tools = listOf(routeTool), sinkHolder = sinkHolder, toolEmissionsReachQueue = true) { stack ->
+			val decisions = runBlocking { stack.adapter.plan(observation) }
+
+			assertThat(decisions, "no decision is returned").isEmpty()
+			assertThat(stack.queue.approximateSize(), "the cut reply's call posted no command").isEqualTo(0)
+			assertThat(stack.sinkHolder.actedThisCycle(), "the cut reply acted on nothing").isFalse()
+			assertThat(stack.ticks.map { it.outcome to it.timeoutNoOpCause })
+				.containsExactly(TickOutcome.TIMEOUT_NOOP to TimeoutNoOpCause.THINKING_TRUNCATED)
+			verify(exactly = 0) { stack.fallback.decide(any()) }
+			assertThat(stack.adapter.circuitBreaker.consecutiveFailures, "the breaker counts the cut")
+				.isEqualTo(1)
+		}
+	}
+
+	/** The honest companion of the gate above: emissions from complete replies of the same cycle stand. */
+	@Test
+	fun `genuinely earlier emissions of the same cycle still stand beside a later cut`() {
+		// Reply 1 is complete (done_reason=stop) and carries a valid actuator call: the route it
+		// requests is the model's deliberate, fully generated decision. Reply 2 is cut afterwards.
+		scriptedReplies.add(
+			"""{"model":"$MODEL_NAME","message":{"role":"assistant","content":"",""" +
+				""""tool_calls":[{"function":{"name":"request_route","arguments":{"trainName":"Train #1",""" +
+				""""fromEndpointName":"$ENTRY","toEndpointName":"$TARGET"}}}]},""" +
+				""""done":true,"done_reason":"$DONE_REASON_STOP","prompt_eval_count":900,"eval_count":12}"""
+		)
+		scriptedReplies.add(chatReply(DONE_REASON_LENGTH))
+		val sinkHolder = SinkHolder()
+		val routeTool = RequestRouteTool(sinkHolder, validEndpointNames = setOf(ENTRY, TARGET))
+		withStack(tools = listOf(routeTool), sinkHolder = sinkHolder, toolEmissionsReachQueue = true) { stack ->
+			runBlocking { stack.adapter.plan(observation) }
+
+			assertThat(stack.queue.approximateSize(), "the complete reply's command stands").isEqualTo(1)
+			assertThat(stack.sinkHolder.actedThisCycle()).isTrue()
+			assertThat(stack.ticks.map { it.outcome }).containsExactly(TickOutcome.LLM_ACTIONS)
+			verify(exactly = 0) { stack.fallback.decide(any()) }
 		}
 	}
 
