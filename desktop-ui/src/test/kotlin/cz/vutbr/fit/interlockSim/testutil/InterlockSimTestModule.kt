@@ -8,8 +8,29 @@ import cz.vutbr.fit.interlockSim.di.objectsModule
 import cz.vutbr.fit.interlockSim.di.simulationDesktopModule
 import cz.vutbr.fit.interlockSim.di.xmlModule
 import cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelfileHashSource
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ModelProfileRecord
 import org.koin.core.module.Module
 import org.koin.dsl.module
+
+/** The Modelfile hash the test modules' [ModelfileHashSource] reports for every tag (Issue #1342). */
+const val TEST_MODELFILE_SHA256: String = "0000000000000000000000000000000000000000000000000000000000001342"
+
+/**
+ * A [ModelfileHashSource] that never calls Ollama (Issue #1342): an LLM example built by a test
+ * records this profile instead of reading `/api/show` from whatever Ollama the machine runs.
+ */
+val testModelfileHashSource: ModelfileHashSource =
+	ModelfileHashSource { tag -> ModelProfileRecord(tag, TEST_MODELFILE_SHA256, numPredict = null) }
+
+/**
+ * Overrides `dispatcherAgentModule`'s Ollama-backed [ModelfileHashSource] with
+ * [testModelfileHashSource]. Included LAST in each test module, so its definition wins.
+ */
+val testModelfileHashSourceModule: Module =
+	module {
+		single<ModelfileHashSource> { testModelfileHashSource }
+	}
 
 /**
  * Lightweight test module (DEFAULT for most tests)
@@ -27,7 +48,8 @@ val testModuleLightweight: Module =
 			editingModule,
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
 			simulationDesktopModule, // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
-			dispatcherAgentModule // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
+			dispatcherAgentModule, // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
+			testModelfileHashSourceModule // Issue #1342: last, so it overrides the Ollama-backed source
 			// NOTE: guiModule excluded to prevent Frame overhead
 		)
 		// Provide a new instance of TestContextBuilder for each injection
@@ -46,6 +68,7 @@ val testModuleFull: Module =
 	module {
 		includes(interlockSimModule)
 		includes(guiModule) // GUI components and Main coordinator
+		includes(testModelfileHashSourceModule) // Issue #1342: last, so it overrides the Ollama-backed source
 		// Provide a new instance of TestContextBuilder for each injection
 		factory { TestContextBuilder() }
 	}
@@ -64,7 +87,8 @@ val integrationTestModule: Module =
 			editingModule,
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
 			simulationDesktopModule, // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
-			dispatcherAgentModule // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
+			dispatcherAgentModule, // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
+			testModelfileHashSourceModule // Issue #1342: last, so it overrides the Ollama-backed source
 			// NOTE: guiModule excluded to prevent Frame overhead
 		)
 		// Provide a new instance of TestContextBuilder for each injection

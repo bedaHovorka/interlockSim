@@ -179,8 +179,7 @@ class DispatcherRunSnapshotTest {
 
 	@Test
 	fun `current schema version is 14`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_REFUSED_ENTRIES)
-		assertThat(SCHEMA_VERSION_WITH_REFUSED_ENTRIES).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW + 1)
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_MODEL_PROFILE)
 	}
 
 	/** Issue #1457 (schema version 14): the refused entries at run end survive the round-trip. */
@@ -201,6 +200,31 @@ class DispatcherRunSnapshotTest {
 		val decoded = json.decodeFromString(RailwayOutcome.serializer(), "{\"trainsExited\": 3}")
 
 		assertThat(decoded.refusedEntriesAtRunEnd).isNull()
+	}
+
+	/** Issue #1342 (schema version 14): the model profile's tag, Modelfile hash and num_predict survive. */
+	@Test
+	fun `serialization round-trips the model profile`() {
+		val profile = ModelProfileRecord(tag = "qwen2.5:7b-capped", modelfileSha256 = "ab".repeat(32), numPredict = 2048)
+		val snap = snapshotWith().copy(modelProfile = profile)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"modelfileSha256\": \"${"ab".repeat(32)}\"")
+		assertThat(encoded).contains("\"numPredict\": 2048")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.modelProfile).isEqualTo(profile)
+	}
+
+	/** Issue #1342: a version 13 file has no model profile and decodes with it absent. */
+	@Test
+	fun `a snapshot without a model profile key decodes with the profile absent`() {
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snapshotWith())
+		val withoutKey = json.parseToJsonElement(encoded).jsonObject.filterKeys { it != "modelProfile" }
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), JsonObject(withoutKey).toString())
+
+		assertThat(decoded.modelProfile).isNull()
 	}
 
 	/** Issue #1302 (schema version 12): the skipped and offered NEXT SECTION counts survive the round-trip. */
@@ -610,6 +634,9 @@ class DispatcherRunSnapshotTest {
 
 		/** Issue #1457 added the refused entries at run end. */
 		private const val SCHEMA_VERSION_WITH_REFUSED_ENTRIES: Int = 14
+
+		/** Issue #1342 added the model profile and the THINKING_TRUNCATED cause key. */
+		private const val SCHEMA_VERSION_WITH_MODEL_PROFILE: Int = 14
 
 		private val json =
 			Json {

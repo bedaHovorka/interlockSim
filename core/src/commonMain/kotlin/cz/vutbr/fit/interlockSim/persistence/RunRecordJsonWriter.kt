@@ -223,6 +223,8 @@ object RunRecordJsonWriter {
 			)
 			put("example", run.example)
 			putAbsent("processWallSeconds")
+			// Schema 14 (Issue #1342): a run without an LLM has no model profile.
+			putAbsent("modelProfile")
 		}
 	}
 

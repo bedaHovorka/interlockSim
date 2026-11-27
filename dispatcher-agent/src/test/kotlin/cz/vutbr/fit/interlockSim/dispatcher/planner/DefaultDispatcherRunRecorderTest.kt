@@ -341,6 +341,34 @@ class DefaultDispatcherRunRecorderTest {
 		assertThat(snap.timeoutNoOpByCause[TimeoutNoOpCause.DEADLINE_MISS.name] ?: 0L).isEqualTo(1L)
 	}
 
+	/** Issue #1342: a cycle cut by num_predict is counted under its own cause. */
+	@Test
+	fun `timeoutNoOpByCause THINKING_TRUNCATED is counted and zero by default`() {
+		val r = recorder()
+		assertThat(r.snapshot().timeoutNoOpByCause[TimeoutNoOpCause.THINKING_TRUNCATED.name]).isEqualTo(0L)
+
+		r.onTick(TickRecord(TickOutcome.TIMEOUT_NOOP, simTime = 1.0, timeoutNoOpCause = TimeoutNoOpCause.THINKING_TRUNCATED))
+
+		assertThat(r.snapshot().timeoutNoOpByCause[TimeoutNoOpCause.THINKING_TRUNCATED.name]).isEqualTo(1L)
+	}
+
+	/** Issue #1342: the model profile captured at run start reaches the snapshot unchanged. */
+	@Test
+	fun `the model profile reaches the snapshot and the frozen finish copy`() {
+		val profile = ModelProfileRecord(tag = "qwen2.5:7b-capped", modelfileSha256 = null, numPredict = null)
+		val r =
+			DefaultDispatcherRunRecorder(
+				runId = "profile-run",
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				params = defaultParams,
+				modelProfile = profile
+			)
+
+		assertThat(r.snapshot().modelProfile).isEqualTo(profile)
+		assertThat(r.finish(RunEndCause.NATURAL_COMPLETION).modelProfile).isEqualTo(profile)
+		assertThat(recorder().snapshot().modelProfile, "a rule-based run has no model profile").isNull()
+	}
+
 	@Test
 	fun `snapshot has correct schemaVersion`() {
 		val snap = recorder().snapshot()

@@ -33,6 +33,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelfileHashSource
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
@@ -596,7 +597,8 @@ class ExampleRegistry {
 	/**
 	 * Overrides the Koin-scoped [DispatcherRunRecorder] (bound `DispatcherAgentModule`-wide with
 	 * arm = RULE_BASED / empty model) with the LLM_TOOL_CALLING arm and the run's actual
-	 * [RunParameters], so the per-run JSON identifies its own arm. Used by both shared helpers,
+	 * [RunParameters], so the per-run JSON identifies its own arm, and with the model profile read from
+	 * [ModelfileHashSource] at run start (Issue #1342). Used by both shared helpers,
 	 * [llmShuntingLoopExample] (console) and [llmGuiShuntingLoopExample] (GUI).
 	 * Issue #847 round 4 (R4-5) / #928.
 	 */
@@ -613,7 +615,11 @@ class ExampleRegistry {
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				params =
 					llmRunParameters(scope.get<OllamaExecutorConfig>(), scope.get<DispatcherRunConfig>()),
-				circuitBreaker = circuitBreaker
+				circuitBreaker = circuitBreaker,
+				// Issue #1342: which Modelfile (and num_predict cap) the run's tag resolves to, read
+				// once here, at run start, before the first cycle. A failed read records it absent.
+				modelProfile =
+					scope.get<ModelfileHashSource>().fetch(scope.get<OllamaExecutorConfig>().modelName)
 			)
 		)
 	}

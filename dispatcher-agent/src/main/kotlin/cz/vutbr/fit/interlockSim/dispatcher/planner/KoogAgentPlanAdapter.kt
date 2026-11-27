@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaCycleReplies
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
@@ -28,6 +29,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.time.Duration
 import kotlin.time.TimeSource
@@ -125,6 +127,19 @@ import kotlin.time.TimeSource
  *    [TickOutcome.LLM_SILENT_ALL_MOVING], an LLM success.
  * 4. LLM times out → fall back to [fallbackDispatcher]
  * 5. LLM throws exception → fall back to [fallbackDispatcher] (re-throws [CancellationException])
+ *
+ * ## A generation cut by `num_predict` acts on nothing (Issue #1342)
+ *
+ * Checked after every attempt, before the retry and before [handleSuccess]: when any `/api/chat`
+ * reply of the cycle ended with `done_reason == "length"` (read by
+ * [cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaReplyObserver] into the cycle's
+ * [OllamaCycleReplies]), the cycle is never retried (a retry doubles the stall), the circuit
+ * breaker records a failure, and the rule-based fallback is not consulted. Without an emission the
+ * tick is [TickOutcome.TIMEOUT_NOOP] with [TimeoutNoOpCause.THINKING_TRUNCATED]; with one, the
+ * emissions stand and classify the tick, as for any partial emission. This is R7 of Goal 9B for this
+ * one cause: queued trains wait at their entry signal and moving trains keep their reserved paths.
+ * After [LlmCircuitBreaker]'s threshold of consecutive cuts the breaker opens and its skip falls
+ * back as today — the stall bound of this ending until the R7 watchdog exists.
  *
  * ## Fallback decision input (Issue #1343)
  *
@@ -314,18 +329,20 @@ class KoogAgentPlanAdapter(
 
 	/** Outcome of one attempt at [KoogDispatchAgent.decideAsync], wrapped for [attemptInference]'s callers. */
 	private sealed class InferenceAttempt {
+		abstract val latencyMs: Long
+
 		data class Success(
 			val decisions: List<DispatchDecision>,
-			val latencyMs: Long
+			override val latencyMs: Long
 		) : InferenceAttempt()
 
 		data class TimedOut(
-			val latencyMs: Long
+			override val latencyMs: Long
 		) : InferenceAttempt()
 
 		data class Failed(
 			val exception: Exception,
-			val latencyMs: Long
+			override val latencyMs: Long
 		) : InferenceAttempt()
 	}
 
@@ -339,10 +356,16 @@ class KoogAgentPlanAdapter(
 	private suspend fun attemptInference(
 		agent: KoogDispatchAgent,
 		observation: DispatchObservation,
-		mark: TimeSource.Monotonic.ValueTimeMark
+		mark: TimeSource.Monotonic.ValueTimeMark,
+		replies: OllamaCycleReplies
 	): InferenceAttempt =
 		try {
-			val decisions = withTimeout(inferenceTimeout.toMillis()) { agent.decideAsync(observation) }
+			// The cycle's replies ride in the coroutine context, where OllamaReplyObserver's hook
+			// finds them (Issue #1342).
+			val decisions =
+				withContext(replies) {
+					withTimeout(inferenceTimeout.toMillis()) { agent.decideAsync(observation) }
+				}
 			InferenceAttempt.Success(decisions, mark.elapsedNow().inWholeMilliseconds)
 		} catch (e: TimeoutCancellationException) {
 			InferenceAttempt.TimedOut(mark.elapsedNow().inWholeMilliseconds)
@@ -464,14 +487,22 @@ class KoogAgentPlanAdapter(
 		// where recordSuccess/recordFailure have already cleared it. Without the release, the
 		// breaker would grant no probe ever again while stuck in HALF_OPEN (#1058 review round).
 		try {
-			var attempt = attemptInference(a, observation, cycleStart)
+			// A fresh sink per cycle, so a cut never leaks into the next cycle (Issue #1342).
+			val replies = OllamaCycleReplies()
+			var attempt = attemptInference(a, observation, cycleStart, replies)
+			if (replies.generationCut) {
+				return reportCutCycle(attempt, observation)
+			}
 			if (attempt is InferenceAttempt.Failed && !sinkHolder.actedThisCycle()) {
 				// One bounded retry (Issue #1058) on a plain failure only — never on a timeout,
 				// which would double the 30s stall the breaker exists to avoid, and never after a
 				// partial emission: those actions are already posted, and a retry could
 				// double-dispatch a second action for the same train. Only the cycle's final
 				// outcome (this retry included) is reported to the circuit breaker below.
-				attempt = attemptInference(a, observation, cycleStart)
+				attempt = attemptInference(a, observation, cycleStart, replies)
+				if (replies.generationCut) {
+					return reportCutCycle(attempt, observation)
+				}
 			}
 
 			return when (val result = attempt) {
@@ -693,6 +724,45 @@ class KoogAgentPlanAdapter(
 			decisionInput = { latestObservationOr(observation) },
 			logAction = { logger.warn(exception) { fallbackWarnMessage() } }
 		)
+	}
+
+	/**
+	 * The cycle ending for a generation cut by the model profile's `num_predict` (Issue #1342) —
+	 * see the class KDoc's "A generation cut by `num_predict` acts on nothing". Whatever the attempt
+	 * returned (an answer, a failure on the cut reply, or a timeout after a cut reply), the cut is
+	 * what left the cycle without a usable answer.
+	 *
+	 * Records a circuit-breaker failure (the cut spent the cycle's budget for nothing). A cycle that
+	 * already emitted keeps its emissions and is reported through [outcomeFromEmissions], exactly as
+	 * the partial-emission arm of [recordFailureAndFallback]. Otherwise the tick is
+	 * [TickOutcome.TIMEOUT_NOOP] with [TimeoutNoOpCause.THINKING_TRUNCATED], and nothing acts: no
+	 * retry, no fallback, an empty decision list.
+	 */
+	private fun reportCutCycle(
+		attempt: InferenceAttempt,
+		observation: DispatchObservation
+	): List<DispatchDecision> {
+		val simTime = observation.snapshot.simTime
+		circuitBreaker.recordFailure(simTime)
+		if (sinkHolder.actedThisCycle()) {
+			logger.warn {
+				"KoogAgentPlanAdapter: LLM generation was cut by num_predict after an emission — keeping " +
+					"the emitted actions, no retry and no fallback (simTime=$simTime)"
+			}
+			reportTick(outcomeFromEmissions(), simTime, attempt.latencyMs, countOffersFrom = observation)
+			return (attempt as? InferenceAttempt.Success)?.decisions ?: emptyList()
+		}
+		logger.warn {
+			"KoogAgentPlanAdapter: LLM generation was cut by num_predict (done_reason=length) — the " +
+				"cycle acts on nothing, no retry and no fallback (simTime=$simTime)"
+		}
+		reportTick(
+			TickOutcome.TIMEOUT_NOOP,
+			simTime,
+			attempt.latencyMs,
+			timeoutNoOpCause = TimeoutNoOpCause.THINKING_TRUNCATED
+		)
+		return emptyList()
 	}
 
 	/**
@@ -954,19 +1024,23 @@ class KoogAgentPlanAdapter(
 	 *   later prompts, and this count is reporting only. `null` — every fallback ending — counts
 	 *   nothing and reports a plain not-measured `null` count, exactly the pre-#1302 fallback
 	 *   endings; the parameter carries the signal, so behaviour is never keyed on [outcome].
+	 * @param timeoutNoOpCause Forwarded to [TickRecord.timeoutNoOpCause]; set exactly when [outcome]
+	 *   is [TickOutcome.TIMEOUT_NOOP] — today only by [reportCutCycle] (Issue #1342).
 	 */
 	private fun reportTick(
 		outcome: TickOutcome,
 		simTime: Double,
 		latencyMs: Long?,
 		silentNonIdleCycleIndex: Long? = null,
-		countOffersFrom: DispatchObservation? = null
+		countOffersFrom: DispatchObservation? = null,
+		timeoutNoOpCause: TimeoutNoOpCause? = null
 	) {
 		val (nextSectionOffers, nextSectionOffersFailed) = countNextSectionOffers(countOffersFrom)
 		tickListeners.onTick(
 			TickRecord(
 				outcome,
 				simTime,
+				timeoutNoOpCause = timeoutNoOpCause,
 				latencyMs = latencyMs,
 				silentNonIdleCycleIndex = silentNonIdleCycleIndex,
 				nextSectionOffers = nextSectionOffers,

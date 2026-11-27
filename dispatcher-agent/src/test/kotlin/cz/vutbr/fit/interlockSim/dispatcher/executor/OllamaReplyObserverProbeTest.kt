@@ -89,7 +89,8 @@ class OllamaReplyObserverProbeTest {
 	private val testPrompt = prompt("probe-1342") { user("Hello") }
 
 	private fun execute(): Message.Assistant {
-		val client = cancellableOllamaClient(baseUrl = endpoint(), contextWindowStrategy = ContextWindowStrategy.Companion.None)
+		val client =
+			cancellableOllamaClient(baseUrl = endpoint(), contextWindowStrategy = ContextWindowStrategy.Companion.None)
 		try {
 			return runBlocking {
 				client.execute(testPrompt, OllamaModelFactory.toolCapableModel(MODEL_NAME, CONTEXT_LENGTH), emptyList())
@@ -100,7 +101,8 @@ class OllamaReplyObserverProbeTest {
 	}
 
 	private fun executeIn(replies: OllamaCycleReplies): Message.Assistant {
-		val client = cancellableOllamaClient(baseUrl = endpoint(), contextWindowStrategy = ContextWindowStrategy.Companion.None)
+		val client =
+			cancellableOllamaClient(baseUrl = endpoint(), contextWindowStrategy = ContextWindowStrategy.Companion.None)
 		try {
 			return runBlocking {
 				withContext(replies) {

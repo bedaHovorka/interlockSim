@@ -103,6 +103,8 @@ import java.util.concurrent.atomic.AtomicReference
  * @param runId Opaque unique identifier (typically a UUID or `yyyyMMdd-HHmmss-<short-uuid>`).
  * @param arm Which dispatcher implementation arm is active.
  * @param params Fixed run parameters captured at run start.
+ * @param modelProfile The LLM run's model profile read at run start (Issue #1342), copied into every
+ *   snapshot as [DispatcherRunSnapshot.modelProfile]; `null` for a run with no LLM.
  *
  * @since Issue #845 (SP2c.22 — run identity and per-run JSON persistence)
  */
@@ -110,7 +112,8 @@ class DefaultDispatcherRunRecorder(
 	override val runId: String,
 	private val arm: DispatcherArm,
 	private val params: RunParameters,
-	private val circuitBreaker: LlmCircuitBreaker? = null
+	private val circuitBreaker: LlmCircuitBreaker? = null,
+	private val modelProfile: ModelProfileRecord? = null
 ) : DispatcherRunRecorder {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -500,7 +503,8 @@ class DefaultDispatcherRunRecorder(
 			offeredNextSectionHops = if (offersMeasured) offeredSum else null,
 			skippedNextSectionOffersStandingAtSignal = if (offersMeasured) standingSum else null,
 			longestSkippedOfferStreakCycles = if (offersMeasured) streakCycles else null,
-			longestSkippedOfferStreakSimSeconds = if (offersMeasured) streakSimSeconds else null
+			longestSkippedOfferStreakSimSeconds = if (offersMeasured) streakSimSeconds else null,
+			modelProfile = modelProfile
 		)
 	}
 
