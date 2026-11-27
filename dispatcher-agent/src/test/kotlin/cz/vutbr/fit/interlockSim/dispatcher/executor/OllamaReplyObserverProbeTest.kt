@@ -221,6 +221,24 @@ class OllamaReplyObserverProbeTest {
 		assertThat(replies.replyCount).isEqualTo(0)
 	}
 
+	/** Review finding 2: a reply whose fields are not primitives must never fail the request. */
+	@Test
+	fun `a chat reply with non-primitive done_reason and eval_count does not fail the request`() {
+		val client = cancellableOllamaHttpClientFactory().second
+		val replies = OllamaCycleReplies()
+		val odd = """{"done":true,"done_reason":{"why":"length"},"eval_count":[2048]}"""
+		chatReplies.add(odd)
+		val text =
+			try {
+				runBlocking { withContext(replies) { client.post("${endpoint()}/api/chat") { setBody("{}") }.bodyAsText() } }
+			} finally {
+				client.close()
+			}
+		assertThat(text, "the request succeeded and its body is intact").isEqualTo(odd)
+		assertThat(replies.generationCut).isFalse()
+		assertThat(replies.lastEvalCount).isNull()
+	}
+
 	@Test
 	fun `an unparseable chat reply marks nothing`() {
 		val client = cancellableOllamaHttpClientFactory().second

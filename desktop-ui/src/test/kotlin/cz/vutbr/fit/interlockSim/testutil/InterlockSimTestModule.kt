@@ -25,7 +25,8 @@ val testModelfileHashSource: ModelfileHashSource =
 
 /**
  * Overrides `dispatcherAgentModule`'s Ollama-backed [ModelfileHashSource] with
- * [testModelfileHashSource]. Included LAST in each test module, so its definition wins.
+ * [testModelfileHashSource]. [KoinTestBase] loads it after every test module, so its definition
+ * wins; a test that starts Koin itself and builds an LLM example adds it the same way.
  */
 val testModelfileHashSourceModule: Module =
 	module {
@@ -48,8 +49,7 @@ val testModuleLightweight: Module =
 			editingModule,
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
 			simulationDesktopModule, // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
-			dispatcherAgentModule, // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
-			testModelfileHashSourceModule // Issue #1342: last, so it overrides the Ollama-backed source
+			dispatcherAgentModule // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
 			// NOTE: guiModule excluded to prevent Frame overhead
 		)
 		// Provide a new instance of TestContextBuilder for each injection
@@ -68,7 +68,6 @@ val testModuleFull: Module =
 	module {
 		includes(interlockSimModule)
 		includes(guiModule) // GUI components and Main coordinator
-		includes(testModelfileHashSourceModule) // Issue #1342: last, so it overrides the Ollama-backed source
 		// Provide a new instance of TestContextBuilder for each injection
 		factory { TestContextBuilder() }
 	}
@@ -87,8 +86,7 @@ val integrationTestModule: Module =
 			editingModule,
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
 			simulationDesktopModule, // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
-			dispatcherAgentModule, // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
-			testModelfileHashSourceModule // Issue #1342: last, so it overrides the Ollama-backed source
+			dispatcherAgentModule // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
 			// NOTE: guiModule excluded to prevent Frame overhead
 		)
 		// Provide a new instance of TestContextBuilder for each injection

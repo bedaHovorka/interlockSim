@@ -18,9 +18,9 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -92,7 +92,8 @@ class OllamaCycleReplies : AbstractCoroutineContextElement(Key) {
  *
  * Only `/api/chat` is observed. The model prewarmer's `/api/generate` request (`num_predict=1`,
  * always cut) goes over the JDK client and never reaches this plugin; the path filter would ignore
- * it anyway. An unparseable reply records nothing and logs one warning.
+ * it anyway. An unparseable reply records nothing and logs one warning; a field of the wrong JSON
+ * shape reads as absent. The hook never fails the request it observes.
  */
 object OllamaReplyObserver {
 	/** The Ollama path whose replies are observed. */
@@ -132,9 +133,11 @@ object OllamaReplyObserver {
 			logger.warn { "OllamaReplyObserver: could not parse an Ollama /api/chat reply; the cycle is not marked" }
 			return
 		}
+		// `as? JsonPrimitive`, never `jsonPrimitive`: an object or array here must not throw out of
+		// the plugin hook, which would fail the dispatcher's request instead of marking nothing.
 		replies.record(
-			doneReason = reply["done_reason"]?.jsonPrimitive?.contentOrNull,
-			evalCount = reply["eval_count"]?.jsonPrimitive?.intOrNull
+			doneReason = (reply["done_reason"] as? JsonPrimitive)?.contentOrNull,
+			evalCount = (reply["eval_count"] as? JsonPrimitive)?.intOrNull
 		)
 	}
 }

@@ -18,9 +18,12 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
+import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
+import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaCycleReplies
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
@@ -44,6 +47,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.time.Duration
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import okhttp3.mockwebserver.Dispatcher as MockDispatcher
 
@@ -73,6 +77,9 @@ class ThinkingTruncatedCycleTest {
 	@Volatile
 	private var doneReason = DONE_REASON_LENGTH
 
+	/** Scripted `/api/chat` bodies served in order before falling back to [chatReply]. */
+	private val scriptedReplies = ConcurrentLinkedQueue<String>()
+
 	/** A queued train: the station is not idle, so today's silent cycle consults the fallback. */
 	private val observation =
 		DispatchObservation(
@@ -91,7 +98,7 @@ class ThinkingTruncatedCycleTest {
 					val body =
 						if (request.path == "/api/chat") {
 							chatRequests.incrementAndGet()
-							chatReply(doneReason)
+							scriptedReplies.poll() ?: chatReply(doneReason)
 						} else {
 							"{}"
 						}
@@ -145,7 +152,10 @@ class ThinkingTruncatedCycleTest {
 		val executor: OllamaSimpleExecutor
 	)
 
-	private fun <T> withStack(block: (Stack) -> T): T {
+	private fun <T> withStack(
+		tools: List<DomainTool> = emptyList(),
+		block: (Stack) -> T
+	): T {
 		val config = OllamaExecutorConfig(ollamaEndpoint = server.url("/").toString().trimEnd('/'))
 		val executor = OllamaSimpleExecutor(config)
 		try {
@@ -153,7 +163,7 @@ class ThinkingTruncatedCycleTest {
 				runBlocking {
 					DefaultAgentService(executor, config).createDispatchAgent(
 						modelName = config.modelName,
-						tools = emptyList(),
+						tools = tools,
 						systemPrompt = "You are a test dispatcher."
 					)
 				}
@@ -199,6 +209,44 @@ class ThinkingTruncatedCycleTest {
 			val snapshot = stack.recorder.snapshot()
 			assertThat(snapshot.timeoutNoOpByCause[TimeoutNoOpCause.THINKING_TRUNCATED.name]).isEqualTo(1L)
 			assertThat(snapshot.ticksByOutcome[TickOutcome.RULE_FALLBACK.name] ?: 0L).isEqualTo(0L)
+		}
+	}
+
+	/**
+	 * P3 on the agent path (review finding 1): Koog's own tool loop sends the second `/api/chat`
+	 * after a tool ran, and the cut of that second reply still reaches the cycle's
+	 * [OllamaCycleReplies]. Reply 1 is a finished tool call, reply 2 a cut thinking-only reply.
+	 */
+	@Test
+	fun `a tool call followed by a cut final reply inside the Koog tool loop is a cut cycle`() {
+		val toolRuns = AtomicInteger()
+		val inspect =
+			object : DomainTool {
+				override val name = "inspect_station"
+				override val description = "Reads the station state (test double)."
+				override val parameters = emptyList<DomainToolParameter>()
+
+				override suspend fun execute(args: Map<String, Any?>): ToolResult {
+					toolRuns.incrementAndGet()
+					return ToolResult.Success("all quiet")
+				}
+			}
+		scriptedReplies.add(
+			"""{"model":"$MODEL_NAME","message":{"role":"assistant","content":"",""" +
+				""""tool_calls":[{"function":{"name":"inspect_station","arguments":{}}}]},""" +
+				""""done":true,"done_reason":"$DONE_REASON_STOP","prompt_eval_count":900,"eval_count":12}"""
+		)
+		scriptedReplies.add(chatReply(DONE_REASON_LENGTH))
+		withStack(tools = listOf(inspect)) { stack ->
+			val decisions = runBlocking { stack.adapter.plan(observation) }
+
+			assertThat(toolRuns.get(), "Koog ran the tool between the two replies").isEqualTo(1)
+			assertThat(chatRequests.get(), "Koog's tool loop sent the second /api/chat itself").isEqualTo(2)
+			assertThat(decisions).isEmpty()
+			assertThat(stack.ticks.map { it.outcome to it.timeoutNoOpCause })
+				.containsExactly(TickOutcome.TIMEOUT_NOOP to TimeoutNoOpCause.THINKING_TRUNCATED)
+			verify(exactly = 0) { stack.fallback.decide(any()) }
+			assertThat(stack.adapter.circuitBreaker.consecutiveFailures).isEqualTo(1)
 		}
 	}
 
