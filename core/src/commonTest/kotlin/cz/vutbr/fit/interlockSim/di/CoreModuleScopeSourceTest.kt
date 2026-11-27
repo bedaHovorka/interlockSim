@@ -14,6 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
+import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
@@ -25,13 +26,13 @@ import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import org.koin.core.component.KoinComponent
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.core.error.InstanceCreationException
+import org.koin.core.qualifier.Qualifier
 import org.koin.core.qualifier.named
 import org.koin.core.scope.Scope
 import kotlin.test.AfterTest
@@ -43,7 +44,8 @@ import kotlin.test.assertFailsWith
  * Tests the defensive source check shared by every simulation-scoped binding in
  * [navigationModule].
  *
- * Each of these bindings starts by reading the scope's source object:
+ * Each of these bindings starts by reading the scope's source object (the editing-scope
+ * [TopologyNavigator] does the same with [DefaultEditingContext]):
  *
  * ```kotlin
  * val context = getSource<DefaultSimulationContext>()
@@ -61,6 +63,11 @@ import kotlin.test.assertFailsWith
  * `sharedSimulationTestScopesModule` (Issue #1029), so loading one of those would exercise
  * that shared copy rather than the shipped module.
  *
+ * Until Issue #1455 (Goal 9B SP2.3) one case pinned the check for the scoped
+ * `TemporalConflictDetector`; that inert detector was deleted (its design is kept in #1497),
+ * and the case now covers the editing-scope [TopologyNavigator], the other binding with the
+ * same check.
+ *
  * Runs on both JVM and linuxX64 via commonTest.
  */
 class CoreModuleScopeSourceTest : KoinComponent {
@@ -75,14 +82,17 @@ class CoreModuleScopeSourceTest : KoinComponent {
 	}
 
 	/**
-	 * Opens a simulation-qualified scope with no source, runs [block] against it, and
+	 * Opens a scope with [qualifier] and no source, runs [block] against it, and
 	 * always closes the scope again.
 	 */
-	private fun withSourcelessSimulationScope(block: (Scope) -> Unit) {
+	private fun withSourcelessScope(
+		qualifier: Qualifier,
+		block: (Scope) -> Unit
+	) {
 		val scope =
 			getKoin().createScope(
-				scopeId = "sourceless-simulation-scope",
-				qualifier = named<DefaultSimulationContext>()
+				scopeId = "sourceless-scope",
+				qualifier = qualifier
 			)
 		try {
 			block(scope)
@@ -92,18 +102,21 @@ class CoreModuleScopeSourceTest : KoinComponent {
 	}
 
 	/**
-	 * Asserts that resolving [T] from a sourceless simulation scope fails with the
-	 * shared "no source" message.
+	 * Asserts that resolving [T] from a sourceless scope with [qualifier] fails with
+	 * [expectedMessage], by default the shared simulation "no source" message.
 	 *
 	 * Koin wraps a definition's own failure in an [InstanceCreationException], so the
 	 * check looks at the cause, which is the [IllegalStateException] the binding threw.
 	 */
-	private inline fun <reified T : Any> assertMissingSourceIsReported() {
-		withSourcelessSimulationScope { scope ->
+	private inline fun <reified T : Any> assertMissingSourceIsReported(
+		qualifier: Qualifier = named<DefaultSimulationContext>(),
+		expectedMessage: String = EXPECTED_MESSAGE
+	) {
+		withSourcelessScope(qualifier) { scope ->
 			val failure = assertFailsWith<InstanceCreationException> { scope.get<T>() }
 			val cause = failure.cause
 			assertThat(cause).isNotNull().isInstanceOf(IllegalStateException::class)
-			assertThat(cause?.message).isEqualTo(EXPECTED_MESSAGE)
+			assertThat(cause?.message).isEqualTo(expectedMessage)
 		}
 	}
 
@@ -126,7 +139,11 @@ class CoreModuleScopeSourceTest : KoinComponent {
 	fun collisionDetectionServiceReportsMissingSource() = assertMissingSourceIsReported<CollisionDetectionService>()
 
 	@Test
-	fun temporalConflictDetectorReportsMissingSource() = assertMissingSourceIsReported<TemporalConflictDetector>()
+	fun editingTopologyNavigatorReportsMissingSource() =
+		assertMissingSourceIsReported<TopologyNavigator>(
+			qualifier = named<DefaultEditingContext>(),
+			expectedMessage = EXPECTED_EDITING_MESSAGE
+		)
 
 	@Test
 	fun conflictResolverReportsMissingSource() = assertMissingSourceIsReported<ConflictResolver>()
@@ -157,5 +174,6 @@ class CoreModuleScopeSourceTest : KoinComponent {
 
 	private companion object {
 		const val EXPECTED_MESSAGE = "DefaultSimulationContext source not found in scope"
+		const val EXPECTED_EDITING_MESSAGE = "DefaultEditingContext source not found in scope"
 	}
 }

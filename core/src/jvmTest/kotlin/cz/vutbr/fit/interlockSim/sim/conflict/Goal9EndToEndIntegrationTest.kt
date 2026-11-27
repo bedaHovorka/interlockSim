@@ -22,7 +22,6 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.paths.Route
@@ -47,7 +46,7 @@ import java.util.concurrent.TimeUnit
 /**
  * End-to-end integration and false-positive validation suite for Goal 9 (#593).
  *
- * Wires the spatial/temporal detectors, resolution generator and ranking engine together
+ * Wires the spatial detector, resolution generator and ranking engine together
  * and validates the Goal 9 flow against the parent-issue verification plan (#531).
  *
  * ## Acceptance criteria verified
@@ -55,8 +54,10 @@ import java.util.concurrent.TimeUnit
  * - AC1: Two trains reserving the same block trigger a [ConflictDetectedEvent] before
  *   any collision; the scoped [ConflictResolver] turns the event into a non-empty, ranked
  *   candidate list ordered exactly as the base [ConflictResolutionRanker.rank] orders it.
- * - AC2: Converging-path projections trigger a [TemporalConflictEvent] within the
- *   30-second lookahead window configured on [TemporalConflictDetector].
+ * - AC2 (removed by Issue #1455): converging-path projections triggered a
+ *   `TemporalConflictEvent` of the inert `TemporalConflictDetector`. Goal 9B SP2.3 deleted the
+ *   detector (owner ruling R1, #1434); its provider contract, overlap and dedup rules are kept
+ *   in #1497 (Goal 3B).
  * - AC3: [DefaultConflictResolver] generates both [ConflictResolution.HoldTrain] and
  *   [ConflictResolution.Reroute] candidates, ranked correctly by
  *   [ConflictResolutionRanker].
@@ -65,7 +66,9 @@ import java.util.concurrent.TimeUnit
  *   ranks it above [ConflictResolution.Strategy.HOLD_TRAIN]; Goal 9B SP2.2 removed that
  *   in-memory learning (owner rulings R1 and R14, #1434; learning from run records is Goal 9C,
  *   #1490), so AC4 now pins that the base order is the same on every ranking.
- * - AC5: Trains on separate non-conflicting paths produce no [ConflictDetectedEvent].
+ * - AC5: Trains on separate non-conflicting paths produce no [ConflictDetectedEvent]. Its
+ *   temporal half (no `TemporalConflictEvent`, and the non-overlapping projection case) went
+ *   with the detector in Issue #1455.
  *
  * ## Scope note
  *
@@ -213,90 +216,6 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// AC2: Converging-path projections trigger TemporalConflictEvent within
-	//      the 30-second lookahead window.
-	// ─────────────────────────────────────────────────────────────────────────
-
-	@Nested
-	@DisplayName("AC2 — Converging-path projections trigger TemporalConflictEvent within 30 s window")
-	inner class Ac2TemporalConflictWithinLookaheadWindow {
-		/**
-		 * Two trains with overlapping projected occupancies on the same block are detected
-		 * by the production-wired [TemporalConflictDetector] within the default 30-second
-		 * lookahead window.
-		 *
-		 * The projection provider is registered on the real scoped detector before the
-		 * scan is triggered by synthetic [BlockEvent.BlockReserved] events. Both trains
-		 * project onto the same [DynamicTrackBlock] at overlapping future offsets (10–25 s
-		 * and 15–30 s respectively), with the overlap beginning 15 s after detection — well
-		 * within the 30-second window.
-		 *
-		 * Verification plan (Issue #531):
-		 * > "Two trains on converging paths; verify detection within the lookahead window."
-		 *
-		 * @since Issue #593 (Goal 9 SP7)
-		 */
-		@Test
-		@Timeout(value = 10, unit = TimeUnit.SECONDS)
-		@DisplayName("converging-path projections trigger TemporalConflictEvent within the 30 s lookahead window")
-		fun convergingPathProjections_triggersTemporalConflictEvent_withinThirtySecondLookaheadWindow() {
-			val ctx = createShuntingLoopContext()
-			extraContext = ctx
-
-			// Get the real TemporalConflictDetector from the production DI scope.
-			// Subscribe directly on the detector — env wiring for onBlockEvent runs in
-			// the init block. handleBlockEvent is called directly below, so ctx.run() is
-			// not needed and ctx.onTemporalConflictEvent (which buffers until run()) is
-			// intentionally bypassed in favour of registering directly on the detector.
-			val detector = ctx.getTemporalConflictDetector()
-			assertThat(detector.lookaheadWindowSeconds)
-				.isEqualTo(TemporalConflictDetector.DEFAULT_LOOKAHEAD_WINDOW_SECONDS)
-
-			val temporalConflicts = mutableListOf<TemporalConflictEvent>()
-			detector.onTemporalConflictEvent { e -> temporalConflicts.add(e) }
-
-			// Obtain a real DynamicTrackBlock from the network graph.
-			val sharedBlock = ctx.getGraph().values().first()
-
-			// Register projection provider: Train-Converge-A and Train-Converge-B both
-			// project onto sharedBlock with overlapping windows within the 30 s lookahead.
-			//   Train-Converge-A: enters at offset 10 s, exits at offset 25 s
-			//   Train-Converge-B: enters at offset 15 s, exits at offset 30 s
-			//   Overlap interval: [15, 25) → predictedConflictTime ≈ detectionTime + 15 s
-			detector.registerProjectionProvider { trainId ->
-				when (trainId) {
-					"Train-Converge-A" ->
-						listOf(ProjectedOccupancy(sharedBlock, enterOffsetSeconds = 10.0, exitOffsetSeconds = 25.0))
-					"Train-Converge-B" ->
-						listOf(ProjectedOccupancy(sharedBlock, enterOffsetSeconds = 15.0, exitOffsetSeconds = 30.0))
-					else -> null
-				}
-			}
-
-			// Drive the detector with synthetic BlockReserved events to make both
-			// trains active simultaneously and trigger the lookahead scan.
-			// handleBlockEvent is `internal` and accessible from within the same package.
-			detector.handleBlockEvent(BlockEvent.BlockReserved(sharedBlock, "Train-Converge-A", time = 0.0))
-			detector.handleBlockEvent(BlockEvent.BlockReserved(sharedBlock, "Train-Converge-B", time = 0.5))
-
-			// The scan runs after the second BlockReserved event (both trains now active).
-			assertThat(temporalConflicts).isNotEmpty()
-
-			val event = temporalConflicts.first()
-			// Both trains must be identified in the event.
-			val trainIds = setOf(event.trainId, event.otherTrainId)
-			assertThat(trainIds.contains("Train-Converge-A")).isTrue()
-			assertThat(trainIds.contains("Train-Converge-B")).isTrue()
-			assertThat(event.conflictBlock).isEqualTo(sharedBlock)
-
-			// Predicted conflict time must be within the 30-second lookahead window.
-			val timeUntilConflict = event.predictedConflictTime - event.detectionTime
-			assertThat(timeUntilConflict)
-				.isLessThanOrEqualTo(TemporalConflictDetector.DEFAULT_LOOKAHEAD_WINDOW_SECONDS)
-		}
-	}
-
-	// ─────────────────────────────────────────────────────────────────────────
 	// AC3: Hold-train and reroute resolutions are generated and correctly
 	//      ranked by ConflictResolutionRanker.
 	// ─────────────────────────────────────────────────────────────────────────
@@ -420,7 +339,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// AC5: Trains on separate non-conflicting paths produce no ConflictDetectedEvent
-	//      and no TemporalConflictEvent (false-positive validation).
+	//      (false-positive validation).
 	// ─────────────────────────────────────────────────────────────────────────
 
 	@Nested
@@ -447,9 +366,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 			extraContext = ctx
 
 			val conflictEvents = mutableListOf<ConflictDetectedEvent>()
-			val temporalConflicts = mutableListOf<TemporalConflictEvent>()
 			ctx.onConflictDetectedEvent { e -> conflictEvents.add(e) }
-			ctx.onTemporalConflictEvent { e -> temporalConflicts.add(e) }
 
 			val reservationService = ctx.getRoutingServices().getPathReservationService()
 			val inOuts = ctx.getInOuts()
@@ -485,52 +402,6 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 
 			// No conflict events must have been produced for sequential, non-overlapping reservations.
 			assertThat(conflictEvents).isEmpty()
-			// Also guard against temporal-detector false positives on the run-wired path.
-			assertThat(temporalConflicts).isEmpty()
-		}
-
-		/**
-		 * Validates that the [TemporalConflictDetector] produces no [TemporalConflictEvent]
-		 * when two trains have **non-overlapping** projected occupancies on the same block
-		 * (Train-NoOverlap-A exits before Train-NoOverlap-B enters).
-		 *
-		 * This is the false-positive guard for the temporal detector: back-to-back
-		 * occupancies that do not overlap must never fire the lookahead alarm.
-		 *
-		 * @since Issue #593 (Goal 9 SP7)
-		 */
-		@Test
-		@Timeout(value = 10, unit = TimeUnit.SECONDS)
-		@DisplayName("non-overlapping projected occupancies on the same block produce no TemporalConflictEvent")
-		fun nonOverlappingProjectedOccupancies_produceNoTemporalConflictEvent() {
-			val ctx = createShuntingLoopContext()
-			extraContext = ctx
-
-			val detector = ctx.getTemporalConflictDetector()
-			val block = ctx.getGraph().values().first()
-
-			// Subscribe directly on the detector (handleBlockEvent is called directly
-			// below, no ctx.run() is needed).
-			val temporalConflicts = mutableListOf<TemporalConflictEvent>()
-			detector.onTemporalConflictEvent { e -> temporalConflicts.add(e) }
-
-			// Non-overlapping: Train-NoOverlap-A exits at 10 s; Train-NoOverlap-B enters at 15 s.
-			detector.registerProjectionProvider { trainId ->
-				when (trainId) {
-					"Train-NoOverlap-A" ->
-						listOf(ProjectedOccupancy(block, enterOffsetSeconds = 0.0, exitOffsetSeconds = 10.0))
-					"Train-NoOverlap-B" ->
-						listOf(ProjectedOccupancy(block, enterOffsetSeconds = 15.0, exitOffsetSeconds = 25.0))
-					else -> null
-				}
-			}
-
-			// Drive both trains active to trigger the scan.
-			detector.handleBlockEvent(BlockEvent.BlockReserved(block, "Train-NoOverlap-A", time = 0.0))
-			detector.handleBlockEvent(BlockEvent.BlockReserved(block, "Train-NoOverlap-B", time = 0.5))
-
-			// No temporal conflict must have been emitted: occupancies are disjoint.
-			assertThat(temporalConflicts).isEmpty()
 		}
 	}
 }

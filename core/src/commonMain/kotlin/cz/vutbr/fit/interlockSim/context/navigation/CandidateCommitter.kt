@@ -376,9 +376,9 @@ internal class CandidateCommitter(
 		// owned block left the per-event reservation counters permanently
 		// off-balance: DefaultMetricsCollectionService.activeReservationCount
 		// never returned to zero (the train was never counted as completed) and
-		// DefaultCollisionDetectionService / TemporalConflictDetector over-counted
-		// it the same way (Issue #1081 review; extensions over owned blocks
-		// became dispatcher-reachable with Issue #1060).
+		// DefaultCollisionDetectionService over-counted it the same way
+		// (Issue #1081 review; extensions over owned blocks became
+		// dispatcher-reachable with Issue #1060).
 		val simTime = currentSimulationTime()
 		forwardBlocks.forEach { block ->
 			emitCustomGuarded(BlockEvent.BlockReserved(block, trainId, simTime))
