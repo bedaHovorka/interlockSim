@@ -43,10 +43,12 @@ class InOutWorker(
 		private val logger = KotlinLogging.logger {}
 
 		/**
-		 * Issue #1295: the wait before the next entry-path attempt while the queued train still holds a
-		 * stale reservation that makes its entry route non-contiguous — one control period. A plain
-		 * `hold`, not a `waitUntil`: some scenarios (MultiTrainLoop, ThreeTrainLoop) never expire
-		 * reservations, so a state condition could block forever.
+		 * Issue #1295: the wait before the next entry-path attempt after an entry route was refused as
+		 * non-contiguous with the queued train's footprint — whatever the train holds: a stale
+		 * reservation that makes its entry route non-contiguous, or nothing at all (Issue #1457's
+		 * no-reservation safety net) — one control period. A plain `hold`, not a `waitUntil`: some
+		 * scenarios (MultiTrainLoop, ThreeTrainLoop) never expire reservations, so a state condition
+		 * could block forever.
 		 *
 		 * The bounded blocked-path poll in [waitUntilPathFreeBoundedByStaleOrigin] steps by the same
 		 * period while a stale-origin episode runs (Issue #1295 review fix).
@@ -69,7 +71,8 @@ class InOutWorker(
 
 	/**
 	 * Issue #1295: how many stale-origin episodes this worker has recorded — one per queued train
-	 * whose entry route was refused as non-contiguous with a reservation it still held.
+	 * whose entry route was refused as non-contiguous with the footprint it holds, a stale reservation
+	 * of its own or nothing at all (Issue #1457's no-reservation safety net).
 	 */
 	var staleOriginDenials: Int = 0
 		private set
