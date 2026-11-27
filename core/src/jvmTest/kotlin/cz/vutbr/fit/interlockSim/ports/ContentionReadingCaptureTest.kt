@@ -7,14 +7,21 @@
  */
 package cz.vutbr.fit.interlockSim.ports
 
+import assertk.all
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.navigation.ContentionQuery
 import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -22,6 +29,8 @@ import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.util.Array2DMap
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
@@ -36,6 +45,9 @@ import java.util.concurrent.TimeUnit
  * [OpenContention]s; the readings must equal them field by field, the section named by the
  * [BlockOccupancyReading.sectionId] of the live block (the join key to [SimulationSnapshot.blocks]).
  * After `train1` releases and `train2` gets its route, the next capture carries no contention.
+ *
+ * A contention on a block that is not in the network graph has no section id; the capture fails
+ * loudly instead of publishing a blank one.
  */
 class ContentionReadingCaptureTest : KoinTestBase() {
 	private lateinit var context: DefaultSimulationContext
@@ -97,6 +109,37 @@ class ContentionReadingCaptureTest : KoinTestBase() {
 			.containsExactly("train1")
 		assertThat(published, name = "the published snapshot").isSameInstanceAs(waiting)
 		assertThat(afterRelease.contentions, name = "contentions after the grant").isEmpty()
+	}
+
+	@Test
+	fun `a contention on a block outside the network graph fails the capture loudly`() {
+		context = loadVyhybnaContext(warmUpDynamicWrappers = true).tracked()
+		val foreignBlock = mockk<DynamicTrackBlock>()
+		every { foreignBlock.name } returns "ghost"
+		val stubQuery =
+			object : ContentionQuery {
+				override fun openContentions(): List<OpenContention> =
+					listOf(OpenContention(trainId = "train2", block = foreignBlock, owner = "train1", since = REFUSED_AT))
+
+				override fun blockedSeconds(now: Double): Map<String, Double> = emptyMap()
+			}
+		val realRouting = context.getRoutingServices()
+		val env =
+			object : SimulationContext by context {
+				override fun getRoutingServices(): RoutingServices =
+					object : RoutingServices by realRouting {
+						override fun getContentionQuery(): ContentionQuery = stubQuery
+					}
+			}
+		val port = DefaultNetworkPerceptionPort(env = env, activeTrains = { emptyList() })
+
+		assertFailure { port.captureSnapshot() }
+			.isInstanceOf<IllegalStateException>()
+			.transform { it.message.orEmpty() }
+			.all {
+				contains("train2")
+				contains("ghost")
+			}
 	}
 
 	/** The grid id of [block] from its end points' grid locations, independent of the port's graph scan. */

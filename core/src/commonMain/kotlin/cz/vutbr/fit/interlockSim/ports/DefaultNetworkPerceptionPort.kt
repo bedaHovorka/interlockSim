@@ -375,12 +375,19 @@ class DefaultNetworkPerceptionPort(
 	 * `OpenContention.block` never leaves this method: it is mapped to its
 	 * [BlockOccupancyReading.sectionId] through [sectionIdByBlock], the same table the [blocks][SimulationSnapshot.blocks]
 	 * facet uses, so the two facets join by section id.
+	 *
+	 * @throws IllegalStateException if a contention names a block outside the network graph: it has
+	 *   no section id, and a blank one would silently break the join.
 	 */
 	private fun allContentions(): List<ContentionReading> =
 		env.getRoutingServices().getContentionQuery().openContentions().map { contention ->
 			ContentionReading(
 				waitingTrainId = contention.trainId,
-				sectionId = sectionIdByBlock[contention.block].orEmpty(),
+				sectionId =
+					checkNotNull(sectionIdByBlock[contention.block]) {
+						"Open contention of train ${contention.trainId} is on block " +
+							"${blockId(contention.block)}, which is not in this network's graph and has no section id"
+					},
 				ownerTrainId = contention.owner,
 				sinceSimTime = contention.since
 			)
