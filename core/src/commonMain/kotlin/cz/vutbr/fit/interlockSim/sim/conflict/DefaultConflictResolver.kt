@@ -41,17 +41,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * The combined candidate list is sorted by [ConflictResolutionRanker] before it is
  * returned, from least to most operationally disruptive (see [generateResolutions]).
  *
- * ### Preference-aware ranking
- *
- * When a [StrategyPreferenceStore] is supplied (via the constructor or
- * [forEnvironment]), [generateResolutions] delegates to the preference-weighted
- * [ConflictResolutionRanker.rank] overload, using the contested block's name as the
- * conflict-type key. Strategies the dispatcher has chosen repeatedly for that block
- * then accumulate a score boost and rise in the ranking over time — closing the
- * Goal 9 SC4 learning loop end-to-end. When no store is supplied the base
- * (non-preference) [ConflictResolutionRanker.rank] overload is used, preserving the
- * historical behaviour for tests and headless callers.
- *
  * ### Context coupling
  *
  * [routeFinder], [inOuts], and [networkState] **must all come from the same
@@ -77,14 +66,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *                             networks.
  * @param maxRerouteCandidates Maximum Reroute candidates returned per conflict (≥ 1).
  *                             The cheapest candidates are kept.
- * @param preferenceStore      Optional [StrategyPreferenceStore] used to re-weight
- *                             candidates via the preference-aware
- *                             [ConflictResolutionRanker.rank] overload. `null` (default)
- *                             selects the base non-preference ranking.
  *
  * @see ConflictResolver
  * @see ConflictResolution
- * @since Issue #585 (Goal 9 SP3); preference-aware ranking since Issue #592 (Goal 9 SC4 wiring)
+ * @since Issue #585 (Goal 9 SP3); the preference-aware ranking of Issue #592 was removed by Issue #1454
  */
 class DefaultConflictResolver(
 	private val routeFinder: RouteFinder,
@@ -93,8 +78,7 @@ class DefaultConflictResolver(
 	private val holdDurationSeconds: Double = DEFAULT_HOLD_DURATION_SECONDS,
 	private val speedReductionFactor: Double = DEFAULT_SPEED_REDUCTION_FACTOR,
 	private val maxRoutesPerPair: Int = DEFAULT_MAX_ROUTES_PER_PAIR,
-	private val maxRerouteCandidates: Int = DEFAULT_MAX_REROUTE_CANDIDATES,
-	private val preferenceStore: StrategyPreferenceStore? = null
+	private val maxRerouteCandidates: Int = DEFAULT_MAX_REROUTE_CANDIDATES
 ) : ConflictResolver {
 	init {
 		require(holdDurationSeconds > 0.0) {
@@ -116,22 +100,11 @@ class DefaultConflictResolver(
 		candidates.addAll(generateRerouteCandidates(conflict))
 		candidates.add(generateSpeedAdjust(conflict))
 
-		// Use the preference-aware rank overload when a StrategyPreferenceStore is wired
-		// (Goal 9 SC4 learning loop). The contested block's name is the conflict-type key:
-		// strategies chosen repeatedly for this block accumulate a score boost and rise in
-		// the ranking over time. Falls back to the base non-preference ranking otherwise.
-		val conflictTypeKey = conflict.block.name ?: DEFAULT_CONFLICT_TYPE_KEY
-		val ranked =
-			if (preferenceStore != null) {
-				ConflictResolutionRanker.rank(candidates, preferenceStore, conflictTypeKey)
-			} else {
-				ConflictResolutionRanker.rank(candidates)
-			}
+		val ranked = ConflictResolutionRanker.rank(candidates)
 
 		logger.debug {
 			"generateResolutions: conflict=(${conflict.trainId} vs ${conflict.conflictingTrainId}) " +
-				"block=${conflict.block} → ${ranked.size} candidates (ranked least → most disruptive)" +
-				if (preferenceStore != null) " [preference-aware, key=$conflictTypeKey]" else ""
+				"block=${conflict.block} → ${ranked.size} candidates (ranked least → most disruptive)"
 		}
 		return ranked
 	}
@@ -267,30 +240,19 @@ class DefaultConflictResolver(
 		const val DEFAULT_MAX_REROUTE_CANDIDATES: Int = 10
 
 		/**
-		 * Conflict-type key used when [ConflictDetectedEvent.block] has no name
-		 * (a degenerate or test-supplied block). Keeps preference learning grouped
-		 * under a stable, recognisable key instead of the literal `"null"`.
-		 */
-		const val DEFAULT_CONFLICT_TYPE_KEY: String = "unknown-block"
-
-		/**
 		 * Create a resolver wired to [env], the same [SimulationEnvironment] that emits
 		 * the [ConflictDetectedEvent]s this resolver will process.
 		 *
 		 * This is the recommended construction path: it guarantees the same-environment
 		 * invariant described in the class documentation ("Context coupling") and hides
 		 * the `DynamicInOut → InOut` unwrapping that the primary constructor requires.
-		 *
-		 * @param preferenceStore  Optional [StrategyPreferenceStore] enabling preference-aware
-		 *                          ranking (Goal 9 SC4 learning loop). `null` by default.
 		 */
 		fun forEnvironment(
 			env: SimulationEnvironment,
 			holdDurationSeconds: Double = DEFAULT_HOLD_DURATION_SECONDS,
 			speedReductionFactor: Double = DEFAULT_SPEED_REDUCTION_FACTOR,
 			maxRoutesPerPair: Int = DEFAULT_MAX_ROUTES_PER_PAIR,
-			maxRerouteCandidates: Int = DEFAULT_MAX_REROUTE_CANDIDATES,
-			preferenceStore: StrategyPreferenceStore? = null
+			maxRerouteCandidates: Int = DEFAULT_MAX_REROUTE_CANDIDATES
 		): DefaultConflictResolver =
 			DefaultConflictResolver(
 				routeFinder = env.getRouteFinder(),
@@ -299,8 +261,7 @@ class DefaultConflictResolver(
 				holdDurationSeconds = holdDurationSeconds,
 				speedReductionFactor = speedReductionFactor,
 				maxRoutesPerPair = maxRoutesPerPair,
-				maxRerouteCandidates = maxRerouteCandidates,
-				preferenceStore = preferenceStore
+				maxRerouteCandidates = maxRerouteCandidates
 			)
 	}
 }

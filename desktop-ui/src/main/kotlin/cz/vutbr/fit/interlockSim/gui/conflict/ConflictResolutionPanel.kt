@@ -35,11 +35,12 @@ import javax.swing.SwingUtilities
  * ranked [List]`<`[ConflictResolution]`>` and calls [showResolutions] to populate
  * this panel. The dispatcher:
  * 1. Reviews the ranked candidates (least → most disruptive).
- * 2. Selects a candidate in the list.
- * 3. Clicks **Apply** to invoke [onResolutionApplied] with the active conflict and
- *    the selected resolution, so the caller can record the operator's choice and
- *    feed it back into preference learning (Goal 9 SC3 + SC4).
- * 4. Clicks **Dismiss** to discard the conflict without applying any resolution.
+ * 2. Selects a candidate in the list (the tooltip shows the affected trains).
+ * 3. Clicks **Dismiss** to discard the conflict.
+ *
+ * The suggestions are advisory. **Apply** is disabled, with [APPLY_DISABLED_TOOLTIP], until
+ * Goal 9B SP9 gives it its real meaning: until Issue #1454 it only fed the operator's choice to
+ * the in-run preference learning of Goal 9 SC3 + SC4, which changed nothing in the simulation.
  *
  * ## Layout
  *
@@ -52,7 +53,7 @@ import javax.swing.SwingUtilities
  * │  2. SPEED_ADJUST — Reduce Train-A speed 50%  │
  * │  3. REROUTE  — Reroute Train-A via 3-segment │
  * ├──────────────────────────────────────────────┤
- * │  [Apply]                                     │
+ * │  [Apply] (disabled until Goal 9B SP9)        │
  * └──────────────────────────────────────────────┘
  * ```
  *
@@ -70,24 +71,9 @@ class ConflictResolutionPanel : JPanel() {
 
 	private val resolutionList = JList(listModel)
 	private val conflictLabel = JLabel(" ")
-	private val applyButton = JButton("Apply")
 
-	/**
-	 * The conflict currently presented to the dispatcher, or `null` when the panel is
-	 * empty. Captured in [showResolutions] and passed to [onResolutionApplied] so the
-	 * caller has the full `(event, resolution)` pair needed to record the operator's
-	 * choice in the preference stores.
-	 */
-	private var currentConflict: ConflictDetectedEvent? = null
-
-	/**
-	 * Invoked (on EDT) when the dispatcher clicks **Apply** with a resolution selected.
-	 *
-	 * Receives the active [ConflictDetectedEvent] and the chosen [ConflictResolution] so
-	 * the caller can record the operator's selection (Goal 9 SC3) and feed it into
-	 * preference learning (Goal 9 SC4). Set to `null` to disable the apply action.
-	 */
-	var onResolutionApplied: ((conflict: ConflictDetectedEvent, resolution: ConflictResolution) -> Unit)? = null
+	/** The **Apply** button: disabled, with [APPLY_DISABLED_TOOLTIP], until Goal 9B SP9. */
+	internal val applyButton = JButton("Apply")
 
 	/**
 	 * Invoked (on EDT) when the dispatcher clicks **Dismiss** or when [clearResolutions]
@@ -118,22 +104,12 @@ class ConflictResolutionPanel : JPanel() {
 		// Resolution list
 		resolutionList.selectionMode = ListSelectionModel.SINGLE_SELECTION
 		resolutionList.cellRenderer = ResolutionCellRenderer()
-		resolutionList.addListSelectionListener { e ->
-			if (!e.valueIsAdjusting) {
-				applyButton.isEnabled = resolutionList.selectedValue != null
-			}
-		}
 		val scrollPane = JScrollPane(resolutionList)
 		add(scrollPane, BorderLayout.CENTER)
 
-		// Footer: Apply button
+		// Footer: Apply button, disabled until Goal 9B SP9 (Issue #1454)
 		applyButton.isEnabled = false
-		applyButton.addActionListener {
-			val selected = resolutionList.selectedValue ?: return@addActionListener
-			val conflict = currentConflict ?: return@addActionListener
-			onResolutionApplied?.invoke(conflict, selected)
-			clearResolutions()
-		}
+		applyButton.toolTipText = APPLY_DISABLED_TOOLTIP
 		val footerPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
 		footerPanel.isOpaque = false
 		footerPanel.add(applyButton)
@@ -157,16 +133,12 @@ class ConflictResolutionPanel : JPanel() {
 				"${conflict.trainId} vs ${conflict.conflictingTrainId}  " +
 				"on ${conflict.block.name}"
 		if (SwingUtilities.isEventDispatchThread()) {
-			currentConflict = conflict
 			conflictLabel.text = labelText
-			applyButton.isEnabled = false
 			listModel.setResolutions(resolutions)
 			isVisible = true
 		} else {
 			SwingUtilities.invokeLater {
-				currentConflict = conflict
 				conflictLabel.text = labelText
-				applyButton.isEnabled = false
 				listModel.setResolutions(resolutions)
 				isVisible = true
 			}
@@ -180,17 +152,13 @@ class ConflictResolutionPanel : JPanel() {
 	 */
 	fun clearResolutions() {
 		if (SwingUtilities.isEventDispatchThread()) {
-			currentConflict = null
 			conflictLabel.text = " "
-			applyButton.isEnabled = false
 			listModel.clearResolutions()
 			isVisible = false
 			onDismiss?.invoke()
 		} else {
 			SwingUtilities.invokeLater {
-				currentConflict = null
 				conflictLabel.text = " "
-				applyButton.isEnabled = false
 				listModel.clearResolutions()
 				isVisible = false
 				onDismiss?.invoke()
@@ -247,5 +215,9 @@ class ConflictResolutionPanel : JPanel() {
 
 		/** Foreground color for conflict-label text. */
 		val CONFLICT_COLOR: Color = GuiConstants.CONFLICT_LABEL_COLOR
+
+		/** Tooltip of the disabled **Apply** button (Issue #1454). */
+		const val APPLY_DISABLED_TOOLTIP: String =
+			"Suggestions are advisory; carrying them out arrives with Goal 9B SP9"
 	}
 }

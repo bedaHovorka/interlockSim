@@ -233,61 +233,85 @@ class ConflictResolutionPanelTest {
 		assertThat(panel.listModel.hasNoResolutions).isTrue()
 	}
 
-	// ── onResolutionApplied (Goal 9 SC3 wiring) ──────────────────────────────
+	// ── Apply is disabled until Goal 9B SP9 (Issue #1454) ────────────────────
+	//
+	// Apply used to hand the operator's choice to the in-run preference learning of Goal 9
+	// SC3/SC4, which changed nothing in the simulation. #1454 removed that learning, so Apply
+	// stays disabled, with a tooltip, until SP9 (b) gives it its real meaning. The three former
+	// Apply cases (callback receives conflict and resolution, null callback, no selection) are
+	// converted below to the disabled button.
 
 	@Test
-	@DisplayName("Apply invokes onResolutionApplied with the active conflict and the selected resolution")
-	fun applyInvokesOnResolutionAppliedWithConflictAndResolution() {
-		var appliedConflict: ConflictDetectedEvent? = null
-		var appliedResolution: ConflictResolution? = null
-		panel.onResolutionApplied = { c, r ->
-			appliedConflict = c
-			appliedResolution = r
+	@DisplayName("Apply is disabled with the SP9 tooltip while suggestions are shown")
+	fun applyIsDisabledWithTooltipWhileSuggestionsAreShown() {
+		SwingUtilities.invokeAndWait {
+			panel.showResolutions(conflict, listOf(holdResolution, speedResolution))
 		}
+		flushEDT()
 
+		assertThat(panel.isVisible).isTrue()
+		assertThat(panel.listModel.size).isEqualTo(2)
+		assertThat(panel.applyButton.isEnabled).isFalse()
+		assertThat(panel.applyButton.toolTipText).isEqualTo(ConflictResolutionPanel.APPLY_DISABLED_TOOLTIP)
+		assertThat(ConflictResolutionPanel.APPLY_DISABLED_TOOLTIP)
+			.isEqualTo("Suggestions are advisory; carrying them out arrives with Goal 9B SP9")
+	}
+
+	@Test
+	@DisplayName("selecting a suggestion leaves Apply disabled")
+	fun selectingASuggestionLeavesApplyDisabled() {
 		SwingUtilities.invokeAndWait {
 			panel.showResolutions(conflict, listOf(holdResolution, speedResolution))
 			selectFirstResolution(panel)
-			clickApply(panel)
 		}
+		flushEDT()
 
-		// The callback must receive BOTH the active conflict (so the caller can record
-		// the operator's choice in the preference stores) and the selected resolution.
-		assertThat(appliedConflict).isEqualTo(conflict)
-		assertThat(appliedResolution).isEqualTo(holdResolution)
-		// Apply also clears the panel.
-		assertThat(panel.isVisible).isFalse()
-		assertThat(panel.listModel.hasNoResolutions).isTrue()
+		assertThat(panel.applyButton.isEnabled).isFalse()
 	}
 
 	@Test
-	@DisplayName("Apply with a null onResolutionApplied callback does not throw")
-	fun applyWithNullCallbackDoesNotThrow() {
-		panel.onResolutionApplied = null
-
+	@DisplayName("clicking the disabled Apply with a selection keeps the suggestions on screen")
+	fun clickingDisabledApplyWithSelectionKeepsSuggestions() {
 		SwingUtilities.invokeAndWait {
-			panel.showResolutions(conflict, listOf(holdResolution))
+			panel.showResolutions(conflict, listOf(holdResolution, speedResolution))
 			selectFirstResolution(panel)
-			clickApply(panel)
+			panel.applyButton.doClick()
 		}
+		flushEDT()
 
-		// Panel is cleared regardless; no exception thrown.
-		assertThat(panel.isVisible).isFalse()
+		// A disabled button fires no action: the panel is not cleared.
+		assertThat(panel.isVisible).isTrue()
+		assertThat(panel.listModel.size).isEqualTo(2)
 	}
 
 	@Test
-	@DisplayName("Apply with no selection does not invoke onResolutionApplied")
-	fun applyWithNoSelectionDoesNotInvokeCallback() {
-		var invoked = false
-		panel.onResolutionApplied = { _, _ -> invoked = true }
-
+	@DisplayName("clicking the disabled Apply with no selection keeps the suggestions on screen")
+	fun clickingDisabledApplyWithNoSelectionKeepsSuggestions() {
 		SwingUtilities.invokeAndWait {
 			panel.showResolutions(conflict, listOf(holdResolution, speedResolution))
 			// Deliberately do NOT select anything.
-			clickApply(panel)
+			panel.applyButton.doClick()
 		}
+		flushEDT()
 
-		assertThat(invoked).isFalse()
+		assertThat(panel.isVisible).isTrue()
+		assertThat(panel.applyButton.isEnabled).isFalse()
+	}
+
+	@Test
+	@DisplayName("Apply stays disabled after the suggestions are cleared and shown again")
+	fun applyStaysDisabledAcrossClearAndShow() {
+		SwingUtilities.invokeAndWait {
+			panel.showResolutions(conflict, listOf(holdResolution))
+			selectFirstResolution(panel)
+			panel.clearResolutions()
+			panel.showResolutions(conflict, listOf(speedResolution))
+			selectFirstResolution(panel)
+		}
+		flushEDT()
+
+		assertThat(panel.applyButton.isEnabled).isFalse()
+		assertThat(panel.applyButton.toolTipText).isEqualTo(ConflictResolutionPanel.APPLY_DISABLED_TOOLTIP)
 	}
 
 	/** Drive the private [javax.swing.JList] selection from a test. */
@@ -295,12 +319,5 @@ class ConflictResolutionPanelTest {
 		val listField = ConflictResolutionPanel::class.java.getDeclaredField("resolutionList")
 		listField.isAccessible = true
 		(listField.get(panel) as javax.swing.JList<*>).setSelectedIndex(0)
-	}
-
-	/** Drive the private Apply [javax.swing.JButton] click from a test. */
-	private fun clickApply(panel: ConflictResolutionPanel) {
-		val applyField = ConflictResolutionPanel::class.java.getDeclaredField("applyButton")
-		applyField.isAccessible = true
-		(applyField.get(panel) as javax.swing.JButton).doClick()
 	}
 }

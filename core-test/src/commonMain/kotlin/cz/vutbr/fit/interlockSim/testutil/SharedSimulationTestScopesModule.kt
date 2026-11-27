@@ -22,9 +22,6 @@ import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
@@ -142,15 +139,8 @@ val sharedSimulationTestScopesModule: Module =
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultConflictResolver.forEnvironment(
-					context,
-					preferenceStore = get<StrategyPreferenceStore>()
-				)
+				DefaultConflictResolver.forEnvironment(context)
 			}
-
-			scoped<StrategyPreferenceStore> { StrategyPreferenceStore() }
-
-			scoped<DispatcherPreferenceStore> { DefaultDispatcherPreferenceStore() }
 
 			scoped<MetricsCollectionService> {
 				val context =
