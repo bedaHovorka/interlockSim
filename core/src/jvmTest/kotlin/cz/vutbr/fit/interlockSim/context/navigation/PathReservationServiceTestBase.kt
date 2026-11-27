@@ -249,10 +249,11 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	 * A [TopologyNavigator] that delegates everything to [real] and records the enumerations the
 	 * reservation machinery runs through it (Issue #1385) — one double for the three suites whose
 	 * private counting doubles it replaces. Every `findAllSwitchConstrainedPaths` call is noted
-	 * three ways, one per consumer: as a probe count ([evaluations], one per availability
-	 * evaluation, resettable to recount from the next call), as a per-pair call count ([calls]),
-	 * and as the full record with the handed-back answer ([switchConstrainedAnswers],
-	 * [RecordedSearch]). A switch-blind [findAllTopologicalPaths] call is counted alone in
+	 * once, as the full record with the handed-back answer ([switchConstrainedAnswers],
+	 * [RecordedSearch]); the probe count ([evaluations], one per availability evaluation) and the
+	 * per-pair call count ([calls]) are read-only views computed from that record, so they cannot
+	 * disagree. [reset] clears the record and [topologicalCalls] together to recount from the
+	 * next call (Issue #1405). A switch-blind [findAllTopologicalPaths] call is counted alone in
 	 * [topologicalCalls], the seam the public `reservePath` must never run since Issue #1385.
 	 *
 	 * On top of recording, a target in [noRouteTo] is always answered with no candidates and a
@@ -267,15 +268,27 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 	) : TopologyNavigator by real {
 		/** The switch-blind [findAllTopologicalPaths] calls, counted alone. */
 		var topologicalCalls = 0
+			private set
 
-		/** The switch-constrained searches, one count per call (the availability-probe counter). */
-		var evaluations = 0
+		/** The switch-constrained searches with their answers, in call order: the only stored record. */
+		val switchConstrainedAnswers: List<RecordedSearch>
+			get() = record
 
-		/** The switch-constrained searches, per `(start, target)` pair; a consumer clears it to recount. */
-		val calls = mutableMapOf<Pair<PathSeparator, PathSeparator>, Int>()
+		private val record = mutableListOf<RecordedSearch>()
 
-		/** The switch-constrained searches with their answers, in call order. */
-		val switchConstrainedAnswers = mutableListOf<RecordedSearch>()
+		/** The switch-constrained searches, one count per call (the availability-probe counter); derived. */
+		val evaluations: Int
+			get() = record.size
+
+		/** The switch-constrained searches, per `(start, target)` pair; derived. */
+		val calls: Map<Pair<PathSeparator, PathSeparator>, Int>
+			get() = record.groupingBy { it.start to it.target }.eachCount()
+
+		/** Forget every recorded search and the topological count, so the next call is counted from zero. */
+		fun reset() {
+			record.clear()
+			topologicalCalls = 0
+		}
 
 		override fun findAllTopologicalPaths(
 			start: PathSeparator,
@@ -297,9 +310,7 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 					in stubbedSwitchConstrained -> stubbedSwitchConstrained.getValue(target)
 					else -> real.findAllSwitchConstrainedPaths(start, target, maxDepth)
 				}
-			evaluations++
-			calls.merge(start to target, 1, Int::plus)
-			switchConstrainedAnswers += RecordedSearch(start, target, answer)
+			record += RecordedSearch(start, target, answer)
 			return answer
 		}
 	}
