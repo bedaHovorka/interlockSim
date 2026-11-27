@@ -30,11 +30,14 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaCycleReplies
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.testutil.semaphoreCandidates
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -388,6 +391,13 @@ class ThinkingTruncatedCycleTest {
  */
 @DisplayName("Cut-cycle rules of KoogAgentPlanAdapter (Issue #1342)")
 class ThinkingTruncatedAdapterRulesTest {
+	private companion object {
+		/** The offered-hop train of the [offeringObservation] shape. */
+		const val OFFERED_TRAIN = "Train #4"
+		const val OFFERED_ORIGIN = "zB"
+		const val OFFERED_TARGET = "doA1"
+	}
+
 	private val observation =
 		DispatchObservation(
 			snapshot = SimulationSnapshot.EMPTY.copy(simTime = 5.0),
@@ -395,6 +405,37 @@ class ThinkingTruncatedAdapterRulesTest {
 			innerBlockInputs = emptyList(),
 			outerBlockInputs = emptyList()
 		)
+
+	/**
+	 * One active train whose cycle message offers one NEXT SECTION hop (`zB -> doA1`), in the same
+	 * shape the offer-count test builds — the hop the skipped-offer accounting exists for.
+	 */
+	private fun offeringObservation(simTime: Double): DispatchObservation =
+		DispatchObservation(
+			snapshot =
+				SimulationSnapshot.EMPTY.copy(
+					simTime = simTime,
+					trainPositions = listOf(trainPosition(OFFERED_TRAIN, velocity = 5.0))
+				),
+			unapprovedTrains = emptyList(),
+			innerBlockInputs = emptyList(),
+			outerBlockInputs =
+				listOf(
+					BlockInputObservation(
+						blockId = "kB",
+						towardSemaphoreName = OFFERED_ORIGIN,
+						state = TrackFacility.State.OCCUPIED,
+						ownerTrainId = OFFERED_TRAIN,
+						isApproachingThisInput = true,
+						pathSetUpTowardThisInput = false,
+						pathAlreadyExtendedBeyond = false,
+						candidateTargets = semaphoreCandidates(OFFERED_TARGET)
+					)
+				)
+		)
+
+	private fun offeredCount(): NextSectionOfferCount =
+		NextSectionOfferCount(offered = 1, skippedTrainIds = setOf(OFFERED_TRAIN), skippedStandingAtSignal = 0)
 
 	/** Marks the cycle's replies cut, as the observer would; returns whether the adapter installed them. */
 	private suspend fun markCut(): Boolean {
@@ -445,6 +486,59 @@ class ThinkingTruncatedAdapterRulesTest {
 		verify(exactly = 0) { fallback.decide(any()) }
 		assertThat(ticks.map { it.outcome to it.timeoutNoOpCause })
 			.containsExactly(TickOutcome.TIMEOUT_NOOP to TimeoutNoOpCause.THINKING_TRUNCATED)
+	}
+
+	/**
+	 * The cut ending skips the rule-based fallback, so it counts like its three sibling endings
+	 * (Copilot review finding, 2026-11-27): the cycle's offered NEXT SECTION hop must reach
+	 * [TickRecord.nextSectionOffers], and a train skipped across consecutive cut cycles must extend
+	 * its streak — not have every open streak cleared on the false premise that the fallback ran.
+	 * Before the count was passed, an all-cut run published the whole offer group as not-measured.
+	 */
+	@Test
+	fun `consecutive cut cycles count and extend the skipped-offer streak of an offered hop`() {
+		val koogAgent = mockk<KoogDispatchAgent>()
+		coEvery { koogAgent.decideAsync(any()) } coAnswers {
+			markCut()
+			emptyList()
+		}
+		val fallback = mockk<Dispatcher>()
+		val adapter = adapter(koogAgent, fallback)
+		val recorder =
+			DefaultDispatcherRunRecorder(
+				runId = "consecutive-cut-offers",
+				arm = DispatcherArm.LLM_TOOL_CALLING,
+				params =
+					RunParameters(
+						tickPeriodMs = 0L,
+						historyN = 0,
+						temperature = 0.0,
+						maxActionsPerTick = 3,
+						model = "qwen2.5:7b-instruct",
+						seed = null
+					)
+			)
+		val ticks = mutableListOf<TickRecord>()
+		adapter.addTickListener { record ->
+			ticks.add(record)
+			recorder.onTick(record)
+		}
+
+		runBlocking {
+			adapter.plan(offeringObservation(simTime = 10.0))
+			adapter.plan(offeringObservation(simTime = 12.0))
+		}
+
+		assertThat(ticks.map { it.nextSectionOffers }).containsExactly(offeredCount(), offeredCount())
+		val snapshot = recorder.snapshot()
+		assertThat(snapshot.skippedNextSectionOffers, "both cut cycles skipped the same offered hop")
+			.isEqualTo(2L)
+		assertThat(snapshot.offeredNextSectionHops).isEqualTo(2L)
+		assertThat(
+			snapshot.longestSkippedOfferStreakCycles,
+			"the streak extends across the consecutive cut cycles"
+		).isEqualTo(2L)
+		assertThat(snapshot.longestSkippedOfferStreakSimSeconds).isEqualTo(2.0)
 	}
 
 	@Test

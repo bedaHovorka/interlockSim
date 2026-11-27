@@ -747,9 +747,16 @@ class KoogAgentPlanAdapter(
 	 *
 	 * Records a circuit-breaker failure (the cut spent the cycle's budget for nothing). A cycle that
 	 * already emitted keeps its emissions and is reported through [outcomeFromEmissions], exactly as
-	 * the partial-emission arm of [recordFailureAndFallback]. Otherwise the tick is
+	 * the partial-emission arm of [recordFailureAndFallback]; after the emission seal those
+	 * emissions always came from complete replies of the cycle. Otherwise the tick is
 	 * [TickOutcome.TIMEOUT_NOOP] with [TimeoutNoOpCause.THINKING_TRUNCATED], and nothing acts: no
 	 * retry, no fallback, an empty decision list.
+	 *
+	 * Both arms are fallback-skipping endings, so both count the cycle's NEXT SECTION offers with
+	 * [countOffersFrom], exactly as [reportActedCycle] and the partial-emission arm do (Issue
+	 * #1302): the cut ending leaves a queued train's offered extension unrequested, the same way
+	 * the emissions arms do. Counts nothing only when the count was never attempted or threw — see
+	 * [countNextSectionOffers].
 	 */
 	private fun reportCutCycle(
 		attempt: InferenceAttempt,
@@ -773,6 +780,7 @@ class KoogAgentPlanAdapter(
 			TickOutcome.TIMEOUT_NOOP,
 			simTime,
 			attempt.latencyMs,
+			countOffersFrom = observation,
 			timeoutNoOpCause = TimeoutNoOpCause.THINKING_TRUNCATED
 		)
 		return emptyList()
@@ -1030,13 +1038,14 @@ class KoogAgentPlanAdapter(
 	 * @param silentNonIdleCycleIndex Forwarded to [TickRecord.silentNonIdleCycleIndex]: set only by
 	 *   [runFallback] for a silent cycle on a non-idle station (Issue #1365).
 	 * @param countOffersFrom The observation whose NEXT SECTION offers this ending skipped the
-	 *   rule-based fallback over — the three fallback-skipping endings ([reportActedCycle], the
-	 *   partial-emission arm of [recordFailureAndFallback], [reportAllMovingSilent]) pass it, and
-	 *   this method counts [TickRecord.nextSectionOffers] from it internally (Issue #1302, see
-	 *   [countNextSectionOffers]). Deliberately not part of [cycleHistory]: the history feeds
-	 *   later prompts, and this count is reporting only. `null` — every fallback ending — counts
-	 *   nothing and reports a plain not-measured `null` count, exactly the pre-#1302 fallback
-	 *   endings; the parameter carries the signal, so behaviour is never keyed on [outcome].
+	 *   rule-based fallback over — the four fallback-skipping endings ([reportActedCycle], the
+	 *   partial-emission arm of [recordFailureAndFallback], both arms of [reportCutCycle],
+	 *   [reportAllMovingSilent]) pass it, and this method counts [TickRecord.nextSectionOffers] from
+	 *   it internally (Issue #1302, see [countNextSectionOffers]). Deliberately not part of
+	 *   [cycleHistory]: the history feeds later prompts, and this count is reporting only. `null` —
+	 *   the endings where the fallback ran on the whole cycle — counts nothing and reports a plain
+	 *   not-measured `null` count, exactly the pre-#1302 fallback endings; the parameter carries the
+	 *   signal, so behaviour is never keyed on [outcome].
 	 * @param timeoutNoOpCause Forwarded to [TickRecord.timeoutNoOpCause]; set exactly when [outcome]
 	 *   is [TickOutcome.TIMEOUT_NOOP] — today only by [reportCutCycle] (Issue #1342).
 	 */
@@ -1066,14 +1075,14 @@ class KoogAgentPlanAdapter(
 	/**
 	 * Counts the NEXT SECTION hops [observation]'s cycle message offered and the LLM left without an
 	 * accepted `request_route` (Issue #1302, step 1 "record" of #992 F8) — see
-	 * [NextSectionOfferCount] for what "accepted" means. A `null` [observation] — every fallback
-	 * ending, where the fallback ran on the whole cycle so no offer is left behind by the guard —
+	 * [NextSectionOfferCount] for what "accepted" means. A `null` [observation] — a fallback ending,
+	 * where the fallback ran on the whole cycle so no offer is left behind by the guard —
 	 * yields the plain not-measured `null to false` pair without invoking the counter.
 	 *
-	 * Called only by [reportTick], for exactly the three cycle endings that skip the rule-based
-	 * fallback: [reportActedCycle], the partial-emission arm of [recordFailureAndFallback], and
-	 * [reportAllMovingSilent]. The count is reporting only: it never feeds a decision, the
-	 * emissions or [cycleHistory].
+	 * Called only by [reportTick], for exactly the four cycle endings that skip the rule-based
+	 * fallback: [reportActedCycle], the partial-emission arm of [recordFailureAndFallback], both
+	 * arms of [reportCutCycle], and [reportAllMovingSilent]. The count is reporting only: it never
+	 * feeds a decision, the emissions or [cycleHistory].
 	 *
 	 * Two endings worth knowing:
 	 * - [TickOutcome.LLM_SILENT_ALL_MOVING] is always (0, 0) by construction: the branch is taken only
