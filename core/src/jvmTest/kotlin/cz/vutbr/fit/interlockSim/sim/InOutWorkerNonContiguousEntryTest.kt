@@ -16,9 +16,11 @@ import assertk.assertions.each
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
+import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import ch.qos.logback.classic.Level
@@ -341,6 +343,78 @@ class InOutWorkerNonContiguousEntryTest : KoinTestBase() {
 		assertThat(record.refusedEntriesAtRunEnd.single().since).isEqualTo(requireNotNull(firstRefusalAt))
 		assertThat(record.summaryLine()).contains("$trainId at ${entries.getValue(trainId)}")
 		assertThat(record.summaryLine()).contains(EntryRefusalKind.NON_CONTIGUOUS.text)
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("a regrant inside the retry hold keeps the recovered train out of the run record's refused entries")
+	fun regrantInsideTheHoldKeepsTheRecoveredTrainOutOfRunRecordRefusedEntries() {
+		val context = loadCervenyUjezd { env, inOut, real -> InOutWorker(env, inOut, pathReservationService = real) }
+		val decorated =
+			NavigationDecoratingContext(context, context.getRoutingServices().getTrainNavigationService()) {
+				errorStops += Process.time() to it
+			}
+		val navigation = context.getRoutingServices().getTrainNavigationService()
+		val reservations = context.getRoutingServices().getPathReservationService()
+		val entries = recordEntryInOuts(context)
+		val exits = recordExits(context)
+
+		var delayedTrainId: String? = null
+		var entryWorker: InOutWorker? = null
+		var refusalSeen: RefusedEntry? = null
+		var regrantAt: Double? = null
+		var authoritySeen = false
+
+		runShuntingLoop(context, END_TIME, env = decorated) { loop ->
+			val wired = requireNotNull(loop.controlStepListener) { "runShuntingLoop did not install a listener" }
+			loop.controlStepListener =
+				ControlStepListener {
+					if (delayedTrainId == null) {
+						seedWrongOriginRoute(loop, context, reservations, entries)?.let { (id, worker) ->
+							delayedTrainId = id
+							entryWorker = worker
+						}
+					}
+					wired.onControlStep()
+					if (delayedTrainId == null) return@ControlStepListener
+					val trainId = requireNotNull(delayedTrainId)
+					val worker = requireNotNull(entryWorker)
+					if (regrantAt != null) return@ControlStepListener
+					if (worker.staleOriginDenials == 0) return@ControlStepListener
+					// The worker sits in its retry hold at this instant: the episode is armed, the train
+					// still heads the queue and holds no entry authority from this InOut yet.
+					refusalSeen = worker.refusedEntry
+					// Production-shaped dispatcher replace in one control step: cancel the stale route
+					// and grant a valid entry route from the train's own InOut, then cut the run off
+					// inside the hold, before the worker's next pass.
+					reservations.releasePath(trainId)
+					val entry = context.inOutNamed(entries.getValue(trainId))
+					assertReservationSuccess(reservations.reservePathToAnyNextSemaphore(trainId, entry))
+					authoritySeen = navigation.isPathReservedForTrain(trainId, entry)
+					regrantAt = Process.time()
+					context.stop()
+				}
+		}
+
+		assertThat(errorStops, "no errorStop may end the run").isEmpty()
+		assertThat(fatalLines(), "no FATAL SimulationException may be logged").isEmpty()
+		val trainId = requireNotNull(delayedTrainId) { "a queued train must have been seeded" }
+		val refusal = requireNotNull(refusalSeen) { "the non-contiguous refusal was never exposed" }
+		assertThat(refusal.trainId).isEqualTo(trainId)
+		val regranted = requireNotNull(regrantAt) { "the dispatcher regrant never happened" }
+		assertThat(regranted, "the regrant follows the first refusal").isGreaterThanOrEqualTo(refusal.since)
+		assertThat(
+			regranted,
+			"the cutoff lands inside the retry hold, one retry period after the first refusal at the latest"
+		).isLessThanOrEqualTo(refusal.since + InOutWorker.STALE_ORIGIN_RETRY_SECONDS)
+		assertThat(authoritySeen, "the regrant granted the train entry authority").isTrue()
+		assertThat(exits[trainId], "the run ended before the worker resumed on the fresh route").isNull()
+		val record = context.runRecord()
+		assertThat(record.endTimeReached, "the cutoff preceded the end time").isFalse()
+		assertThat(
+			record.refusedEntriesAtRunEnd,
+			"a train that got its entry authority back mid-hold is not recorded as refused at run end"
+		).isEmpty()
 	}
 
 	/**

@@ -98,7 +98,10 @@ class InOutWorker(
 	 * entry route the running stale-origin episode refuses as non-contiguous, this InOut and the time
 	 * of the episode's first refusal — or `null` when no episode runs. The train waits at the InOut
 	 * with simulated time advancing; the route that blocks it is the dispatcher's to cancel, so a
-	 * watchdog can read this as actionable work. Read on the simulation thread or after the run.
+	 * watchdog can read this as actionable work. Read on the simulation thread or after the run. The
+	 * episode premise is revalidated at read time: during the retry hold a dispatcher regrant or a
+	 * departure turns the state `null` before the worker's next pass, which is what keeps a run that
+	 * ends inside the hold from publishing a recovered train as refused-waiting.
 	 *
 	 * Known limit: for a refused train that holds no blocks, the premise check in
 	 * [waitUntilPathFreeBoundedByStaleOrigin] ("the holding is gone") is always true, so a pass with
@@ -109,8 +112,20 @@ class InOutWorker(
 	 * non-contiguous; the no-block wait exists only as a safety net.
 	 */
 	val refusedEntry: RefusedEntry?
-		get() =
-			staleOriginTrainId?.let { RefusedEntry(it, inOut.name, EntryRefusalKind.NON_CONTIGUOUS, staleOriginSince) }
+		get() {
+			val trainId = staleOriginTrainId ?: return null
+			// Issue #1457 review round 1: the episode premise is revalidated at read time, not only in
+			// [waitUntilPathFreeBoundedByStaleOrigin]'s poll. During the [STALE_ORIGIN_RETRY_SECONDS]
+			// hold a dispatcher can grant the train usable entry authority (or the train can leave the
+			// queue some other way), and a run that ends before the worker's next pass must not
+			// publish the recovered train as refused-waiting. Both probes are plain reads (no engine
+			// calls), the same arms the poll checks. The holding-is-gone arm is deliberately left out:
+			// the wait also covers a train that holds no reservation, whose footprint is empty the
+			// whole time.
+			if ((queqe.first() as? Train)?.name != trainId) return null
+			if (trainNavigationService.isPathReservedForTrain(trainId, inOut)) return null
+			return RefusedEntry(trainId, inOut.name, EntryRefusalKind.NON_CONTIGUOUS, staleOriginSince)
+		}
 
 	private val queqe = Head()
 	private var myIdle = true
