@@ -19,6 +19,8 @@ import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.testutil.PlanningSnapshotLiveComparator
+import cz.vutbr.fit.interlockSim.testutil.TrainSampleOracle
 import cz.vutbr.fit.interlockSim.testutil.runSampled
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
@@ -39,10 +41,11 @@ import java.util.concurrent.locks.LockSupport
  * same stamp for all trains" would be trivially true with one published reference, so each
  * off-thread read is checked against a simulation-thread recorder keyed by tick instead:
  *
- * - **Recorder** (simulation thread): a decorator of the control-step listener, installed after
- *   [wireSynchronousDispatcher], so under spec rule P3 it runs first after the publication. Per tick
- *   it keeps the published train-sample reference and a structural copy, and compares each reading
- *   with the live train ([TrainSampleOracle]).
+ * - **Recorder** (simulation thread): a control-step listener wrapped by
+ *   [PlanningSnapshotLiveComparator], installed after [wireSynchronousDispatcher], so under spec rule
+ *   P3 the comparator runs first after the publication and compares each reading with the live train
+ *   ([TrainSampleOracle]); the recorder then keeps, per tick, the published train-sample reference
+ *   and a structural copy.
  * - **Reader** (its own thread): reads [ShuntingLoop.latestDispatchLoopSnapshot] in a tight loop
  *   while the simulation thread integrates train physics, and keeps every read that differs from
  *   the one before (another tick, or another reference within the same tick).
@@ -87,7 +90,7 @@ class TrainSampleNoTornTickStressTest : KoinTestBase() {
 		val dispatcherStep = checkNotNull(loop.controlStepListener)
 
 		val recorded = ConcurrentHashMap<Long, Recorded>()
-		val liveMismatches = mutableListOf<String>()
+		val comparator = PlanningSnapshotLiveComparator(ctx, loop)
 		val lastTickSeenByReader = AtomicLong(-1L)
 		val readerDone = AtomicBoolean(false)
 		val readerFailure = AtomicReference<Throwable?>(null)
@@ -116,14 +119,15 @@ class TrainSampleNoTornTickStressTest : KoinTestBase() {
 		reader.isDaemon = true
 
 		loop.controlStepListener =
-			ControlStepListener {
-				val published = loop.latestDispatchLoopSnapshot()
-				val sample = published.snapshot.trainPositions
-				recorded[published.tick] = Recorded(sample, sample.map { it.copy() })
-				liveMismatches += TrainSampleOracle.compareWithLive(published.tick, sample, loop.getApprovedTrains())
-				if (published.tick % HANDSHAKE_EVERY == 0L) awaitReader(lastTickSeenByReader, published.tick)
-				dispatcherStep.onControlStep()
-			}
+			comparator.wrap(
+				ControlStepListener {
+					val published = loop.latestDispatchLoopSnapshot()
+					val sample = published.snapshot.trainPositions
+					recorded[published.tick] = Recorded(sample, sample.map { it.copy() })
+					if (published.tick % HANDSHAKE_EVERY == 0L) awaitReader(lastTickSeenByReader, published.tick)
+					dispatcherStep.onControlStep()
+				}
+			)
 		ctx.setMainProcess(loop)
 
 		reader.start()
@@ -136,7 +140,7 @@ class TrainSampleNoTornTickStressTest : KoinTestBase() {
 
 		assertThat(reader.isAlive, name = "reader thread still running").isFalse()
 		assertThat(readerFailure.get(), name = "reader thread failure").isNull()
-		assertThat(liveMismatches, name = "published sample vs live mismatches").isEmpty()
+		assertThat(comparator.mismatches, name = "published snapshot vs live mismatches").isEmpty()
 
 		val tornReads =
 			reads.mapNotNull { read ->

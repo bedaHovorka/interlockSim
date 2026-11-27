@@ -5,9 +5,12 @@
  *
  * Railway Interlocking Simulator - Test Suite
  */
-package cz.vutbr.fit.interlockSim.ports
+package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.TrainMotionState
+import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
 
@@ -15,14 +18,14 @@ import cz.vutbr.fit.interlockSim.util.BlockIdentity
  * Issue #1472 (Goal 9B SP4.6): the live-state oracle for one train of the published train sample.
  *
  * Reads every field of [TrainPositionReading] straight from the live [Train] — not through
- * [DefaultNetworkPerceptionPort] — so the live-equality and stress tests compare the published
+ * [DefaultNetworkPerceptionPort] — so [PlanningSnapshotLiveComparator] compares the published
  * sample with an independent source. Call it on the simulation thread only, at the first point
  * after publication (#1467 spec rule P3), where live state still equals the published snapshot.
  *
  * The [TrainMotionState] order is the one [TrainMotionState] documents: no front section first,
  * then a station dwell, then standing (velocity exactly 0.0), else moving.
  */
-internal object TrainSampleOracle {
+object TrainSampleOracle {
 	fun liveSample(train: Train): TrainPositionReading =
 		TrainPositionReading(
 			trainId = train.name,
