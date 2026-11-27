@@ -29,7 +29,7 @@ import cz.vutbr.fit.interlockSim.util.Point
  * Like [GeneratedSemaphoreName.at], the format is a file-format contract: saved files with omitted
  * names depend on the next load regenerating the same name.
  */
-object GeneratedElementName {
+internal object GeneratedElementName {
 	/** The switch name format, for log and error messages. */
 	const val SWITCH_PATTERN = "SW_<X>_<Y>"
 
