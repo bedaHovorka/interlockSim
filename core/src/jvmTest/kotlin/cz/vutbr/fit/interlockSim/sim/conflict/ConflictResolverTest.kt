@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.conflict
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -18,6 +19,10 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.NetworkState
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -32,6 +37,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 
 /**
  * Unit tests for [DefaultConflictResolver] — Goal 9 SP3 (#585).
@@ -98,6 +104,33 @@ class ConflictResolverTest {
 			cost = cost ?: segments.size.toDouble(),
 			costBreakdown = segments.map { SegmentCost(it, 1.0) }
 		)
+
+	// ── Debug summary line ───────────────────────────────────────────────────
+
+	@Test
+	@DisplayName("generateResolutions logs one DEBUG summary naming the trains, the block and the candidate count")
+	fun generateResolutionsLogsDebugSummary() {
+		val resolver = DefaultConflictResolver(routeFinder, emptyList(), networkState)
+		val logger = LoggerFactory.getLogger(DefaultConflictResolver::class.java.name) as Logger
+		val appender = ListAppender<ILoggingEvent>().also { it.start() }
+		val levelBefore = logger.level
+		logger.level = Level.DEBUG
+		logger.addAppender(appender)
+		try {
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val lines = appender.list.filter { it.formattedMessage.startsWith("generateResolutions:") }
+			assertThat(lines).hasSize(1)
+			assertThat(lines.single().level).isEqualTo(Level.DEBUG)
+			val message = lines.single().formattedMessage
+			assertThat(message).contains("conflict=(TrainBlocked vs TrainHolder)")
+			assertThat(message).contains("block=$contestedBlock")
+			assertThat(message).contains("${resolutions.size} candidates")
+		} finally {
+			logger.detachAppender(appender)
+			logger.level = levelBefore
+		}
+	}
 
 	// ── 1. HoldTrain candidate ───────────────────────────────────────────────
 
