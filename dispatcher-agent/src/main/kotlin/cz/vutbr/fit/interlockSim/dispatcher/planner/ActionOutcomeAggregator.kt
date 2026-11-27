@@ -35,7 +35,9 @@ class ActionOutcomeAggregator : ActionOutcomeSink {
 		val totalOutcomes: Long,
 		val countsByPhase: Map<ActionPhase, Long>,
 		val countsByApplyFailure: Map<ApplyFailureCode, Long>,
-		val countsByAuthor: Map<ActionAuthor, Long>
+		val countsByAuthor: Map<ActionAuthor, Long>,
+		/** Outcomes whose author is unknown (Issue #1477); they are in no [countsByAuthor] entry. */
+		val unattributedOutcomes: Long
 	)
 
 	private val totalOutcomes = AtomicLong(0L)
@@ -43,13 +45,15 @@ class ActionOutcomeAggregator : ActionOutcomeSink {
 	private val applyFailureCounts: Map<ApplyFailureCode, AtomicLong> =
 		concurrentEnumCounters(ApplyFailureCode.entries)
 	private val authorCounts: Map<ActionAuthor, AtomicLong> = concurrentEnumCounters(ActionAuthor.entries)
+	private val unattributedOutcomes = AtomicLong(0L)
 
 	/** Called on the sim thread. Allocation-light; no logging (SP2c.20 review checklist). */
 	override fun onActionOutcome(outcome: ActionOutcome) {
 		totalOutcomes.incrementAndGet()
 		phaseCounts.getValue(outcome.phase).incrementAndGet()
 		outcome.applyFailure?.let { applyFailureCounts.getValue(it).incrementAndGet() }
-		authorCounts.getValue(outcome.authored.author).incrementAndGet()
+		val author = outcome.authored.author
+		if (author == null) unattributedOutcomes.incrementAndGet() else authorCounts.getValue(author).incrementAndGet()
 	}
 
 	/** Returns an immutable point-in-time snapshot of all counters. Safe to call from any thread. */
@@ -58,6 +62,7 @@ class ActionOutcomeAggregator : ActionOutcomeSink {
 			totalOutcomes = totalOutcomes.get(),
 			countsByPhase = phaseCounts.mapValues { it.value.get() },
 			countsByApplyFailure = applyFailureCounts.mapValues { it.value.get() },
-			countsByAuthor = authorCounts.mapValues { it.value.get() }
+			countsByAuthor = authorCounts.mapValues { it.value.get() },
+			unattributedOutcomes = unattributedOutcomes.get()
 		)
 }

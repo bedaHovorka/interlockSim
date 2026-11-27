@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationServic
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.ReservationExpired
 import cz.vutbr.fit.interlockSim.context.navigation.onReservationExpired
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.ExpiredRouteQuarantine
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -427,7 +428,7 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 						loop.getInnerBlockInputs(),
 						loop.getOuterBlockInputs()
 					)
-				stack.queue.postAll(dispatcher.decide(observation))
+				stack.queue.postAll(dispatcher.decide(observation), ActionAuthor.LLM)
 				applier.onControlStep()
 				scenario.holdAfterTheDispatcher()
 				recordHeldTrain(scenario.hold, stack.registry, record)

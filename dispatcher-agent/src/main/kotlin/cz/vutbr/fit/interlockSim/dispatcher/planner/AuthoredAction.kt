@@ -29,10 +29,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  *
  * When the correlation map cannot find a registered entry for an applied
  * [cz.vutbr.fit.interlockSim.sim.DispatchDecision] (entry was evicted, reused across ticks, or
- * never registered), [tickIndex] is set to `-1` and the action is counted as an
- * `unattributedApply` in the metrics. This is never swallowed silently.
+ * never registered), [author] is `null`, [tickIndex] is set to `-1` and the action is counted as an
+ * `unattributedApply` in the metrics. This is never swallowed silently, and the action is never
+ * credited to [ActionAuthor.LLM] or any other author (Issue #1477).
  *
- * @property author Decision-maker that produced this action.
+ * @property author Decision-maker that produced this action; `null` when it is unknown (an
+ *   unattributed apply).
  * @property reason Human-readable explanation of why [author] chose this action.
  * @property decisionKind Classification of the decision type (e.g. `"ApproveTrain"`,
  *   `"RequestRoute"`, `"NoOp"`, `"RULE_FALLBACK"`, `"SAFETY_NET"`).
@@ -42,7 +44,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * @since Issue #843 (SP2c.20 — Goal 10 action attribution + C7 violation gate)
  */
 data class AuthoredAction(
-	val author: ActionAuthor,
+	val author: ActionAuthor?,
 	val reason: String,
 	val decisionKind: String,
 	val tickIndex: Long

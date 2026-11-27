@@ -242,7 +242,8 @@ class ActionAttributionTest {
 				AttributedAction(
 					commandId = CommandId(1L),
 					tick = 1L,
-					action = DispatchAction.NoOp
+					action = DispatchAction.NoOp,
+					author = ActionAuthor.LLM
 				)
 			assertThat(action.reason).isEqualTo("")
 		}

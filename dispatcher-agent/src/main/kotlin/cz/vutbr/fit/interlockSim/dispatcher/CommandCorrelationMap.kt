@@ -72,17 +72,16 @@ class CommandCorrelationMap {
 	 * A [CommandId] paired with the [tickIndex] at which the command was queued, plus the
 	 * [author] and [reason] of the decision that produced it (SP2c.20, Issue #843).
 	 *
-	 * [author] and [reason] default to [ActionAuthor.LLM] / `""` for backwards-compatibility
-	 * with callers that do not supply attribution (e.g. the `SinkHolder` queue-posting wrapper
-	 * in [KoogAgentFactory][cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory]).
+	 * [author] has no default (Issue #1477): every registration names who posted the command, so
+	 * an unknown actor is never credited to [ActionAuthor.LLM].
 	 *
 	 * The tick index is the value of the internal [cycleCounter] at registration time.
 	 */
 	data class CommandAndTick(
 		val id: CommandId,
 		val tickIndex: Long,
-		/** Attribution author for this command. Defaults to [ActionAuthor.LLM]. */
-		val author: ActionAuthor = ActionAuthor.LLM,
+		/** Attribution author for this command; required (Issue #1477). */
+		val author: ActionAuthor,
 		/** Human-readable reason from the decision-maker. Defaults to empty string. */
 		val reason: String = ""
 	)
@@ -119,12 +118,11 @@ class CommandCorrelationMap {
 	 *
 	 * Called on the **driver thread** from [ActuatorCommandQueue.postAll].
 	 *
-	 * [author] and [reason] default to [ActionAuthor.LLM] / `""` for callers that do not
-	 * supply attribution (backwards-compatible with pre-SP2c.20 code).
+	 * [author] is required (Issue #1477); [reason] defaults to `""`.
 	 */
 	fun register(
 		decisions: List<DispatchDecision>,
-		author: ActionAuthor = ActionAuthor.LLM,
+		author: ActionAuthor,
 		reason: String = ""
 	) {
 		val tick = cycleCounter.get()

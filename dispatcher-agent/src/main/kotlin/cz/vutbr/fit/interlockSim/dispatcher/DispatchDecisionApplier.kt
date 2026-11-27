@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
-import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeSink
@@ -442,7 +441,9 @@ class DispatchDecisionApplier(
 		if (actionOutcomeSink == null || decision is DispatchDecision.NoAction) return
 		val authored =
 			AuthoredAction(
-				author = correlation?.author ?: ActionAuthor.LLM,
+				// Issue #1477: no correlation means no known author. The outcome carries a null
+				// author and is counted as unattributed, never under LLM.
+				author = correlation?.author,
 				reason = correlation?.reason ?: "",
 				decisionKind = decision::class.simpleName ?: "Unknown",
 				tickIndex = correlation?.tickIndex ?: -1L

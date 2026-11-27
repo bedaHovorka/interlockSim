@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
@@ -82,7 +83,8 @@ class DispatchDecisionApplierDecisionListenerTest {
 			listOf(
 				DispatchDecision.ApproveTrain("T1"),
 				DispatchDecision.ReservePath("T1", "zA", "doA1")
-			)
+			),
+			ActionAuthor.LLM
 		)
 
 		applier.onControlStep()
@@ -97,7 +99,7 @@ class DispatchDecisionApplierDecisionListenerTest {
 		val captured = AtomicReference<List<DispatchDecision>>(emptyList())
 		hub.setSink { decision -> captured.set(captured.get() + decision) }
 		val (queue, applier) = makeApplier(listener = hub)
-		queue.postAll(listOf(DispatchDecision.NoAction))
+		queue.postAll(listOf(DispatchDecision.NoAction), ActionAuthor.LLM)
 
 		applier.onControlStep()
 
@@ -112,7 +114,7 @@ class DispatchDecisionApplierDecisionListenerTest {
 		val captured = AtomicReference<List<DispatchDecision>>(emptyList())
 		hub.setSink { decision -> captured.set(captured.get() + decision) }
 		val (queue, applier) = makeApplier(listener = hub, modeState = state)
-		queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+		queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 		applier.onControlStep()
 
@@ -124,7 +126,7 @@ class DispatchDecisionApplierDecisionListenerTest {
 	@DisplayName("null listener (default) is a no-op — backward compatibility")
 	fun nullListener_isNoOp() {
 		val (queue, applier) = makeApplier(listener = null)
-		queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+		queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 		applier.onControlStep() // must not throw
 

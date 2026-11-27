@@ -76,15 +76,16 @@ class ActuatorCommandQueue(
 	 * Callers that need an exact count should drain the queue.
 	 *
 	 * @param decisions Decisions to post; may be empty.
-	 * @param author Attribution author for the decision (SP2c.20, Issue #843). Defaults to
-	 *   [ActionAuthor.LLM] for backwards-compatibility with pre-SP2c.20 callers.
+	 * @param author Attribution author for the decision (SP2c.20, Issue #843). Required, with no
+	 *   default (Issue #1477): every caller names who posted the decisions, so an unknown actor is
+	 *   never credited to [ActionAuthor.LLM].
 	 * @param reason Human-readable reason from the decision-maker (SP2c.20, Issue #843).
 	 *   Defaults to an empty string.
 	 * @return `true` if all decisions were accepted; `false` if backpressure rejected them.
 	 */
 	fun postAll(
 		decisions: List<DispatchDecision>,
-		author: ActionAuthor = ActionAuthor.LLM,
+		author: ActionAuthor,
 		reason: String = ""
 	): Boolean {
 		if (decisions.isEmpty()) {

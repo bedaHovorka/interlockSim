@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
@@ -90,7 +91,7 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 		fun noApprover_dropsApproveTrain() {
 			val gateway = SemiAutoApprovalGateway()
 			val (queue, applier) = makeApplierWithGateway(gateway)
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -102,7 +103,7 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 		fun noApprover_dropsReservePath() {
 			val gateway = SemiAutoApprovalGateway()
 			val (queue, applier) = makeApplierWithGateway(gateway)
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -121,7 +122,7 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 			val gateway = SemiAutoApprovalGateway()
 			gateway.setApprover { true }
 			val (queue, applier) = makeApplierWithGateway(gateway)
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -134,7 +135,7 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 			val gateway = SemiAutoApprovalGateway()
 			gateway.setApprover { true }
 			val (queue, applier) = makeApplierWithGateway(gateway)
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -153,7 +154,7 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 			val gateway = SemiAutoApprovalGateway()
 			gateway.setApprover { false }
 			val (queue, applier) = makeApplierWithGateway(gateway)
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -166,7 +167,7 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 			val gateway = SemiAutoApprovalGateway()
 			gateway.setApprover { false }
 			val (queue, applier) = makeApplierWithGateway(gateway)
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -184,7 +185,7 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 		val (queue, applier) = makeApplierWithGateway(gateway)
 
 		// First control step: approver is installed, decision is applied.
-		queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+		queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 		applier.onControlStep()
 		assertThat(approvedTrains).containsExactly("T1")
 
@@ -192,7 +193,7 @@ class DispatchDecisionApplierSemiAutoGatewayTest {
 		gateway.setApprover(null)
 
 		// Second control step: approver is gone, decision must be dropped.
-		queue.postAll(listOf(DispatchDecision.ApproveTrain("T2")))
+		queue.postAll(listOf(DispatchDecision.ApproveTrain("T2")), ActionAuthor.LLM)
 		applier.onControlStep()
 		// List still contains only T1 — T2 was dropped.
 		assertThat(approvedTrains).containsExactly("T1")

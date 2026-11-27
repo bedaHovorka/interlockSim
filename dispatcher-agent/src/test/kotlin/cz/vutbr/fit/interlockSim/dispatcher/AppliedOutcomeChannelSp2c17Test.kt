@@ -24,6 +24,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.Affordance
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CompactTextRenderer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.RenderContext
@@ -112,7 +113,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -140,7 +141,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			// Simulate the projector draining outcomes for the next tick
@@ -167,7 +168,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -187,7 +188,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-091", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-091", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -213,7 +214,7 @@ class AppliedOutcomeChannelSp2c17Test {
 					outcomeSink = outcomeSink
 				)
 			correlationMap.newCycle()
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-102")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-102")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -236,11 +237,11 @@ class AppliedOutcomeChannelSp2c17Test {
 			val (queue, applier) = makeWiredApplier()
 
 			correlationMap.newCycle() // cycle 1
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			correlationMap.newCycle() // cycle 2
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -266,7 +267,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(correlationMap.unattributedApplies).isEqualTo(0L)
@@ -292,7 +293,7 @@ class AppliedOutcomeChannelSp2c17Test {
 				)
 
 			// Post directly to the queue (bypasses correlationMap.register)
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			// correlate() returns null → unattributedApplies increments
@@ -308,7 +309,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "XYZ")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "XYZ")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -330,7 +331,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "XYZ")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "XYZ")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -355,7 +356,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")))
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -388,7 +389,7 @@ class AppliedOutcomeChannelSp2c17Test {
 			try {
 				correlationMap.newCycle()
 				val (queue, applier) = makeWiredApplier()
-				queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")))
+				queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")), ActionAuthor.LLM)
 				applier.onControlStep()
 
 				val outcomes = outcomeSink.drainSince(0L)
@@ -415,7 +416,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")))
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -440,7 +441,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")))
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("T-087")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -546,7 +547,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -568,7 +569,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -609,7 +610,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "doA1", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "doA1", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -633,7 +634,7 @@ class AppliedOutcomeChannelSp2c17Test {
 
 			correlationMap.newCycle()
 			val (queue, applier) = makeWiredApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "doA1", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "doA1", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcome = outcomeSink.drainSince(0L).single() as AppliedOutcome.Reserved
@@ -707,7 +708,7 @@ class AppliedOutcomeChannelSp2c17Test {
 		fun correlateEvictsOnRead() {
 			val map = CommandCorrelationMap()
 			val decision = DispatchDecision.RequestRoute("T-1", "zA", "InOut-B")
-			map.register(listOf(decision))
+			map.register(listOf(decision), ActionAuthor.LLM)
 
 			val first = map.correlate(decision)
 			assertThat(first).isNotNull()
@@ -724,7 +725,7 @@ class AppliedOutcomeChannelSp2c17Test {
 			val map = CommandCorrelationMap()
 			val d1 = DispatchDecision.RequestRoute("T-1", "zA", "InOut-B")
 			val d2 = DispatchDecision.ReleaseRoute("T-2")
-			map.register(listOf(d1, d2))
+			map.register(listOf(d1, d2), ActionAuthor.LLM)
 			assertThat(map.size()).isEqualTo(2)
 
 			map.correlate(d1)
@@ -757,7 +758,7 @@ class AppliedOutcomeChannelSp2c17Test {
 				)
 
 			correlationMap.newCycle()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T-087", "zA", "InOut-B")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			// The actuator must not have fired under MANUAL ...

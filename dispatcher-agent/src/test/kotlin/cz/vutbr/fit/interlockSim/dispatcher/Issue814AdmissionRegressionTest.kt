@@ -14,6 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerCapabilities
 import cz.vutbr.fit.interlockSim.dispatcher.testutil.DispatcherKoinTestBase
@@ -133,7 +134,7 @@ class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 			val toAdmit = observation.unapprovedTrains.take(freeSlots)
 			if (toAdmit.isEmpty()) return
 			forcedAdmissions.addAndGet(toAdmit.size)
-			queue.postAll(toAdmit.map { DispatchDecision.ApproveTrain(it.trainId) })
+			queue.postAll(toAdmit.map { DispatchDecision.ApproveTrain(it.trainId) }, ActionAuthor.LLM)
 		}
 	}
 

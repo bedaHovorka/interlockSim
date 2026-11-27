@@ -451,14 +451,18 @@ class AgentLoopDriver(
 			return false
 		}
 
-		// Attribute this cycle's decisions correctly instead of silently defaulting to
-		// ActionAuthor.LLM (postAll's pre-fix default) regardless of which planner
-		// actually produced them.
+		// Attribute this cycle's decisions to the planner that produced them. postAll has no default
+		// author (Issue #1477), and an LLM-backed cycle always reports its tick outcome before plan()
+		// returns (see the listener in init), so a missing outcome is a wiring defect: fail loudly
+		// rather than credit an unknown actor to ActionAuthor.LLM.
 		val author =
 			if (plannerTickSource == null) {
 				ActionAuthor.RULE_BASED
 			} else {
-				lastTickOutcome?.toActionAuthor ?: ActionAuthor.LLM
+				checkNotNull(lastTickOutcome) {
+					"AgentLoopDriver: the LLM planner returned without reporting a tick outcome; " +
+						"the decisions of this cycle have no known author"
+				}.toActionAuthor
 			}
 		val reason = lastTickOutcome?.name ?: ""
 

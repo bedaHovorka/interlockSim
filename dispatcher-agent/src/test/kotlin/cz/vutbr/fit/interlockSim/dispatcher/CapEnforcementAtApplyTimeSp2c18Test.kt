@@ -18,6 +18,7 @@ import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.Affordance
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CompactTextRenderer
 import cz.vutbr.fit.interlockSim.dispatcher.agents.RenderContext
@@ -121,8 +122,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
 
 			// Two commands queued in the same driver tick
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("Train-A")))
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("Train-B")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("Train-A")), ActionAuthor.LLM)
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("Train-B")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -153,8 +154,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
 
 			// Post in deliberate order: Alpha before Beta
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("Alpha")))
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("Beta")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("Alpha")), ActionAuthor.LLM)
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("Beta")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -174,8 +175,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			correlationMap.newCycle()
 			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 3)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("Train-A")))
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("Train-B")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("Train-A")), ActionAuthor.LLM)
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("Train-B")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -201,7 +202,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 					DispatchDecision.ApproveTrain("T-1"),
 					DispatchDecision.ApproveTrain("T-2"),
 					DispatchDecision.ApproveTrain("T-3")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -230,7 +232,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			correlationMap.newCycle()
 			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-99")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-99")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			// The outcome channel holds the refusal
@@ -251,7 +253,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			correlationMap.newCycle()
 			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-77")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-77")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -282,7 +284,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			correlationMap.newCycle()
 			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-10")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-10")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			val outcomes = outcomeSink.drainSince(0L)
@@ -384,7 +386,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			assertThat(admittedTrains).hasSize(0)
 
 			// Step 2: post a command — exactly one admission
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-LLM")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-LLM")), ActionAuthor.LLM)
 			applier.onControlStep()
 			assertThat(admittedTrains).hasSize(1)
 			assertThat(admittedTrains[0]).isEqualTo("T-LLM")
@@ -419,7 +421,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 					DispatchDecision.ApproveTrain("T-A"),
 					DispatchDecision.ApproveTrain("T-B"),
 					DispatchDecision.ApproveTrain("T-C")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -444,7 +447,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 				listOf(
 					DispatchDecision.ApproveTrain("T-first"),
 					DispatchDecision.ApproveTrain("T-second")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -466,7 +470,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			correlationMap.newCycle()
 			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-refused")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-refused")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(admittedTrains).hasSize(0)
@@ -484,14 +488,14 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 			correlationMap.newCycle()
 			val (queue, applier) = makeCapApplier(maxConcurrentTrains = 2)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-late")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-late")), ActionAuthor.LLM)
 			applier.onControlStep()
 			assertThat(admittedTrains).hasSize(0)
 
 			// A train exits; the agent re-issues the same admission on the next tick.
 			liveActiveCount.set(1)
 			correlationMap.newCycle()
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-late")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-late")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(admittedTrains).isEqualTo(listOf("T-late"))
@@ -512,7 +516,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 				listOf(
 					DispatchDecision.ApproveTrain("T-1"),
 					DispatchDecision.ApproveTrain("T-2")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -544,7 +549,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 					DispatchDecision.ApproveTrain("T-b"),
 					DispatchDecision.ApproveTrain("T-c"),
 					DispatchDecision.ApproveTrain("T-d")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -565,7 +571,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 					DispatchDecision.ApproveTrain("T-a"),
 					DispatchDecision.ApproveTrain("T-b"),
 					DispatchDecision.ApproveTrain("T-c")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -588,7 +595,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 				listOf(
 					DispatchDecision.ApproveTrain("T-in"),
 					DispatchDecision.ApproveTrain("T-out")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -643,7 +651,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 					outcomeSink = outcomeSink
 				)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-blocked")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-blocked")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(callbackEntries.get()).isEqualTo(0)
@@ -690,7 +698,8 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 				listOf(
 					DispatchDecision.ApproveTrain("T-in"),
 					DispatchDecision.ApproveTrain("T-out")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -723,7 +732,7 @@ class CapEnforcementAtApplyTimeSp2c18Test {
 					onDecisionApplied = DispatchDecisionListener { fired.add(it) }
 				)
 
-			queue.postAll(listOf(DispatchDecision.NoAction))
+			queue.postAll(listOf(DispatchDecision.NoAction), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(fired).hasSize(0)

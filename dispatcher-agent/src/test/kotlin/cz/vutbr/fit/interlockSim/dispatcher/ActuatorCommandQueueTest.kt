@@ -20,6 +20,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -57,7 +58,7 @@ class ActuatorCommandQueueTest {
 				DispatchDecision.NoAction
 			)
 
-		val posted = queue.postAll(decisions)
+		val posted = queue.postAll(decisions, ActionAuthor.LLM)
 
 		assertThat(posted).isTrue()
 		assertThat(queue.drain()).containsExactly(*decisions.toTypedArray())
@@ -69,7 +70,7 @@ class ActuatorCommandQueueTest {
 	fun postAllEmptyIsNoOp() {
 		val queue = ActuatorCommandQueue()
 
-		val posted = queue.postAll(emptyList())
+		val posted = queue.postAll(emptyList(), ActionAuthor.LLM)
 
 		assertThat(posted).isTrue()
 		assertThat(queue.approximateSize()).isEqualTo(0)
@@ -95,7 +96,8 @@ class ActuatorCommandQueueTest {
 				listOf(
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ApproveTrain("T2")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 		assertThat(first).isTrue()
@@ -112,13 +114,15 @@ class ActuatorCommandQueueTest {
 				listOf(
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ApproveTrain("T2")
-				)
+				),
+				ActionAuthor.LLM
 			)
 		val second =
 			queue.postAll(
 				listOf(
 					DispatchDecision.ApproveTrain("T3")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 		assertThat(first).isTrue()
@@ -138,7 +142,8 @@ class ActuatorCommandQueueTest {
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ApproveTrain("T2"),
 					DispatchDecision.ApproveTrain("T3")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 		assertThat(posted).isFalse()
@@ -152,7 +157,7 @@ class ActuatorCommandQueueTest {
 		val queue = ActuatorCommandQueue(capacity = -1)
 
 		val decisions = (1..10_000).map { DispatchDecision.ApproveTrain("T$it") }
-		val posted = queue.postAll(decisions)
+		val posted = queue.postAll(decisions, ActionAuthor.LLM)
 
 		assertThat(posted).isTrue()
 		assertThat(queue.approximateSize()).isEqualTo(10_000)
@@ -176,7 +181,8 @@ class ActuatorCommandQueueTest {
 					queue.postAll(
 						listOf(
 							DispatchDecision.ApproveTrain("P$producerIndex-D$decisionIndex")
-						)
+						),
+						ActionAuthor.LLM
 					)
 				}
 				doneLatch.countDown()
@@ -221,7 +227,8 @@ class ActuatorCommandQueueTest {
 					queue.postAll(
 						listOf(
 							DispatchDecision.ReservePath("P$producerIndex", "S$decisionIndex", "T$decisionIndex")
-						)
+						),
+						ActionAuthor.LLM
 					)
 				}
 				producerDoneLatch.countDown()
@@ -260,7 +267,7 @@ class ActuatorCommandQueueTest {
 	fun approximateSizeTracksQueue() {
 		val queue = ActuatorCommandQueue()
 
-		queue.postAll(listOf(DispatchDecision.NoAction, DispatchDecision.NoAction))
+		queue.postAll(listOf(DispatchDecision.NoAction, DispatchDecision.NoAction), ActionAuthor.LLM)
 		assertThat(queue.approximateSize()).isEqualTo(2)
 
 		queue.drain()
@@ -307,7 +314,7 @@ class ActuatorCommandQueueTest {
 		val queue = ActuatorCommandQueue(correlationMap = correlationMap)
 
 		val firstCycleDecision = DispatchDecision.ApproveTrain("T1")
-		queue.postAll(listOf(firstCycleDecision))
+		queue.postAll(listOf(firstCycleDecision), ActionAuthor.LLM)
 		val firstCorrelation = correlationMap.correlate(firstCycleDecision)
 
 		assertThat(firstCorrelation).isNotNull()
@@ -316,7 +323,7 @@ class ActuatorCommandQueueTest {
 		// Advance the cycle — the next decision must land in tick index 1.
 		queue.advanceCorrelationCycle()
 		val secondCycleDecision = DispatchDecision.ApproveTrain("T2")
-		queue.postAll(listOf(secondCycleDecision))
+		queue.postAll(listOf(secondCycleDecision), ActionAuthor.LLM)
 		val secondCorrelation = correlationMap.correlate(secondCycleDecision)
 
 		assertThat(secondCorrelation).isNotNull()

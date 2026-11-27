@@ -34,7 +34,7 @@ class ActionOutcomeAggregatorTest {
 		phase: ActionPhase = ActionPhase.APPLIED,
 		rejection: RejectionCode? = null,
 		applyFailure: ApplyFailureCode? = null,
-		author: ActionAuthor = ActionAuthor.LLM
+		author: ActionAuthor? = ActionAuthor.LLM
 	) = ActionOutcome(
 		phase = phase,
 		rejection = rejection,
@@ -51,6 +51,7 @@ class ActionOutcomeAggregatorTest {
 		ActionPhase.entries.forEach { assertThat(snapshot.countsByPhase.getValue(it)).isZero() }
 		ApplyFailureCode.entries.forEach { assertThat(snapshot.countsByApplyFailure.getValue(it)).isZero() }
 		ActionAuthor.entries.forEach { assertThat(snapshot.countsByAuthor.getValue(it)).isZero() }
+		assertThat(snapshot.unattributedOutcomes).isZero()
 	}
 
 	@Test
@@ -99,6 +100,18 @@ class ActionOutcomeAggregatorTest {
 		assertThat(snapshot.countsByAuthor.getValue(ActionAuthor.LLM)).isEqualTo(2L)
 		assertThat(snapshot.countsByAuthor.getValue(ActionAuthor.RULE_BASED)).isEqualTo(1L)
 		assertThat(snapshot.countsByAuthor.getValue(ActionAuthor.RULE_FALLBACK)).isZero()
+	}
+
+	@Test
+	@DisplayName("an outcome with no known author counts as unattributed, under no author (Issue #1477)")
+	fun unknownAuthorIsUnattributed() {
+		val aggregator = ActionOutcomeAggregator()
+		aggregator.onActionOutcome(outcome(author = null))
+
+		val snapshot = aggregator.getSnapshot()
+		assertThat(snapshot.totalOutcomes).isEqualTo(1L)
+		assertThat(snapshot.unattributedOutcomes).isEqualTo(1L)
+		ActionAuthor.entries.forEach { assertThat(snapshot.countsByAuthor.getValue(it)).isZero() }
 	}
 
 	@Test

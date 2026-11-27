@@ -17,6 +17,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
@@ -78,7 +79,7 @@ class DispatchDecisionApplierTest {
 		@DisplayName("ApproveTrain is routed to the onApproveTrain callback")
 		fun approveTrain_routedToCallback() {
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -91,7 +92,7 @@ class DispatchDecisionApplierTest {
 		fun reservePath_routedToActuatorPort() {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -104,7 +105,7 @@ class DispatchDecisionApplierTest {
 		fun reservePath_passesCorrectNames() {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T2", 2)
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T2", "doB1", "B")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T2", "doB1", "B")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -115,7 +116,7 @@ class DispatchDecisionApplierTest {
 		@DisplayName("NoAction does not trigger any side effect")
 		fun noAction_noSideEffect() {
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.NoAction))
+			queue.postAll(listOf(DispatchDecision.NoAction), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -133,7 +134,8 @@ class DispatchDecisionApplierTest {
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ReservePath("T1", "zA", "doA1"),
 					DispatchDecision.NoAction
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -151,7 +153,8 @@ class DispatchDecisionApplierTest {
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ApproveTrain("T2"),
 					DispatchDecision.ApproveTrain("T3")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -191,7 +194,7 @@ class DispatchDecisionApplierTest {
 		@DisplayName("Queue is empty after onControlStep drains it")
 		fun queueEmptyAfterDrain() {
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 			// Second call — queue already drained
@@ -213,7 +216,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
 				RouteRequestResult.AllPathsBlocked(attemptedPaths = 2)
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -224,7 +227,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
 				RouteRequestResult.Conflict(blockName = "k1", existingOwner = "T2")
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -235,7 +238,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
 				RouteRequestResult.NoRouteExists(fromEndpointName = "zA", toEndpointName = "doA1")
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -246,7 +249,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
 				RouteRequestResult.UnresolvedEndpoint(endpointName = "zA")
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -259,7 +262,7 @@ class DispatchDecisionApplierTest {
 					"Switch along candidate 0 could not be configured for the requested route"
 				)
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -285,7 +288,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } throws
 				IllegalArgumentException("bad request argument 'kA'")
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "kA", "kB")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "kA", "kB")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -296,7 +299,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.setSignalAspect(any(), any(), any()) } throws
 				IllegalArgumentException("bad semaphore name")
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSignalAspect("bogus", Signal.STOP)))
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("bogus", Signal.STOP)), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -311,7 +314,8 @@ class DispatchDecisionApplierTest {
 				listOf(
 					DispatchDecision.RequestRoute("Train #1", "kA", "kB"),
 					DispatchDecision.ApproveTrain("T2")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -342,12 +346,12 @@ class DispatchDecisionApplierTest {
 			val (queue, applier) = makeApplier()
 
 			// First drain: the reservation is genuinely new.
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			// Second drain: the driver decided the identical hop again before observing
 			// the first application (the race this guard exists to suppress).
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			verify(exactly = 1) { networkActuator.requestRoute("T1", "zB", "doA1") }
@@ -363,7 +367,8 @@ class DispatchDecisionApplierTest {
 				listOf(
 					DispatchDecision.ReservePath("T1", "zB", "doA1"),
 					DispatchDecision.ReservePath("T1", "zB", "doA1")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -384,9 +389,9 @@ class DispatchDecisionApplierTest {
 					onBlockTransition = { transitionCount++ }
 				)
 
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(transitionCount).isEqualTo(1)
@@ -398,10 +403,10 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
 			val (queue, applier) = makeApplier()
 
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep()
 			// Same train, different hop — genuine forward progress, must still be applied.
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "doA1", "A")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "doA1", "A")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			verify(exactly = 1) { networkActuator.requestRoute("T1", "zB", "doA1") }
@@ -425,9 +430,9 @@ class DispatchDecisionApplierTest {
 			// production decision sources. This test is defense-in-depth: it keeps the
 			// structured-key guard demonstrably sound against this input shape, so it stays safe
 			// if that upstream validation is ever relaxed. Both must reach the actuator port.
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1|zB", "doA1", "X")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1|zB", "doA1", "X")), ActionAuthor.LLM)
 			applier.onControlStep()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB|doA1", "X")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB|doA1", "X")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			verify(exactly = 1) { networkActuator.requestRoute("T1|zB", "doA1", "X") }
@@ -448,10 +453,10 @@ class DispatchDecisionApplierTest {
 			}
 			val (queue, applier) = makeApplier()
 
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep() // fails — must not be recorded as applied
 
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep() // legitimate retry — must reach the actuator port
 
 			verify(exactly = 2) { networkActuator.requestRoute("T1", "zB", "doA1") }
@@ -466,7 +471,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
 			val (queue, applier) = makeApplier()
 
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			// Simulate the wiring layer's BlockOccupancyListener reacting to a BLOCK_RELEASED
@@ -474,7 +479,7 @@ class DispatchDecisionApplierTest {
 			applier.evictReservationsFor("T1")
 
 			// The identical triple is now a fresh request, not a stale in-flight duplicate.
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			verify(exactly = 2) { networkActuator.requestRoute("T1", "zB", "doA1") }
@@ -490,7 +495,8 @@ class DispatchDecisionApplierTest {
 				listOf(
 					DispatchDecision.ReservePath("T1", "zB", "doA1"),
 					DispatchDecision.ReservePath("T2", "zB", "doA1")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -501,7 +507,8 @@ class DispatchDecisionApplierTest {
 				listOf(
 					DispatchDecision.ReservePath("T1", "zB", "doA1"),
 					DispatchDecision.ReservePath("T2", "zB", "doA1")
-				)
+				),
+				ActionAuthor.LLM
 			)
 			applier.onControlStep()
 
@@ -524,7 +531,7 @@ class DispatchDecisionApplierTest {
 				RouteRequestResult.Reserved("T1", 1)
 			}
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			val callerThread = Thread.currentThread()
 			applier.onControlStep()
@@ -540,7 +547,7 @@ class DispatchDecisionApplierTest {
 			val trackingCallback: (String) -> Unit = { callbackThread.set(Thread.currentThread()) }
 			val queue = ActuatorCommandQueue()
 			val applier = DispatchDecisionApplier(queue, networkActuator, trackingCallback)
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 			val callerThread = Thread.currentThread()
 			applier.onControlStep()
@@ -562,7 +569,7 @@ class DispatchDecisionApplierTest {
 			// Post from a background thread (simulating the future SP0.10 driver thread)
 			val driverThread =
 				Thread {
-					queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+					queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 				}
 			driverThread.start()
 			driverThread.join()
@@ -595,7 +602,8 @@ class DispatchDecisionApplierTest {
 				listOf(
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ReservePath("T1", "zA", "doA1")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			// After posting, nothing should have been applied yet
@@ -625,7 +633,7 @@ class DispatchDecisionApplierTest {
 		fun setSignalAspect_routedToActuatorPort() {
 			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE)))
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE)), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -638,7 +646,7 @@ class DispatchDecisionApplierTest {
 		fun setSignalAspect_passesCorrectArguments() {
 			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zB", Signal.STOP)))
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zB", Signal.STOP)), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -650,7 +658,7 @@ class DispatchDecisionApplierTest {
 		fun setSignalAspect_forwardsTrainName() {
 			every { networkActuator.setSignalAspect(any(), any(), any()) } returns true
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE, trainName = "T1")))
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE, trainName = "T1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -662,7 +670,7 @@ class DispatchDecisionApplierTest {
 		fun setSignalAspect_falseResult_doesNotThrow() {
 			every { networkActuator.setSignalAspect(any(), any(), any()) } returns false
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zC", Signal.STOP)))
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zC", Signal.STOP)), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -672,7 +680,7 @@ class DispatchDecisionApplierTest {
 		fun setSwitchPosition_routedToActuatorPort() {
 			every { networkActuator.setSwitchPosition(any(), any()) } returns true
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v1", RailSwitch.Conf.MAIN)))
+			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v1", RailSwitch.Conf.MAIN)), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -685,7 +693,7 @@ class DispatchDecisionApplierTest {
 		fun setSwitchPosition_passesCorrectArguments() {
 			every { networkActuator.setSwitchPosition(any(), any()) } returns true
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v2", RailSwitch.Conf.BRANCH)))
+			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v2", RailSwitch.Conf.BRANCH)), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -697,7 +705,7 @@ class DispatchDecisionApplierTest {
 		fun setSwitchPosition_falseResult_doesNotThrow() {
 			every { networkActuator.setSwitchPosition(any(), any()) } returns false
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v3", RailSwitch.Conf.MAIN)))
+			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v3", RailSwitch.Conf.MAIN)), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -707,7 +715,7 @@ class DispatchDecisionApplierTest {
 		fun releaseRoute_routedToActuatorPort() {
 			every { networkActuator.releaseRouteDetailed(any()) } returns RouteRelease(true, emptyList())
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReleaseRoute("Train #1")))
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("Train #1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -720,7 +728,7 @@ class DispatchDecisionApplierTest {
 		fun releaseRoute_falseResult_doesNotThrow() {
 			every { networkActuator.releaseRouteDetailed(any()) } returns RouteRelease(false, emptyList())
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ReleaseRoute("Train #2")))
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("Train #2")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -732,7 +740,8 @@ class DispatchDecisionApplierTest {
 				RouteRequestResult.Reserved("Train #1", 3)
 			val (queue, applier) = makeApplier()
 			queue.postAll(
-				listOf(DispatchDecision.RequestRoute("Train #1", "A", "B"))
+				listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -761,7 +770,8 @@ class DispatchDecisionApplierTest {
 				listOf(
 					DispatchDecision.RequestRoute("Train #1", "A", "B"),
 					DispatchDecision.RequestRoute("Train #2", "A", "B")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -775,7 +785,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
 				RouteRequestResult.AllPathsBlocked(attemptedPaths = 2)
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -786,7 +796,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
 				RouteRequestResult.Conflict(blockName = "k1", existingOwner = "Train #2")
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -797,7 +807,7 @@ class DispatchDecisionApplierTest {
 			every { networkActuator.requestRoute(any(), any(), any()) } returns
 				RouteRequestResult.NoRouteExists(fromEndpointName = "A", toEndpointName = "B")
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -817,7 +827,8 @@ class DispatchDecisionApplierTest {
 					DispatchDecision.SetSwitchPosition("v1", RailSwitch.Conf.BRANCH),
 					DispatchDecision.ReleaseRoute("Train #1"),
 					DispatchDecision.RequestRoute("Train #1", "A", "B")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -837,7 +848,7 @@ class DispatchDecisionApplierTest {
 				true
 			}
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE)))
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE)), ActionAuthor.LLM)
 
 			val callerThread = Thread.currentThread()
 			applier.onControlStep()
@@ -882,7 +893,7 @@ class DispatchDecisionApplierTest {
 		fun holdTrain_routedToLifecyclePort() {
 			every { trainLifecyclePort.holdTrain(any(), any()) } returns true
 			val (queue, applier) = makeApplierWithLifecyclePort()
-			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)))
+			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -896,7 +907,7 @@ class DispatchDecisionApplierTest {
 		fun holdTrain_passesCorrectArguments() {
 			every { trainLifecyclePort.holdTrain(any(), any()) } returns true
 			val (queue, applier) = makeApplierWithLifecyclePort()
-			queue.postAll(listOf(DispatchDecision.HoldTrain("Train-7", 60.0)))
+			queue.postAll(listOf(DispatchDecision.HoldTrain("Train-7", 60.0)), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -908,7 +919,7 @@ class DispatchDecisionApplierTest {
 		fun holdTrain_falseResult_doesNotThrow() {
 			every { trainLifecyclePort.holdTrain(any(), any()) } returns false
 			val (queue, applier) = makeApplierWithLifecyclePort()
-			queue.postAll(listOf(DispatchDecision.HoldTrain("ghostTrain", 10.0)))
+			queue.postAll(listOf(DispatchDecision.HoldTrain("ghostTrain", 10.0)), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw
 		}
@@ -918,7 +929,7 @@ class DispatchDecisionApplierTest {
 		fun holdTrain_withoutLifecyclePort_doesNotThrow() {
 			// makeApplier() creates an applier WITHOUT a TrainLifecyclePort
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)))
+			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)), ActionAuthor.LLM)
 
 			applier.onControlStep() // must not throw; logs a warning
 
@@ -936,7 +947,7 @@ class DispatchDecisionApplierTest {
 				true
 			}
 			val (queue, applier) = makeApplierWithLifecyclePort()
-			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)))
+			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)), ActionAuthor.LLM)
 
 			val callerThread = Thread.currentThread()
 			applier.onControlStep()

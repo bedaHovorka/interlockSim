@@ -304,12 +304,14 @@ class DefaultDispatcherRunRecorder(
 		// Apply-failure counts
 		outcome.applyFailure?.let { code -> applyFailuresByCode.getValue(code.name).incrementAndGet() }
 
-		// Author counts
-		actionsByAuthor.getValue(outcome.authored.author.name).incrementAndGet()
-
-		// Unattributed applies: tickIndex == -1 means the correlation map had no entry
-		if (outcome.authored.tickIndex == -1L) {
+		// Author counts. Issue #1477: an action with no known author (a null author, or tickIndex -1:
+		// the correlation map had no entry) goes to the unattributed counter only, never under an
+		// author — LLM included.
+		val author = outcome.authored.author
+		if (author == null || outcome.authored.tickIndex == -1L) {
 			unattributedApplies.incrementAndGet()
+		} else {
+			actionsByAuthor.getValue(author.name).incrementAndGet()
 		}
 
 		// Issue #1365: a non-contiguous-origin refusal of a decision the silent cycle posted
