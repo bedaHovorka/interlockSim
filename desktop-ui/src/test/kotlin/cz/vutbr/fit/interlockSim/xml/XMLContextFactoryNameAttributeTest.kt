@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.xml
 
 import assertk.assertThat
-import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
 import assertk.assertions.isFalse
@@ -93,12 +92,12 @@ class XMLContextFactoryNameAttributeTest : XMLContextFactoryTestBase() {
 
 		editingContextFactory.createContext(xml).use { context ->
 			assertThat(context).isNotNull()
-			// Issue #1273: an unnamed semaphore is named after its grid position so a dispatcher can
-			// address it; an unnamed switch stays unnamed (its names are written by hand, #1279).
+			// Issue #1273 / #1473: an unnamed semaphore and an unnamed switch are named after their
+			// grid position, so a dispatcher can address them.
 			val semaphore = context.getRailWayNetGrid().getCellAt(15, 10) as RailSemaphore
 			val railSwitch = context.getRailWayNetGrid().getCellAt(20, 10) as RailSwitch
 			assertThat(semaphore.getName()).isEqualTo("S_15_10")
-			assertThat(railSwitch.getName()).isEmpty()
+			assertThat(railSwitch.getName()).isEqualTo("SW_20_10")
 		}
 	}
 

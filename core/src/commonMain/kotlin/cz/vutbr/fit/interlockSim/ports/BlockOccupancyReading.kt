@@ -31,11 +31,17 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  * @property state Current occupancy state.
  * @property trainId Identifier of the train that owns (reserved or occupies) this block.
  *   `null` when [state] is [TrackFacility.State.FREE].
+ * @property sectionId The block's unique grid id: its two end points in row order, for example
+ *   `(16,8)-(25,8)` — the form of `Station.StationBlock.id`, for every block (Issue #1473). Unlike
+ *   [blockId], it is unique per network by construction; two blocks with the same end points (not
+ *   possible in today's graph) would get `/2`, `/3`, ... in their order of appearance. It is the
+ *   join key of the planning-snapshot facets (#1467 spec §7). Empty in a reading built by hand.
  *
  * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
  */
 data class BlockOccupancyReading(
 	val blockId: String,
 	val state: TrackFacility.State,
-	val trainId: String?
+	val trainId: String?,
+	val sectionId: String = ""
 )

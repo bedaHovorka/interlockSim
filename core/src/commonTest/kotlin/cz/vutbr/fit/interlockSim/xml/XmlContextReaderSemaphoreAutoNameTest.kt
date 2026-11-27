@@ -42,8 +42,9 @@ import kotlin.test.Test
  * Pinned here: the generated name format, that it is stable across loads, that explicit names
  * are untouched, that all 37 Praha signals are addressable, that saving keeps the user's XML
  * clean (a generated name is not written back unless another node also carries it), and that a
- * clash with an explicit name fails the load with a message naming the cause. Switches stay
- * unnamed (issue #1279 names them by hand).
+ * clash with an explicit name fails the load with a message naming the cause. Unnamed switches
+ * get their own generated form (Issue #1473, pinned by [XmlContextReaderSwitchAutoNameTest]); the
+ * two forms never meet.
  */
 class XmlContextReaderSemaphoreAutoNameTest {
 	private val reader = XmlContextReader()
@@ -104,12 +105,12 @@ class XmlContextReaderSemaphoreAutoNameTest {
 	}
 
 	@Test
-	fun unnamedSwitchesStayUnnamed() {
+	fun unnamedSwitchGetsTheSwitchFormNotTheSemaphoreForm() {
 		// LEGACY_NETWORK_NO_NAMES_XML: unnamed semaphore at (15,10), unnamed switch at (20,10).
 		reader.parse(NetworkResources.LEGACY_NETWORK_NO_NAMES_XML).use { ctx ->
 			val switch = ctx.getRailWayNetGrid()[Point(20, 10)]
 			assertThat(switch).isNotNull().isInstanceOf<RailSwitch>()
-			assertThat((switch as RailSwitch).getName()).isEqualTo("")
+			assertThat((switch as RailSwitch).getName()).isEqualTo("SW_20_10")
 			assertThat(semaphoreAt(ctx, Point(15, 10)).getName()).isEqualTo("S_15_10")
 		}
 	}

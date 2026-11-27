@@ -16,7 +16,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.separatorAspect
 import cz.vutbr.fit.interlockSim.sim.separatorName
+import cz.vutbr.fit.interlockSim.util.Array2DMap
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
+import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import cz.vutbr.fit.interlockSim.util.indexByNonBlankName
@@ -125,6 +127,36 @@ class DefaultNetworkPerceptionPort(
 	private val blockById: Map<String, DynamicTrackBlock> =
 		blockCache.associateBy { blockId(it) }
 
+	/**
+	 * The unique grid id of every block ([BlockOccupancyReading.sectionId], Issue #1473), built once:
+	 * the graph's end points never change within a context, unlike [blockId], which changes when
+	 * `Station.applyBlockNames` runs and is therefore derived per reading.
+	 */
+	private val sectionIdByBlock: Map<DynamicTrackBlock, String> = buildSectionIds()
+
+	/**
+	 * Each block's two end points in row order, `(x1,y1)-(x2,y2)`: the form `Station` computes for
+	 * `Station.StationBlock.id`, for every graph block. The graph keys a block by its end-point
+	 * pair, so two blocks cannot share both ends today; should they, the later ones in row order
+	 * of their first end point get `/2`, `/3`, ... so the id stays unique.
+	 */
+	private fun buildSectionIds(): Map<DynamicTrackBlock, String> {
+		val graph = env.getGraph()
+		val endpoints: Map<DynamicTrackBlock, List<Point>> =
+			graph
+				.nodeSet()
+				.sortedWith(Array2DMap.POINT_COMPARATOR)
+				.flatMap { node -> graph[node].map { it to node } }
+				.groupBy(keySelector = { it.first }, valueTransform = { it.second })
+		val seen = mutableMapOf<String, Int>()
+		return endpoints.mapValues { (_, ends) ->
+			val base = ends.joinToString("-") { "(${it.x},${it.y})" }
+			val count = (seen[base] ?: 0) + 1
+			seen[base] = count
+			if (count == 1) base else "$base/$count"
+		}
+	}
+
 	// ── Block helper ──────────────────────────────────────────────────────
 
 	/**
@@ -211,7 +243,8 @@ class DefaultNetworkPerceptionPort(
 					TrackFacility.State.FREE -> null
 					TrackFacility.State.RESERVED -> trainName
 					TrackFacility.State.OCCUPIED -> occupant?.name ?: trainName
-				}
+				},
+			sectionId = sectionIdByBlock[this].orEmpty()
 		)
 
 	// ── NetworkPerceptionPort — train positions ───────────────────────────

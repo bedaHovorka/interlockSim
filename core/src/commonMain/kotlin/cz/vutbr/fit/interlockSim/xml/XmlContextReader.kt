@@ -27,8 +27,9 @@ private val logger = KotlinLogging.logger {}
  * identically to the existing JVM SAX parser.
  *
  * A `RailSemaphore` without a `name` attribute gets the [GeneratedSemaphoreName] of its grid
- * position, so a dispatcher can address it (Issue #1273); one WARN line per load reports how
- * many semaphores were named this way.
+ * position, so a dispatcher can address it (Issue #1273); a `RailSwitch` without one gets
+ * [GeneratedElementName.switchAt] its position (Issue #1473). One WARN line per load reports how
+ * many elements were named this way.
  *
  * @since 2026-03 (KMP Task 2c)
  */
@@ -171,7 +172,8 @@ class XmlContextReader {
 
 			"RailSwitch" -> {
 				val ctx = requireContext(editingContext1)
-				putNodeCell(ctx, attrs, parseRailSwitch(attrs))
+				val position = parsePoint(attrs, prefix = null)
+				ctx.putCell(position, parseRailSwitch(attrs, position, generatedNames))
 			}
 
 			"SimpleTrackBlock" -> {
@@ -225,7 +227,7 @@ class XmlContextReader {
 
 	/**
 	 * Fails the load (closing [ctx]) when a generated name collides with an explicit one, else
-	 * WARNs how many semaphores were auto-named.
+	 * WARNs how many semaphores and switches were auto-named.
 	 */
 	private fun checkGeneratedNames(
 		ctx: DefaultEditingContext,
@@ -238,15 +240,19 @@ class XmlContextReader {
 			throw e
 		}
 		if (generatedNames.isNotEmpty()) {
+			val grid: RailwayNetGrid<*> = ctx.getRailWayNetGrid()
+			val switches = generatedNames.keys.count { grid[it] is RailSwitch }
+			val semaphores = generatedNames.size - switches
 			logger.warn {
-				"Auto-named ${generatedNames.size} unnamed RailSemaphore element(s) by grid position " +
-					"(${GeneratedSemaphoreName.PATTERN}); add a name attribute in the XML to choose the name"
+				"Auto-named $semaphores unnamed RailSemaphore element(s) (${GeneratedSemaphoreName.PATTERN}) and " +
+					"$switches unnamed RailSwitch element(s) (${GeneratedElementName.SWITCH_PATTERN}) by grid position; " +
+					"add a name attribute in the XML to choose the name"
 			}
 		}
 	}
 
 	/**
-	 * Fails the load when a generated semaphore name is also the explicit name of another
+	 * Fails the load when a generated semaphore or switch name is also the explicit name of another
 	 * element: a dispatcher could not tell the two apart. The message names both positions.
 	 */
 	private fun requireGeneratedNamesUnique(
@@ -262,25 +268,32 @@ class XmlContextReader {
 				position !in generatedNames && cell is NodeCell && cell.getName() in positionByGeneratedName
 			} ?: return
 		val name = (clash.value as NodeCell).getName()
-		val semaphorePosition = positionByGeneratedName.getValue(name)
+		val generatedPosition = positionByGeneratedName.getValue(name)
+		val element = if (grid[generatedPosition] is RailSwitch) "RailSwitch" else "RailSemaphore"
 		throw IllegalArgumentException(
-			"The unnamed RailSemaphore at ${format(semaphorePosition)} gets the generated name $name, " +
+			"The unnamed $element at ${format(generatedPosition)} gets the generated name $name, " +
 				"which is already the name of the element at ${format(clash.key)}; " +
-				"give the semaphore at ${format(semaphorePosition)} a name attribute in the XML"
+				"give the $element at ${format(generatedPosition)} a name attribute in the XML"
 		)
 	}
 
 	private fun format(position: Point): String = "(${position.x},${position.y})"
 
-	private fun parseRailSwitch(attrs: Map<String, String>): RailSwitch {
+	/**
+	 * A switch without a `name` attribute is named [GeneratedElementName.switchAt] its [position]
+	 * and recorded in [generatedNames] for the clash check and the load's WARN line (Issue #1473).
+	 */
+	private fun parseRailSwitch(
+		attrs: Map<String, String>,
+		position: Point,
+		generatedNames: MutableMap<Point, String>
+	): RailSwitch {
 		val spatialType = requireEnum<SpatialType>(attrs, "SpatialType")
 		val type = requireEnum<RailSwitch.Type>(attrs, "Type")
-		val name = parseOptionalName(attrs)
-		return if (name != null) {
-			RailSwitch(name, spatialType, type)
-		} else {
-			RailSwitch(spatialType, type)
-		}
+		val name =
+			parseOptionalName(attrs)
+				?: GeneratedElementName.switchAt(position).also { generatedNames[position] = it }
+		return RailSwitch(name, spatialType, type)
 	}
 
 	private fun parseAndInsertTrackBlock(

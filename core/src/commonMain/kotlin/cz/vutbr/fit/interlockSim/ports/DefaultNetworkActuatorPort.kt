@@ -21,7 +21,9 @@ import cz.vutbr.fit.interlockSim.sim.resolveEndpoint
 import cz.vutbr.fit.interlockSim.sim.toRouteResponse
 import cz.vutbr.fit.interlockSim.sim.unresolvedEndpointDenial
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
+import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.cellsByName
+import cz.vutbr.fit.interlockSim.xml.GeneratedElementName
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -342,8 +344,20 @@ class DefaultNetworkActuatorPort(
 		env.getRailWayNetGrid().cellsByName<DynamicRailSemaphore> { it.name }
 
 	/**
-	 * Scans the grid once to build a name→switch index.
+	 * Scans the grid once to build a name→switch index. A switch loaded from XML always has a name (the reader generates one for an
+	 * unnamed switch); a switch of a context built in code may be blank and is then addressed by
+	 * the same generated form, [GeneratedElementName.switchName] (Issue #1473).
 	 */
-	private fun buildSwitchCache(): Map<String, DynamicRailSwitch> =
-		env.getRailWayNetGrid().cellsByName<DynamicRailSwitch> { it.name }
+	private fun buildSwitchCache(): Map<String, DynamicRailSwitch> {
+		// The same getCellAt scan as cellsOfType, keeping the position for the fallback name.
+		val grid = env.getRailWayNetGrid()
+		val result = LinkedHashMap<String, DynamicRailSwitch>()
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
+				val switch = grid.getCellAt(x, y) as? DynamicRailSwitch ?: continue
+				result[GeneratedElementName.switchName(switch.name, Point(x, y))] = switch
+			}
+		}
+		return result
+	}
 }
