@@ -313,9 +313,13 @@ class ThinkingTruncatedCycleTest {
 			assertThat(stack.sinkHolder.actedThisCycle(), "the cut reply acted on nothing").isFalse()
 			assertThat(stack.ticks.map { it.outcome to it.timeoutNoOpCause })
 				.containsExactly(TickOutcome.TIMEOUT_NOOP to TimeoutNoOpCause.THINKING_TRUNCATED)
+			assertThat(stack.ticks.single().generationCut, "the cycle is named as cut").isTrue()
 			verify(exactly = 0) { stack.fallback.decide(any()) }
 			assertThat(stack.adapter.circuitBreaker.consecutiveFailures, "the breaker counts the cut")
 				.isEqualTo(1)
+			// The run-record trace (owner ruling of 2026-11-27): the cut cycle is counted even
+			// though nothing acts.
+			assertThat(stack.recorder.snapshot().generationCutCycles).isEqualTo(1L)
 		}
 	}
 
@@ -339,6 +343,9 @@ class ThinkingTruncatedCycleTest {
 			assertThat(stack.queue.approximateSize(), "the complete reply's command stands").isEqualTo(1)
 			assertThat(stack.sinkHolder.actedThisCycle()).isTrue()
 			assertThat(stack.ticks.map { it.outcome }).containsExactly(TickOutcome.LLM_ACTIONS)
+			// The mixed cycle's trace: the outcome came from the emissions, the cut still shows.
+			assertThat(stack.ticks.single().generationCut, "the later cut is named on the tick").isTrue()
+			assertThat(stack.recorder.snapshot().generationCutCycles).isEqualTo(1L)
 			verify(exactly = 0) { stack.fallback.decide(any()) }
 		}
 	}

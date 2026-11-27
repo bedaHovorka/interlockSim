@@ -238,6 +238,18 @@ class RunRecordJsonWriterTest {
 			.isEqualTo("""[{"trainId":"T3","inOut":"west_entry_1","kind":"NON_CONTIGUOUS","since":42.0}]""")
 	}
 
+	/**
+	 * Issue #1342 (schema 16): a run without an LLM dispatcher made no LLM calls, so the
+	 * generation-cut counter is a measured zero — the same figure a JVM recorder publishes for the
+	 * run, which `RunRecordJsonReadBackTest` compares whole.
+	 */
+	@Test
+	fun `the snapshot records the generation-cut counter as a measured zero`() {
+		val json = parse(RunRecordJsonWriter.snapshotJson(run()))
+
+		assertThat(json.getValue("generationCutCycles").jsonPrimitive.long).isEqualTo(0L)
+	}
+
 	@Test
 	fun `a record without a capacity writes the capacity as absent and not as zero`() {
 		val json = parse(RunRecordJsonWriter.snapshotJson(run(record(capacityShownToDispatcher = null))))
@@ -294,6 +306,6 @@ class RunRecordJsonWriterTest {
 
 	@Test
 	fun `the schema version is a number the store accepts`() {
-		assertThat(JsonPrimitive(RunRecordJsonWriter.SCHEMA_VERSION).int).isEqualTo(15)
+		assertThat(JsonPrimitive(RunRecordJsonWriter.SCHEMA_VERSION).int).isEqualTo(16)
 	}
 }

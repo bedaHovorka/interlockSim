@@ -757,6 +757,11 @@ class KoogAgentPlanAdapter(
 	 * #1302): the cut ending leaves a queued train's offered extension unrequested, the same way
 	 * the emissions arms do. Counts nothing only when the count was never attempted or threw — see
 	 * [countNextSectionOffers].
+	 *
+	 * Both arms report [TickRecord.generationCut] on their tick (the owner ruling of the
+	 * 2026-11-27 round): [DefaultDispatcherRunRecorder] counts the cut cycles into
+	 * [DispatcherRunSnapshot.generationCutCycles], so a run JSON names every cycle a cut hit
+	 * regardless of the outcome its emissions classified.
 	 */
 	private fun reportCutCycle(
 		attempt: InferenceAttempt,
@@ -769,7 +774,13 @@ class KoogAgentPlanAdapter(
 				"KoogAgentPlanAdapter: LLM generation was cut by num_predict after an emission — keeping " +
 					"the emitted actions, no retry and no fallback (simTime=$simTime)"
 			}
-			reportTick(outcomeFromEmissions(), simTime, attempt.latencyMs, countOffersFrom = observation)
+			reportTick(
+				outcomeFromEmissions(),
+				simTime,
+				attempt.latencyMs,
+				countOffersFrom = observation,
+				generationCut = true
+			)
 			return (attempt as? InferenceAttempt.Success)?.decisions ?: emptyList()
 		}
 		logger.warn {
@@ -781,7 +792,8 @@ class KoogAgentPlanAdapter(
 			simTime,
 			attempt.latencyMs,
 			countOffersFrom = observation,
-			timeoutNoOpCause = TimeoutNoOpCause.THINKING_TRUNCATED
+			timeoutNoOpCause = TimeoutNoOpCause.THINKING_TRUNCATED,
+			generationCut = true
 		)
 		return emptyList()
 	}
@@ -1055,7 +1067,8 @@ class KoogAgentPlanAdapter(
 		latencyMs: Long?,
 		silentNonIdleCycleIndex: Long? = null,
 		countOffersFrom: DispatchObservation? = null,
-		timeoutNoOpCause: TimeoutNoOpCause? = null
+		timeoutNoOpCause: TimeoutNoOpCause? = null,
+		generationCut: Boolean = false
 	) {
 		val (nextSectionOffers, nextSectionOffersFailed) = countNextSectionOffers(countOffersFrom)
 		tickListeners.onTick(
@@ -1066,7 +1079,8 @@ class KoogAgentPlanAdapter(
 				latencyMs = latencyMs,
 				silentNonIdleCycleIndex = silentNonIdleCycleIndex,
 				nextSectionOffers = nextSectionOffers,
-				nextSectionOffersFailed = nextSectionOffersFailed
+				nextSectionOffersFailed = nextSectionOffersFailed,
+				generationCut = generationCut
 			)
 		)
 		cycleHistory.record(simTime, outcome, sinkHolder.emittedActionsThisCycle())

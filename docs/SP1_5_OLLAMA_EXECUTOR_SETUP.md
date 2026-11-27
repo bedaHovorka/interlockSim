@@ -185,12 +185,17 @@ What the dispatcher does with the cap:
   SHA-256 of the returned `modelfile` and the `num_predict` value from its parameters. Two runs on
   the same tag name but a rebuilt Modelfile therefore never look like one configuration. A failed
   call records both figures `null` (not measured), logs one warning, and the run continues.
+  A non-positive `num_predict` (`-1` is Ollama's "no cap") records `null` too: no cap is configured.
 - **A cut generation acts on nothing.** Koog drops Ollama's `done_reason`, so `OllamaReplyObserver`
   (a Ktor plugin on the dispatcher's own base HTTP client) reads it from every `/api/chat` reply. A
   cycle with a `done_reason == "length"` reply is never retried and never handed to the rule-based
-  fallback; with no emission it is a `TIMEOUT_NOOP` tick with cause `THINKING_TRUNCATED`, counted in
-  `timeoutNoOpByCause`. The circuit breaker counts it as a failure, so three cuts in a row open the
-  breaker.
+  fallback; the cap stopped that generation before the model finished reasoning, so its own tool
+  calls are refused at the actuator emission and reach nothing. With no emission (a call from the
+  cut reply is not one) the tick is a `TIMEOUT_NOOP` with cause `THINKING_TRUNCATED`, counted in
+  `timeoutNoOpByCause`; a command from an earlier *complete* reply of the same cycle still stands
+  and classifies the tick as any action tick. Either way every cut cycle is counted in
+  `generationCutCycles` (schema 16, the owner ruling of the 2026-11-27 review round). The circuit
+  breaker counts every cut as a failure, so three cuts in a row open the breaker.
 
 ### Customize via Code (SP1.6+)
 

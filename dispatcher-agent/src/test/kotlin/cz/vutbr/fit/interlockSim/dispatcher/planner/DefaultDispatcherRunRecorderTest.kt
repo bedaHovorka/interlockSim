@@ -369,6 +369,46 @@ class DefaultDispatcherRunRecorderTest {
 		assertThat(recorder().snapshot().modelProfile, "a rule-based run has no model profile").isNull()
 	}
 
+	/**
+	 * Issue #1342 (owner ruling of 2026-11-27): the generation-cut counter counts every cut cycle,
+	 * whatever the tick outcome. The no-emission cut ending is already counted under its
+	 * THINKING_TRUNCATED cause; the counter is the trace for the mixed cycles post-emission-seal —
+	 * a command from an earlier complete reply classified the tick, the cut still shows.
+	 */
+	@Test
+	fun `generationCutCycles counts cut cycles whatever the tick outcome records`() {
+		val r = llmRecorder()
+		// A no-emission cut ending: TIMEOUT_NOOP / THINKING_TRUNCATED.
+		r.onTick(
+			TickRecord(
+				TickOutcome.TIMEOUT_NOOP,
+				simTime = 1.0,
+				timeoutNoOpCause = TimeoutNoOpCause.THINKING_TRUNCATED,
+				generationCut = true
+			)
+		)
+		// A mixed cycle: an earlier complete reply acted, the tick is classified by the emissions,
+		// and the cut reply is named by the flag alone.
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 2.0, generationCut = true))
+		// An uncut tick counts nothing.
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 3.0))
+
+		assertThat(r.snapshot().generationCutCycles).isEqualTo(2L)
+		assertThat(r.snapshot().timeoutNoOpByCause[TimeoutNoOpCause.THINKING_TRUNCATED.name]).isEqualTo(1L)
+	}
+
+	@Test
+	fun `a run without cut cycles records the counter as zero, not absent`() {
+		val r = llmRecorder()
+		r.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 1.0))
+		r.onTick(offerTick(2.0, offered = 1, skipped = emptySet()))
+		val ruleBased = recorder().apply { onTick(TickRecord(TickOutcome.RULE_FALLBACK, simTime = 5.0)) }
+
+		assertThat(r.snapshot().generationCutCycles).isEqualTo(0L)
+		assertThat(ruleBased.snapshot().generationCutCycles, "a rule-based arm makes no LLM calls")
+			.isEqualTo(0L)
+	}
+
 	@Test
 	fun `snapshot has correct schemaVersion`() {
 		val snap = recorder().snapshot()

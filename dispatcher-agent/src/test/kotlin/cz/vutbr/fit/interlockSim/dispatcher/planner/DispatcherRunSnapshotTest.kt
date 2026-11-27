@@ -178,8 +178,9 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 15`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_MODEL_PROFILE)
+	fun `current schema version is 16`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_GENERATION_CUT)
+		assertThat(SCHEMA_VERSION_WITH_GENERATION_CUT).isEqualTo(SCHEMA_VERSION_WITH_MODEL_PROFILE + 1)
 		assertThat(SCHEMA_VERSION_WITH_MODEL_PROFILE).isEqualTo(SCHEMA_VERSION_WITH_REFUSED_ENTRIES + 1)
 		assertThat(SCHEMA_VERSION_WITH_REFUSED_ENTRIES).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW + 1)
 	}
@@ -227,6 +228,34 @@ class DispatcherRunSnapshotTest {
 		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), JsonObject(withoutKey).toString())
 
 		assertThat(decoded.modelProfile).isNull()
+	}
+
+	/**
+	 * The owner ruling of 2026-11-27 on the review round (Issue #1342): a run records how many of
+	 * its cycles a cut generation hit — the structured trace a run JSON needs once the emission seal
+	 * makes a cut cycle that still acted (an earlier complete reply's command, classified by the
+	 * emissions) look like a clean action tick. A counter, not a verdict.
+	 */
+	@Test
+	fun `serialization round-trips the generation-cut counter`() {
+		val snap = snapshotWith().copy(generationCutCycles = 2L)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"generationCutCycles\": 2")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.generationCutCycles).isEqualTo(2L)
+	}
+
+	/** A version 15 file has no generation-cut key; it decodes with the counter absent, not zero. */
+	@Test
+	fun `a snapshot without a generation-cut key decodes with the counter absent`() {
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snapshotWith())
+		val withoutKey = json.parseToJsonElement(encoded).jsonObject.filterKeys { it != "generationCutCycles" }
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), JsonObject(withoutKey).toString())
+
+		assertThat(decoded.generationCutCycles).isNull()
 	}
 
 	/** Issue #1302 (schema version 12): the skipped and offered NEXT SECTION counts survive the round-trip. */
@@ -639,6 +668,9 @@ class DispatcherRunSnapshotTest {
 
 		/** Issue #1342 added the model profile and the THINKING_TRUNCATED cause key. */
 		private const val SCHEMA_VERSION_WITH_MODEL_PROFILE: Int = 15
+
+		/** The owner ruling on #1342's review round added the generation-cut counter. */
+		private const val SCHEMA_VERSION_WITH_GENERATION_CUT: Int = 16
 
 		private val json =
 			Json {
