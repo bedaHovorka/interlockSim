@@ -15,8 +15,8 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * per cause in [DispatcherRunSnapshot.silentCyclesByCause]. Each silent cycle goes under exactly one cause.
  *
  * The causes are read from existing keys of [DispatcherRunSnapshot.ticksByOutcome] and
- * [DispatcherRunSnapshot.timeoutNoOpByCause], by name, so [THINKING_TRUNCATED] is counted as soon as #1342
- * adds that `TimeoutNoOpCause` value, without a change here.
+ * [DispatcherRunSnapshot.timeoutNoOpByCause], by name, so [THINKING_TRUNCATED] counts #1342's
+ * `TimeoutNoOpCause.THINKING_TRUNCATED` cycles without a reference to that enum here.
  *
  * Today a silent non-idle cycle still runs the rule fallback (C8, until #1413): its fallback actions are
  * counted under `RULE_FALLBACK` whatever the cycle's silent cause.

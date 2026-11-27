@@ -323,6 +323,6 @@ class CleanRunRuleTest {
 	private companion object {
 		const val MODEL = "qwen2.5:7b-instruct"
 		const val SCRIPT = "perfect-dispatcher"
-		const val SCHEMA_BEFORE_1476 = 13
+		const val SCHEMA_BEFORE_1476 = 16
 	}
 }
