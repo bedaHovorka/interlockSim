@@ -271,19 +271,22 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 			private set
 
 		/** The switch-constrained searches with their answers, in call order: the only stored record. */
-		val switchConstrainedAnswers = mutableListOf<RecordedSearch>()
+		val switchConstrainedAnswers: List<RecordedSearch>
+			get() = record
+
+		private val record = mutableListOf<RecordedSearch>()
 
 		/** The switch-constrained searches, one count per call (the availability-probe counter); derived. */
 		val evaluations: Int
-			get() = switchConstrainedAnswers.size
+			get() = record.size
 
 		/** The switch-constrained searches, per `(start, target)` pair; derived. */
 		val calls: Map<Pair<PathSeparator, PathSeparator>, Int>
-			get() = switchConstrainedAnswers.groupingBy { it.start to it.target }.eachCount()
+			get() = record.groupingBy { it.start to it.target }.eachCount()
 
 		/** Forget every recorded search and the topological count, so the next call is counted from zero. */
 		fun reset() {
-			switchConstrainedAnswers.clear()
+			record.clear()
 			topologicalCalls = 0
 		}
 
@@ -307,7 +310,7 @@ abstract class PathReservationServiceTestBase : KoinTestBase() {
 					in stubbedSwitchConstrained -> stubbedSwitchConstrained.getValue(target)
 					else -> real.findAllSwitchConstrainedPaths(start, target, maxDepth)
 				}
-			switchConstrainedAnswers += RecordedSearch(start, target, answer)
+			record += RecordedSearch(start, target, answer)
 			return answer
 		}
 	}
