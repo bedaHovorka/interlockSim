@@ -196,8 +196,10 @@ A late train never leaves before its planned departure; dwell rules come from se
 **Check of the normal range against a public figure.** České dráhy, first half of 2023: **88.8 %** of trains on time, where
 on time means a delay of at most 5 minutes (1,093,002 of 1,217,296 trains; network-wide, not split by train type; source:
 https://cc.cz/vcas-jezdi-devet-z-deseti-nasich-spoju-hlasi-ceske-drahy-v-presnosti-jsou-pry-na-spicce-evropy/). With the late tail spread evenly over 3–10 min
-(estimate), the normal range puts 0.80 + 0.20 × 2/7 ≈ 86 % to 0.90 + 0.10 × 2/7 ≈ 93 % of arrivals within 5 minutes. The ČD
-figure lies inside that band, so the normal range is consistent with it. No Správa železnic station-level figure was found.
+(estimate), the normal range puts 0.80 + 0.20 × 2/7 ≈ 86 % to 0.90 + 0.10 × 2/7 ≈ 93 % of arrivals within 5 minutes. The article is
+internally inconsistent — its own counts imply 1,093,002 / 1,217,296 ≈ 89.8 %, while the stated 88.8 % is the ČD
+management-statement figure — and both figures lie inside the 86–93 % band, so the normal-range consistency check holds either
+way. No Správa železnic station-level figure was found.
 
 **Requirements for #1447** (this leaf does not implement the draws):
 
@@ -221,6 +223,7 @@ out of scope.
 - PID timetable booklet 221, valid 2025-12-14 to 2026-12-12 (pid.cz, `221_jr2026.pdf`); PID rail line list (pid.cz).
 - Správa železnic, CZPTT portal `portal.cisjr.cz/pub/draha/celostatni/szdc/` and its format description v1.09.06.
 - FOSDEM 2026, D. Koňařík, *Czech transport data* (slides).
-- cc.cz, ČD punctuality H1 2023 (88.8 % within 5 minutes).
+- cc.cz, ČD punctuality H1 2023 within 5 minutes (stated 88.8 % is the ČD management-statement figure; the article's own counts
+  imply 1,093,002 / 1,217,296 ≈ 89.8 % — an internally inconsistent source; both figures lie inside the 86–93 % band of section 6).
 - Model: `praha-hlavni-nadrazi-station.xml`, `Station`, `SwitchLegalPairs`, `PrahaGeneratedPairsTest`;
   `docs/CZECH_RAILWAY_TERMINOLOGY.md` (InOut names).

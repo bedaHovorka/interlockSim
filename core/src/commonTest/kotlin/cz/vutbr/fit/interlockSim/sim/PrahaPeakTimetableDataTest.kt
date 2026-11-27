@@ -165,6 +165,9 @@ class PrahaPeakTimetableDataTest : CommonKoinTestBase() {
 	@Test
 	fun presenceStaysInTheTargetRangeAndWithinTheTopologyCapacity() {
 		val capacity = Station.from(load()).topologyCapacity
+		// The document's section 3 names the capacity (9: k1-k8 plus the bypass track k9); pin it so a
+		// topology-derivation change fails here and not only against the peak presence.
+		assertThat(capacity, name = "topology capacity (the document's 9 station tracks)").isEqualTo(9)
 		// Departures sort before arrivals at the same second: the track is free again.
 		val events =
 			trains
@@ -214,7 +217,12 @@ class PrahaPeakTimetableDataTest : CommonKoinTestBase() {
 			specs.map { it.length }.distinct(),
 			name = "train lengths"
 		).containsExactly(PrahaPeakTimetable.TRAIN_LENGTH)
-		assertThat(specs.map { it.inName to it.outName }.toSet(), name = "spec pairs")
-			.isEqualTo(trains.map { it.entry to it.exit }.toSet())
+		// Sorted multisets, not sets: a duplicated pair on either side of the pin would now fail.
+		assertThat(
+			specs.map { it.inName to it.outName }.sortedWith(compareBy({ it.first }, { it.second })),
+			name = "spec pairs"
+		).isEqualTo(
+			trains.map { it.entry to it.exit }.sortedWith(compareBy({ it.first }, { it.second }))
+		)
 	}
 }
