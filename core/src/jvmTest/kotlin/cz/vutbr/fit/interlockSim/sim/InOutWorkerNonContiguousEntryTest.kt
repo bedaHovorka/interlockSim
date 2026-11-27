@@ -215,6 +215,79 @@ class InOutWorkerNonContiguousEntryTest : KoinTestBase() {
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("a wrong route re-refused through the real reservation service until the kernel expiry releases it stays quiet")
+	fun refusalsThroughTheRealReservationServiceStayQuietUntilTheKernelExpiryReleasesTheRoute() {
+		val context = loadCervenyUjezd { env, inOut, real -> InOutWorker(env, inOut, pathReservationService = real) }
+		val decorated =
+			NavigationDecoratingContext(context, context.getRoutingServices().getTrainNavigationService()) {
+				errorStops += Process.time() to it
+			}
+		val reservations = context.getRoutingServices().getPathReservationService()
+		val entries = recordEntryInOuts(context)
+		val exits = recordExits(context)
+		var delayedTrainId: String? = null
+		var entryWorker: InOutWorker? = null
+		val reservePathCalls = mutableListOf<Pair<String, Double>>()
+		context.onRunAccountingEvent {
+			if (it is RunAccountingEvent.ReservePathCalled) reservePathCalls += it.trainId to it.time
+		}
+
+		runShuntingLoop(context, END_TIME, env = decorated) { loop ->
+			val wired = requireNotNull(loop.controlStepListener) { "runShuntingLoop did not install a listener" }
+			loop.controlStepListener =
+				ControlStepListener {
+					if (delayedTrainId == null) {
+						seedWrongOriginRoute(loop, context, reservations, entries)?.let { (id, worker) ->
+							delayedTrainId = id
+							entryWorker = worker
+						}
+					}
+					wired.onControlStep()
+					// Nobody ever cancels the wrong route: the worker keeps waiting until the kernel
+					// reservation expiry releases it, so every refusal of the wait is produced by the
+					// real reservation service — the two sites the one-WARNING-per-train design must
+					// keep quiet.
+				}
+		}
+
+		assertThat(errorStops, "no errorStop may end the run").isEmpty()
+		assertThat(fatalLines(), "no FATAL SimulationException may be logged").isEmpty()
+		val trainId = requireNotNull(delayedTrainId) { "a queued train must have been seeded" }
+		val worker = requireNotNull(entryWorker) { "the entry worker was never captured" }
+		val trainCalls = reservePathCalls.filter { it.first == trainId }.map { it.second }
+		assertThat(trainCalls.size, "the entry was re-attempted through the real service repeatedly").isGreaterThan(2)
+		assertThat(worker.staleOriginDenials, "one episode for the whole wait").isEqualTo(1)
+		val trainNamed = Regex("${Regex.escape(trainId)}(?!\\d)")
+		val refusalInfos =
+			appender.list
+				.filter { it.level == Level.INFO && EntryRefusalKind.NON_CONTIGUOUS.text in it.formattedMessage }
+				.filter { trainNamed.containsMatchIn(it.formattedMessage) }
+		assertThat(refusalInfos.map { it.formattedMessage }, "the first denial of the wait was logged").hasSize(1)
+		assertThat(
+			requireNotNull(exits[trainId]) { "the delayed train's entry route was never granted" }
+		).isLessThan(END_TIME.toDouble())
+		val record = context.runRecord()
+		assertThat(record.endTimeReached, "the run reaches its end time").isTrue()
+		assertThat(record.refusedEntriesAtRunEnd, "the wait was over by the end of the run").isEmpty()
+		// Word boundary: "Train #1" must not match "Train #10".
+		val warningWordings = listOf(
+			"rejected non-contiguous start",
+			"aborting, start is not contiguous",
+			EntryRefusalKind.NON_CONTIGUOUS.text
+		)
+		val refusalWarnings =
+			appender.list
+				.filter { it.level == Level.WARN && warningWordings.any { wording -> wording in it.formattedMessage } }
+				.map { it.formattedMessage }
+		assertThat(
+			refusalWarnings,
+			"the refusal is one diagnostic line per episode at INFO and no WARNING of any kind at the sites" +
+				" the wait passes per retry"
+		).isEmpty()
+	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("a wrong route that is never released keeps the train waiting to the end time with one WARNING")
 	fun wrongRouteNeverReleasedWaitsToTheEndTimeWithOneWarning() {
 		var refusedTrain: String? = null

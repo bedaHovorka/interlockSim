@@ -900,7 +900,12 @@ class DefaultPathReservationService(
 					// The start itself is unusable for this train (Issue #893). Every remaining
 					// candidate shares that same start, so trying them would produce the identical
 					// rejection -- abort and surface the reason to the caller.
-					logger.warn {
+					// Issue #1457: the only caller here is InOutWorker's entry attempt, and a
+					// NonContiguousStart is now the refused route the worker waits out -- this line
+					// would WARN on every STALE_ORIGIN_RETRY_SECONDS retry, one level down from the
+					// worker's INFO first denial and its one WARNING per train. A caller that must
+					// treat the refusal as loud logs its own WARN on the returned result.
+					logger.debug {
 						"reservePathToAnyNextSemaphore: aborting, start is not contiguous with " +
 							"'$trainId': ${result.reason}"
 					}
