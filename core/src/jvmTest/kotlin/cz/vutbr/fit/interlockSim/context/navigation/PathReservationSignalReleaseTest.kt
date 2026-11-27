@@ -406,7 +406,7 @@ class PathReservationSignalReleaseTest : PathReservationServiceTestBase() {
 		// already-owned prefix filtered out at Step 2a.5 -- while each physical block
 		// is later released exactly once. Per-event reservation counters
 		// (DefaultMetricsCollectionService.activeReservationCount,
-		// DefaultCollisionDetectionService, TemporalConflictDetector) therefore never
+		// DefaultCollisionDetectionService) therefore never
 		// returned to zero for a train whose route was extended over its own blocks,
 		// so the train was never counted as completed.
 		val reservedEvents = mutableListOf<BlockOccupancyEvent>()
