@@ -446,7 +446,7 @@ class DispatchDecisionApplier(
 				author = correlation?.author,
 				reason = correlation?.reason ?: "",
 				decisionKind = decision::class.simpleName ?: "Unknown",
-				tickIndex = correlation?.tickIndex ?: -1L
+				tickIndex = correlation?.tickIndex ?: AuthoredAction.UNATTRIBUTED_TICK_INDEX
 			)
 		val phase =
 			if (applyFailure != null) ActionPhase.APPLIED_THEN_FAILED else ActionPhase.APPLIED

@@ -52,8 +52,13 @@ class ActionOutcomeAggregator : ActionOutcomeSink {
 		totalOutcomes.incrementAndGet()
 		phaseCounts.getValue(outcome.phase).incrementAndGet()
 		outcome.applyFailure?.let { applyFailureCounts.getValue(it).incrementAndGet() }
+		// Issue #1477: the same unattributed rule as DefaultDispatcherRunRecorder (AuthoredAction.isUnattributed).
 		val author = outcome.authored.author
-		if (author == null) unattributedOutcomes.incrementAndGet() else authorCounts.getValue(author).incrementAndGet()
+		if (outcome.authored.isUnattributed || author == null) {
+			unattributedOutcomes.incrementAndGet()
+		} else {
+			authorCounts.getValue(author).incrementAndGet()
+		}
 	}
 
 	/** Returns an immutable point-in-time snapshot of all counters. Safe to call from any thread. */

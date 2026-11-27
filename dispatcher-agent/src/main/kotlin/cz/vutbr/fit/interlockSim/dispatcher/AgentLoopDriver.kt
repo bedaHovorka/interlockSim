@@ -430,6 +430,9 @@ class AgentLoopDriver(
 		// from the same sim tick (Issue #1354).
 		val observation = record.toDispatchObservation()
 		val planStart = TimeSource.Monotonic.markNow()
+		// Issue #1477: forget the previous cycle's outcome, so a cycle that reports none is never
+		// credited to the author of the cycle before. The listener fires synchronously inside plan().
+		lastTickOutcome = null
 		val decisions = planner.plan(observation)
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
 
@@ -453,8 +456,10 @@ class AgentLoopDriver(
 
 		// Attribute this cycle's decisions to the planner that produced them. postAll has no default
 		// author (Issue #1477), and an LLM-backed cycle always reports its tick outcome before plan()
-		// returns (see the listener in init), so a missing outcome is a wiring defect: fail loudly
-		// rather than credit an unknown actor to ActionAuthor.LLM.
+		// returns (see the listener in init; lastTickOutcome is cleared before every plan()), so a
+		// cycle that reported none is a wiring defect: fail loudly rather than credit an unknown actor
+		// to ActionAuthor.LLM. AgentDriverLoop logs the failure at ERROR and goes on; this cycle's
+		// batch is not posted.
 		val author =
 			if (plannerTickSource == null) {
 				ActionAuthor.RULE_BASED

@@ -48,4 +48,16 @@ data class AuthoredAction(
 	val reason: String,
 	val decisionKind: String,
 	val tickIndex: Long
-)
+) {
+	/**
+	 * Whether this action has no known author: a `null` [author], or the `-1` [tickIndex] of a
+	 * missing correlation entry (Issue #1477). Every [ActionOutcomeSink] that counts by author uses
+	 * this one rule, and counts an unattributed action under no author.
+	 */
+	val isUnattributed: Boolean get() = author == null || tickIndex == UNATTRIBUTED_TICK_INDEX
+
+	companion object {
+		/** The [tickIndex] of an action whose correlation entry was missing at apply time. */
+		const val UNATTRIBUTED_TICK_INDEX: Long = -1L
+	}
+}

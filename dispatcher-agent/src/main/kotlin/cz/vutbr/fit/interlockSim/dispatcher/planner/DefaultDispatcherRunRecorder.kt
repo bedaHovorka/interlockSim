@@ -304,11 +304,10 @@ class DefaultDispatcherRunRecorder(
 		// Apply-failure counts
 		outcome.applyFailure?.let { code -> applyFailuresByCode.getValue(code.name).incrementAndGet() }
 
-		// Author counts. Issue #1477: an action with no known author (a null author, or tickIndex -1:
-		// the correlation map had no entry) goes to the unattributed counter only, never under an
-		// author — LLM included.
+		// Author counts. Issue #1477: an action with no known author (AuthoredAction.isUnattributed)
+		// goes to the unattributed counter only, never under an author — LLM included.
 		val author = outcome.authored.author
-		if (author == null || outcome.authored.tickIndex == -1L) {
+		if (outcome.authored.isUnattributed || author == null) {
 			unattributedApplies.incrementAndGet()
 		} else {
 			actionsByAuthor.getValue(author.name).incrementAndGet()

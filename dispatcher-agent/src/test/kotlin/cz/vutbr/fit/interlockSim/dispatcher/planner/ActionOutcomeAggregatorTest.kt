@@ -34,12 +34,13 @@ class ActionOutcomeAggregatorTest {
 		phase: ActionPhase = ActionPhase.APPLIED,
 		rejection: RejectionCode? = null,
 		applyFailure: ApplyFailureCode? = null,
-		author: ActionAuthor? = ActionAuthor.LLM
+		author: ActionAuthor? = ActionAuthor.LLM,
+		tickIndex: Long = 1L
 	) = ActionOutcome(
 		phase = phase,
 		rejection = rejection,
 		applyFailure = applyFailure,
-		authored = AuthoredAction(author, "", "RequestRoute", 1L)
+		authored = AuthoredAction(author, "", "RequestRoute", tickIndex)
 	)
 
 	@Test
@@ -112,6 +113,22 @@ class ActionOutcomeAggregatorTest {
 		assertThat(snapshot.totalOutcomes).isEqualTo(1L)
 		assertThat(snapshot.unattributedOutcomes).isEqualTo(1L)
 		ActionAuthor.entries.forEach { assertThat(snapshot.countsByAuthor.getValue(it)).isZero() }
+	}
+
+	@Test
+	@DisplayName(
+		"an outcome with the missing-correlation tick index counts as unattributed even with an author set, " +
+			"the same rule as the run recorder (Issue #1477)"
+	)
+	fun missingCorrelationTickIndexIsUnattributed() {
+		val aggregator = ActionOutcomeAggregator()
+		aggregator.onActionOutcome(
+			outcome(author = ActionAuthor.LLM, tickIndex = AuthoredAction.UNATTRIBUTED_TICK_INDEX)
+		)
+
+		val snapshot = aggregator.getSnapshot()
+		assertThat(snapshot.unattributedOutcomes).isEqualTo(1L)
+		assertThat(snapshot.countsByAuthor.getValue(ActionAuthor.LLM)).isZero()
 	}
 
 	@Test
