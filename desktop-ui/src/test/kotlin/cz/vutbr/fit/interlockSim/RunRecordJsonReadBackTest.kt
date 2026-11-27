@@ -16,11 +16,15 @@ import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CommandSourceKind
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CountedAutomatic
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.planner.SilentCycleCause
 import cz.vutbr.fit.interlockSim.persistence.RecordedRun
 import cz.vutbr.fit.interlockSim.persistence.RunRecordJsonWriter
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
@@ -97,6 +101,18 @@ class RunRecordJsonReadBackTest : KoinTestBase() {
 	fun writerSchemaVersionIsCurrent() {
 		assertThat(RunRecordJsonWriter.SCHEMA_VERSION, name = "writer schema version")
 			.isEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
+	}
+
+	@Test
+	@DisplayName("the writer spells the clean-run keys as the JVM vocabularies do (Issue #1476)")
+	fun writerSpellsTheCleanRunKeys() {
+		assertThat(RunRecordJsonWriter.AUTHOR_KEYS, name = "authors").isEqualTo(ActionAuthor.entries.map { it.name })
+		assertThat(RunRecordJsonWriter.COUNTED_AUTOMATIC_KEYS, name = "counted automatics")
+			.isEqualTo(CountedAutomatic.entries.map { it.name })
+		assertThat(RunRecordJsonWriter.SILENT_CYCLE_CAUSE_KEYS, name = "silent-cycle causes")
+			.isEqualTo(SilentCycleCause.entries.map { it.name })
+		assertThat(RunRecordJsonWriter.SOURCE_RULE_BASED).isEqualTo(CommandSourceKind.RULE_BASED.name)
+		assertThat(RunRecordJsonWriter.SOURCE_NONE).isEqualTo(CommandSourceKind.NONE.name)
 	}
 
 	@ParameterizedTest(name = "{0} for {1} s with main process {2} ends {3} under {4}")

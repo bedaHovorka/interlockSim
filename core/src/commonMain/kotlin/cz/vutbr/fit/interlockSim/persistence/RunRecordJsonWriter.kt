@@ -75,9 +75,12 @@ data class RecordedRun(
  * - **Parameters**: the values a JVM run records with no `-Dinterlocksim.dispatcher.*` property
  *   (`ruleBasedRunParameters` over `DispatcherRunConfig.fromProperties` and the shipped
  *   `dispatcher-defaults.properties`), so the report puts a native run into the same cell as a JVM one.
- * - **Dispatcher figures**: a run without a dispatcher agent has no ticks and no actions. The count maps
- *   are written empty, which every reader treats as zero; the JVM writes the same counts as zero-valued
- *   keys.
+ * - **Dispatcher figures**: a run without a dispatcher agent has no ticks and no dispatcher actions. The
+ *   count maps are written empty, which every reader treats as zero; the JVM writes the same counts as
+ *   zero-valued keys. The exceptions are the keys of the clean-run rule (Issue #1476), which carry every key
+ *   as the JVM does: `actionsByAuthor` holds the kernel's expiry acts under `EXPIRY`, `countedAutomatics`
+ *   holds them by row, `silentCyclesByCause` is all zero, and `commandSource` is `RULE_BASED` or `NONE`
+ *   with an empty name, by the arm.
  *
  * The file goes to `<runsRoot>/<arm in lower case>/<timestamp>-<run id>.json`, the layout of
  * `DefaultRunSnapshotStore.write`, written to `<name>.json.tmp` first and renamed into place.
@@ -86,7 +89,49 @@ data class RecordedRun(
  */
 object RunRecordJsonWriter {
 	/** The run JSON schema this writer produces; equal to `DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION`. */
-	const val SCHEMA_VERSION: Int = 16
+	const val SCHEMA_VERSION: Int = 17
+
+	/** `commandSource.kind` of a run that wired the synchronous rule-based dispatcher (Issue #1476). */
+	const val SOURCE_RULE_BASED: String = "RULE_BASED"
+
+	/** `commandSource.kind` of a run that wired no dispatcher (Issue #1476). */
+	const val SOURCE_NONE: String = "NONE"
+
+	/**
+	 * The `ActionAuthor` names, as `actionsByAuthor` spells them; every one is written, so a reader sees the
+	 * same keys as in a JVM file. `RunRecordJsonReadBackTest` holds this list to the enum.
+	 */
+	val AUTHOR_KEYS: List<String> =
+		listOf(
+			"LLM",
+			"TIMEOUT_NOOP",
+			"RULE_BASED",
+			"RULE_FALLBACK",
+			"SAFETY_NET",
+			"OPERATOR",
+			"EXPIRY",
+			"ORPHAN_SWEEP",
+			"EMERGENCY_SYSTEM",
+			"WATCHDOG"
+		)
+
+	/** The `CountedAutomatic` names, as `countedAutomatics` spells them; held to the enum like [AUTHOR_KEYS]. */
+	val COUNTED_AUTOMATIC_KEYS: List<String> =
+		listOf(
+			"EXPIRY_WHOLE_HOLDING",
+			"EXPIRY_OCCUPYING_TAIL",
+			"EXPIRY_ON_REQUEST",
+			"SWEEP_STALE",
+			"SWEEP_PARTIAL",
+			"SWEEP_PHANTOM",
+			"EMERGENCY_RESTRICTION",
+			"WATCHDOG_STOP"
+		)
+
+	/** The `SilentCycleCause` names, as `silentCyclesByCause` spells them; held to the enum like [AUTHOR_KEYS]. */
+	val SILENT_CYCLE_CAUSE_KEYS: List<String> = listOf("TIMEOUT", "THINKING_TRUNCATED", "EMPTY_PLAN", "NO_OP")
+
+	private const val AUTHOR_EXPIRY: String = "EXPIRY"
 
 	/** The arm of a run that wired the synchronous rule-based dispatcher. */
 	const val ARM_RULE_BASED: String = "RULE_BASED"
@@ -207,7 +252,7 @@ object RunRecordJsonWriter {
 			put("runId", run.runId)
 			put("arm", arm(run.record))
 			put("params", ruleBasedParameters())
-			putDispatcherFigures()
+			putDispatcherFigures(run.record)
 			put("completedNaturally", endCause == END_NATURAL_COMPLETION)
 			put("endCause", endCause)
 			put("railwayOutcome", railwayOutcome(run.record))
@@ -229,11 +274,35 @@ object RunRecordJsonWriter {
 			// same figure a JVM recorder publishes for the run (RunRecordJsonReadBackTest compares
 			// the whole snapshots).
 			put("generationCutCycles", 0L)
+			putJsonObject("commandSource") {
+				put("kind", if (arm(run.record) == ARM_RULE_BASED) SOURCE_RULE_BASED else SOURCE_NONE)
+				put("name", "")
+			}
+			put("countedAutomatics", countedAutomatics(run.record))
+			putJsonObject("silentCyclesByCause") { SILENT_CYCLE_CAUSE_KEYS.forEach { put(it, 0L) } }
 		}
 	}
 
+	/**
+	 * The counted automatics of [record] by row (Issue #1476): the kernel's expiry acts. A run without a
+	 * dispatcher agent wires no orphan sweeper, no emergency path and no watchdog, so those rows are `0`.
+	 */
+	private fun countedAutomatics(record: RunRecord): JsonObject {
+		val counts =
+			mapOf(
+				"EXPIRY_WHOLE_HOLDING" to record.wholeHoldingExpiryActs,
+				"EXPIRY_OCCUPYING_TAIL" to record.tailExpiryActs,
+				"EXPIRY_ON_REQUEST" to record.requestExpiryActs
+			)
+		return buildJsonObject { COUNTED_AUTOMATIC_KEYS.forEach { put(it, (counts[it] ?: 0).toLong()) } }
+	}
+
+	/** The expiry acts of [record], the `EXPIRY` author's actions (Issue #1476). */
+	private fun expiryActs(record: RunRecord): Long =
+		(record.wholeHoldingExpiryActs + record.tailExpiryActs + record.requestExpiryActs).toLong()
+
 	/** What a dispatcher recorder holds after a run in which no dispatcher agent ticked. */
-	private fun JsonObjectBuilder.putDispatcherFigures() {
+	private fun JsonObjectBuilder.putDispatcherFigures(record: RunRecord) {
 		put("totalTicks", 0L)
 		putJsonObject("ticksByOutcome") {}
 		putJsonObject("timeoutNoOpByCause") {}
@@ -247,7 +316,9 @@ object RunRecordJsonWriter {
 		putJsonObject("applyFailuresByCode") {}
 		put("validAt1", 0.0)
 		putAbsent("correctAt1", "oracleAgreementAt1", "latencyP50Ms", "latencyP95Ms", "latencyMaxMs")
-		putJsonObject("actionsByAuthor") {}
+		putJsonObject("actionsByAuthor") {
+			AUTHOR_KEYS.forEach { put(it, if (it == AUTHOR_EXPIRY) expiryActs(record) else 0L) }
+		}
 		put("unattributedApplies", 0L)
 		put("terminalFallbackEngaged", false)
 		putAbsent("terminalFallbackTickIndex")

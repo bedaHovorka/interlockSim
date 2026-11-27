@@ -241,6 +241,51 @@ class OrphanReservationSweeper(
 		private set
 
 	/**
+	 * Acts of the phantom branch (row C6 of the #1475 counted automatics, author `ORPHAN_SWEEP`, Issue
+	 * #1476): counted once per episode, on its first release call that changed railway state (a freed
+	 * block, or a deferral that already dropped the signals to STOP). Unlike [phantomReleaseCount], a
+	 * deferred release retried on the next sweep is not counted again. An episode ends when its release
+	 * completes or its owner holds nothing any more.
+	 */
+	var phantomActCount: Int = 0
+		private set
+
+	/** Acts of the stale branch (row C4), counted like [phantomActCount]; see [staleReleaseCount]. */
+	var staleActCount: Int = 0
+		private set
+
+	/** Acts of the partial branch (row C5), counted like [phantomActCount]; see [partialReleaseCount]. */
+	var partialActCount: Int = 0
+		private set
+
+	/** Owners whose current episode was already counted as an act, per branch (Issue #1476). */
+	private val countedEpisodes = mutableMapOf<SweepBranch, MutableSet<String>>()
+
+	/** The three branches that release, one act counter each. */
+	private enum class SweepBranch { PHANTOM, STALE, PARTIAL }
+
+	/**
+	 * Count one act of [branch] for [owner] if [changedState] and the episode is not yet counted; end the
+	 * episode when [completed]. Returns nothing: the counters are the result.
+	 */
+	private fun countAct(
+		branch: SweepBranch,
+		owner: String,
+		changedState: Boolean,
+		completed: Boolean
+	) {
+		val counted = countedEpisodes.getOrPut(branch) { mutableSetOf() }
+		if (changedState && counted.add(owner)) {
+			when (branch) {
+				SweepBranch.PHANTOM -> phantomActCount++
+				SweepBranch.STALE -> staleActCount++
+				SweepBranch.PARTIAL -> partialActCount++
+			}
+		}
+		if (completed) counted.remove(owner)
+	}
+
+	/**
 	 * Times [sweep] has run. Gives the release counts their denominator in the end-of-run summary,
 	 * and distinguishes "swept every tick and found nothing" from "never ran at all" — the latter
 	 * being the failure mode that made round 1's controller fix necessary in the first place.
@@ -281,6 +326,8 @@ class OrphanReservationSweeper(
 		// Forget trains that no longer hold anything, so a later route of theirs starts a fresh
 		// clock rather than inheriting a stale one.
 		holdings.keys.retainAll(heldByTrain.keys)
+		// An owner that holds nothing any more ended its episode, however it ended (Issue #1476).
+		countedEpisodes.values.forEach { it.retainAll(heldByTrain.keys) }
 	}
 
 	private fun releasePhantom(
@@ -296,6 +343,7 @@ class OrphanReservationSweeper(
 		if (release.anyReleased) {
 			phantomReleaseCount++
 		}
+		countAct(SweepBranch.PHANTOM, owner, release.anyReleased || release.deferred, completed = !release.deferred)
 		// Issue #1050: a deferred release kept blocks reserved; the phantom is offered again next
 		// sweep like any unknown owner, so there is no clock to keep.
 		holdings.remove(owner)
@@ -329,6 +377,7 @@ class OrphanReservationSweeper(
 				"${staleAfterSimSeconds}s). Blocks: ${blockIds.joinToString(", ")}"
 		}
 		val release = actuatorPort.releaseRouteDetailed(owner)
+		countAct(SweepBranch.STALE, owner, release.anyReleased || release.deferred, completed = !release.deferred)
 		if (release.anyReleased) {
 			staleReleaseCount++
 			// Issue #1304: the same release for the metrics' run-end accounting; record only.
@@ -397,6 +446,12 @@ class OrphanReservationSweeper(
 				"Tail: ${tailIds.joinToString(", ")}"
 		}
 		val outcome = releaser.releaseUntravelledTail(owner, tailIds)
+		countAct(
+			SweepBranch.PARTIAL,
+			owner,
+			outcome.deferred || outcome.released.isNotEmpty(),
+			completed = !outcome.deferred
+		)
 		if (outcome.deferred) {
 			// Approach lock (Issue #1025): the signals are now at STOP but the tail is still held.
 			// Keep the holding so the next sweep retries at once instead of waiting another

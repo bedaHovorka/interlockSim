@@ -60,6 +60,10 @@ import cz.vutbr.fit.interlockSim.sim.RefusedEntry
  * @property refusedEntriesAtRunEnd Trains still waiting at their InOut on a refused entry route when the
  *   run ended ([cz.vutbr.fit.interlockSim.sim.RunEnded.refusedEntries], Issue #1457); empty before the
  *   run ended and when none waits.
+ * @property wholeHoldingExpiryActs Expiry acts of whole holdings on the loop tick (row C1 of the #1475
+ *   counted automatics), one per act on its first state-changing call (`ExpiryTotalsQuery`, Issue #1476).
+ * @property tailExpiryActs Expiry acts of stalled tails on the loop tick (row C2).
+ * @property requestExpiryActs Expiry acts at the top of another train's request (row C3).
  * @since Issue #1304 (Goal 6 SP6)
  */
 data class RunEndSummary(
@@ -87,7 +91,10 @@ data class RunEndSummary(
 	val endTimeReached: Boolean,
 	val classification: RunEndClassification?,
 	val performance: RunPerformance? = null,
-	val refusedEntriesAtRunEnd: List<RefusedEntry> = emptyList()
+	val refusedEntriesAtRunEnd: List<RefusedEntry> = emptyList(),
+	val wholeHoldingExpiryActs: Int = 0,
+	val tailExpiryActs: Int = 0,
+	val requestExpiryActs: Int = 0
 )
 
 /**

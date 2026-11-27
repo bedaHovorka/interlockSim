@@ -102,6 +102,26 @@ internal class DefaultReservationExpiry(
 	internal var expiredTailCount: Int = 0
 		private set
 
+	/** See [ExpiryTotalsQuery.wholeHoldingExpiryActs] (Issue #1476). */
+	internal var wholeHoldingExpiryActs: Int = 0
+		private set
+
+	/** See [ExpiryTotalsQuery.tailExpiryActs] (Issue #1476). */
+	internal var tailExpiryActs: Int = 0
+		private set
+
+	/** See [ExpiryTotalsQuery.requestExpiryActs] (Issue #1476). */
+	internal var requestExpiryActs: Int = 0
+		private set
+
+	/**
+	 * Trains whose current expiry episode has already been counted as an act (Issue #1476): the first
+	 * call that changed railway state counted it, so its deferred retries do not. An entry clears when
+	 * the episode completes, or when the train leaves both phases' candidate sets (an LLM cancel or a
+	 * new claim ended the episode), like [deferralLoggedTrains].
+	 */
+	private val countedEpisodeTrains = mutableSetOf<String>()
+
 	/**
 	 * Trains whose expiry release threw and was logged at WARN; later failures log at DEBUG
 	 * (Issue #1174). An entry clears when the train leaves both phases' candidate sets (a new claim
@@ -133,7 +153,12 @@ internal class DefaultReservationExpiry(
 	internal fun expireStale(exceptTrainId: String?): Int {
 		val stale = staleHoldings(exceptTrainId)
 		val stalled = stallTracker.stalled(exceptTrainId)
-		if (stale.isEmpty() && stalled.isEmpty() && failedExpiryTrains.isEmpty() && deferralLoggedTrains.isEmpty()) {
+		if (stale.isEmpty() &&
+			stalled.isEmpty() &&
+			failedExpiryTrains.isEmpty() &&
+			deferralLoggedTrains.isEmpty() &&
+			countedEpisodeTrains.isEmpty()
+		) {
 			return 0
 		}
 		// A train no longer in the candidate set gets a fresh WARN / INFO should it fail or defer again.
@@ -142,8 +167,11 @@ internal class DefaultReservationExpiry(
 		val attempted = stale.map { it.trainId } + stalled.map { it.holding.trainId } + listOfNotNull(exceptTrainId)
 		failedExpiryTrains.retainAll(attempted.toSet())
 		deferralLoggedTrains.retainAll(attempted.toSet())
-		// Each completed expiry is counted by [countAndAnnounce], before its event is delivered.
-		return stale.count { expireHolding(it) } + stalled.count { expireTail(it) }
+		countedEpisodeTrains.retainAll(attempted.toSet())
+		// Each completed expiry is counted by [countAndAnnounce], before its event is delivered; each
+		// act by [countAct], on the first call of its episode that changed railway state (Issue #1476).
+		val onRequest = exceptTrainId != null
+		return stale.count { expireHolding(it, onRequest) } + stalled.count { expireTail(it, onRequest) }
 	}
 
 	/** Phase 1's candidates: stale whole-route holdings of trains that stand on nothing. */
@@ -160,10 +188,14 @@ internal class DefaultReservationExpiry(
 	}
 
 	/** Release one stale [holding]; `true` when nothing of it is left. */
-	private fun expireHolding(holding: ExpiredHolding): Boolean {
+	private fun expireHolding(
+		holding: ExpiredHolding,
+		onRequest: Boolean
+	): Boolean {
 		val trainId = holding.trainId
 		val age = roundedToTenth(holding.ageSimSeconds)
 		val release = releaseContained(trainId) ?: return false
+		countAct(trainId, release, onRequest, ReservationExpired.Kind.WHOLE_HOLDING)
 		if (release.deferred.isNotEmpty()) {
 			logDeferral(trainId) {
 				"Reservation expiry deferred for '$trainId': no new claim for ${age}s of simulated time " +
@@ -173,6 +205,7 @@ internal class DefaultReservationExpiry(
 			return false
 		}
 		deferralLoggedTrains.remove(trainId)
+		countedEpisodeTrains.remove(trainId)
 		countAndAnnounce(
 			ReservationExpired(
 				trainId,
@@ -196,10 +229,14 @@ internal class DefaultReservationExpiry(
 	 * Release the un-entered tail of one [stalled] train (Issue #1220); `true` when none of its
 	 * tail is left. The blocks it stands on stay: the release keeps them.
 	 */
-	private fun expireTail(stalled: TailStallTracker.StalledTail): Boolean {
+	private fun expireTail(
+		stalled: TailStallTracker.StalledTail,
+		onRequest: Boolean
+	): Boolean {
 		val trainId = stalled.holding.trainId
 		val age = roundedToTenth(stalled.stalledForSimSeconds)
 		val release = releaseContained(trainId) ?: return false
+		countAct(trainId, release, onRequest, ReservationExpired.Kind.OCCUPYING_TRAIN_TAIL)
 		val remaining = registry.getBlocks(trainId).filter(::isUnenteredReservation)
 		if (remaining.isNotEmpty()) {
 			// This expiry's own release is not progress: keep the clock, so the rest is retried.
@@ -214,6 +251,7 @@ internal class DefaultReservationExpiry(
 		}
 		stallTracker.forget(trainId)
 		deferralLoggedTrains.remove(trainId)
+		countedEpisodeTrains.remove(trainId)
 		countAndAnnounce(
 			ReservationExpired(
 				trainId,
@@ -254,6 +292,28 @@ internal class DefaultReservationExpiry(
 			}
 		failedExpiryTrains.remove(trainId)
 		return release
+	}
+
+	/**
+	 * Count one expiry act of [trainId] (Issue #1476): once per episode, on the first call whose
+	 * [release] changed railway state -- it freed a block, or it deferred, which means it already
+	 * dropped the route's signals to STOP. A release that did neither changed nothing and is no act.
+	 * An act at the top of another train's request ([onRequest]) counts under row C3, whatever its
+	 * [kind]; on the loop tick under C1 or C2 by [kind].
+	 */
+	private fun countAct(
+		trainId: String,
+		release: PathRelease,
+		onRequest: Boolean,
+		kind: ReservationExpired.Kind
+	) {
+		if (release.released.isEmpty() && release.deferred.isEmpty()) return
+		if (!countedEpisodeTrains.add(trainId)) return
+		when {
+			onRequest -> requestExpiryActs++
+			kind == ReservationExpired.Kind.WHOLE_HOLDING -> wholeHoldingExpiryActs++
+			else -> tailExpiryActs++
+		}
 	}
 
 	/** Log a deferral of [trainId] at INFO the first time, at DEBUG afterwards (Issue #1220 ruling D5, #1228). */

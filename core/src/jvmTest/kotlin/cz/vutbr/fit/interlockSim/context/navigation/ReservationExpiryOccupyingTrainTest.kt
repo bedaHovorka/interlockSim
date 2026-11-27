@@ -240,6 +240,30 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 		assertTailExpiryAnnounced(freedBefore = freedBeforeCompletion.size)
 	}
 
+	@Test
+	fun `a deferred tail expiry counts one act on its first call, not again when it completes (Issue 1476)`() {
+		val returned = mutableListOf<Int>()
+
+		runInOrder(
+			listOf(0.0 to { reserveWholeRouteStandingOnKa(TRAIN, ProgressStub(TRAIN)) }),
+			listOf(
+				0.0 to { returned += service.expireStaleReservations() },
+				TTL to {
+					expireAtTtlDeferred(returned)
+					assertThat(expiry.expiredTailCount).isEqualTo(0)
+					assertThat(service.tailExpiryActs).isEqualTo(1)
+				},
+				PAST_TTL to { returned += service.expireStaleReservations() },
+				(PAST_TTL + TICK) to { returned += service.expireStaleReservations() }
+			)
+		)
+
+		assertThat(expiry.expiredTailCount).isEqualTo(1)
+		assertThat(service.tailExpiryActs).isEqualTo(1)
+		assertThat(service.wholeHoldingExpiryActs).isEqualTo(0)
+		assertThat(service.requestExpiryActs).isEqualTo(0)
+	}
+
 	/**
 	 * The loop tick at the TTL, for a train stalled for exactly the TTL: the release has run (its first
 	 * step resets the signals) but deferred on the approach lock, so nothing is announced yet (Issue

@@ -176,7 +176,10 @@ internal class RunEndAccounting(
 			endTimeReached = ended?.endTimeReached ?: false,
 			classification = ended?.let(::classification),
 			performance = performance,
-			refusedEntriesAtRunEnd = ended?.refusedEntries.orEmpty()
+			refusedEntriesAtRunEnd = ended?.refusedEntries.orEmpty(),
+			wholeHoldingExpiryActs = expiries?.wholeHoldingExpiryActs ?: 0,
+			tailExpiryActs = expiries?.tailExpiryActs ?: 0,
+			requestExpiryActs = expiries?.requestExpiryActs ?: 0
 		)
 	}
 

@@ -39,4 +39,23 @@ interface ExpiryTotalsQuery {
 	 * released completely so far, counted once, on the call that frees the last un-entered block.
 	 */
 	val expiredTailCount: Int
+
+	/**
+	 * Expiry acts of whole holdings on the loop tick (row C1 of the #1475 counted automatics, author
+	 * `EXPIRY`), counted once per act on the first call of its episode that changed railway state --
+	 * a freed block or a signal dropped to STOP -- so a holding approach locking deferred counts on its
+	 * deferring call, also when an LLM cancel or the run end finishes it (Issue #1476). Unlike
+	 * [expiredHoldingCount], which counts only completed releases.
+	 */
+	val wholeHoldingExpiryActs: Int
+
+	/** Expiry acts of stalled tails on the loop tick (row C2), counted like [wholeHoldingExpiryActs]. */
+	val tailExpiryActs: Int
+
+	/**
+	 * Expiry acts, of either kind, run at the top of another train's request (row C3): the requester
+	 * did not choose to release that route, so the act is the expiry's, counted like
+	 * [wholeHoldingExpiryActs] and never under a loop-tick row.
+	 */
+	val requestExpiryActs: Int
 }

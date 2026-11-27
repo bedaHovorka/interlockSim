@@ -31,6 +31,18 @@ import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
  * | [RULE_FALLBACK] | Post-engagement rule-based action: [TerminalFallbackGuard] has already marked the run FAILED; the rule engine runs to bring the simulation to a terminating state. Does **not** engage the guard on its own. |
  * | [SAFETY_NET] | Forced admission — should be extinct; retained so its reappearance is detectable. Engages [TerminalFallbackGuard] immediately with [FailureReason.SAFETY_NET_ENGAGED]. |
  * | [OPERATOR] | Human operator override (reserved for future interactive use). |
+ * | [EXPIRY] | The kernel's reservation expiry released a route by its clock (rows C1-C3 of #1475). |
+ * | [ORPHAN_SWEEP] | The orphan reservation sweeper cancelled a route (rows C4-C6). |
+ * | [EMERGENCY_SYSTEM] | The R9 emergency path restricted by itself (row C13; no producer yet). |
+ * | [WATCHDOG] | The #1485 watchdog stopped the run (row C14; no producer yet). |
+ *
+ * **The full set (Issue #1476).** Every author other than [LLM] and [TIMEOUT_NOOP] breaks a clean run
+ * (`CleanRunRule`). A low-level command inherits the author of its high-level parent. An action with no
+ * author goes to the unattributed counter (`unattributedApplies`), never to a new value here. Scripted test
+ * commands carry [LLM]; the run-level `commandSource` tells a scripted run from an LLM run. The four
+ * automatics' authors are counted through `CountedAutomatic`, not through an [AttributedAction]: they do
+ * not pass through the action path. The issue lists the set in another order; new values are appended so
+ * the ordinals of the stored ones do not move.
  *
  * **Why [RULE_BASED] ≠ [RULE_FALLBACK]:** conflating them would mark every rule-based
  * determinism run (the P10 gate) as FAILED — exactly the bug the [TerminalFallbackGuard] /
@@ -74,7 +86,22 @@ enum class ActionAuthor {
 	SAFETY_NET,
 
 	/** Human operator approval via the SEMI_AUTO gateway. Legal, but disqualifies the run from the autonomous bar. */
-	OPERATOR
+	OPERATOR,
+
+	/**
+	 * The kernel's reservation expiry (`DefaultReservationExpiry`): a holding or a stalled tail released by
+	 * its clock, also when another train's request triggered it (rows C1-C3 of #1475, Issue #1476).
+	 */
+	EXPIRY,
+
+	/** The orphan reservation sweeper's stale, partial or phantom release (rows C4-C6, Issue #1476). */
+	ORPHAN_SWEEP,
+
+	/** A restricting command the R9 emergency path issued by itself (row C13; no producer yet, Issue #1476). */
+	EMERGENCY_SYSTEM,
+
+	/** The #1485 watchdog's stop of the run (row C14; no producer yet, Issue #1476). */
+	WATCHDOG
 }
 
 /**

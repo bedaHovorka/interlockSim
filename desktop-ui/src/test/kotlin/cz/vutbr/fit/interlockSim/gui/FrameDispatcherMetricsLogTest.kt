@@ -138,6 +138,8 @@ class FrameDispatcherMetricsLogTest : AbstractFrameTestBase() {
 			// Issue #834 (SP2c.11): DispatcherRunSummaries.finishAndPersist also records the run's
 			// RailwayOutcome before finish()/logFinalSummary() — see that method's kdoc.
 			verify(exactly = 1) { runRecorder.recordRailwayOutcome(any()) }
+			// Issue #1476: the counted automatics without an action path, added once before finish().
+			verify(exactly = 1) { runRecorder.onCountedAutomatics(any()) }
 			verify(exactly = 1) { runRecorder.finish(any()) }
 			verify(exactly = 1) { runRecorder.logFinalSummary() }
 			confirmVerified(runRecorder)

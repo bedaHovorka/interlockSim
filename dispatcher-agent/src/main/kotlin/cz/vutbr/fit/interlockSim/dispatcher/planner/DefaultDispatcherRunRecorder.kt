@@ -176,6 +176,13 @@ class DefaultDispatcherRunRecorder(
 
 	private val unattributedApplies = AtomicLong(0L)
 
+	// Issue #1476: the counted automatics without an action path, every row present.
+	private val countedAutomatics: ConcurrentHashMap<String, AtomicLong> =
+		concurrentEnumCounters(CountedAutomatic.entries) { it.name }
+
+	// Issue #1476: null until recorded; the snapshot then derives the source from the arm and model.
+	private val commandSource = AtomicReference<CommandSource?>(null)
+
 	// Correlation tick indices of the silent non-idle cycles (Issue #1365): written on the driver
 	// thread by onTick, read on the sim thread by onActionOutcome. One entry per such cycle.
 	private val silentNonIdleCycleIndices: MutableSet<Long> = ConcurrentHashMap.newKeySet()
@@ -317,6 +324,14 @@ class DefaultDispatcherRunRecorder(
 		railwayOutcome.set(outcome)
 	}
 
+	override fun onCountedAutomatics(counts: Map<CountedAutomatic, Long>) {
+		counts.forEach { (automatic, count) -> countedAutomatics.getValue(automatic.name).addAndGet(count) }
+	}
+
+	override fun recordCommandSource(source: CommandSource) {
+		commandSource.set(source)
+	}
+
 	override fun snapshot(): DispatcherRunSnapshot {
 		// Return the frozen terminal snapshot when the run has ended.
 		frozenSnapshot.get()?.let { return it }
@@ -452,7 +467,15 @@ class DefaultDispatcherRunRecorder(
 		val latencyP95 = nearestRankPercentile(latencySamples, 95.0)
 		val latencyMax = nearestRankPercentile(latencySamples, 100.0)
 
-		val byAuthor: Map<String, Long> = actionsByAuthor.mapValues { it.value.get() }
+		val counted: Map<String, Long> = countedAutomatics.mapValues { it.value.get() }
+		// Issue #1476: the counted automatics join their authors' action counts, so the clean-run rule
+		// reads one map; c7Clean below reads only RULE_FALLBACK and SAFETY_NET, which no automatic feeds.
+		val automaticsByAuthor: Map<String, Long> =
+			CountedAutomatic.entries
+				.groupBy { it.author.name }
+				.mapValues { (_, rows) -> rows.sumOf { counted.getValue(it.name) } }
+		val byAuthor: Map<String, Long> =
+			actionsByAuthor.mapValues { (author, count) -> count.get() + (automaticsByAuthor[author] ?: 0L) }
 		val c7Clean =
 			(byAuthor[ActionAuthor.RULE_FALLBACK.name] ?: 0L) == 0L &&
 				(byAuthor[ActionAuthor.SAFETY_NET.name] ?: 0L) == 0L
@@ -524,7 +547,10 @@ class DefaultDispatcherRunRecorder(
 			longestSkippedOfferStreakCycles = if (offersMeasured) streakCycles else null,
 			longestSkippedOfferStreakSimSeconds = if (offersMeasured) streakSimSeconds else null,
 			modelProfile = modelProfile,
-			generationCutCycles = generationCutCycles.get()
+			generationCutCycles = generationCutCycles.get(),
+			commandSource = commandSource.get() ?: CommandSource.forArm(arm, params.model),
+			countedAutomatics = counted,
+			silentCyclesByCause = SilentCycleCause.countsFrom(byOutcome, byCause)
 		)
 	}
 
