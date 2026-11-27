@@ -185,6 +185,29 @@ class CleanRunRuleTest {
 	}
 
 	@Test
+	fun `a cut cycle that already emitted counts its actions under LLM`() {
+		// A cycle the num_predict cap cut after it emitted commands is an acting cycle, not a silent one
+		// (#1475 §1b.1): its tick is LLM_ACTIONS and its commands are LLM actions. The MockWebServer
+		// done_reason=length variant comes with the chain rebase onto #1342.
+		val recorder = llmRun()
+		recorder.onTick(TickRecord(TickOutcome.LLM_ACTIONS, simTime = 20.0))
+		recorder.onActionOutcome(outcome(ActionAuthor.LLM, tickIndex = 20L))
+		recorder.onActionOutcome(outcome(ActionAuthor.LLM, tickIndex = 20L))
+		val snapshot = recorder.finish(RunEndCause.NATURAL_COMPLETION)
+
+		assertThat(snapshot.actionsByAuthor[ActionAuthor.LLM.name]).isEqualTo(5L)
+		assertThat(snapshot.silentCyclesByCause?.values?.sum()).isEqualTo(0L)
+		assertThat(CleanRunRule.isClean(snapshot)).isTrue()
+	}
+
+	@Test
+	fun `a snapshot of the clean-run schema without a command source is not clean`() {
+		val snapshot = llmRun().finish(RunEndCause.NATURAL_COMPLETION).copy(commandSource = null)
+
+		assertThat(CleanRunRule.violations(snapshot)).containsExactly(CleanRunRule.Violation.NO_COMMAND_SOURCE)
+	}
+
+	@Test
 	fun `a non-zero unattributed-action count makes the run not clean`() {
 		val recorder = llmRun()
 		recorder.onActionOutcome(outcome(ActionAuthor.LLM, tickIndex = -1L))

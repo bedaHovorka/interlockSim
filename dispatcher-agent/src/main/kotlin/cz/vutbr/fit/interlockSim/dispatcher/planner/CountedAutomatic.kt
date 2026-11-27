@@ -28,6 +28,10 @@ import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
  * [ActionAuthor.LLM]), C12 ([ActionAuthor.OPERATOR]) and C15 ([ActionAuthor.RULE_BASED]). C7 (a command
  * that retries its own deferral) keeps the author of its command and has no counter.
  *
+ * C9, C10 and C11 share one key, `actionsByAuthor.SAFETY_NET`, so the run JSON cannot tell them apart;
+ * none has a producer today. The leaf that adds a C10 producer (#1486 decision layer, #1456 Q2) or a C11
+ * producer (SP7) also adds its own row key here, with a schema bump.
+ *
  * @property author The author the #1475 row names.
  * @since Issue #1476 (Goal 9B SP5.3)
  */

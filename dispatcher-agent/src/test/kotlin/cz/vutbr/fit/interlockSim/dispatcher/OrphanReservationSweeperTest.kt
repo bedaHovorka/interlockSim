@@ -262,6 +262,54 @@ class OrphanReservationSweeperTest {
 	}
 
 	@Test
+	@DisplayName("a deferred tail whose train moves on and stalls again is a second act (Issue #1476 review)")
+	fun tailThatChangesAfterADeferralStartsANewAct() {
+		val outcomes = ArrayDeque(listOf(TailRelease(emptyList(), deferred = true), TailRelease(listOf("kC"))))
+		val releaser = PartialRouteReleaser { _, _ -> outcomes.removeFirst() }
+		val first = listOf(occupied("kA", "Train #1"), reserved("kB", "Train #1"), reserved("kC", "Train #1"))
+		// The committed train booked kB inside the booking window: a new tail, a new clock.
+		val moved = listOf(occupied("kA", "Train #1"), occupied("kB", "Train #1"), reserved("kC", "Train #1"))
+
+		val sweeper =
+			sweepAll(
+				partialReleaser = releaser,
+				ticks =
+					listOf(
+						Tick(simTime = 0.0, blocks = first, activeTrains = listOf("Train #1")),
+						Tick(simTime = 70.0, blocks = first, activeTrains = listOf("Train #1")),
+						Tick(simTime = 71.0, blocks = moved, activeTrains = listOf("Train #1")),
+						Tick(simTime = 140.0, blocks = moved, activeTrains = listOf("Train #1"))
+					)
+			)
+
+		assertThat(sweeper.partialReleaseCount).isEqualTo(1)
+		assertThat(sweeper.partialActCount).isEqualTo(2)
+	}
+
+	@Test
+	@DisplayName("a deferred stale route whose holding changes and goes stale again is a second act (Issue #1476 review)")
+	fun staleHoldingThatChangesAfterADeferralStartsANewAct() {
+		every { actuatorPort.releaseRouteDetailed("Train #1") } returnsMany
+			listOf(RouteRelease(true, listOf("k1")), RouteRelease(true, emptyList()))
+		val held = listOf(reserved("k1", "Train #1"), reserved("kA", "Train #1"))
+		// After the deferral the train is granted a new route: the holding changed, the clock restarts.
+		val regranted = listOf(reserved("k1", "Train #1"), reserved("k5", "Train #1"))
+
+		val sweeper =
+			sweepAll(
+				ticks =
+					listOf(
+						Tick(simTime = 0.0, blocks = held, activeTrains = listOf("Train #1")),
+						Tick(simTime = 70.0, blocks = held, activeTrains = listOf("Train #1")),
+						Tick(simTime = 72.0, blocks = regranted, activeTrains = listOf("Train #1")),
+						Tick(simTime = 140.0, blocks = regranted, activeTrains = listOf("Train #1"))
+					)
+			)
+
+		assertThat(sweeper.staleActCount).isEqualTo(2)
+	}
+
+	@Test
 	@DisplayName("a reservation owned by no known train is released on the first sweep")
 	fun phantomOwnerIsReleasedImmediately() {
 		// The exact round-1 failure: the system prompt's worked example made the model call

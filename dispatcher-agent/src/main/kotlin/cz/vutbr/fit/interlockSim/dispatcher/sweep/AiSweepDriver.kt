@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.sweep
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CommandSource
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
@@ -571,7 +572,10 @@ internal fun abortedSnapshot(
 		railwayOutcome = RailwayOutcome.UNMEASURED,
 		loggedFatalSimExceptionCount = fatalScan.count,
 		loggedFatalSimExceptionFirstMessage = fatalScan.firstMessage,
-		example = example
+		example = example,
+		// Issue #1476: every run JSON carries the source (ADR part 1 §3.4). The counted automatics stay
+		// absent: the killed child never reported them, and an absent counter is never clean.
+		commandSource = CommandSource.forArm(arm, params.model)
 	)
 
 private fun zeroed(keys: List<String>): Map<String, Long> = keys.associateWith { 0L }

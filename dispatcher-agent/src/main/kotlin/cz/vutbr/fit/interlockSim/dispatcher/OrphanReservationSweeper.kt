@@ -258,11 +258,23 @@ class OrphanReservationSweeper(
 	var partialActCount: Int = 0
 		private set
 
-	/** Owners whose current episode was already counted as an act, per branch (Issue #1476). */
+	/**
+	 * Owners whose current episode was already counted as an act, per branch (Issue #1476). An episode
+	 * ends where its branch completes the release, restarts or forgets the holding, or hands the owner
+	 * to another branch, and when the owner holds nothing any more ([endEpisode]).
+	 */
 	private val countedEpisodes = mutableMapOf<SweepBranch, MutableSet<String>>()
 
 	/** The three branches that release, one act counter each. */
 	private enum class SweepBranch { PHANTOM, STALE, PARTIAL }
+
+	/** End the current [branch] episode of [owner]: its next state-changing call is a new act. */
+	private fun endEpisode(
+		branch: SweepBranch,
+		owner: String
+	) {
+		countedEpisodes[branch]?.remove(owner)
+	}
 
 	/**
 	 * Count one act of [branch] for [owner] if [changedState] and the episode is not yet counted; end the
@@ -319,6 +331,7 @@ class OrphanReservationSweeper(
 			if (owner !in knownTrainIds) {
 				releasePhantom(owner, blocks)
 			} else {
+				endEpisode(SweepBranch.PHANTOM, owner)
 				evaluateKnownTrain(owner, blocks, snapshot.simTime)
 			}
 		}
@@ -358,13 +371,17 @@ class OrphanReservationSweeper(
 		// ahead of it. That case has its own path (Issue #847 round 4, R4-3) — it must never reach
 		// the whole-route release below, which would drop the occupied block too.
 		if (blocks.any { it.state == TrackFacility.State.OCCUPIED }) {
+			endEpisode(SweepBranch.STALE, owner)
 			evaluateOccupyingTrain(owner, blocks, simTime)
 			return
 		}
+		endEpisode(SweepBranch.PARTIAL, owner)
 
 		val blockIds = blocks.map { it.blockId }.sorted()
 		val previous = holdings[owner]
 		if (previous == null || previous.blockIds != blockIds) {
+			// A new holding, or a changed one: a new clock and a new episode (Issue #1476 review).
+			endEpisode(SweepBranch.STALE, owner)
 			holdings[owner] = Holding(blockIds, simTime)
 			return
 		}
@@ -418,6 +435,7 @@ class OrphanReservationSweeper(
 		val releaser = partialReleaser
 		if (releaser == null) {
 			holdings.remove(owner)
+			endEpisode(SweepBranch.PARTIAL, owner)
 			return
 		}
 
@@ -426,11 +444,13 @@ class OrphanReservationSweeper(
 		val tailIds = blocks.filter { it.state == TrackFacility.State.RESERVED }.map { it.blockId }.sorted()
 		if (tailIds.isEmpty()) {
 			holdings.remove(owner)
+			endEpisode(SweepBranch.PARTIAL, owner)
 			return
 		}
 
 		val previous = holdings[owner]
 		if (previous == null || previous.blockIds != tailIds) {
+			endEpisode(SweepBranch.PARTIAL, owner)
 			// First sight, or the train advanced and now holds a different tail — restart the clock
 			// so a merely slow train is never mistaken for a stalled one.
 			holdings[owner] = Holding(tailIds, simTime)
