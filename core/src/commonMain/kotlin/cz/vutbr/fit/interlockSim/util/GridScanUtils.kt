@@ -10,7 +10,9 @@
 package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.xml.GeneratedElementName
 
 /**
  * Returns every cell of type [R] currently placed in this grid, scanning each `x`/`y`
@@ -26,6 +28,25 @@ inline fun <reified R : Cell> RailwayNetGrid<Cell>.cellsOfType(): List<R> {
 		for (y in 0 until rows) {
 			val cell = getCellAt(x, y)
 			if (cell is R) result.add(cell)
+		}
+	}
+	return result
+}
+
+/**
+ * Returns every [DynamicRailSwitch] in this grid with its stable name, in scan order: the switch's
+ * own name, or for a blank name (a context built in code) the generated
+ * [GeneratedElementName.switchName] of its grid position. The same `getCellAt` scan as [cellsOfType],
+ * keeping each position for the fallback name.
+ *
+ * @since Issue #1468 — the one scan the perception and actuator ports key their switches by
+ */
+fun RailwayNetGrid<Cell>.switchesByStableName(): List<Pair<String, DynamicRailSwitch>> {
+	val result = mutableListOf<Pair<String, DynamicRailSwitch>>()
+	for (x in 0 until cols) {
+		for (y in 0 until rows) {
+			val switch = getCellAt(x, y) as? DynamicRailSwitch ?: continue
+			result += GeneratedElementName.switchName(switch.name, Point(x, y)) to switch
 		}
 	}
 	return result

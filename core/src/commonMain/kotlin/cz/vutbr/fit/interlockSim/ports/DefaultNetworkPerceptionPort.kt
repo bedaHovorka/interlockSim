@@ -25,7 +25,7 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import cz.vutbr.fit.interlockSim.util.indexByNonBlankName
-import cz.vutbr.fit.interlockSim.xml.GeneratedElementName
+import cz.vutbr.fit.interlockSim.util.switchesByStableName
 
 /**
  * Simulation-backed implementation of [NetworkPerceptionPort].
@@ -106,22 +106,25 @@ class DefaultNetworkPerceptionPort(
 	// ── Switch cache built once at construction (Issue #1468) ─────────────
 
 	/**
-	 * Every [DynamicRailSwitch] cell with its stable name, in grid scan order: the XML name, or for a
-	 * blank name (a context built in code) the generated [GeneratedElementName.switchName] of its grid
+	 * Every [DynamicRailSwitch] cell with its stable name, in grid scan order ([switchesByStableName]):
+	 * the XML name, or for a blank name (a context built in code) the generated `SW_<x>_<y>` of its grid
 	 * position, so a [SwitchReading.name] is never blank. Cells are stable for the lifetime of a
 	 * context, like [semaphoreCache].
 	 */
-	private val switchCache: List<Pair<String, DynamicRailSwitch>> = buildSwitchCache()
+	private val switchCache: List<Pair<String, DynamicRailSwitch>> = env.getRailWayNetGrid().switchesByStableName()
 
 	/**
 	 * The owning-train lookup, [PathReservationRegistry.getSwitchOwner] of the context's scope (the
 	 * same registry instance the reservation service writes). Resolved on the first switch reading,
-	 * on the simulation thread. An environment that is not a [SimulationContext] (a test stub) has no
-	 * registry and reports no owners.
+	 * on the simulation thread. A [SimulationContext] without the registry fails loudly: reporting
+	 * every lock without an owner would look like orphan locks to a planner. Only an environment that
+	 * is not a [SimulationContext] (a test stub) has no registry and reports no owners.
 	 */
 	private val switchOwner: (DynamicRailSwitch) -> String? by lazy {
-		val registry = (env as? SimulationContext)?.scope?.getOrNull<PathReservationRegistry>()
-		if (registry == null) { _ -> null } else registry::getSwitchOwner
+		when (val context = env) {
+			is SimulationContext -> context.scope.get<PathReservationRegistry>()::getSwitchOwner
+			else -> { _ -> null }
+		}
 	}
 
 	// ── Block cache built once at construction ─────────────────────────────
@@ -427,17 +430,4 @@ class DefaultNetworkPerceptionPort(
 	 * Matches the strategy used by the animation controller.
 	 */
 	private fun buildSemaphoreCache(): List<DynamicRailSemaphore> = env.getRailWayNetGrid().cellsOfType()
-
-	/** The same `getCellAt` scan as [cellsOfType], keeping each switch's position for its fallback name. */
-	private fun buildSwitchCache(): List<Pair<String, DynamicRailSwitch>> {
-		val grid = env.getRailWayNetGrid()
-		val result = mutableListOf<Pair<String, DynamicRailSwitch>>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val switch = grid.getCellAt(x, y) as? DynamicRailSwitch ?: continue
-				result += GeneratedElementName.switchName(switch.name, Point(x, y)) to switch
-			}
-		}
-		return result
-	}
 }

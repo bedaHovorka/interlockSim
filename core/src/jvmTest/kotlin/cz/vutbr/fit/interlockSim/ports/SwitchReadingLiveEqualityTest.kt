@@ -34,26 +34,41 @@ import org.koin.core.component.get
  * The run must also show the two cases the issue names, read from the verified published snapshots:
  * - a switch **locked by a route**: a reading with `locked` and an owning train;
  * - a switch **released behind a train**: a switch owned and locked by train T at one tick, free and
- *   unlocked at the next, while T is still an active train of that next snapshot (so the release came
- *   behind the running train, not from its exit).
+ *   unlocked at the next, while T is still an active train of that next snapshot and moved forward
+ *   between the two ticks. This is a proxy, read from the snapshots only: it excludes a release by
+ *   T's exit and by expiry of a standing train, but a reservation expiry or a
+ *   `SwitchConfigurator.reclaimStaleForeignSwitchOwnership` while T moves would count as well. The
+ *   live-equality check above holds for every reading, whatever released the switch.
  */
 class SwitchReadingLiveEqualityTest : KoinTestBase() {
 	private class Tally {
 		var lockedByRoute = 0
-		var releasedBehindTrain = 0
+
+		/** Releases while the owner was still active and moving: the proxy of the class KDoc. */
+		var releasedWhileOwnerMoved = 0
 		private var previous: Map<String, SwitchReading> = emptyMap()
+		private var previousDistance: Map<String, Double> = emptyMap()
 
 		fun record(snapshot: SimulationSnapshot) {
-			val activeTrains = snapshot.trainPositions.mapTo(HashSet()) { it.trainId }
+			val distance = snapshot.trainPositions.associate { it.trainId to it.totalDistance }
 			for (reading in snapshot.switches) {
 				if (reading.locked && reading.ownerTrainId != null) lockedByRoute++
 				val before = previous[reading.name] ?: continue
 				val owner = before.ownerTrainId
-				if (before.locked && owner != null && !reading.locked && reading.ownerTrainId == null && owner in activeTrains) {
-					releasedBehindTrain++
-				}
+				val released = before.locked && owner != null && !reading.locked && reading.ownerTrainId == null
+				if (released && ownerMoved(owner, distance)) releasedWhileOwnerMoved++
 			}
 			previous = snapshot.switches.associateBy { it.name }
+			previousDistance = distance
+		}
+
+		private fun ownerMoved(
+			owner: String,
+			distance: Map<String, Double>
+		): Boolean {
+			val now = distance[owner] ?: return false
+			val before = previousDistance[owner] ?: return false
+			return now > before
 		}
 	}
 
@@ -94,7 +109,8 @@ class SwitchReadingLiveEqualityTest : KoinTestBase() {
 		assertThat(comparator.comparedSwitchReadings, name = "compared switch readings")
 			.isEqualTo(comparator.comparedTicks * switchCount)
 		assertThat(tally.lockedByRoute, name = "readings of a switch locked by a route").isGreaterThan(0)
-		assertThat(tally.releasedBehindTrain, name = "switches released behind a running train").isGreaterThan(0)
+		assertThat(tally.releasedWhileOwnerMoved, name = "switches released while their owner moved on")
+			.isGreaterThan(0)
 	}
 
 	@Test

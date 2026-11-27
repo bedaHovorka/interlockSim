@@ -33,8 +33,10 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.publishedOrNull
+import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.CERVENY_UJEZD_STATION_CAPACITY
+import cz.vutbr.fit.interlockSim.testutil.CERVENY_UJEZD_SWITCHES
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createExampleContextFromMap
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
@@ -81,6 +83,35 @@ class ExampleRegistryCervenyUjezdAiTest : KoinTestBase() {
 			.isInstanceOf<ThrottlingSimulationController>()
 		// DispatcherRunSummaries writes a run JSON only when an AgentDriverLoop exists.
 		assertThat(ctx.scope.agentDriverLoopOrNull(), "agent driver loop").isNotNull()
+	}
+
+	/**
+	 * Issue #1468: the LLM arm's Koin-scoped `DefaultNetworkPerceptionPort` scans the grid for its
+	 * switch cache when the example resolves it. The capture hook the loop publishes through must
+	 * sample all 12 Červený Újezd switches, with stable non-blank names: an empty cache would hand the
+	 * translator a snapshot without switches.
+	 */
+	@Test
+	@Timeout(value = 20, unit = TimeUnit.SECONDS)
+	fun `cervenyUjezdAI publishes every switch in its planning snapshot`() {
+		val registry = get<ExampleRegistry>()
+		val ctx = createExampleContextFromMap(registry.examples, get(), ExampleNames.CERVENY_UJEZD_AI).tracked()
+		val loop = assertCervenyUjezdLoop(ctx)
+
+		val capture = checkNotNull(loop.snapshotCaptureHook) { "the LLM arm wires no snapshot capture hook" }
+		val switches = capture().switches
+
+		assertThat(switches.size, "switch readings").isEqualTo(CERVENY_UJEZD_SWITCHES)
+		assertThat(switches.map { it.name }.toSet().size, "distinct switch names").isEqualTo(CERVENY_UJEZD_SWITCHES)
+		assertThat(switches.none { it.name.isBlank() }, "no blank switch name").isTrue()
+		// The hook is the Koin-scoped port the LLM's perception tools read: it published this capture.
+		assertThat(
+			ctx.scope
+				.get<NetworkPerceptionPort>()
+				.snapshot()
+				.switches,
+			"switches the LLM tools read"
+		).isEqualTo(switches)
 	}
 
 	@Test

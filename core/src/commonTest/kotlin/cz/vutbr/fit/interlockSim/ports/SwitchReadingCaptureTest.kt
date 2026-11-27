@@ -9,6 +9,7 @@ package cz.vutbr.fit.interlockSim.ports
 
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
@@ -67,7 +68,7 @@ class SwitchReadingCaptureTest : CommonKoinTestBase() {
 
 	@Test
 	fun theEmptySnapshotHasNoSwitches() {
-		assertThat(SimulationSnapshot.EMPTY.switches.size).isEqualTo(0)
+		assertThat(SimulationSnapshot.EMPTY.switches).isEmpty()
 		assertThat(SimulationSnapshot.EMPTY.switchReading(TestTopologies.Y_JUNCTION_SWITCH)).isNull()
 	}
 

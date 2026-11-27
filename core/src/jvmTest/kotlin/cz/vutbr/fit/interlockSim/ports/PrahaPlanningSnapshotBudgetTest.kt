@@ -26,27 +26,34 @@ import java.lang.management.ManagementFactory
  * The #1467 spec §6 measurement of the planning snapshot on Praha (Issue #1468, the first SP4 leaf
  * that grows the snapshot; #1469, #1470 and #1472 re-run it and record the numbers in their PRs).
  *
- * The test wraps `ShuntingLoop.snapshotCaptureHook` on a Praha Station control run and records, per
- * capture, the `System.nanoTime` delta and the `com.sun.management.ThreadMXBean.getThreadAllocatedBytes`
- * delta of the simulation thread. The allocated bytes are an upper bound of the snapshot's size: they
- * include the short-lived temporaries of the capture. It prints median, p99 and the run totals, and
- * asserts the two spec budgets:
- * - at most [MAX_BYTES_PER_SNAPSHOT] (64 KiB) allocated per snapshot, at the median. The allocation
- *   delta depends on the JVM's history: run alone the median is about 28 KB on Praha, run inside
- *   the `:core:integrationTest` suite the same capture measured about 51 KB (most likely JIT profile
- *   pollution, so escape analysis no longer removes the capture's temporaries; the retained snapshot
- *   does not change). p99 is printed, not asserted: it also catches the first capture's class loading;
- * - the captures take at most [MAX_CAPTURE_SHARE] (3 %) of the run's wall time, counted as the median
- *   capture time times the number of captures. The median is used because a single capture the OS
- *   preempts under machine load adds milliseconds that the capture itself did not spend; the raw total
- *   is printed next to it.
+ * `heavy-test` (review ruling on #1468): manual, run solo under the gate lock before merge, never in
+ * CI. Both quantities depend on load and on what the JVM ran before.
  *
- * The `:fast-sim` wall-time check stays the #738 gate; this test is the per-capture view.
+ * The test wraps `ShuntingLoop.snapshotCaptureHook` on a Praha Station control run (8 trains, 600 s,
+ * seed 1468, 301 captures) and records, per capture, the `System.nanoTime` delta and the
+ * `com.sun.management.ThreadMXBean.getThreadAllocatedBytes` delta of the simulation thread. It prints
+ * median, p99, the run totals and the capture share of the run's wall time. Time is recorded only:
+ * the wall-time budget belongs to the `:fast-sim` comparison of #738.
+ *
+ * **Tripwire, not a budget verdict:** the median allocation must stay at or below
+ * [ALLOCATION_TRIPWIRE_BYTES] (the 64 KiB per-snapshot budget). The allocation delta includes the
+ * capture's short-lived temporaries, so it is an upper bound of the retained snapshot. Crossing the
+ * tripwire means "measure the retained size, for example with JOL", not "the snapshot is too big".
+ *
+ * Reference numbers (Issue #1468, `e53223fb`; compare like with like):
+ * - solo, a fresh JVM: allocation median 27 904 B, p99 37 392 B; capture time median 24–57 µs, total
+ *   share of the run 1.0–2.5 %;
+ * - inside the full `:core:integrationTest` suite JVM: allocation median 49 248–51 360 B, p99 60 416 B
+ *   (most likely JIT profile pollution: escape analysis no longer removes the temporaries; the
+ *   retained snapshot is the same);
+ * - run by `:core:heavyTest`, filtered to this class: recorded in the #1468 report.
+ * The first capture allocates about 570–590 KB (class loading, the lazy registry lookup), which is
+ * why p99 and max are printed and not checked.
  */
-@Tag("integration-test")
+@Tag("heavy-test")
 class PrahaPlanningSnapshotBudgetTest : KoinTestBase() {
 	@Test
-	fun aPrahaPlanningSnapshotStaysWithinItsSizeAndTimeBudget() {
+	fun aPrahaPlanningSnapshotStaysUnderTheAllocationTripwire() {
 		val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
 		assertThat(threads.isThreadAllocatedMemorySupported, name = "thread allocation measurement").isTrue()
 		threads.isThreadAllocatedMemoryEnabled = true
@@ -99,10 +106,9 @@ class PrahaPlanningSnapshotBudgetTest : KoinTestBase() {
 
 		assertThat(nanos.size, name = "captures").isGreaterThan(0)
 		assertThat(loop.getTrainsExited(), name = "trains exited (the run moved trains)").isGreaterThan(0)
-		assertThat(bytes.percentile(MEDIAN), name = "median allocated bytes per snapshot")
-			.isLessThanOrEqualTo(MAX_BYTES_PER_SNAPSHOT)
-		assertThat(medianShare, name = "median-based capture share of the run wall time")
-			.isLessThanOrEqualTo(MAX_CAPTURE_SHARE)
+		val tripwire = "median allocated bytes per snapshot (tripwire: crossing it means measure the retained size)"
+		assertThat(bytes.percentile(MEDIAN), name = tripwire)
+			.isLessThanOrEqualTo(ALLOCATION_TRIPWIRE_BYTES)
 	}
 
 	private fun List<Long>.percentile(fraction: Double): Long {
@@ -114,8 +120,7 @@ class PrahaPlanningSnapshotBudgetTest : KoinTestBase() {
 		const val END_TIME: Long = 600L
 		const val SEED: Long = 1468L
 		const val TRAINS: Int = 8
-		const val MAX_BYTES_PER_SNAPSHOT: Long = 64L * 1024L
-		const val MAX_CAPTURE_SHARE: Double = 0.03
+		const val ALLOCATION_TRIPWIRE_BYTES: Long = 64L * 1024L
 		const val MEDIAN: Double = 0.5
 		const val P99: Double = 0.99
 		const val NANOS_PER_MICRO: Long = 1_000L
