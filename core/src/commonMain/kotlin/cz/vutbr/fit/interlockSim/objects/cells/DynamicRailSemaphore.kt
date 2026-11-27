@@ -372,6 +372,7 @@ private class ConstantSemaphore(
 	static: RailSemaphore,
 	signal: Signal
 ) : DynamicRailSemaphore(static) {
+	// @Volatile to match the base property, so the read side stays uniform (Issue #1128)
 	@kotlin.concurrent.Volatile
 	override var signal: Signal = signal
 		set(_) {
