@@ -294,6 +294,6 @@ class RunRecordJsonWriterTest {
 
 	@Test
 	fun `the schema version is a number the store accepts`() {
-		assertThat(JsonPrimitive(RunRecordJsonWriter.SCHEMA_VERSION).int).isEqualTo(14)
+		assertThat(JsonPrimitive(RunRecordJsonWriter.SCHEMA_VERSION).int).isEqualTo(15)
 	}
 }

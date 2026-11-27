@@ -36,7 +36,7 @@ import kotlinx.serialization.Serializable
  * [railwayOutcome], Issue #676; version 12 added the skipped NEXT SECTION offer figures
  * from [skippedNextSectionOffers] to [longestSkippedOfferStreakSimSeconds], Issue #1302; version 13
  * added the performance row and [example], Issue #1306; version 14 added
- * [RailwayOutcome.refusedEntriesAtRunEnd], Issue #1457; version 14 (#1342) added [modelProfile] and the
+ * [RailwayOutcome.refusedEntriesAtRunEnd], Issue #1457; version 15 added [modelProfile] and the
  * [TimeoutNoOpCause.THINKING_TRUNCATED] cause key, Issue #1342).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
@@ -209,7 +209,7 @@ import kotlinx.serialization.Serializable
  *   too (a timed-out run carries its timeout); `null` outside a sweep and in files before version 12.
  * @property modelProfile The derived Ollama tag the LLM run used, its Modelfile hash and its
  *   `num_predict` cap, read from `/api/show` at run start (Issue #1342). `null` for a run with no LLM
- *   (the rule-based arms), a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot, and files before version 14.
+ *   (the rule-based arms), a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot, and files before version 15.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -359,18 +359,16 @@ data class DispatcherRunSnapshot(
 		 *   waiting at their InOut to the end of the run, which used to end the run with a FATAL
 		 *   `SimulationException` instead. It defaults to `null`, so every version 1-13 file still
 		 *   decodes, with it absent (not measured).
-		 *
-		 * - **14** — Issue #1342, added [modelProfile] (the derived Ollama tag, the SHA-256 of its
+		 * - **15** — Issue #1342, added [modelProfile] (the derived Ollama tag, the SHA-256 of its
 		 *   Modelfile and its `num_predict`) and the [TimeoutNoOpCause.THINKING_TRUNCATED] key of
 		 *   [timeoutNoOpByCause], counting cycles whose generation the cap cut. [modelProfile]
-		 *   defaults to `null`, so every version 1-13 file still decodes, with it absent; their
+		 *   defaults to `null`, so every version 1-14 file still decodes, with it absent; their
 		 *   cause map lacks the new key, which means not measured — older runs could not see a cut
-		 *   generation, so a cut there ended as a silent cycle, a failure or a fallback. (Stacked
-		 *   with #1457, which also takes the next number: renumber to 15 at the chain rebase.)
+		 *   generation, so a cut there ended as a silent cycle, a failure or a fallback.
 		 *
 		 * A bump also changes `RunRecordJsonWriter.SCHEMA_VERSION` (`:core`) and its keys (Issue #1327).
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 14
+		const val CURRENT_SCHEMA_VERSION: Int = 15
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

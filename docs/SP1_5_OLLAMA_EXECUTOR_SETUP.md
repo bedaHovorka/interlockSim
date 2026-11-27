@@ -181,7 +181,7 @@ java -ea -Dinterlocksim.dispatcher.model=qwen2.5:7b-capped -jar interlockSim.jar
 What the dispatcher does with the cap:
 
 - **Run record.** At run start the LLM run calls `POST /api/show` for its tag
-  (`OllamaModelfileHashSource`) and records `modelProfile` in the run JSON (schema 14): the tag, the
+  (`OllamaModelfileHashSource`) and records `modelProfile` in the run JSON (schema 15): the tag, the
   SHA-256 of the returned `modelfile` and the `num_predict` value from its parameters. Two runs on
   the same tag name but a rebuilt Modelfile therefore never look like one configuration. A failed
   call records both figures `null` (not measured), logs one warning, and the run continues.

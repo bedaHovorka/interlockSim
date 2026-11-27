@@ -86,7 +86,7 @@ data class RecordedRun(
  */
 object RunRecordJsonWriter {
 	/** The run JSON schema this writer produces; equal to `DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION`. */
-	const val SCHEMA_VERSION: Int = 14
+	const val SCHEMA_VERSION: Int = 15
 
 	/** The arm of a run that wired the synchronous rule-based dispatcher. */
 	const val ARM_RULE_BASED: String = "RULE_BASED"
@@ -223,7 +223,7 @@ object RunRecordJsonWriter {
 			)
 			put("example", run.example)
 			putAbsent("processWallSeconds")
-			// Schema 14 (Issue #1342): a run without an LLM has no model profile.
+			// Schema 15 (Issue #1342): a run without an LLM has no model profile.
 			putAbsent("modelProfile")
 		}
 	}

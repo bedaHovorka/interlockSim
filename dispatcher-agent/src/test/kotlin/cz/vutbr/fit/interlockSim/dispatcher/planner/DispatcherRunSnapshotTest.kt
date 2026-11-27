@@ -178,8 +178,10 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 14`() {
+	fun `current schema version is 15`() {
 		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_MODEL_PROFILE)
+		assertThat(SCHEMA_VERSION_WITH_MODEL_PROFILE).isEqualTo(SCHEMA_VERSION_WITH_REFUSED_ENTRIES + 1)
+		assertThat(SCHEMA_VERSION_WITH_REFUSED_ENTRIES).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW + 1)
 	}
 
 	/** Issue #1457 (schema version 14): the refused entries at run end survive the round-trip. */
@@ -202,7 +204,7 @@ class DispatcherRunSnapshotTest {
 		assertThat(decoded.refusedEntriesAtRunEnd).isNull()
 	}
 
-	/** Issue #1342 (schema version 14): the model profile's tag, Modelfile hash and num_predict survive. */
+	/** Issue #1342 (schema version 15): the model profile's tag, Modelfile hash and num_predict survive. */
 	@Test
 	fun `serialization round-trips the model profile`() {
 		val profile = ModelProfileRecord(tag = "qwen2.5:7b-capped", modelfileSha256 = "ab".repeat(32), numPredict = 2048)
@@ -216,7 +218,7 @@ class DispatcherRunSnapshotTest {
 		assertThat(decoded.modelProfile).isEqualTo(profile)
 	}
 
-	/** Issue #1342: a version 13 file has no model profile and decodes with it absent. */
+	/** Issue #1342: a version 14 file has no model profile and decodes with it absent. */
 	@Test
 	fun `a snapshot without a model profile key decodes with the profile absent`() {
 		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snapshotWith())
@@ -636,7 +638,7 @@ class DispatcherRunSnapshotTest {
 		private const val SCHEMA_VERSION_WITH_REFUSED_ENTRIES: Int = 14
 
 		/** Issue #1342 added the model profile and the THINKING_TRUNCATED cause key. */
-		private const val SCHEMA_VERSION_WITH_MODEL_PROFILE: Int = 14
+		private const val SCHEMA_VERSION_WITH_MODEL_PROFILE: Int = 15
 
 		private val json =
 			Json {
