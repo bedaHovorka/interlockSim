@@ -442,7 +442,7 @@ class RequestRouteTool(
 		// and the second conjunct is kept purely defensively. Two InOuts (vyhybna) keep the rule
 		// below unchanged, including when the destination is unknown.
 		if (inOutNames.size > 2 && candidateOrigins.size > 1) return ambiguousEntryError(trainId)
-		if (rule.admits(fromEndpointName)) return null
+		if (rule.accepts(fromEndpointName)) return null
 		val legalOrigins = if (candidateOrigins.isEmpty()) inOutNames.sorted() else candidateOrigins
 		return ToolResult.Error(
 			"Train '$trainId' has not entered the network yet, so its route must start at its entry " +
@@ -522,7 +522,7 @@ class RequestRouteTool(
 		return when (rule) {
 			is LegalOrigins.AtInOut -> queuedOriginError(trainId, fromEndpointName, rule)
 			is LegalOrigins.AtEntry ->
-				if (rule.admits(fromEndpointName)) {
+				if (rule.accepts(fromEndpointName)) {
 					null
 				} else {
 					notYetEnteredOriginError(trainId, fromEndpointName, rule.entryInOut, rule.names.toList())
@@ -530,7 +530,7 @@ class RequestRouteTool(
 			is LegalOrigins.AtSignal -> {
 				val entry = rule.entryInOut
 				when {
-					rule.admits(fromEndpointName) -> null
+					rule.accepts(fromEndpointName) -> null
 					entry != null && fromEndpointName != entry ->
 						notYetEnteredOriginError(trainId, fromEndpointName, entry, listOf(entry, rule.signal))
 					else -> standingAtSignalError(trainId, fromEndpointName, rule.signal)

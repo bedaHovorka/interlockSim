@@ -408,7 +408,7 @@ class ActionValidator(
 				velocity = train.velocityMps
 			)
 		val rule = RouteRequestAdmission.legalOriginsOf(facts, inOutNames) ?: return null
-		if (rule.admits(action.fromEndpointName)) return null
+		if (rule.accepts(action.fromEndpointName)) return null
 		val where =
 			when (rule) {
 				is LegalOrigins.AtSignal -> "is standing at signal '${rule.signal}'"

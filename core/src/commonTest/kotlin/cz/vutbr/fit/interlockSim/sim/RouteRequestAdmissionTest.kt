@@ -81,8 +81,8 @@ class RouteRequestAdmissionTest {
 		val rule = legal(snapshot(), isQueued = true)
 
 		assertThat(rule).isEqualTo(LegalOrigins.AtInOut(IN_OUTS))
-		assertThat(rule!!.admits("A")).isTrue()
-		assertThat(rule.admits("doB1")).isFalse()
+		assertThat(rule!!.accepts("A")).isTrue()
+		assertThat(rule.accepts("doB1")).isFalse()
 	}
 
 	@Test
@@ -119,8 +119,8 @@ class RouteRequestAdmissionTest {
 		// The entry route already reaches doA1 and the train stands still, so the standing rule
 		// narrows the origin to the signal (RequestRouteTool applied both checks in sequence).
 		assertThat(rule).isEqualTo(LegalOrigins.AtSignal("doA1", entryInOut = "A"))
-		assertThat(rule!!.admits("doA1")).isTrue()
-		assertThat(rule.admits("A")).isFalse()
+		assertThat(rule!!.accepts("doA1")).isTrue()
+		assertThat(rule.accepts("A")).isFalse()
 	}
 
 	@Test

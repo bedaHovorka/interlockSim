@@ -80,6 +80,24 @@ class ActionValidatorLegalOriginsTest {
 	}
 
 	@Test
+	fun `a not-yet-entered train standing at its entry route's signal may not start at its entry InOut`() {
+		val train = train(TrainPhase.HELD, frontSectionName = null, signalAheadName = "sigA")
+
+		val fromEntry = verdict(train, from = "A")
+		assertThat(fromEntry.code()).isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+		assertThat((fromEntry as ValidationVerdict.Rejected).detail).contains("'sigA'")
+		assertThat(verdict(train, from = "sigA").code()).isNotEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+	}
+
+	@Test
+	fun `a RUNNING-phase train at velocity zero is held to its signal`() {
+		val verdict = verdict(train(TrainPhase.RUNNING, signalAheadName = "sigA", velocityMps = 0.0), from = "sigB", to = "B")
+
+		assertThat(verdict.code()).isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+		assertThat((verdict as ValidationVerdict.Rejected).detail).contains("'sigA'")
+	}
+
+	@Test
 	fun `a dwelling train standing at a signal must start there`() {
 		val verdict = verdict(train(TrainPhase.DWELLING, signalAheadName = "sigA"), from = "sigB", to = "B")
 

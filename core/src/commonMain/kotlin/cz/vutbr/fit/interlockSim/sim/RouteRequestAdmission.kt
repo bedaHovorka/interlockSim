@@ -31,14 +31,19 @@ import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
  *
  * Demand 1B-SP12.9 asked for a stricter kernel guard beside
  * `RouteCandidateScreen.rejectNonContiguousStart`: the origin must bound the train's *front*
- * block. [legalOriginsOf] already enforces that wherever it is well defined: a train standing at
- * a signal reports the block it has traversed up to that signal as its front section (Issue #788),
- * so [LegalOrigins.AtSignal] is exactly the front block's far boundary; a train without a front
- * section is held to its entry. For a moving train the front boundary is ambiguous mid-transition,
- * and a forward extension legitimately starts at the held route's end, beyond the front block —
- * the kernel's contiguity guard ("any footprint block") is deliberately the rule there. A kernel
- * front-block guard would therefore add nothing on the stopped cases and would refuse legitimate
- * extensions on the moving one, so none is added (pinned by `StandingOriginBoundsFrontBlockTest`).
+ * block. [legalOriginsOf] covers this for **one case only: a train standing at its stop signal**.
+ * Such a train reports the block it has traversed up to that signal as its front section
+ * (Issue #788), so [LegalOrigins.AtSignal] is the front block's far boundary there (pinned by
+ * `StandingOriginBoundsFrontBlockTest`). A train without a front section is held to its entry.
+ * Other cases are not covered:
+ * - a block can also be bounded by a switch;
+ * - a train can stop short of its signal (a mid-block standstill, the ownership-conflict window),
+ *   where the signal ahead does not bound its front block;
+ * - for a moving train the front boundary is ambiguous mid-transition, and a forward extension
+ *   legitimately starts at the held route's end, beyond the front block.
+ * In all of these the kernel's contiguity guard ("any footprint block") stays the rule on purpose.
+ * A kernel front-block guard would refuse legitimate extensions there and adds nothing at a stop
+ * signal, so none is added.
  *
  * @since Issue #1414
  */
@@ -64,13 +69,13 @@ object RouteRequestAdmission {
 		val velocity: Double
 	)
 
-	/** Where a train's next route may start; [admits] is the membership test both callers apply. */
+	/** Where a train's next route may start; [accepts] is the membership test both callers apply. */
 	sealed interface LegalOrigins {
 		/** Every origin this rule accepts. */
 		val names: Set<String>
 
 		/** Whether a route starting at [fromEndpointName] satisfies this rule. */
-		fun admits(fromEndpointName: String): Boolean = fromEndpointName in names
+		fun accepts(fromEndpointName: String): Boolean = fromEndpointName in names
 
 		/** A queued train has not entered: its route starts at an InOut. */
 		data class AtInOut(

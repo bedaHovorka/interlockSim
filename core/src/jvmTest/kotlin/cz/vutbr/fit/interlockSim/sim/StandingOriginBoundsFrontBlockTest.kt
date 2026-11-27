@@ -24,17 +24,17 @@ import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
 
 /**
- * Why [RouteRequestAdmission.legalOriginsOf] needs no separate front-block guard (Issue #1414,
- * demand 1B-SP12.9): whenever it names a standing train's origin ([standingAtSignalName]), that
- * signal bounds the train's **front** block. A train standing at a signal reports the block it has
- * traversed up to the signal as its front section (Issue #788), so the standing rule *is* the
- * front-block rule.
+ * The one case in which [RouteRequestAdmission.legalOriginsOf] covers the front-block origin rule
+ * (Issue #1414, demand 1B-SP12.9): a train standing **at its stop signal**. It reports the block it
+ * has traversed up to the signal as its front section (Issue #788), so the signal it is held to
+ * ([standingAtSignalName]) bounds its front block. This does not hold for a train that stops short
+ * of its signal (a mid-block standstill); there the kernel's contiguity guard is the rule.
  *
- * Three trains on a 4-block line, released 2 s apart, queue behind each other at the semaphores,
- * so the standing state is sampled for real trains on every frame. Each sample checks that the
- * signal the perception port reports as "standing at" is an end of `Train.frontSection`.
+ * Three trains on a 4-block line with no switches, released 2 s apart, queue behind each other at
+ * the semaphores, so the standing-at-signal state is sampled on real trains. Each sample checks that
+ * the signal the perception port reports as "standing at" is an end of `Train.frontSection`.
  */
-@DisplayName("A standing train's legal origin bounds its front block (Issue #1414, 1B-SP12.9)")
+@DisplayName("A train standing at its stop signal is held to its front block's boundary (Issue #1414, 1B-SP12.9)")
 class StandingOriginBoundsFrontBlockTest : KoinTestBase() {
 	private companion object {
 		const val END_TIME: Long = 600L
