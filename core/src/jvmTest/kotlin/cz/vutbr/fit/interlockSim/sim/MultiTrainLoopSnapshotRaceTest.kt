@@ -45,7 +45,10 @@ private val logger = KotlinLogging.logger {}
  * records one representative per exception type and fails on any of them.
  *
  * This test runs a real multi-train simulation on its own thread while a second thread
- * hammers both readers, and asserts that nothing escapes. The thread harness lives in
+ * hammers both readers, and asserts that nothing escapes.
+ * It passes an absent train id ([ABSENT_TRAIN_ID]) to [MultiTrainLoop.getTrainSnapshot], so
+ * only the approved-set lookup is exercised: it never reads a train's velocity and distance
+ * pair, and says nothing about that pair being consistent off the simulation thread. The thread harness lives in
  * [probeConcurrentReads]; this test supplies only the topology, the workload and the asserts.
  */
 @Tag("integration-test")
