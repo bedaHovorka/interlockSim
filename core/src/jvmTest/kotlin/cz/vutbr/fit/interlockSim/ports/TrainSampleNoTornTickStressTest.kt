@@ -107,6 +107,7 @@ class TrainSampleNoTornTickStressTest : KoinTestBase() {
 							lastSample = sample
 						}
 						lastTickSeenByReader.set(snapshot.tick)
+						Thread.onSpinWait()
 					}
 				} catch (t: Throwable) {
 					readerFailure.set(t)
@@ -119,16 +120,7 @@ class TrainSampleNoTornTickStressTest : KoinTestBase() {
 				val published = loop.latestDispatchLoopSnapshot()
 				val sample = published.snapshot.trainPositions
 				recorded[published.tick] = Recorded(sample, sample.map { it.copy() })
-				val live = loop.getApprovedTrains()
-				if (sample.map { it.trainId } != live.map { it.name }) {
-					liveMismatches += "tick ${published.tick}: trains ${sample.map { it.trainId }} != live ${live.map { it.name }}"
-				} else {
-					sample.zip(live).forEach { (reading, train) ->
-						TrainSampleOracle.fieldDiff(reading, TrainSampleOracle.liveSample(train))?.let {
-							liveMismatches += "tick ${published.tick} ${train.name}: $it"
-						}
-					}
-				}
+				liveMismatches += TrainSampleOracle.compareWithLive(published.tick, sample, loop.getApprovedTrains())
 				if (published.tick % HANDSHAKE_EVERY == 0L) awaitReader(lastTickSeenByReader, published.tick)
 				dispatcherStep.onControlStep()
 			}

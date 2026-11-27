@@ -44,6 +44,24 @@ internal object TrainSampleOracle {
 		}
 
 	/**
+	 * Compares the published train [sample] of [tick] with the [live] approved trains: first the
+	 * train list (ids, in order), then every field of each reading against [liveSample]. Returns one
+	 * message per mismatch, empty when the sample equals live state. Simulation thread only.
+	 */
+	fun compareWithLive(
+		tick: Long,
+		sample: List<TrainPositionReading>,
+		live: List<Train>
+	): List<String> {
+		val sampleIds = sample.map { it.trainId }
+		val liveIds = live.map { it.name }
+		if (sampleIds != liveIds) return listOf("tick $tick: trains $sampleIds != live $liveIds")
+		return sample.zip(live).mapNotNull { (reading, train) ->
+			fieldDiff(reading, liveSample(train))?.let { "tick $tick ${train.name}: $it" }
+		}
+	}
+
+	/**
 	 * Names every field in which [published] differs from [live], or returns `null` when they are
 	 * equal. A per-field message makes a failure say what tore, not only that something did.
 	 */

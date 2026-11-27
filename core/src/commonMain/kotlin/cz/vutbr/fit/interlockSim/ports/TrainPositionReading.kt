@@ -49,7 +49,9 @@ package cz.vutbr.fit.interlockSim.ports
  * `@Volatile` tick record, read as [DispatchLoopSnapshot] (#1467 spec rules P1, P2). An off-thread
  * reader reads that published value only, never a live `Train`, so it cannot see one train from one
  * step and another from the next. A train's held routes are not a field of this reading: they belong
- * to the snapshot's route facet (#1469), filtered by [trainId].
+ * to the snapshot's route facet (#1469), filtered by [trainId]. The GUI's EDT reads
+ * (`AnimationStateCapture`) are outside this rule per #1467 spec §8: they still read live trains,
+ * and they only paint.
  *
  * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
  * @since Issue #1472 — [length] and [state]; the threading rule above

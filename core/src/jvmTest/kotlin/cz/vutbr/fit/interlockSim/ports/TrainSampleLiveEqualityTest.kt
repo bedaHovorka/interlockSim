@@ -66,19 +66,10 @@ class TrainSampleLiveEqualityTest : KoinTestBase() {
 		loop.controlStepListener =
 			ControlStepListener {
 				val published = loop.latestDispatchLoopSnapshot()
-				val live = loop.getApprovedTrains()
-				val publishedIds = published.snapshot.trainPositions.map { it.trainId }
-				if (publishedIds != live.map { it.name }) {
-					mismatches += "tick ${published.tick}: trains $publishedIds != live ${live.map { it.name }}"
-				} else {
-					published.snapshot.trainPositions.zip(live).forEach { (reading, train) ->
-						TrainSampleOracle.fieldDiff(reading, TrainSampleOracle.liveSample(train))?.let {
-							mismatches += "tick ${published.tick} ${train.name}: $it"
-						}
-						statesSeen += reading.state
-						comparedSamples++
-					}
-				}
+				val sample = published.snapshot.trainPositions
+				mismatches += TrainSampleOracle.compareWithLive(published.tick, sample, loop.getApprovedTrains())
+				statesSeen += sample.map { it.state }
+				comparedSamples += sample.size
 				dispatcherStep.onControlStep()
 			}
 		ctx.setMainProcess(loop)
