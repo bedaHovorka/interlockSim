@@ -99,6 +99,14 @@ class InOutWorker(
 	 * of the episode's first refusal — or `null` when no episode runs. The train waits at the InOut
 	 * with simulated time advancing; the route that blocks it is the dispatcher's to cancel, so a
 	 * watchdog can read this as actionable work. Read on the simulation thread or after the run.
+	 *
+	 * Known limit: for a refused train that holds no blocks, the premise check in
+	 * [waitUntilPathFreeBoundedByStaleOrigin] ("the holding is gone") is always true, so a pass with
+	 * the entry path blocked ends the episode. That resets `since` at the next refusal, and a run
+	 * that ends inside such a blocked pass leaves the train out of the run record's refused entries.
+	 * Unreachable today by construction (Issue #893): a train that holds no blocks has an empty
+	 * footprint, so the contiguity check passes vacuously and the entry is never refused as
+	 * non-contiguous; the no-block wait exists only as a safety net.
 	 */
 	val refusedEntry: RefusedEntry?
 		get() =
@@ -383,6 +391,9 @@ class InOutWorker(
 			// Healthy operation in all three shapes must never be timed out; any re-attempt the
 			// caller makes right after runs the normal path (self-owned blocks accept, so the
 			// entry route completes, and real refusals keep their own handling).
+			// Issue #1457 known limit: for a train that holds no blocks the first arm is always
+			// true, so a blocked pass ends its episode (see [refusedEntry]); unreachable today by
+			// construction (Issue #893).
 			if (
 				pathReservationService.getReservedBlocks(staleTrainId).isEmpty() ||
 				(queqe.first() as? Train)?.name != staleTrainId ||

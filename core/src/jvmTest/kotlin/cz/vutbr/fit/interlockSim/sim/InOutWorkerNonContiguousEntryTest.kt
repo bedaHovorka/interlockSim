@@ -253,7 +253,9 @@ class InOutWorkerNonContiguousEntryTest : KoinTestBase() {
 		val trainId = requireNotNull(refusedTrain) { "no train was refused" }
 		assertThat(END_TIME - requireNotNull(firstRefusalAt), "the wait outlasts the WARNING threshold")
 			.isGreaterThan(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS)
-		val warnings = appender.list.filter { it.level == Level.WARN && trainId in it.formattedMessage }
+		// Word boundary: "Train #1" must not match "Train #10".
+		val trainNamed = Regex("${Regex.escape(trainId)}(?!\\d)")
+		val warnings = appender.list.filter { it.level == Level.WARN && trainNamed.containsMatchIn(it.formattedMessage) }
 		assertThat(warnings.map { it.formattedMessage }, "exactly one WARNING for the refused train").hasSize(1)
 		assertThat(warnings.single().formattedMessage).contains(EntryRefusalKind.NON_CONTIGUOUS.text)
 		val record = context.runRecord()
@@ -269,10 +271,13 @@ class InOutWorkerNonContiguousEntryTest : KoinTestBase() {
 	}
 
 	/**
-	 * The brief's watchdog guard: `MultiTrainLoop`'s `DeadlockWatchdog` must give no new end cause
-	 * through the stale route. The refused train was started by the loop (its whole route reserved),
-	 * so it is no watchdog member; the trains behind it wait for its blocks. The run must end at its
-	 * end time with no stall and no errorStop, the refused train named in the run record.
+	 * A tripwire, not a reproduction: `MultiTrainLoop`'s `DeadlockWatchdog` must give no new end cause
+	 * through the stale route. In production the loop reserves a train's whole route before the train
+	 * reaches its worker, so the worker never sees the refusal; the test injects it. The refused train
+	 * was started by the loop (its whole route reserved), so it is no watchdog member; the trains behind
+	 * it wait for its blocks. The wait-for edges sampled during the wait must never leave the refused
+	 * train, and the run must end at its end time with no stall and no errorStop, the refused train
+	 * named in the run record.
 	 */
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
@@ -328,11 +333,21 @@ class InOutWorkerNonContiguousEntryTest : KoinTestBase() {
 						MultiTrainLoop.TrainSpec(inName = WEST_ENTRY_1, outName = EAST_EXIT_1, inTime = it, length = 20.0)
 					}
 			)
+		// Sampled on every accounting event (the waiting trains' entry retries keep them coming).
+		val edgesLeavingRefused = mutableListOf<Set<String>>()
+		var edgeSamples = 0
+		context.onRunAccountingEvent {
+			val refused = refusedTrain ?: return@onRunAccountingEvent
+			edgeSamples++
+			loop.waitForEdges()[refused]?.let { edgesLeavingRefused += it }
+		}
 		context.setMainProcess(loop)
 		context.run()
 
 		assertThat(errorStops, "no errorStop may end the run").isEmpty()
 		assertThat(fatalLines(), "no FATAL SimulationException may be logged").isEmpty()
+		assertThat(edgeSamples, "wait-for edges sampled during the wait").isGreaterThan(0)
+		assertThat(edgesLeavingRefused.flatten(), "no wait-for edge leaves the refused train").isEmpty()
 		val trainId =
 			requireNotNull(refusedTrain) {
 				"no train was refused: entered ${loop.getTrainsEntered()} exited ${loop.getTrainsExited()} " +
