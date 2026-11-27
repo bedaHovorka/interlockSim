@@ -18,7 +18,8 @@ import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
  * [ReservationTargetPolicy], so the policy stays a pure function over candidate lists.
  *
  * Today it holds the origin rule, [legalOriginsOf], called by `:dispatcher-agent`'s
- * `RequestRouteTool` and `ActionValidator`. Issue #1461 adds the target guard (`admits`) here.
+ * `RequestRouteTool` and `ActionValidator`. A planned follow-up (#1461) adds the target guard
+ * (`admits`) here.
  *
  * ## Not a copy of `SwitchLegalPairs`
  *

@@ -36,10 +36,14 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * ## Threading contract
  *
  * `execute()` runs on the agent driver thread. It emits [DispatchAction.RequestRoute] to the
- * active [sinkHolder] (fire-and-forget). The [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop]
- * collects the emission, validates it through [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator],
- * and posts the validated [cz.vutbr.fit.interlockSim.sim.DispatchDecision] to the
- * [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] for the kDisco thread.
+ * active [sinkHolder] (fire-and-forget). In production the agent factory installs a sink that
+ * converts every emitted action to a [cz.vutbr.fit.interlockSim.sim.DispatchDecision] and posts
+ * it straight to [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] for the kDisco
+ * thread — [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]'s
+ * [cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode] checks are the gates there. No
+ * [cz.vutbr.fit.interlockSim.dispatcher.DispatchTickLoop] collects this emission (it is never
+ * constructed in production), so [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator] never
+ * sees a live tool emission; this tool's own in-turn checks below are the pre-emission gate.
  *
  * ## Endpoint-name validation
  *
@@ -60,9 +64,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * train conflicted on those blocks for the rest of the run.
  *
  * [execute] therefore also validates [trainName] against the union of the **queued** trains
- * ([sensorPort]) and the **active** trains ([perceptionPort]). Both, deliberately: reserving a
- * route before calling `approve_train` is the intended order, so restricting to active trains
- * would reject legitimate requests. Both ports are internal, already injected into
+ * ([sensorPort]) and the **active** trains ([perceptionPort]). Both, deliberately: this check
+ * guards identity, not admission ordering — the system prompt owns that order ("admission comes
+ * first": `approve_train` before any route request) — and the applier lags the port read, so a
+ * just-approved train can still read as queued here. Restricting to active trains would reject
+ * legitimate requests. Both ports are internal, already injected into
  * [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory], and are not LLM-facing tools, so
  * the actuator surface stays at four and the SP2c "no new query tool" decision holds.
  *

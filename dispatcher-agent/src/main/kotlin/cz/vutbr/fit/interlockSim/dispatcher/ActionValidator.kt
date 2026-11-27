@@ -413,6 +413,9 @@ class ActionValidator(
 			when (rule) {
 				is LegalOrigins.AtSignal -> "is standing at signal '${rule.signal}'"
 				is LegalOrigins.AtEntry -> "is approved but has not entered the network yet (it enters at '${rule.entryInOut}')"
+				// Exhausts the sealed interface; unreachable for this caller: with isQueued
+				// hardcoded to false above, the rule can never be AtInOut (the rule returns it
+				// for a non-active train only).
 				is LegalOrigins.AtInOut -> "has not entered the network yet"
 			}
 		return rejected(
