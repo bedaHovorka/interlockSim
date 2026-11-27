@@ -124,7 +124,7 @@ class Goal9C7ArchitectureTest {
 		}
 	}
 
-	// ── 4. DefaultConflictResolver: no actuator fields ───────────
+	// ── 4. DefaultConflictResolver: no actuator fields ───────────────────────
 
 	@Nested
 	@DisplayName("DefaultConflictResolver: no ActuatorCommandQueue or NetworkActuatorPort fields")
