@@ -28,8 +28,12 @@ import cz.vutbr.fit.interlockSim.util.Point
  *
  * Like [GeneratedSemaphoreName.at], the format is a file-format contract: saved files with omitted
  * names depend on the next load regenerating the same name.
+ *
+ * Public, unlike [GeneratedSemaphoreName]: the `:core-test` `PlanningSnapshotLiveComparator` (Issue
+ * #1468) names live switches with [switchName] on its own scan, an oracle independent of the ports'
+ * `switchesByStableName`.
  */
-internal object GeneratedElementName {
+object GeneratedElementName {
 	/** The switch name format, for log and error messages. */
 	const val SWITCH_PATTERN = "SW_<X>_<Y>"
 
