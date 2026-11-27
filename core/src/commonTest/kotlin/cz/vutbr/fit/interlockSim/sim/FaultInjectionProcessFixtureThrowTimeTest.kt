@@ -28,6 +28,11 @@ import kotlin.test.Test
  * The fixture throws a [CancellationException] here: on Kotlin/Native an uncaught process exception
  * ends the whole test process (there is no thread `UncaughtExceptionHandler` to record it), whereas
  * a cancellation is process control that kDisco absorbs. The throw time is what is pinned.
+ *
+ * The delayed-activation case pins the absolute semantics: kDisco's `hold` takes a duration, so the
+ * fixture holds only the remaining stretch from its activation to `failAt`. An activation after the
+ * target cannot be pinned here (an uncaught process exception would end the whole Native test
+ * process); the JVM suite records that rejection instead.
  */
 class FaultInjectionProcessFixtureThrowTimeTest {
 	@Test
@@ -53,5 +58,29 @@ class FaultInjectionProcessFixtureThrowTimeTest {
 		runBlocking { sim.run(20.0) }
 
 		assertThat(fixture.thrownAtTime).isEqualTo(4.5)
+	}
+
+	@Test
+	fun `the fixture throws at the configured time when its activation was delayed`() {
+		val fixture =
+			FaultInjectionProcessFixture(
+				failAt = 4.0,
+				throwable = CancellationException("fault injected by the test")
+			)
+		val bystander =
+			object : Process() {
+				override suspend fun actions() {
+					hold(10.0)
+				}
+			}
+
+		val sim =
+			Simulation.create {
+				Process.activate(fixture, delay = 2.0)
+				Process.activate(bystander)
+			}
+		runBlocking { sim.run(20.0) }
+
+		assertThat(fixture.thrownAtTime).isEqualTo(4.0)
 	}
 }

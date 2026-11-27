@@ -26,12 +26,16 @@ import cz.vutbr.fit.interlockSim.exceptions.SimulationException
  * exception kills the whole test process. A test that runs on linuxX64 must therefore configure the
  * fixture to throw a `CancellationException` (kDisco absorbs it as process control), as `:core`'s
  * `FaultInjectionProcessFixtureThrowTimeTest` does; it then pins the throw time through
- * [thrownAtTime]. The default fault is for JVM tests that record the escape.
+ * [thrownAtTime]. The default fault is for JVM tests that record the escape. That absorption runs on
+ * every target: on the JVM too, a configured `CancellationException` stays invisible to
+ * `UncaughtSimulationExceptions`.
  *
  * The default FATAL fault is built when it is thrown, at time [failAt], so its model time
- * (`SimulationException.time`) equals [failAt].
+ * (`SimulationException.time`) equals [failAt]. A read of [throwable] before that returns a preview
+ * built at the read (a pre-run read would sample NaN as its time, a mid-run read that run's time);
+ * the preview is not cached and is not the instance thrown.
  *
- * @param failAt simulated time of the throw, at least 0
+ * @param failAt simulated time of the throw, at least 0; an activation after it is rejected
  * @param throwable what is thrown; `null` means a FATAL [SimulationException] naming [name]
  * @param name the process name a run record shows; also the text of the default throwable
  */
@@ -42,12 +46,16 @@ class FaultInjectionProcessFixture(
 ) : Process() {
 	private val configured: Throwable? = throwable
 
+	/** The default fault instance [actions] threw, `null` before that or when [configured] is thrown instead. */
+	private var thrown: Throwable? = null
+
 	/**
-	 * What [actions] throws: the configured throwable, else the default fault naming [name]. The
-	 * default is built at the first read, which [actions] does at time [failAt], so its model time is
-	 * the time of the fault.
+	 * What [actions] throws: the configured throwable, else the default fault naming [name]. A read
+	 * before the throw returns a fresh preview of the default that is not cached, so it is not the
+	 * instance thrown; a read after the throw returns that instance.
 	 */
-	val throwable: Throwable by lazy { configured ?: defaultFault(name) }
+	val throwable: Throwable
+		get() = configured ?: (thrown ?: defaultFault(name))
 
 	init {
 		require(failAt >= 0.0) { "failAt must not be negative, got $failAt" }
@@ -58,9 +66,17 @@ class FaultInjectionProcessFixture(
 		private set
 
 	override suspend fun actions() {
-		hold(failAt)
+		// hold() takes a duration (kDisco), so hold only the remaining stretch; an activation after
+		// the target is rejected with context, which kDisco's own bare require does not carry.
+		val activationTime = time()
+		if (activationTime > failAt) {
+			throw IllegalStateException(
+				"Fault fixture $name activated at simulated time $activationTime, after its target time $failAt"
+			)
+		}
+		hold(failAt - activationTime)
 		thrownAtTime = time()
-		throw throwable
+		throw configured ?: defaultFault(name).also { thrown = it }
 	}
 
 	override fun toString(): String = "FaultInjectionProcessFixture($name, failAt=$failAt)"
