@@ -14,16 +14,12 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThan
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.ContentionQuery
-import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.ports.ContentionReading
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
-import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.PlanningSnapshotLiveComparator
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
-import cz.vutbr.fit.interlockSim.util.Array2DMap
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -38,16 +34,13 @@ import java.util.concurrent.TimeUnit
  * control arm, where trains really wait for each other.
  *
  * The example is built from [ExampleRegistry] with all its wiring; then the control-step listener is
- * wrapped (the `PlanningSnapshotLiveComparator` decorator style: installed last, so under spec rule P3
- * it is the first code after publication). At every control step, before the dispatcher's own
- * listener drains any command, it compares [SimulationSnapshot.contentions] of the published
- * observation, entry by entry and in order, with `ContentionQuery.openContentions()` read live on the
- * simulation thread:
- * - [ContentionReading.waitingTrainId] with [OpenContention.trainId];
- * - [ContentionReading.sectionId] with the grid id of the live [OpenContention.block], computed from
- *   the grid locations of `block.ends()` (an oracle independent of the port's graph scan);
- * - [ContentionReading.ownerTrainId] with [OpenContention.owner];
- * - [ContentionReading.sinceSimTime] with [OpenContention.since].
+ * wrapped with [PlanningSnapshotLiveComparator.wrap] (installed last, so under spec rule P3 it is the
+ * first code after publication). At every control step, before the dispatcher's own listener drains
+ * any command, the comparator compares [SimulationSnapshot.contentions] of the published observation,
+ * entry by entry and in order, with [ContentionQuery.openContentions] read live on the simulation
+ * thread: waiting train, section id (the grid id of the live block from the grid locations of its
+ * ends, an oracle independent of the port's graph scan), owning train and first-observed time. The
+ * comparator checks the switch facet (#1468) on the same ticks.
  *
  * Non-vacuous on Červený Újezd: the run must reach the two-train wait state the issue names, a tick
  * on which a train waits for a section another train holds (its control arm has one failed
@@ -62,18 +55,6 @@ import java.util.concurrent.TimeUnit
 class ContentionReadingLiveEqualityTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
 
-	private fun liveSectionId(
-		ctx: DefaultSimulationContext,
-		block: DynamicTrackBlock
-	): String {
-		val grid = ctx.getRailWayNetGrid()
-		return block
-			.ends()
-			.map { end -> checkNotNull(grid.getLocation(end as Cell)) { "end $end of a graph block has no grid location" } }
-			.sortedWith(Array2DMap.POINT_COMPARATOR)
-			.joinToString("-") { "(${it.x},${it.y})" }
-	}
-
 	private fun runAndCompare(
 		exampleName: String,
 		seed: String?,
@@ -81,42 +62,20 @@ class ContentionReadingLiveEqualityTest : KoinTestBase() {
 	) {
 		val ctx = buildContext(exampleName, seed)
 		val loop = ctx.mainProcess as ShuntingLoop
-		val contentionQuery: ContentionQuery = ctx.getRoutingServices().getContentionQuery()
 		val dispatcherStep = checkNotNull(loop.controlStepListener) { "$exampleName wires no control-step listener" }
-		val mismatches = mutableListOf<String>()
-		var comparedTicks = 0
-		var waitsForAnotherTrain = 0
-		loop.controlStepListener =
-			ControlStepListener {
-				val observation = loop.getLatestObservation()
-				val published = observation.snapshot.contentions
-				val live = contentionQuery.openContentions()
-				if (published.size != live.size) {
-					mismatches += "tick ${observation.tick}: ${published.size} readings for ${live.size} open contentions"
-				}
-				published.zip(live).forEachIndexed { index, (reading, contention) ->
-					val expected =
-						ContentionReading(
-							waitingTrainId = contention.trainId,
-							sectionId = liveSectionId(ctx, contention.block),
-							ownerTrainId = contention.owner,
-							sinceSimTime = contention.since
-						)
-					if (reading != expected) {
-						mismatches += "tick ${observation.tick} #$index: $reading != live $expected"
-					}
-				}
-				waitsForAnotherTrain += live.count { it.owner != null && it.owner != it.trainId }
-				comparedTicks++
-				dispatcherStep.onControlStep()
-			}
+		val comparator = PlanningSnapshotLiveComparator(ctx, loop)
+		loop.controlStepListener = comparator.wrap(dispatcherStep)
 
 		ctx.run()
 
-		assertThat(mismatches, name = "snapshot vs live mismatches").isEmpty()
-		assertThat(comparedTicks, name = "compared ticks").isGreaterThan(0)
+		assertThat(comparator.mismatches, name = "snapshot vs live mismatches").isEmpty()
+		assertThat(comparator.comparedTicks, name = "compared ticks").isGreaterThan(0)
 		if (requireTwoTrainWait) {
-			assertThat(waitsForAnotherTrain, name = "ticks x contentions where a train waits for another").isGreaterThan(0)
+			assertThat(
+				comparator.contentionsWaitingForAnotherTrain,
+				name = "ticks x contentions where a train waits for another"
+			).isGreaterThan(0)
+			assertThat(comparator.comparedContentionReadings, name = "compared contention readings").isGreaterThan(0)
 		}
 	}
 

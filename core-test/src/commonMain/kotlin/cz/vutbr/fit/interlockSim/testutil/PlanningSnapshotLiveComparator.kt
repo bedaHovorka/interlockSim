@@ -10,12 +10,18 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.navigation.ContentionQuery
+import cz.vutbr.fit.interlockSim.context.navigation.OpenContention
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.ports.ContentionReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.SwitchReading
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ProvidesDispatchLoopObservation
+import cz.vutbr.fit.interlockSim.util.Array2DMap
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.GeneratedElementName
 
@@ -35,7 +41,10 @@ import cz.vutbr.fit.interlockSim.xml.GeneratedElementName
  *
  * Facets compared today: the switches (#1468): name ([GeneratedElementName.switchName] of the grid
  * position for a blank name), `DynamicRailSwitch.conf`, `DynamicRailSwitch.locked` and
- * [PathReservationRegistry.getSwitchOwner]. Later SP4 leaves (#1469, #1470, #1472) add their facets here.
+ * [PathReservationRegistry.getSwitchOwner]; the open contentions (#1470): entry by entry and in order
+ * against [ContentionQuery.openContentions] — waiting train, section id (the grid id of the live
+ * block, computed from the grid locations of its ends, an oracle independent of the port's graph
+ * scan), owning train and first-observed time. Later SP4 leaves (#1469, #1472) add their facets here.
  *
  * @param context the simulation context whose live state is compared; its scope serves the registry
  * @param observation the publisher of the planning snapshot, normally the `ShuntingLoop`
@@ -45,6 +54,8 @@ class PlanningSnapshotLiveComparator(
 	private val observation: ProvidesDispatchLoopObservation
 ) {
 	private val registry: PathReservationRegistry by lazy { context.scope.get<PathReservationRegistry>() }
+
+	private val contentionQuery: ContentionQuery by lazy { context.getRoutingServices().getContentionQuery() }
 
 	/** Every live switch with its expected snapshot name, scanned once: cells never change at runtime. */
 	private val liveSwitches: List<Pair<String, DynamicRailSwitch>> by lazy {
@@ -72,6 +83,17 @@ class PlanningSnapshotLiveComparator(
 	var comparedSwitchReadings: Int = 0
 		private set
 
+	/** The number of contention readings compared so far (all ticks). */
+	var comparedContentionReadings: Int = 0
+		private set
+
+	/**
+	 * Ticks x live contentions in which a train waits for a section another train holds, summed over
+	 * all ticks: the two-train wait state a non-vacuous contention check needs (#1470).
+	 */
+	var contentionsWaitingForAnotherTrain: Int = 0
+		private set
+
 	/** Returns a listener that compares the tick's snapshot with live state, then calls [delegate]. */
 	fun wrap(delegate: ControlStepListener?): ControlStepListener =
 		ControlStepListener {
@@ -81,6 +103,7 @@ class PlanningSnapshotLiveComparator(
 
 	private fun compare(published: DispatchLoopSnapshot) {
 		compareSwitches(published.tick, published.snapshot.switches)
+		compareContentions(published.tick, published.snapshot.contentions)
 		comparedTicks++
 	}
 
@@ -103,5 +126,36 @@ class PlanningSnapshotLiveComparator(
 			if (reading != live) collected += "tick $tick: switch $name published $reading != live $live"
 			comparedSwitchReadings++
 		}
+	}
+
+	private fun compareContentions(
+		tick: Long,
+		readings: List<ContentionReading>
+	) {
+		val live = contentionQuery.openContentions()
+		if (readings.size != live.size) collected += "tick $tick: ${readings.size} readings for ${live.size} open contentions"
+		readings.zip(live).forEachIndexed { index, (reading, contention) ->
+			val expected = contention.toReading()
+			if (reading != expected) collected += "tick $tick #$index: contention $reading != live $expected"
+			comparedContentionReadings++
+		}
+		contentionsWaitingForAnotherTrain += live.count { it.owner != null && it.owner != it.trainId }
+	}
+
+	private fun OpenContention.toReading(): ContentionReading =
+		ContentionReading(
+			waitingTrainId = trainId,
+			sectionId = liveSectionId(block),
+			ownerTrainId = owner,
+			sinceSimTime = since
+		)
+
+	private fun liveSectionId(block: DynamicTrackBlock): String {
+		val grid = context.getRailWayNetGrid()
+		return block
+			.ends()
+			.map { end -> checkNotNull(grid.getLocation(end as Cell)) { "end $end of a graph block has no grid location" } }
+			.sortedWith(Array2DMap.POINT_COMPARATOR)
+			.joinToString("-") { "(${it.x},${it.y})" }
 	}
 }
