@@ -37,6 +37,7 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SemaphoreReading
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.ports.TimetableReading
 import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
@@ -367,6 +368,28 @@ class DispatcherObservationProjectorTest : DispatcherKoinTestBase() {
 				val observation = projector.projectTick(1L)
 
 				assertThat(observation.switches).containsExactly(SwitchView("vX", RailSwitch.Conf.MAIN, null))
+			}
+		}
+	}
+
+	@Nested
+	@DisplayName("timetable origin (Issue #1414)")
+	inner class TimetableOrigin {
+		@Test
+		@DisplayName("an active train's view carries its timetable origin; a queued one carries none")
+		fun activeTrainViewCarriesTimetableOrigin() {
+			loadShuntingLoopContext().use { context ->
+				val active = perception("Train #2", frontSectionName = null)
+				val snapshot =
+					snapshotOf(simTime = 10.0, perceptions = listOf(active))
+						.copy(timetables = listOf(TimetableReading("Train #2", "A", "B", 0.0, 0.0)))
+				val projector =
+					stubPorts(context, snapshot, dispatchSnapshotOf(listOf(QueuedTrainObservation("Train #1", "B"))))
+
+				projector.captureOnSimThread()
+				val views = projector.latest().trains.associateBy { it.trainId }
+				assertThat(views.getValue("Train #2").originInOutName).isEqualTo("A")
+				assertThat(views.getValue("Train #1").originInOutName).isNull()
 			}
 		}
 	}

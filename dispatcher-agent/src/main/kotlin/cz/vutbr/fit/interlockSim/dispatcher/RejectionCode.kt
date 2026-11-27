@@ -173,17 +173,16 @@ enum class RejectionCode {
 	/**
 	 * The `fromEndpointName` does not correspond to the train's current position.
 	 *
-	 * A [cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase.HELD] train is stopped
-	 * at [cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView.signalAheadName]; the
-	 * route must start from that signal. If `fromEndpointName` differs from `signalAheadName`
-	 * when the train is HELD and `signalAheadName` is non-null, the origin is wrong.
+	 * The legal origins come from [cz.vutbr.fit.interlockSim.sim.RouteRequestAdmission.legalOriginsOf],
+	 * the one rule `RequestRouteTool` and [ActionValidator] share (Issue #1414): a train standing at
+	 * a signal starts there; an approved train that has not entered starts at its timetable entry or
+	 * at the signal its entry route reaches; a queued train starts at an InOut.
 	 *
 	 * ## Stated limitation
 	 *
-	 * This check is limited to the HELD+signalAheadName case. For RUNNING trains the
-	 * block-to-endpoint mapping requires topology data not present in the observation, so no
-	 * origin check is performed. The `:core` interlocking layer rejects routes whose origin
-	 * does not connect to the train's current block regardless.
+	 * A moving train gets no origin check: its signal ahead changes under the dispatcher's feet, so
+	 * requiring a match there would reject legitimate look-ahead requests. The `:core` interlocking
+	 * layer rejects routes whose origin does not connect to the train's footprint regardless.
 	 */
 	ORIGIN_NOT_AT_TRAIN_POSITION,
 

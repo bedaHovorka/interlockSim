@@ -12,8 +12,8 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
 import cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.agents.NextHopResolver
-import cz.vutbr.fit.interlockSim.dispatcher.agents.standingAtSignalName
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
+import cz.vutbr.fit.interlockSim.sim.standingAtSignalName
 
 /**
  * The NEXT SECTION offers of one LLM cycle that skipped the rule-based fallback (Issue #1302,

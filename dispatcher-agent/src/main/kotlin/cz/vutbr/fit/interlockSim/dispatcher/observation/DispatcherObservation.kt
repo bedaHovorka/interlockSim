@@ -60,6 +60,10 @@ enum class TrainPhase { QUEUED, RUNNING, DWELLING, HELD, EXITED }
  *   currently waiting (running, or exited). See [DispatcherObservationProjector] for the
  *   statefulness this requires.
  * @property waitSeconds `simTime - waitingSinceSimTime`, or `0.0` when not currently waiting.
+ * @property originInOutName The InOut the train's timetable enters at, or `null` when the snapshot
+ *   carries no timetable for it (always for a queued train). `ActionValidator` reads it for the
+ *   not-yet-entered origin rule of [cz.vutbr.fit.interlockSim.sim.RouteRequestAdmission.legalOriginsOf]
+ *   (Issue #1414).
  */
 data class TrainView(
 	val trainId: String,
@@ -72,7 +76,8 @@ data class TrainView(
 	val signalAheadAspect: Signal?,
 	val distanceToSignalAheadMetres: Double,
 	val waitingSinceSimTime: Double?,
-	val waitSeconds: Double
+	val waitSeconds: Double,
+	val originInOutName: String? = null
 )
 
 /**
