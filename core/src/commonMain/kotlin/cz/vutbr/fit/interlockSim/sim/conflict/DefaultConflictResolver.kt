@@ -139,8 +139,9 @@ class DefaultConflictResolver(
 	 * **Position-agnostic limitation:** candidates are advisory suggestions enumerated
 	 * across *all* InOut pairs.  This slice does not know where the blocked train
 	 * currently is, where it is heading, or whether it can still reach a candidate
-	 * route's start point — so not every candidate is actionable.  Actionability and
-	 * position-aware filtering are deferred to Goal 9 SP4 (Issue #568).
+	 * route's start point — so not every candidate is actionable.  The suggestions are
+	 * advisory until Goal 9B SP9 (b) (Issue #1443); actionability and position-aware
+	 * filtering are not part of this resolver.
 	 */
 	private fun generateRerouteCandidates(conflict: ConflictDetectedEvent): List<ConflictResolution.Reroute> {
 		val bypassingRoutes = mutableListOf<RouteWithEndpoints>()

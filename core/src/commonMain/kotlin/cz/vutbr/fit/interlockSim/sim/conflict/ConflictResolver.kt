@@ -14,10 +14,9 @@ package cz.vutbr.fit.interlockSim.sim.conflict
  *
  * Given a [ConflictDetectedEvent] this service produces a list of candidate resolutions,
  * ranked from least to most operationally disruptive
- * ([cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker]), that an operator
- * or an automated layer (Issue #568) can apply to resolve the conflict.  The service
- * itself is **headless** — it never applies a resolution; it only generates and ranks
- * options.
+ * ([cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker]).  The suggestions are
+ * advisory until Goal 9B SP9 (b) (Issue #1443).  The service itself is **headless** — it
+ * never applies a resolution; it only generates and ranks options.
  *
  * ## Candidate strategies
  *

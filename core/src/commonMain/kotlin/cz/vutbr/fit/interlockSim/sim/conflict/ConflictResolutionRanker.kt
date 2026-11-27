@@ -43,8 +43,8 @@ package cz.vutbr.fit.interlockSim.sim.conflict
  *    sorts first.
  * 3. The joined [ConflictResolution.affectedTrains] IDs, as a last-resort stable key.
  *
- * This class is independent of any UI so it can be shared by the resolution panel and by
- * the automated-application layer (Issue #568).
+ * This class is independent of any UI. Its ranking orders suggestions that are advisory until
+ * Goal 9B SP9 (b) (Issue #1443) gives them a way to be carried out.
  *
  * The preference-weighted overload of Goal 9 SP6 (Issue #592) was removed by Goal 9B SP2.2
  * (Issue #1454): the ranking no longer depends on the operator's choice history.
