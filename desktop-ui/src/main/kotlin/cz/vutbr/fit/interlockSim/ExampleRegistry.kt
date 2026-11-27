@@ -601,6 +601,19 @@ class ExampleRegistry {
 	 * [ModelfileHashSource] at run start (Issue #1342). Used by both shared helpers,
 	 * [llmShuntingLoopExample] (console) and [llmGuiShuntingLoopExample] (GUI).
 	 * Issue #847 round 4 (R4-5) / #928.
+	 *
+	 * ⚠️ **Blocking read at example construction.** [ModelfileHashSource.fetch] runs here, inline,
+	 * bounded by its own 5 s timeout (plus DNS/connect on top): until Ollama answers, the example
+	 * does not finish constructing — on the GUI path that is the thread that calls
+	 * `ExampleRegistry`, so an unreachable Ollama (the expected state of every rule-based-only
+	 * session) costs the full bound before the run window opens. The executor module deliberately
+	 * defers its connectivity check instead ([cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor]
+	 * is lazily initialized), but the profile cannot be deferred the same way: the recorder is
+	 * declared synchronously and every snapshot must carry the profile from run start, and caching
+	 * the read would pool two runs on the same tag name but a rebuilt Modelfile — the exact
+	 * misconfiguration the record exists to expose. A 2026-11-27 review round flagged the stall and
+	 * the owner keeps it as documented; file a backlog issue before re-engineering it (an async
+	 * read that the first snapshot must await is a wiring change of its own).
 	 */
 	private fun declareLlmToolCallingRecorder(
 		scope: Scope,

@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelProfileRecord
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject

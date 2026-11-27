@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.executor
 
-import cz.vutbr.fit.interlockSim.dispatcher.planner.ModelProfileRecord
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -25,9 +24,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.security.MessageDigest
 import java.time.Duration
@@ -82,15 +81,21 @@ class OllamaModelfileHashSource(
 				.digest(text.toByteArray(Charsets.UTF_8))
 				.joinToString("") { "%02x".format(it) }
 
-		/** The `num_predict` value of an `/api/show` `parameters` text, or `null` when it sets none. */
+		/**
+		 * The `num_predict` value of an `/api/show` `parameters` text, or `null` when it sets none or
+		 * sets a non-positive one: Ollama reads `num_predict -1` (its own "no cap" sentinel) and `0`
+		 * the same way, while the record's KDoc defines `numPredict == null` as "no cap is
+		 * configured", so a non-positive figure in the run JSON would read as a cap that is not there.
+		 */
 		internal fun numPredictOf(parameters: String?): Int? =
-			parameters?.let {
-				NUM_PREDICT_LINE
-					.find(it)
-					?.groupValues
-					?.get(1)
-					?.toIntOrNull()
-			}
+			parameters
+				?.let {
+					NUM_PREDICT_LINE
+						.find(it)
+						?.groupValues
+						?.get(1)
+						?.toIntOrNull()
+				}?.takeIf { it > 0 }
 	}
 
 	override fun fetch(tag: String): ModelProfileRecord =
@@ -125,13 +130,17 @@ class OllamaModelfileHashSource(
 			val reply =
 				json.parseToJsonElement(body) as? JsonObject
 					?: return unmeasured(tag, "the reply is not a JSON object", null)
+			// `as? JsonPrimitive`, never `jsonPrimitive`: a field of the wrong shape must not throw
+			// out of the read, which would trade the clean English reason below for a raw
+			// IllegalArgumentException in the warning — the same deliberate read
+			// OllamaReplyObserver.observe makes on the /api/chat side.
 			val modelfile =
-				reply["modelfile"]?.jsonPrimitive?.contentOrNull
+				(reply["modelfile"] as? JsonPrimitive)?.contentOrNull
 					?: return unmeasured(tag, "the reply has no modelfile", null)
 			ModelProfileRecord(
 				tag = tag,
 				modelfileSha256 = sha256Hex(modelfile),
-				numPredict = numPredictOf(reply["parameters"]?.jsonPrimitive?.contentOrNull)
+				numPredict = numPredictOf((reply["parameters"] as? JsonPrimitive)?.contentOrNull)
 			)
 		}
 	}

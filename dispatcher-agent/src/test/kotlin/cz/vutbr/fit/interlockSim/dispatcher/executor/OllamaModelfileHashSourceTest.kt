@@ -18,7 +18,6 @@ import assertk.assertions.isNull
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import cz.vutbr.fit.interlockSim.dispatcher.planner.ModelProfileRecord
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -106,6 +105,40 @@ class OllamaModelfileHashSourceTest {
 
 		assertThat(profile.modelfileSha256).isEqualTo(sha256Hex(MODELFILE))
 		assertThat(profile.numPredict).isNull()
+	}
+
+	/**
+	 * Ollama reads `num_predict -1` (and 0) as "no cap", but the record's KDoc defines `null` as "no
+	 * cap is configured" — a negative figure in the run JSON would contradict it (review finding,
+	 * 2026-11-27). A non-positive value therefore records nothing.
+	 */
+	@Test
+	fun `a non-positive num_predict records no cap, never a negative figure`() {
+		server.enqueue(showReply("num_predict                    -1\nstop                           x"))
+
+		assertThat(source().fetch(TAG).numPredict).isNull()
+
+		server.enqueue(showReply("num_predict                    0"))
+
+		assertThat(source().fetch(TAG).numPredict).isNull()
+	}
+
+	/**
+	 * A field of the wrong JSON shape must not turn into a raw exception in the warning (review
+	 * finding, 2026-11-27) — the run keeps its unmeasured outcome either way, but the reason line
+	 * stays the clean English one, mirroring `OllamaReplyObserver.observe`'s `as?` read.
+	 */
+	@Test
+	fun `a modelfile of the wrong JSON shape records both figures absent with the clean reason`() {
+		server.enqueue(
+			MockResponse()
+				.setResponseCode(200)
+				.setHeader("Content-Type", "application/json")
+				.setBody("""{"modelfile":{"unexpectedly":"an object"},"parameters":"num_predict 2048"}""")
+		)
+
+		assertThat(source().fetch(TAG)).isEqualTo(ModelProfileRecord(TAG, null, null))
+		assertThat(warnings().single().formattedMessage).contains("the reply has no modelfile")
 	}
 
 	@Test

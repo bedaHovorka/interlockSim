@@ -8,8 +8,8 @@ import cz.vutbr.fit.interlockSim.di.objectsModule
 import cz.vutbr.fit.interlockSim.di.simulationDesktopModule
 import cz.vutbr.fit.interlockSim.di.xmlModule
 import cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelProfileRecord
 import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelfileHashSource
-import cz.vutbr.fit.interlockSim.dispatcher.planner.ModelProfileRecord
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
