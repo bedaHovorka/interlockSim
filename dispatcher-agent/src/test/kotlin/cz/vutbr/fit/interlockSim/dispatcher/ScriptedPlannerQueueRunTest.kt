@@ -104,6 +104,9 @@ class ScriptedPlannerQueueRunTest : DispatcherKoinTestBase() {
 		)
 		assertThat(run.snapshot.totalTicks).isEqualTo(run.controlTicks)
 		assertThat(run.snapshot.commandSource).isEqualTo(CommandSource(CommandSourceKind.SCRIPTED, SILENT_SCRIPT))
+		// Holds until the #1485 idle-work trigger: in silent mode trains wait with actionable work, so
+		// #1485 ends such a run as failed and flips this to not clean with its end cause. #1485
+		// converts this assertion; it does not delete it.
 		assertThat(CleanRunRule.isClean(run.snapshot), name = "a silent run is clean").isTrue()
 	}
 

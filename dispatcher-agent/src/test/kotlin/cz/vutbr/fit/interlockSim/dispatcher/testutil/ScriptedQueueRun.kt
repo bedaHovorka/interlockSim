@@ -59,7 +59,8 @@ class ScriptedQueueRun(
  *   command is never unattributed;
  * - each control step is one tick: [TickOutcome.LLM_ACTIONS] when the planner wrote a command,
  *   [TickOutcome.LLM_NO_OP] when it was silent (a scripted silence is an explicit decision to do
- *   nothing, counted under the `NO_OP` silent-cycle cause);
+ *   nothing, counted under the `NO_OP` silent-cycle cause). After #1478 the two become distinct:
+ *   an explicit `NoOp` command maps to `NO_OP` and an empty list maps to `EMPTY_PLAN`;
  * - the run-level command source is [CommandSourceKind.SCRIPTED] with the script name;
  * - the end cause follows the run-end classification of the context.
  */
