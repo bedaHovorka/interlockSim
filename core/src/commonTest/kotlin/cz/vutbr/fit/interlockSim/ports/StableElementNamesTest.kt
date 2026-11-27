@@ -32,6 +32,7 @@ import cz.vutbr.fit.interlockSim.sim.Station
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.util.Array2DMap
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.GeneratedElementName
@@ -149,14 +150,15 @@ class StableElementNamesTest : CommonKoinTestBase() {
 	fun anUnnamedSwitchOfAContextBuiltInCodeIsCommandedByItsGeneratedName() {
 		// A context built in code keeps the switch name blank (no XML load); the actuator port
 		// resolves it through the same GeneratedElementName.switchAt form.
-		val ctx = unnamedSwitchJunction().use { DefaultSimulationContext.fromEditingContext(it, get()) }.tracked()
+		val ctx = TestTopologies.yJunctionWithSwitchSimulation(switchName = "").tracked()
 		ctx.getInOuts()
 		val port = DefaultNetworkActuatorPort(env = ctx)
-		val switch = ctx.getRailWayNetGrid()[JUNCTION_SWITCH_AT] as DynamicRailSwitch
+		val switch = ctx.getRailWayNetGrid()[TestTopologies.Y_JUNCTION_SWITCH_AT] as DynamicRailSwitch
 		val target = if (switch.conf == RailSwitch.Conf.MAIN) RailSwitch.Conf.BRANCH else RailSwitch.Conf.MAIN
 
 		assertThat(switch.name, name = "static name of the code-built switch").isEqualTo("")
-		assertThat(port.setSwitchPosition(GeneratedElementName.switchAt(JUNCTION_SWITCH_AT), target)).isTrue()
+		val generatedName = GeneratedElementName.switchAt(TestTopologies.Y_JUNCTION_SWITCH_AT)
+		assertThat(port.setSwitchPosition(generatedName, target)).isTrue()
 		assertThat(switch.conf).isEqualTo(target)
 	}
 
@@ -240,28 +242,11 @@ class StableElementNamesTest : CommonKoinTestBase() {
 		assertThat(blank.conf, name = "the blank switch keeps its conf").isEqualTo(blankSaved)
 	}
 
-	/** The `TestTopologies.yJunctionWithSwitch` layout with an unnamed switch. */
-	private fun unnamedSwitchJunction(): DefaultEditingContext {
-		val context = DefaultEditingContext(60, 50)
-		val entry = InOut("J_IN", false, Cell.SpatialType.HORIZONTAL)
-		val exitMain = InOut("J_MAIN", true, Cell.SpatialType.HORIZONTAL)
-		val exitBranch = InOut("J_BRANCH", true, Cell.SpatialType.HORIZONTAL)
-		val switch: NodeCell = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		context.putCell(Point(5, 30), entry)
-		context.putCell(JUNCTION_SWITCH_AT, switch)
-		context.putCell(Point(55, 30), exitMain)
-		context.putCell(Point(50, 40), exitBranch)
-		context.joinCells(Point(5, 30), JUNCTION_SWITCH_AT, SimpleTrackBlock(entry, switch, 250.0, 80.0))
-		context.joinCells(JUNCTION_SWITCH_AT, Point(55, 30), SimpleTrackBlock(switch, exitMain, 250.0, 100.0))
-		context.joinCells(JUNCTION_SWITCH_AT, Point(50, 40), SimpleTrackBlock(switch, exitBranch, 180.0, 90.0))
-		return context
-	}
-
 	/**
 	 * A straight `entry → switch(es) → exit` lane on one shared row whose switches carry the
 	 * [placements] names at their grid positions, `null` for blank (the fallback case under
-	 * test). The lane keeps every join on the row, the simple wiring of [unnamedSwitchJunction],
-	 * and [LANE_MARGIN] leaves room between two joins for the intermediate track cells.
+	 * test). The lane keeps every join on the row with y-junction-style simple wiring, and
+	 * [LANE_MARGIN] leaves room between two joins for the intermediate track cells.
 	 */
 	private fun laneJunction(vararg placements: Pair<Point, String?>): DefaultEditingContext {
 		val row = placements.first().first.y
@@ -289,7 +274,6 @@ class StableElementNamesTest : CommonKoinTestBase() {
 		const val SEED: Long = 1473L
 		const val UNKNOWN_BLOCK_ID = "unknown"
 		const val SWITCH_PREFIX = "SW_"
-		val JUNCTION_SWITCH_AT = Point(30, 30)
 
 		/** The gap between a lane's InOut and its nearest switch, in columns. */
 		const val LANE_MARGIN = 4
