@@ -32,7 +32,6 @@ import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
@@ -232,16 +231,6 @@ val navigationModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
 				DefaultCollisionDetectionService(context, context)
-			}
-
-			// TemporalConflictDetector: scoped to simulation context (Issue #583 Goal 9 SP2)
-			// Subscribes to block events in its init{} block to run the lookahead scan.
-			// The context serves as SimulationEnvironment (block-event source).
-			scoped<TemporalConflictDetector> {
-				val context =
-					getSource<DefaultSimulationContext>()
-						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
-				TemporalConflictDetector(context)
 			}
 
 			// ConflictResolver: scoped to simulation context (Issue #585 Goal 9 SP3)

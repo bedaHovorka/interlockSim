@@ -15,6 +15,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -39,15 +40,18 @@ import java.io.File
  * to the removed class — a file of the removed class's package, or one that imports the removed
  * name or its package with a wildcard.
  *
- * A third check covers the one removed member that is not a class: [ConflictResolutionRanker]
- * keeps a single `rank` method, the base ranking.
+ * A third check covers the removed members that are not classes: [ConflictResolutionRanker]
+ * keeps a single `rank` method, the base ranking, and [SimulationEnvironment] has none of
+ * [REMOVED_ENVIRONMENT_MEMBERS].
  *
  * Like every tripwire in this repository it fails and never fixes.
  *
  * Leaves: SP2.1 (#1453) removed `AutoConflictResolutionService` and its default implementation.
  * SP2.2 (#1454) removed the in-memory preference learning: `StrategyPreferenceStore`, the
  * `sim.conflict` `DispatcherPreferenceStore` with `DefaultDispatcherPreferenceStore`, and the
- * preference overload of [ConflictResolutionRanker.rank].
+ * preference overload of [ConflictResolutionRanker.rank]. SP2.3 (#1455) removed the inert
+ * `TemporalConflictDetector` with `ProjectedOccupancy` and `TemporalConflictEvent`, and the two
+ * [SimulationEnvironment] members that exposed it; its design is kept in #1497 (Goal 3B).
  */
 class Goal9ARemovedSymbolsTripwireTest {
 	private companion object {
@@ -58,7 +62,20 @@ class Goal9ARemovedSymbolsTripwireTest {
 				"cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService" to "#1453",
 				"cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore" to "#1454",
 				"cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore" to "#1454",
-				"cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore" to "#1454"
+				"cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore" to "#1454",
+				"cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector" to "#1455",
+				"cz.vutbr.fit.interlockSim.sim.conflict.ProjectedOccupancy" to "#1455",
+				"cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent" to "#1455"
+			)
+
+		/**
+		 * Removed members of [SimulationEnvironment], with the leaf that removed each. Their names
+		 * are also covered by the source scan through the removed types they returned or took.
+		 */
+		val REMOVED_ENVIRONMENT_MEMBERS: Map<String, String> =
+			mapOf(
+				"getTemporalConflictDetector" to "#1455",
+				"onTemporalConflictEvent" to "#1455"
 			)
 
 		/**
@@ -138,6 +155,20 @@ class Goal9ARemovedSymbolsTripwireTest {
 	}
 
 	@Test
+	fun `the simulation environment has no removed member`() {
+		val memberNames =
+			SimulationEnvironment::class.java.methods
+				.map { it.name }
+				.toSet()
+
+		assertThat(
+			REMOVED_ENVIRONMENT_MEMBERS
+				.filterKeys { it in memberNames }
+				.map { (name, leaf) -> "SimulationEnvironment.$name (removed by $leaf) still exists" }
+		).isEmpty()
+	}
+
+	@Test
 	fun `a homonym mention counts only where it resolves to the removed class`() {
 		val removed = "cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore"
 		val kept = KEPT_HOMONYMS.getValue("DispatcherPreferenceStore")
@@ -182,8 +213,10 @@ class Goal9ARemovedSymbolsTripwireTest {
 	@Test
 	fun `the scan is not vacuous`() {
 		// The conflict package that held the removed classes is scanned, and so are the DI modules
-		// that bound them and the build scripts.
+		// that bound them, the context that exposed the temporal detector and the build scripts.
 		assertThat(scannedFiles.size).isGreaterThan(MIN_SCANNED_FILES)
+		assertThat(scannedFiles.any { it.name == "SimulationEnvironment.kt" }).isTrue()
+		assertThat(scannedFiles.any { it.name == "DefaultSimulationContext.kt" }).isTrue()
 		assertThat(scannedFiles.any { it.name == "ConflictResolver.kt" }).isTrue()
 		assertThat(scannedFiles.any { it.name == "CoreModule.kt" }).isTrue()
 		assertThat(scannedFiles.any { it.name == "SharedSimulationTestScopesModule.kt" }).isTrue()

@@ -44,7 +44,7 @@ that loop has a Goal 9 counterpart designed to replace it:
 | No prioritisation between competing blocked trains | `ConflictResolutionRanker` impact scoring (SP4) |
 | No headless decision-maker | `AutoConflictResolutionService.applyTopRanked` (SP5) — currently inert by design (removed by #1453) |
 | Conflicts only become visible as a CI timeout | Contention tracking (`blockedSince`, `flushUnresolvedConflicts`) is watchdog-ready telemetry |
-| No prediction — conflicts detected only on collision course | `TemporalConflictDetector` lookahead (SP2) — currently inert (no projection provider) |
+| No prediction — conflicts detected only on collision course | `TemporalConflictDetector` lookahead (SP2) — currently inert, no projection provider (removed by #1455; its provider contract, overlap and dedup rules are kept in #1497) |
 
 **Headline findings:**
 
@@ -104,7 +104,7 @@ All items below exist on `develop` today (Goal 9 marked ✅ COMPLETE 2026-07-06 
 |---|---|---|---|
 | SP1 | `ConflictDetectedEvent(block, trainId, conflictingTrainId, time)` | `sim/conflict/ConflictDetectedEvent.kt` | **Live.** Emitted by `DefaultPathReservationService` at reservation time — on registry `Conflict` (line ~455) and on the **first** observation of a blocked-path contention (`recordContentionAndEmitIfNew`, deduplicated per `(trainId, block)`) |
 | SP1 | `SimulationEnvironment.onConflictDetectedEvent(listener)` | `context/SimulationEnvironment.kt:508`, impl `DefaultSimulationContext.kt:1211` | **Live**, no production subscriber |
-| SP2 | `TemporalConflictDetector` + `ProjectedOccupancy` + `TemporalConflictEvent` | `sim/conflict/TemporalConflictDetector.kt` | **Wired but inert** — its own KDoc: "no production code path calls `registerProjectionProvider` yet … it never emits a `TemporalConflictEvent` in a real simulation run" |
+| SP2 | `TemporalConflictDetector` + `ProjectedOccupancy` + `TemporalConflictEvent` | `sim/conflict/TemporalConflictDetector.kt` | **Wired but inert** — its own KDoc: "no production code path calls `registerProjectionProvider` yet … it never emits a `TemporalConflictEvent` in a real simulation run" (removed by #1455; its provider contract, overlap and dedup rules are kept in #1497) |
 | SP3 | `ConflictResolution` sealed hierarchy: `HoldTrain`, `Reroute`, `SpeedAdjust`, each with `EstimatedImpact` | `sim/conflict/ConflictResolution.kt` | Model only — advisory, nothing enacts them |
 | SP3 | `DefaultConflictResolver.generateResolutions` (hold always; reroutes via `RouteFinder` over all InOut pairs, deduped, cost-sorted, capped; speed-adjust always) | `sim/conflict/DefaultConflictResolver.kt` | Live for the UI path; **position-agnostic** (its KDoc: actionability deferred to SP4/#568) |
 | SP4 | `ConflictResolutionRanker` — deterministic impact scoring, plus preference-weighted overload | `sim/conflict/ConflictResolutionRanker.kt` | **Live** (the preference-weighted overload was removed by #1454) |
