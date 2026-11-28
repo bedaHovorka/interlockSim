@@ -209,7 +209,9 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 			ctx.run()
 
 			// Post-run: exactly one conflict event, and the resolver generated a non-empty
-			// candidate list for it, ordered by ConflictResolutionRanker (score ascending).
+			// candidate list for it, ordered by ConflictResolutionRanker (score ascending —
+			// the store is empty here, so plain-score ordering coincides with the
+			// preference-adjusted ranking the scoped resolver actually performs).
 			assertThat(conflictEvents).hasSize(1)
 			assertThat(generatedCandidates).hasSize(1)
 			val ranked = generatedCandidates[0]

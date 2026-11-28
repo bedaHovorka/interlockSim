@@ -69,10 +69,6 @@ class Goal9C7ArchitectureTest {
 	private val actuatorTypeNames =
 		listOf("ActuatorCommandQueue", "NetworkActuatorPort", "DispatchLoopActuatorPort")
 
-	/** Forbidden conflict-resolution types accessible from :dispatcher-agent only via the annotator path. */
-	private val conflictOrchestratorNames =
-		listOf("ConflictResolver")
-
 	// ── Helper ──────────────────────────────────────────────────────────────────
 
 	private fun assertNoForbiddenFields(
