@@ -370,8 +370,16 @@ Users receive automatic detection of routing conflicts when multiple trains requ
   thread, so the frozen headless picker has no role left: `AutoConflictResolutionService`
   and `DefaultAutoConflictResolutionService` were deleted with their scoped Koin
   bindings. Their absence is pinned by `Goal9ARemovedSymbolsTripwireTest` (`:core`).
-  Only the headless picker goes — the scoped `ConflictResolver`, the preference store
-  and the operator UI stay as recorded above.
+  Only the headless picker goes — the scoped `ConflictResolver` and the operator UI
+  stay as recorded above; the in-memory preference stores go with the SP2.2 bullet
+  below.
+- **2026-11-28 deletion (owner rulings R1 and R14, #1434 — Goal 9B SP2.2, #1454):**
+  the in-memory preference learning of old Goal 9 was deleted with its Koin bindings:
+  `StrategyPreferenceStore`, the `sim.conflict` `DispatcherPreferenceStore` with
+  `DefaultDispatcherPreferenceStore`, the preference `rank` overload of
+  `ConflictResolutionRanker` and the `preferenceStore` wiring parameter. The operator
+  "Apply" is disabled as advisory-only pending Goal 9B SP9. Their absence is pinned by
+  `Goal9ARemovedSymbolsTripwireTest` (`:core`).
 
 ---
 

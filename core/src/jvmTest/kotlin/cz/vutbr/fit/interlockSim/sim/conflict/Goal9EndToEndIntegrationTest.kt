@@ -193,9 +193,8 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 			ctx.run()
 
 			// Post-run: exactly one conflict event, and the resolver generated a non-empty
-			// candidate list for it, ordered by ConflictResolutionRanker (score ascending —
-			// the store is empty here, so plain-score ordering coincides with the
-			// preference-adjusted ranking the scoped resolver actually performs).
+			// candidate list for it, ordered by ConflictResolutionRanker (score ascending;
+			// the base ranker is the only ranking since Issue #1454).
 			assertThat(conflictEvents).hasSize(1)
 			assertThat(generatedCandidates).hasSize(1)
 			val ranked = generatedCandidates[0]
@@ -205,8 +204,11 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 					.isLessThanOrEqualTo(ConflictResolutionRanker.score(ranked[i + 1]) + 0.0001)
 			}
 
-			// The scoped resolver ranks with the base ranker only (Issue #1454).
-			assertThat(ConflictResolutionRanker.rank(ranked)).isEqualTo(ranked)
+			// The scoped resolver ranks with the base ranker only (Issue #1454): ranking the
+			// resolver's candidates again must reproduce their natural (ascending-score)
+			// order, not any preference order.
+			assertThat(ConflictResolutionRanker.rank(ranked))
+				.isEqualTo(ranked.sortedBy { ConflictResolutionRanker.score(it) })
 		}
 	}
 
@@ -373,7 +375,7 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// AC4 (converted by Issue #1454): the ranking has no choice history; the
-	//      base order is the same on every ranking.
+	//      base order is the only order.
 	// ─────────────────────────────────────────────────────────────────────────
 
 	@Nested
@@ -384,14 +386,13 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		 * in the `StrategyPreferenceStore` and pinned that the preference-weighted overload of
 		 * [ConflictResolutionRanker.rank] then ranked the reroute first. Goal 9B SP2.2 removed
 		 * the store and the overload: the base order (hold 30 s → score 10 030; reroute 400 m →
-		 * score 10 040) is the only order, whatever the input order and however often it is
-		 * ranked.
+		 * score 10 040) is the only order, whatever the input order.
 		 *
 		 * @since Issue #593 (Goal 9 SP7); converted by Issue #1454
 		 */
 		@Test
-		@DisplayName("ranking the same candidates repeatedly keeps HOLD_TRAIN above REROUTE")
-		fun rankingTheSameCandidatesRepeatedly_keepsHoldTrainAboveReroute() {
+		@DisplayName("both input orders keep HOLD_TRAIN above REROUTE")
+		fun bothInputOrders_keepsHoldTrainAboveReroute() {
 			// Score layout (1 affected train each; AFFECTED_TRAIN_WEIGHT = 10 000):
 			//   HoldTrain   → delaySeconds=30   → score = 10 000 + 30×1.0  = 10 030
 			//   Reroute     → routeLength=400 m → score = 10 000 + 400×0.1 = 10 040
@@ -410,12 +411,10 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 					estimatedImpact = ConflictResolution.EstimatedImpact(0.0, "Reroute via 400 m alternative")
 				)
 
-			repeat(3) {
-				assertThat(ConflictResolutionRanker.rank(listOf(holdCandidate, rerouteCandidate)))
-					.containsExactly(holdCandidate, rerouteCandidate)
-				assertThat(ConflictResolutionRanker.rank(listOf(rerouteCandidate, holdCandidate)))
-					.containsExactly(holdCandidate, rerouteCandidate)
-			}
+			assertThat(ConflictResolutionRanker.rank(listOf(holdCandidate, rerouteCandidate)))
+				.containsExactly(holdCandidate, rerouteCandidate)
+			assertThat(ConflictResolutionRanker.rank(listOf(rerouteCandidate, holdCandidate)))
+				.containsExactly(holdCandidate, rerouteCandidate)
 		}
 	}
 
