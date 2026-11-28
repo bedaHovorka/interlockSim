@@ -178,8 +178,29 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 13`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW)
+	fun `current schema version is 14`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_REFUSED_ENTRIES)
+		assertThat(SCHEMA_VERSION_WITH_REFUSED_ENTRIES).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW + 1)
+	}
+
+	/** Issue #1457 (schema version 14): the refused entries at run end survive the round-trip. */
+	@Test
+	fun `serialization round-trips the refused entries at run end`() {
+		val refused = RefusedEntryOutcome(trainId = "Train #10", inOut = "east_exit_1", kind = "NON_CONTIGUOUS", since = 2.0)
+		val snap = snapshotWith(railwayOutcome = RailwayOutcome(refusedEntriesAtRunEnd = listOf(refused)))
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+
+		assertThat(decoded.railwayOutcome.refusedEntriesAtRunEnd).isEqualTo(listOf(refused))
+	}
+
+	/** Issue #1457: a version 13 file has no refused-entry key; it decodes with the figure absent, not empty. */
+	@Test
+	fun `a railway outcome without the refused entries decodes them as not measured`() {
+		val decoded = json.decodeFromString(RailwayOutcome.serializer(), "{\"trainsExited\": 3}")
+
+		assertThat(decoded.refusedEntriesAtRunEnd).isNull()
 	}
 
 	/** Issue #1302 (schema version 12): the skipped and offered NEXT SECTION counts survive the round-trip. */
@@ -586,6 +607,9 @@ class DispatcherRunSnapshotTest {
 
 		/** Issue #1306 added the performance row and the example name. */
 		private const val SCHEMA_VERSION_WITH_PERFORMANCE_ROW: Int = 13
+
+		/** Issue #1457 added the refused entries at run end. */
+		private const val SCHEMA_VERSION_WITH_REFUSED_ENTRIES: Int = 14
 
 		private val json =
 			Json {

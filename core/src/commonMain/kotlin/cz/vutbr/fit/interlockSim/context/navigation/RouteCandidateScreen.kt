@@ -165,7 +165,12 @@ internal class RouteCandidateScreen(
 			"Route origin '$startName' is not contiguous with train '$trainId': the train holds or " +
 				"occupies ${footprint.size} block(s), none of which is bounded by '$startName'. " +
 				"Legal origins for this train are: ${legalStarts.joinToString(", ")}."
-		logger.warn { "reservePath: rejected non-contiguous start — $reason" }
+		// Issue #1457: a NonContiguousStart for a queued train is a refused route its InOutWorker waits
+		// out, one attempt every STALE_ORIGIN_RETRY_SECONDS of simulated time, so this line fires on
+		// every retry — one level down, and at INFO only for the episode's first denial in the worker,
+		// which keeps the one-WARNING-per-train promise. A caller that must treat the refusal as loud
+		// (an unexpected one, not a wait) logs its own WARN on the returned result.
+		logger.debug { "reservePath: rejected non-contiguous start — $reason" }
 		return PathReservationService.ReservationResult.NonContiguousStart(startName, reason)
 	}
 

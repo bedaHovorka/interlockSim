@@ -19,8 +19,10 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
 import cz.vutbr.fit.interlockSim.context.navigation.ExpiryTotalsQuery
+import cz.vutbr.fit.interlockSim.sim.EntryRefusalKind
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.RefusedEntry
 import cz.vutbr.fit.interlockSim.sim.RunAccountingEvent
 import cz.vutbr.fit.interlockSim.sim.RunEnded
 import cz.vutbr.fit.interlockSim.sim.SweeperReleaseKind
@@ -221,6 +223,17 @@ class RunEndAccountingTest {
 		assertThat(s.journeysCompleted).isEqualTo(7)
 		assertThat(s.conflicts).isEqualTo(1)
 		assertThat(s.unresolvedAtRunEnd).isEqualTo(3)
+	}
+
+	/** Issue #1457: the refused entries of the run end reach the summary; none before the run ended. */
+	@Test
+	fun `the refused entries of the run end are carried into the summary`() {
+		val refused = RefusedEntry("T1", "west_entry_1", EntryRefusalKind.NON_CONTIGUOUS, since = 4.0)
+		assertThat(summary().refusedEntriesAtRunEnd, "before the run ended").isEmpty()
+
+		accounting.onRunEnded(RunEnded(601.0, endTimeReached = true, wallSeconds = 1.0, refusedEntries = listOf(refused)))
+
+		assertThat(summary().refusedEntriesAtRunEnd).isEqualTo(listOf(refused))
 	}
 
 	@Test

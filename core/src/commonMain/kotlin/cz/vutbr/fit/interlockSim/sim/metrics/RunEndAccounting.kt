@@ -116,6 +116,14 @@ internal class RunEndAccounting(
 				"$trainsEntered entered, $trainsExited exited, ${onNetwork.size} still on the network, " +
 				"stall ${stall != null}) (Issue #1304)"
 		}
+		// Issue #1457: the run-end residue of refused entries. INFO, not WARN: the worker already logged
+		// the one WARNING per train when the wait passed its threshold.
+		if (event.refusedEntries.isNotEmpty()) {
+			logger.info {
+				"Run ended with ${event.refusedEntries.size} train(s) waiting on a refused entry route: " +
+					event.refusedEntries.joinToString { it.describe() }
+			}
+		}
 	}
 
 	/** The capacity the dispatcher is given next to the station's topology capacity (Issue #1276). */
@@ -167,7 +175,8 @@ internal class RunEndAccounting(
 			endTime = ended?.time,
 			endTimeReached = ended?.endTimeReached ?: false,
 			classification = ended?.let(::classification),
-			performance = performance
+			performance = performance,
+			refusedEntriesAtRunEnd = ended?.refusedEntries.orEmpty()
 		)
 	}
 

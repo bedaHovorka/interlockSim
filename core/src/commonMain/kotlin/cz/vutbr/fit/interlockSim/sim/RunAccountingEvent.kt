@@ -183,12 +183,16 @@ enum class SweeperReleaseKind {
  * @property wallSeconds Wall-clock seconds the kDisco kernel ran, read from the platform's monotonic
  *   clock by the simulation context around the kernel run (Issue #1306, Goal 6 SP8): the one place
  *   every harness passes through. Context set-up, XML loading and JVM start-up are not included.
+ * @property refusedEntries The trains still waiting at their InOut on a refused entry route when the
+ *   kernel stopped, read by the simulation context from its InOut workers
+ *   ([InOutWorker.refusedEntry], Issue #1457), sorted by train name; empty when none waits.
  * @since Issue #1304 (Goal 6 SP6)
  */
 data class RunEnded(
 	val time: Double,
 	val endTimeReached: Boolean,
-	val wallSeconds: Double
+	val wallSeconds: Double,
+	val refusedEntries: List<RefusedEntry> = emptyList()
 )
 
 /**
