@@ -33,10 +33,15 @@ import cz.vutbr.fit.interlockSim.sim.metrics.RunRecord
  * producer (SP7) also adds its own row key here, with a schema bump.
  *
  * @property author The author the #1475 row names.
+ * @property sinceSchema The run JSON schema that introduced the row: a file of that schema or later must
+ *   carry its key, or the clean-run rule refuses it ([CleanRunRule.Violation.INCOMPLETE_COUNTERS]). A leaf
+ *   that adds a row (a C10 or C11 producer) sets the schema it bumps to, so a file of an older schema stays
+ *   judgeable without the new key.
  * @since Issue #1476 (Goal 9B SP5.3)
  */
 enum class CountedAutomatic(
-	val author: ActionAuthor
+	val author: ActionAuthor,
+	val sinceSchema: Int = DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_CLEAN_RUN_RULE
 ) {
 	/** C1: `DefaultReservationExpiry` phase 1 on the loop tick, a whole holding released by its TTL. */
 	EXPIRY_WHOLE_HOLDING(ActionAuthor.EXPIRY),

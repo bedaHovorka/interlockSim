@@ -124,7 +124,7 @@ import kotlinx.serialization.Serializable
  *   [latencyP50Ms].
  * @property latencyMaxMs Maximum tick latency in milliseconds; `null` when unmeasured — also
  *   `null` on [RunEndCause.TIMEOUT_ABORT] / [RunEndCause.CRASH] snapshots, like [latencyP50Ms].
- * @property actionsByAuthor Count of actions per [ActionAuthor] name. From schema 14 (Issue #1476) it also
+ * @property actionsByAuthor Count of actions per [ActionAuthor] name. From schema 17 (Issue #1476) it also
  *   holds the counted automatics of [countedAutomatics], added under their authors, so the clean-run rule
  *   ([CleanRunRule]) reads one map.
  * @property unattributedApplies Count of applied decisions whose correlation entry was missing: the
@@ -228,12 +228,12 @@ import kotlinx.serialization.Serializable
  *   never reported it.
  * @property commandSource What issued the run's commands ([CommandSource], Issue #1476): the model tag of an
  *   LLM run, the script name of a scripted run, `RULE_BASED` or `NONE`. `null` only in files before schema
- *   14; [commandSourceOrDerived] maps those by arm.
+ *   17; [commandSourceOrDerived] maps those by arm.
  * @property countedAutomatics One counter per counted automatic without an action path, keyed by
  *   [CountedAutomatic] name, every row present (Issue #1476). `null` means *not measured*: a file before
- *   schema 14, or a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot. Absent is never clean.
+ *   schema 17, or a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot. Absent is never clean.
  * @property silentCyclesByCause The silent cycles by [SilentCycleCause] name, every cause present (Issue
- *   #1476); derived from [ticksByOutcome] and [timeoutNoOpByCause]. `null` in files before schema 14.
+ *   #1476); derived from [ticksByOutcome] and [timeoutNoOpByCause]. `null` in files before schema 17.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore

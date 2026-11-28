@@ -62,7 +62,7 @@ enum class CommandSourceKind {
 
 /**
  * The [DispatcherRunSnapshot.commandSource] of this run, or, for a file written before the field existed
- * (schema 13 and older), the one its arm and model imply ([CommandSource.forArm]), so old campaign JSONs
+ * (schema 16 and older), the one its arm and model imply ([CommandSource.forArm]), so old campaign JSONs
  * still group by source. The clean-run rule never reads the derived value: such a file is not clean.
  */
 fun DispatcherRunSnapshot.commandSourceOrDerived(): CommandSource =

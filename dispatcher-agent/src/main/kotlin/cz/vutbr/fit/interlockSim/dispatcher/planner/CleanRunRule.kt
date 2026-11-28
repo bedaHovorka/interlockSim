@@ -27,7 +27,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * [DispatcherRunSnapshot.unattributedApplies] (the unattributed-action counter #1477 fills). An absent
  * counter means not clean: a file before the #1476 schema, or a snapshot of that schema whose
  * [DispatcherRunSnapshot.countedAutomatics] is absent (a `TIMEOUT_ABORT` or `CRASH` snapshot, which also
- * fails the end cause).
+ * fails the end cause), [Violation.SCHEMA_BEFORE_CLEAN_RUN_RULE]. A missing key is absent too: a snapshot of
+ * the #1476 schema or later that lacks a key its schema carries -- a [CountedAutomatic] row, an
+ * [ActionAuthor] key of [DispatcherRunSnapshot.actionsByAuthor] or a [SilentCycleCause] key -- or whose
+ * author total is below the sum of that author's rows is [Violation.INCOMPLETE_COUNTERS]. The keys a file
+ * must carry are pinned to the schema that introduced them ([CountedAutomatic.sinceSchema],
+ * [AUTHOR_SINCE_SCHEMA]), so a file of the #1476 schema stays judgeable after a later schema adds a key.
  *
  * ## Scope: the rule judges LLM and scripted runs
  *
@@ -82,6 +87,12 @@ object CleanRunRule {
 		/** The run JSON predates the #1476 schema: its counters are absent. */
 		SCHEMA_BEFORE_CLEAN_RUN_RULE,
 
+		/**
+		 * A snapshot of the #1476 schema or later lacks a counter key its schema carries, or an author total
+		 * is below the sum of its counted rows: an incomplete record, never clean.
+		 */
+		INCOMPLETE_COUNTERS,
+
 		/** An author other than `LLM` and `TIMEOUT_NOOP` acted, a counted automatic included. */
 		COUNTED_AUTHOR_ACTED,
 
@@ -90,6 +101,54 @@ object CleanRunRule {
 
 		/** Out of the rule's scope: the run's command source is not LLM or scripted, or is absent. */
 		NO_COMMAND_SOURCE
+	}
+
+	/**
+	 * The run JSON schema from which each author's `actionsByAuthor` key is required (Issue #1476). The
+	 * floor is the #1476 schema, since an older file is refused whatever it carries; an author added later
+	 * enters with the schema it bumps to. Every [ActionAuthor] has an entry (`CleanRunRuleTest`).
+	 */
+	internal val AUTHOR_SINCE_SCHEMA: Map<ActionAuthor, Int> =
+		ActionAuthor.entries.associateWith { DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_CLEAN_RUN_RULE }
+
+	/** The [CountedAutomatic] keys a file of [schemaVersion] must carry in `countedAutomatics`. */
+	internal fun requiredCountedAutomaticKeys(schemaVersion: Int): Set<String> =
+		CountedAutomatic.entries
+			.filter { it.sinceSchema <= schemaVersion }
+			.mapTo(mutableSetOf()) { it.name }
+
+	/** The [ActionAuthor] keys a file of [schemaVersion] must carry in `actionsByAuthor`. */
+	internal fun requiredAuthorKeys(schemaVersion: Int): Set<String> =
+		AUTHOR_SINCE_SCHEMA
+			.filterValues { it <= schemaVersion }
+			.keys
+			.mapTo(mutableSetOf()) { it.name }
+
+	/** The [SilentCycleCause] keys a file of the #1476 schema or later must carry in `silentCyclesByCause`. */
+	private val requiredSilentCycleCauseKeys: Set<String> = SilentCycleCause.entries.map { it.name }.toSet()
+
+	/**
+	 * Whether [snapshot], a file of the #1476 schema or later with a `countedAutomatics` map, lacks a key its
+	 * schema carries or holds an author total below the sum of that author's rows.
+	 */
+	private fun incomplete(
+		snapshot: DispatcherRunSnapshot,
+		counted: Map<String, Long>
+	): Boolean {
+		val schema = snapshot.schemaVersion
+		val silent = snapshot.silentCyclesByCause
+		val missingKey =
+			!counted.keys.containsAll(requiredCountedAutomaticKeys(schema)) ||
+				!snapshot.actionsByAuthor.keys.containsAll(requiredAuthorKeys(schema)) ||
+				silent == null ||
+				!silent.keys.containsAll(requiredSilentCycleCauseKeys)
+		val authorBelowRows =
+			CountedAutomatic.entries
+				.groupBy { it.author.name }
+				.any { (author, rows) ->
+					(snapshot.actionsByAuthor[author] ?: 0L) < rows.sumOf { counted[it.name] ?: 0L }
+				}
+		return missingKey || authorBelowRows
 	}
 
 	/** Whether [snapshot] is a clean run. */
@@ -103,6 +162,8 @@ object CleanRunRule {
 				snapshot.countedAutomatics == null
 			) {
 				add(Violation.SCHEMA_BEFORE_CLEAN_RUN_RULE)
+			} else if (incomplete(snapshot, snapshot.countedAutomatics)) {
+				add(Violation.INCOMPLETE_COUNTERS)
 			}
 			val counted = snapshot.actionsByAuthor.filterKeys { it !in ALLOWED_AUTHORS.map(ActionAuthor::name) }
 			if (counted.values.any { it != 0L }) add(Violation.COUNTED_AUTHOR_ACTED)

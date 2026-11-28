@@ -217,6 +217,89 @@ class CleanRunRuleTest {
 		assertThat(CleanRunRule.violations(snapshot)).containsExactly(CleanRunRule.Violation.UNATTRIBUTED_ACTIONS)
 	}
 
+	@Test
+	fun `a clean-run snapshot with an empty countedAutomatics map is not clean`() {
+		val snapshot = llmRun().finish(RunEndCause.NATURAL_COMPLETION).copy(countedAutomatics = emptyMap())
+
+		assertThat(CleanRunRule.violations(snapshot)).containsExactly(CleanRunRule.Violation.INCOMPLETE_COUNTERS)
+	}
+
+	@ParameterizedTest(name = "a snapshot without the {0} row is not clean")
+	@EnumSource(CountedAutomatic::class)
+	fun `a clean-run snapshot missing one counted-automatic key is not clean`(automatic: CountedAutomatic) {
+		val complete = llmRun().finish(RunEndCause.NATURAL_COMPLETION)
+		val snapshot = complete.copy(countedAutomatics = complete.countedAutomatics?.minus(automatic.name))
+
+		assertThat(CleanRunRule.violations(snapshot)).containsExactly(CleanRunRule.Violation.INCOMPLETE_COUNTERS)
+	}
+
+	@ParameterizedTest(name = "a snapshot without the {0} author is not clean")
+	@EnumSource(ActionAuthor::class)
+	fun `a clean-run snapshot missing one author key is not clean`(author: ActionAuthor) {
+		val complete = llmRun().finish(RunEndCause.NATURAL_COMPLETION)
+		val snapshot = complete.copy(actionsByAuthor = complete.actionsByAuthor - author.name)
+
+		assertThat(CleanRunRule.violations(snapshot)).contains(CleanRunRule.Violation.INCOMPLETE_COUNTERS)
+	}
+
+	@Test
+	fun `a clean-run snapshot without silentCyclesByCause is not clean`() {
+		val complete = llmRun().finish(RunEndCause.NATURAL_COMPLETION)
+
+		assertThat(CleanRunRule.violations(complete.copy(silentCyclesByCause = null)))
+			.containsExactly(CleanRunRule.Violation.INCOMPLETE_COUNTERS)
+		assertThat(
+			CleanRunRule.violations(
+				complete.copy(silentCyclesByCause = complete.silentCyclesByCause?.minus(SilentCycleCause.NO_OP.name))
+			)
+		).containsExactly(CleanRunRule.Violation.INCOMPLETE_COUNTERS)
+	}
+
+	@Test
+	fun `an author total below the sum of its counted rows is not clean`() {
+		val complete = llmRun().finish(RunEndCause.NATURAL_COMPLETION)
+		// The row says the expiry acted twice, the one map the rule reads says it never did.
+		val snapshot =
+			complete.copy(
+				countedAutomatics = complete.countedAutomatics?.plus(CountedAutomatic.EXPIRY_WHOLE_HOLDING.name to 2L)
+			)
+
+		assertThat(snapshot.actionsByAuthor[ActionAuthor.EXPIRY.name]).isEqualTo(0L)
+		assertThat(CleanRunRule.violations(snapshot)).containsExactly(CleanRunRule.Violation.INCOMPLETE_COUNTERS)
+	}
+
+	@Test
+	fun `the keys a schema-17 file must carry stay pinned to schema 17`() {
+		assertThat(CleanRunRule.requiredCountedAutomaticKeys(SCHEMA_OF_1476))
+			.isEqualTo(CountedAutomatic.entries.map { it.name }.toSet())
+		assertThat(CleanRunRule.requiredAuthorKeys(SCHEMA_OF_1476)).isEqualTo(ActionAuthor.entries.map { it.name }.toSet())
+		assertThat(CleanRunRule.requiredCountedAutomaticKeys(SCHEMA_BEFORE_1476)).isEmpty()
+		assertThat(CleanRunRule.requiredAuthorKeys(SCHEMA_BEFORE_1476)).isEmpty()
+	}
+
+	@ParameterizedTest(name = "{0} has the schema it was introduced in")
+	@EnumSource(CountedAutomatic::class)
+	fun `every counted automatic names the schema that introduced it`(automatic: CountedAutomatic) {
+		assertThat(automatic.sinceSchema).isEqualTo(SCHEMA_OF_1476)
+	}
+
+	@ParameterizedTest(name = "{0} is required from a pinned schema")
+	@EnumSource(ActionAuthor::class)
+	fun `every ActionAuthor has a since-schema`(author: ActionAuthor) {
+		assertThat(CleanRunRule.requiredAuthorKeys(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)).contains(author.name)
+	}
+
+	@Test
+	fun `a clean run read back from the store stays clean`(
+		@TempDir dir: Path
+	) {
+		val written = llmRun().finish(RunEndCause.NATURAL_COMPLETION)
+		DefaultRunSnapshotStore(dir).write(written)
+
+		val read = DefaultRunSnapshotStore(dir).readAll(dir).single()
+		assertThat(CleanRunRule.violations(read)).isEmpty()
+	}
+
 	@ParameterizedTest(name = "a run that ended {0} is not clean")
 	@EnumSource(RunEndCause::class, names = ["NATURAL_COMPLETION"], mode = EnumSource.Mode.EXCLUDE)
 	fun `only a natural completion can be clean`(cause: RunEndCause) {
@@ -304,7 +387,7 @@ class CleanRunRuleTest {
 	}
 
 	/**
-	 * [current] as a schema-13 writer wrote it: schema 13, none of the #1476 keys, and the six authors that
+	 * [current] as a schema-16 writer wrote it: schema 16, none of the #1476 keys, and the six authors that
 	 * vocabulary had.
 	 */
 	private fun schemaBefore1476(current: DispatcherRunSnapshot): String {
@@ -324,5 +407,6 @@ class CleanRunRuleTest {
 		const val MODEL = "qwen2.5:7b-instruct"
 		const val SCRIPT = "perfect-dispatcher"
 		const val SCHEMA_BEFORE_1476 = 16
+		const val SCHEMA_OF_1476 = 17
 	}
 }
