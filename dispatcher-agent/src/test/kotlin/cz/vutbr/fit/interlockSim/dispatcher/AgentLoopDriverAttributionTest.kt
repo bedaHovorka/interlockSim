@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
@@ -24,9 +25,15 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeSink
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CleanRunRule
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultDispatcherRunRecorder
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.PlannerTickListener
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RunParameters
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TickRecord
 import cz.vutbr.fit.interlockSim.dispatcher.planner.TimeoutNoOpCause
@@ -183,12 +190,19 @@ class AgentLoopDriverAttributionTest {
 
 	/**
 	 * An LLM-backed planner whose [KoogAgentPlanAdapter.plan] reports [outcomes] one per cycle
-	 * (`null`: the cycle reports nothing) and returns one fresh decision per cycle (Issue #1477).
+	 * (`null`: the cycle reports nothing) and returns [batches] one per cycle — by default one fresh
+	 * decision per cycle (Issue #1477). [droppedActionSink] is the driver's sink for the decisions of a
+	 * dropped batch.
 	 */
 	private class UnreportedCycleRig(
-		vararg outcomes: TickOutcome?
+		outcomes: List<TickOutcome?>,
+		val batches: List<List<DispatchDecision>> =
+			outcomes.indices.map { listOf(DispatchDecision.ApproveTrain("T$it")) },
+		droppedActionSink: ActionOutcomeSink? = null
 	) {
-		val decisions = outcomes.indices.map { DispatchDecision.ApproveTrain("T$it") }
+		constructor(vararg outcomes: TickOutcome?) : this(outcomes.toList())
+
+		val decisions get() = batches.map { it.single() }
 		val correlationMap = CommandCorrelationMap()
 		val commandQueue = ActuatorCommandQueue(correlationMap = correlationMap)
 		val driver: AgentLoopDriver
@@ -203,7 +217,7 @@ class AgentLoopDriverAttributionTest {
 			coEvery { koogAdapter.plan(any()) } coAnswers {
 				val index = cycle++
 				outcomes[index]?.let { tickListenerSlot.captured.onTick(TickRecord(it, index + 1.0)) }
-				listOf(decisions[index])
+				batches[index]
 			}
 			driver =
 				AgentLoopDriver(
@@ -211,10 +225,26 @@ class AgentLoopDriverAttributionTest {
 					planner = koogAdapter,
 					commandQueue = commandQueue,
 					controller = mockk<SimulationController>(relaxed = true),
-					plannerTickSource = koogAdapter
+					plannerTickSource = koogAdapter,
+					droppedActionSink = droppedActionSink
 				)
 		}
 	}
+
+	private fun recorder() =
+		DefaultDispatcherRunRecorder(
+			runId = "dropped-batch",
+			arm = DispatcherArm.LLM_TOOL_CALLING,
+			params =
+				RunParameters(
+					tickPeriodMs = 0L,
+					historyN = 0,
+					temperature = 0.28,
+					maxActionsPerTick = 3,
+					model = "test-model",
+					seed = null
+				)
+		)
 
 	@Test
 	@DisplayName("a cycle that reports no tick outcome does not reuse the previous cycle's author (Issue #1477)")
@@ -255,5 +285,61 @@ class AgentLoopDriverAttributionTest {
 		// Only the second, reported cycle posted its batch.
 		assertThat(rig.commandQueue.drain()).containsExactly(rig.decisions[1])
 		assertThat(authorFor(rig.correlationMap, rig.decisions[1])).isEqualTo(ActionAuthor.LLM)
+	}
+
+	@Test
+	@DisplayName(
+		"the dropped batch of an unreported cycle counts as unattributed, the run is not clean, " +
+			"and the next cycle is attributed LLM (Issue #1477)"
+	)
+	fun droppedBatchOfUnreportedCycleIsUnattributed() {
+		val recorder = recorder()
+		val next = DispatchDecision.ApproveTrain("T9")
+		val rig =
+			UnreportedCycleRig(
+				outcomes = listOf(null, TickOutcome.LLM_ACTIONS),
+				batches =
+					listOf(
+						listOf(
+							DispatchDecision.ApproveTrain("T1"),
+							DispatchDecision.ReservePath("T1", "zA", "doA1"),
+							DispatchDecision.NoAction
+						),
+						listOf(next)
+					),
+				droppedActionSink = ActionOutcomeSink(recorder::onActionOutcome)
+			)
+		var cycles = 0
+		val loop = AgentDriverLoop(isActive = { cycles++ < 2 }, runCycle = rig.driver::runCycle)
+		runBlocking { loop.run() }
+		val snapshot = recorder.finish(RunEndCause.NATURAL_COMPLETION)
+
+		assertThat(loop.failureCount, name = "failed cycles").isEqualTo(1)
+		assertThat(loop.stoppedByFailures).isFalse()
+		// The two dispatching decisions of the dropped batch; NoAction is not an action.
+		assertThat(snapshot.unattributedApplies, name = "unattributed counter").isEqualTo(2L)
+		assertThat(snapshot.actionsByAuthor.values.sum(), name = "all author counters").isEqualTo(0L)
+		assertThat(CleanRunRule.violations(snapshot)).contains(CleanRunRule.Violation.UNATTRIBUTED_ACTIONS)
+		// The loop went on: the next, reported cycle posted its batch under LLM.
+		assertThat(rig.commandQueue.drain()).containsExactly(next)
+		assertThat(authorFor(rig.correlationMap, next)).isEqualTo(ActionAuthor.LLM)
+	}
+
+	@Test
+	@DisplayName("an unreported cycle with an empty batch reports nothing as unattributed (Issue #1477)")
+	fun emptyDroppedBatchReportsNothing() {
+		val recorder = recorder()
+		val rig =
+			UnreportedCycleRig(
+				outcomes = listOf(null),
+				batches = listOf(emptyList()),
+				droppedActionSink = ActionOutcomeSink(recorder::onActionOutcome)
+			)
+
+		assertFailure { runBlocking { rig.driver.runCycle() } }.isInstanceOf<IllegalStateException>()
+		val snapshot = recorder.finish(RunEndCause.NATURAL_COMPLETION)
+
+		assertThat(snapshot.unattributedApplies, name = "unattributed counter").isEqualTo(0L)
+		assertThat(rig.commandQueue.drain()).isEmpty()
 	}
 }

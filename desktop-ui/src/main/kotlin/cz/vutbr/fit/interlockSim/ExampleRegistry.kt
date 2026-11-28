@@ -1074,6 +1074,10 @@ class ExampleRegistry {
 				// against. It previously had no production caller, so a recorded run reported zero
 				// ticks no matter how long it ran.
 				onTickRecord = runRecorder?.let { it::onTick },
+				// Issue #1477: a cycle the LLM planner leaves without a tick outcome fails loudly and drops
+				// its returned batch; its dispatching decisions reach the applier's own outcome sink (the
+				// aggregator and the run recorder) as unattributed actions, so the run is not judged clean.
+				droppedActionSink = actionOutcomeSink,
 				// Issue #847 (SP2c.24): the grid's tickPeriodMs axis. Zero by default, so a run
 				// that does not set the property paces exactly as it did before.
 				tickPeriodMs = context.scope.get<DispatcherRunConfig>().tickPeriodMs,
