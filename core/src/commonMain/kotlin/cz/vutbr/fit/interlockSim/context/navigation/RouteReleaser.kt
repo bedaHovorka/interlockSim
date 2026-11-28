@@ -41,17 +41,17 @@ private val logger = KotlinLogging.logger {}
  *
  * @property registry Ownership registry shared with the service
  * @property resetSemaphoresForReleasedBlocks [ClearedSignalLedger.resetSemaphoresForReleasedBlocks], the
- *   body of [PathReservationService.resetSemaphoresForReleasedBlocks]
+ *   body of [PathReservationService.resetSemaphoresForReleasedBlocks]; returns how many signals it set to STOP
  * @property resetClearedSemaphores [ClearedSignalLedger.resetClearedSemaphores]: sets every semaphore
- *   recorded as cleared for a train back to STOP
+ *   recorded as cleared for a train back to STOP; returns how many it changed (Issue #1476)
  * @property clearBlockedTracking [ReservationContentionTracker.clearBlockedTracking]: forgets the
  *   blocked-path contention recorded for a train
  * @since Issue #1168
  */
 internal class RouteReleaser(
 	private val registry: PathReservationRegistry,
-	private val resetSemaphoresForReleasedBlocks: (String, Collection<DynamicTrackBlock>) -> Unit,
-	private val resetClearedSemaphores: (String) -> Unit,
+	private val resetSemaphoresForReleasedBlocks: (String, Collection<DynamicTrackBlock>) -> Int,
+	private val resetClearedSemaphores: (String) -> Int,
 	private val clearBlockedTracking: (String) -> Unit
 ) {
 	// ── Approach-lock deferral window (Issue #1050 review round) ──
@@ -143,8 +143,10 @@ internal class RouteReleaser(
 		// early return below because a train can hold cleared signals without holding blocks
 		// (e.g. after a partial release reclaimed its un-travelled tail). The first call also
 		// covers a governing signal of a kept block that this ledger never recorded.
-		resetSemaphoresForReleasedBlocks(trainId, approachLocked)
-		resetClearedSemaphores(trainId)
+		// Issue #1476: how many signals these two resets set to STOP, reported in PathRelease.signalsReset
+		// (the counted automatics count a call that changed only signals; the resets run exactly as before).
+		val lockedSignalsReset = resetSemaphoresForReleasedBlocks(trainId, approachLocked)
+		val signalsReset = lockedSignalsReset + resetClearedSemaphores(trainId)
 		// Arm the deferral window for exactly the blocks a proceed aspect stood at until the reset
 		// above: the latest moment a train can have read that aspect is this call, so the booking it
 		// may still perform lands at now + APPROACH_LOCK_DEFER_SECONDS. A retry that finds the
@@ -154,16 +156,16 @@ internal class RouteReleaser(
 		if (!trimmable) {
 			// Only the approach-locked blocks stop the cut: the reset above is what lets a later
 			// call, past their booking window, cut after the occupied head and free the rest.
-			return deferUntrimmable(trainId, blocks, kept)
+			return deferUntrimmable(trainId, blocks, kept).copy(signalsReset = signalsReset)
 		}
 		forgetUntrimmable(trainId)
 		if (blocks.isEmpty()) {
-			return PathRelease(emptyList(), emptyList())
+			return PathRelease(emptyList(), emptyList(), signalsReset)
 		}
 		if (kept.isNotEmpty()) {
-			return releaseAllBut(trainId, blocks, kept, approachLocked)
+			return releaseAllBut(trainId, blocks, kept, approachLocked).copy(signalsReset = signalsReset)
 		}
-		return PathRelease(releaseAllBlocks(trainId, blocks), emptyList())
+		return PathRelease(releaseAllBlocks(trainId, blocks), emptyList(), signalsReset)
 	}
 
 	/**

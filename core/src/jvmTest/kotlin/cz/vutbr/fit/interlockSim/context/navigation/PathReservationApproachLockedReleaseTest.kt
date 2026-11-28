@@ -15,7 +15,11 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.ksimulantenbande.kdisco.Process
 import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -244,5 +248,94 @@ class PathReservationApproachLockedReleaseTest : PathReservationServiceTestBase(
 
 		assertThat(release.deferred).isEmpty()
 		assertThat(release.released.toSet()).isEqualTo(reserved.toSet())
+	}
+
+	// ── The state-change indicator of the counted automatics (Issue #1476) ──
+
+	@Test
+	fun `a refused untrimmable release resets no signal and reports no state change (Issue 1476)`() {
+		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		// As above: the kept head ends at the switch vA, so the release is refused (Issue #1242).
+		val occupant = FakeTrackOccupant("train1")
+		blocks[0].enter(occupant)
+		blocks[1].enter(occupant)
+
+		val refused = service.releasePathDetailed("train1")
+
+		assertThat(refused.deferred.toSet()).isEqualTo(blocks.toSet())
+		assertThat(refused.signalsReset).isEqualTo(0)
+		assertThat(refused.changedState).isFalse()
+		assertThat(service.hasClearedSignals("train1"), "cleared signals kept by the refusal").isTrue()
+	}
+
+	@Test
+	fun `an approach-lock deferral reports the signals it set to STOP as a state change (Issue 1476)`() =
+		runBlocking {
+			val outcomes = releaseHeadInsideAndAfterItsWindow()
+
+			// t=0.0: the head is kept, the tail freed, and the signals of the route dropped to STOP.
+			assertThat(outcomes[0].signalsReset, "signals reset by the deferring call").isGreaterThan(0)
+			assertThat(outcomes[0].changedState).isTrue()
+			// t=1.5: the window closed; the head is freed, a state change by its freed block alone.
+			assertThat(outcomes[2].released).isNotEmpty()
+			assertThat(outcomes[2].signalsReset).isEqualTo(0)
+			assertThat(outcomes[2].changedState).isTrue()
+		}
+
+	@Test
+	fun `a retry inside the booking window whose signals already read STOP reports no state change (Issue 1476)`() =
+		runBlocking {
+			val outcomes = releaseHeadInsideAndAfterItsWindow()
+
+			// t=0.5: the head stays deferred, nothing is freed and every signal already reads STOP.
+			assertThat(outcomes[1].deferred).isNotEmpty()
+			assertThat(outcomes[1].released).isEmpty()
+			assertThat(outcomes[1].signalsReset).isEqualTo(0)
+			assertThat(outcomes[1].changedState).isFalse()
+		}
+
+	@Test
+	fun `a release of a train holding cleared signals but no blocks reports a signal-only state change (Issue 1476)`() {
+		assertReservationSuccess(service.reservePath("train1", inOut1, inOut2))
+		// The registry forgets the blocks while the signal ledger still records the cleared aspects: the
+		// shape a partial release that reclaimed the tail leaves behind.
+		registry.unregister("train1")
+		assertThat(service.hasClearedSignals("train1")).isTrue()
+
+		val release = service.releasePathDetailed("train1")
+
+		assertThat(release.released).isEmpty()
+		assertThat(release.deferred).isEmpty()
+		assertThat(release.signalsReset, "signals the release set to STOP").isGreaterThan(0)
+		assertThat(release.changedState).isTrue()
+		assertThat(service.hasClearedSignals("train1")).isFalse()
+	}
+
+	/**
+	 * The flow of `a repeat after the booking window frees what approach locking kept`: one release at
+	 * t=0.0 (the proceed aspect at the entry defers the head), one at t=0.5 (inside the booking window)
+	 * and one at t=1.5 (after it). Returns the three outcomes.
+	 */
+	private suspend fun releaseHeadInsideAndAfterItsWindow(): List<ReleaseOutcome> {
+		val blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+		(blocks.first().reservedFrom as DynamicInOut).inSemaphore.signal = Signal.FREE
+		val outcomes = mutableListOf<ReleaseOutcome>()
+
+		Simulation
+			.create {
+				Process.activate(
+					object : Process() {
+						override suspend fun actions() {
+							outcomes += service.releasePathDetailed("train1")
+							hold(0.5)
+							outcomes += service.releasePathDetailed("train1")
+							hold(1.0)
+							outcomes += service.releasePathDetailed("train1")
+						}
+					}
+				)
+			}.run(10.0)
+		assertThat(outcomes).hasSize(3)
+		return outcomes
 	}
 }

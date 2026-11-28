@@ -256,6 +256,46 @@ class ClearedSignalLedgerTest : PathReservationServiceTestBase() {
 		assertThat(ledger.snapshotClearedSemaphores("t1").toList()).containsExactly(zA)
 	}
 
+	// Issue #1476: each reset returns how many semaphores it set to STOP, the signal half of the
+	// state-change indicator the counted automatics read (PathRelease.signalsReset).
+
+	@Test
+	fun `reset returns the count set to STOP and skips a semaphore re-cleared for another train`() {
+		val zA = lit("zA")
+		val doB1 = lit("doB1")
+		ledger.recordClearedSemaphore("t1", zA)
+		ledger.recordClearedSemaphore("t1", doB1)
+		ledger.recordClearedSemaphore("t2", zA)
+
+		assertThat(ledger.resetClearedSemaphores("t1"), "t1 reset").isEqualTo(1)
+		assertThat(ledger.resetClearedSemaphores("t1"), "t1 again").isEqualTo(0)
+		assertThat(ledger.resetClearedSemaphores("unknown"), "unknown train").isEqualTo(0)
+		assertThat(zA.signal).isEqualTo(Signal.S80)
+	}
+
+	@Test
+	fun `the subset resets return the count they set to STOP`() {
+		val zA = lit("zA")
+		val doB1 = lit("doB1")
+		ledger.recordClearedSemaphore("t1", zA)
+		ledger.recordClearedSemaphore("t1", doB1)
+
+		assertThat(ledger.resetSemaphoresForReleasedBlocks("t1", emptyList()), "no blocks").isEqualTo(0)
+		assertThat(ledger.resetSemaphoresForReleasedBlocks("t1", listOf(blockBetween("doB1", "vB")))).isEqualTo(1)
+		assertThat(ledger.resetSemaphoreSet("t1", setOf(zA)), "subset").isEqualTo(1)
+		assertThat(ledger.resetSemaphoreSet("t1", setOf(zA)), "already reset").isEqualTo(0)
+	}
+
+	@Test
+	fun `a STOP write whose listener throws still counts, because the aspect reached STOP`() {
+		val zA = lit("zA")
+		zA.addPropertyChangeListener { throw IllegalStateException("injected signal-write listener failure") }
+		ledger.recordClearedSemaphore("t1", zA)
+
+		assertThat(ledger.resetClearedSemaphores("t1")).isEqualTo(1)
+		assertThat(zA.signal).isEqualTo(Signal.STOP)
+	}
+
 	@Test
 	fun `resetUnrecordedStartSignal drops the train's entry when its own set empties`() {
 		val doA1 = lit("doA1")

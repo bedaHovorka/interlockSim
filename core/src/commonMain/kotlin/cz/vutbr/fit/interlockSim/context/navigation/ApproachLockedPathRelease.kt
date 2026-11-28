@@ -25,12 +25,24 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  *   approach-lock deferral lists the blocks it kept, a partial release lists the blocks it kept
  *   back. A repeated call frees a kept block only after the train has left it or its booking
  *   window has closed, so retrying while the train stands on it changes nothing
+ * @property signalsReset how many signals this call changed from a proceed aspect to STOP (Issue #1476):
+ *   `0` for a refused release (Issue #1242), which resets nothing, and for a retry whose signals already
+ *   read STOP. Report-only: no caller's release decision reads it. The interface default of
+ *   [ApproachLockedPathRelease.releasePathDetailed] reports `0`.
  * @since Issue #1050
  */
 data class PathRelease(
 	val released: List<DynamicTrackBlock>,
-	val deferred: List<DynamicTrackBlock>
-)
+	val deferred: List<DynamicTrackBlock>,
+	val signalsReset: Int = 0
+) {
+	/**
+	 * Whether this call changed railway state (Issue #1476): it freed a block or set a signal to STOP. The
+	 * counted automatics of #1475 count an act on the first call of its episode that did; a [deferred]
+	 * list alone is no change.
+	 */
+	val changedState: Boolean get() = released.isNotEmpty() || signalsReset > 0
+}
 
 /**
  * The approach-locked whole-route release, split out of [PathReservationService] to keep that

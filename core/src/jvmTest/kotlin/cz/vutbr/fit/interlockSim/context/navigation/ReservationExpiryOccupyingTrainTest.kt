@@ -491,6 +491,11 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 			assertTailDeferredForever(stand.held, expiryLog)
 			assertAspectsAsGranted(stand.aspectsAfterGrant)
 			assertReleaserRefusedOnce(releaserLog)
+			// Issue #1476: a refused release changed nothing -- no block freed, no signal reset -- so the
+			// expiry acted on nothing and counts no act under any row.
+			assertThat(service.tailExpiryActs, "tail acts").isEqualTo(0)
+			assertThat(service.wholeHoldingExpiryActs, "whole-holding acts").isEqualTo(0)
+			assertThat(service.requestExpiryActs, "request acts").isEqualTo(0)
 		}
 	}
 

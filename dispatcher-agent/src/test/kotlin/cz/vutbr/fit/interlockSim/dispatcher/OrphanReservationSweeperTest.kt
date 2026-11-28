@@ -198,6 +198,51 @@ class OrphanReservationSweeperTest {
 	}
 
 	@Test
+	@DisplayName("a phantom release the releaser refuses counts no act (Issue #1476)")
+	fun refusedPhantomReleaseCountsNoAct() {
+		// The #1242 refusal: the whole route deferred, nothing freed, no signal reset.
+		every { actuatorPort.releaseRouteDetailed("Train #1") } returns
+			RouteRelease(true, listOf("k1"), changedState = false)
+		val leftover = listOf(reserved("k1", "Train #1"))
+
+		val sweeper =
+			sweepAll(
+				ticks =
+					listOf(
+						Tick(simTime = 10.0, blocks = leftover, activeTrains = listOf("Train #2")),
+						Tick(simTime = 11.0, blocks = leftover, activeTrains = listOf("Train #2"))
+					)
+			)
+
+		verify(exactly = 2) { actuatorPort.releaseRouteDetailed("Train #1") }
+		// The release counter keeps its legacy meaning; the act counter sees no state change.
+		assertThat(sweeper.phantomReleaseCount).isEqualTo(2)
+		assertThat(sweeper.phantomActCount).isEqualTo(0)
+	}
+
+	@Test
+	@DisplayName("a stale release the releaser refuses counts no act (Issue #1476)")
+	fun refusedStaleReleaseCountsNoAct() {
+		every { actuatorPort.releaseRouteDetailed("Train #1") } returns
+			RouteRelease(true, listOf("k1", "kA"), changedState = false)
+		val held = listOf(reserved("k1", "Train #1"), reserved("kA", "Train #1"))
+
+		val sweeper =
+			sweepAll(
+				ticks =
+					listOf(
+						Tick(simTime = 0.0, blocks = held, activeTrains = listOf("Train #1")),
+						Tick(simTime = 70.0, blocks = held, activeTrains = listOf("Train #1")),
+						Tick(simTime = 72.0, blocks = held, activeTrains = listOf("Train #1"))
+					)
+			)
+
+		verify(exactly = 2) { actuatorPort.releaseRouteDetailed("Train #1") }
+		assertThat(sweeper.staleReleaseCount).isEqualTo(2)
+		assertThat(sweeper.staleActCount).isEqualTo(0)
+	}
+
+	@Test
 	@DisplayName("the leftover route of an exited train is a phantom release, one act however often it is retried (C6)")
 	fun exitedTrainLeftoverRouteCountsOnePhantomAct() {
 		// Train #1 has left the railway: it is neither active nor queued, but still holds its route.

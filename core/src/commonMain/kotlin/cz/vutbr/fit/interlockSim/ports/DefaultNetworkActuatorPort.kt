@@ -263,7 +263,10 @@ class DefaultNetworkActuatorPort(
 		// the deferral, as before; a repeat is refused the same way until the head has moved on.
 		return RouteRelease(
 			anyReleased = release.released.isNotEmpty() || release.deferred.isNotEmpty() || hadClearedSignals,
-			deferredBlockIds = release.deferred.map { BlockIdentity.stableBlockId(it) }
+			deferredBlockIds = release.deferred.map { BlockIdentity.stableBlockId(it) },
+			// Issue #1476: what the release really changed, for the counted automatics; the refusal above
+			// reports `anyReleased` and changes nothing.
+			changedState = release.changedState
 		)
 	}
 

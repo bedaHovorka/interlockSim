@@ -243,7 +243,7 @@ class OrphanReservationSweeper(
 	/**
 	 * Acts of the phantom branch (row C6 of the #1475 counted automatics, author `ORPHAN_SWEEP`, Issue
 	 * #1476): counted once per episode, on its first release call that changed railway state (a freed
-	 * block, or a deferral that already dropped the signals to STOP). Unlike [phantomReleaseCount], a
+	 * block or a signal set to STOP, `RouteRelease.changedState`; a refused release changes nothing). Unlike [phantomReleaseCount], a
 	 * deferred release retried on the next sweep is not counted again. An episode ends when its release
 	 * completes or its owner holds nothing any more.
 	 */
@@ -356,7 +356,7 @@ class OrphanReservationSweeper(
 		if (release.anyReleased) {
 			phantomReleaseCount++
 		}
-		countAct(SweepBranch.PHANTOM, owner, release.anyReleased || release.deferred, completed = !release.deferred)
+		countAct(SweepBranch.PHANTOM, owner, release.changedState, completed = !release.deferred)
 		// Issue #1050: a deferred release kept blocks reserved; the phantom is offered again next
 		// sweep like any unknown owner, so there is no clock to keep.
 		holdings.remove(owner)
@@ -394,7 +394,7 @@ class OrphanReservationSweeper(
 				"${staleAfterSimSeconds}s). Blocks: ${blockIds.joinToString(", ")}"
 		}
 		val release = actuatorPort.releaseRouteDetailed(owner)
-		countAct(SweepBranch.STALE, owner, release.anyReleased || release.deferred, completed = !release.deferred)
+		countAct(SweepBranch.STALE, owner, release.changedState, completed = !release.deferred)
 		if (release.anyReleased) {
 			staleReleaseCount++
 			// Issue #1304: the same release for the metrics' run-end accounting; record only.

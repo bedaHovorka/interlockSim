@@ -296,10 +296,10 @@ internal class DefaultReservationExpiry(
 
 	/**
 	 * Count one expiry act of [trainId] (Issue #1476): once per episode, on the first call whose
-	 * [release] changed railway state -- it freed a block, or it deferred, which means it already
-	 * dropped the route's signals to STOP. A release that did neither changed nothing and is no act.
-	 * An act at the top of another train's request ([onRequest]) counts under row C3, whatever its
-	 * [kind]; on the loop tick under C1 or C2 by [kind].
+	 * [release] changed railway state ([PathRelease.changedState]) -- it freed a block or set at least one
+	 * signal to STOP. A refused release (Issue #1242) and a retry whose signals already read STOP changed
+	 * nothing and are no act. An act at the top of another train's request ([onRequest]) counts under row
+	 * C3, whatever its [kind]; on the loop tick under C1 or C2 by [kind].
 	 */
 	private fun countAct(
 		trainId: String,
@@ -307,7 +307,7 @@ internal class DefaultReservationExpiry(
 		onRequest: Boolean,
 		kind: ReservationExpired.Kind
 	) {
-		if (release.released.isEmpty() && release.deferred.isEmpty()) return
+		if (!release.changedState) return
 		if (!countedEpisodeTrains.add(trainId)) return
 		when {
 			onRequest -> requestExpiryActs++
