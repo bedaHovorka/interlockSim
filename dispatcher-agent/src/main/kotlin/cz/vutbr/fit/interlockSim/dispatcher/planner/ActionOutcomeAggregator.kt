@@ -54,6 +54,7 @@ class ActionOutcomeAggregator : ActionOutcomeSink {
 		outcome.applyFailure?.let { applyFailureCounts.getValue(it).incrementAndGet() }
 		// Issue #1477: the same unattributed rule as DefaultDispatcherRunRecorder (AuthoredAction.isUnattributed).
 		val author = outcome.authored.author
+		// `|| author == null` adds no case (isUnattributed covers it); it only smart-casts author below.
 		if (outcome.authored.isUnattributed || author == null) {
 			unattributedOutcomes.incrementAndGet()
 		} else {

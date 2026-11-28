@@ -307,6 +307,7 @@ class DefaultDispatcherRunRecorder(
 		// Author counts. Issue #1477: an action with no known author (AuthoredAction.isUnattributed)
 		// goes to the unattributed counter only, never under an author — LLM included.
 		val author = outcome.authored.author
+		// `|| author == null` adds no case (isUnattributed covers it); it only smart-casts author below.
 		if (outcome.authored.isUnattributed || author == null) {
 			unattributedApplies.incrementAndGet()
 		} else {

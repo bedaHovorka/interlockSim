@@ -428,7 +428,7 @@ class ExpiredRouteRegrantCycleTest : DispatcherKoinTestBase() {
 						loop.getInnerBlockInputs(),
 						loop.getOuterBlockInputs()
 					)
-				stack.queue.postAll(dispatcher.decide(observation), ActionAuthor.LLM)
+				stack.queue.postAll(dispatcher.decide(observation), ActionAuthor.RULE_BASED)
 				applier.onControlStep()
 				scenario.holdAfterTheDispatcher()
 				recordHeldTrain(scenario.hold, stack.registry, record)

@@ -134,7 +134,7 @@ class Issue814AdmissionRegressionTest : DispatcherKoinTestBase() {
 			val toAdmit = observation.unapprovedTrains.take(freeSlots)
 			if (toAdmit.isEmpty()) return
 			forcedAdmissions.addAndGet(toAdmit.size)
-			queue.postAll(toAdmit.map { DispatchDecision.ApproveTrain(it.trainId) }, ActionAuthor.LLM)
+			queue.postAll(toAdmit.map { DispatchDecision.ApproveTrain(it.trainId) }, ActionAuthor.SAFETY_NET)
 		}
 	}
 

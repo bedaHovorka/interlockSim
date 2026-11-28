@@ -141,7 +141,7 @@ class AgentLoopDriver(
 	 *
 	 * When non-null, this driver installs a [PlannerTickListener] on it and attributes each
 	 * cycle's `commandQueue.postAll` call via [TickOutcome.toActionAuthor] on the tick
-	 * outcome most recently reported. When `null` (the default — a pure deterministic
+	 * outcome reported during this cycle's `plan()`. When `null` (the default — a pure deterministic
 	 * planner such as [RuleBasedPlanAdapter]), every cycle is attributed
 	 * [ActionAuthor.RULE_BASED] — safe because a synchronous rule-based planner has no
 	 * internal LLM/fallback blend to distinguish.
@@ -433,12 +433,17 @@ class AgentLoopDriver(
 	 *   assume every call did real work — see
 	 *   [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedDispatcherDeterminismTest] for
 	 *   why: releasing such a barrier unconditionally after a no-op call lets the sim
-	 *   thread proceed before the corresponding decision is actually posted.
+	 *   thread proceed before the corresponding decision is actually posted. A third
+	 *   outcome returns neither value: an LLM-backed cycle with no tick outcome throws
+	 *   [IllegalStateException] (see `@throws`).
 	 * @throws IllegalStateException if an LLM-backed cycle (non-null [plannerTickSource]) returned
 	 *   from `plan()` without reporting a tick outcome (Issue #1477). This cycle's RETURNED batch is
 	 *   not posted; its dispatching decisions go to [droppedActionSink] as unattributed actions.
 	 *   Actuator-tool emissions made inside `plan()` were already posted under [ActionAuthor.LLM] and
-	 *   stay posted. A dropped release keeps a route locked (liveness, not safety).
+	 *   stay posted. A dropped release keeps a route locked (liveness, not safety). As on the
+	 *   existing path where `plan()` itself throws, PACE is skipped for that cycle: no
+	 *   [SimulationController.awaitIfPaused], no [SimulationController.throttle] and no
+	 *   [tickPeriodMs] floor.
 	 */
 	suspend fun runCycle(): Boolean {
 		// 0. WAIT + 1. SENSE — see awaitFreshSnapshot's KDoc for the polling-vs-signal-based

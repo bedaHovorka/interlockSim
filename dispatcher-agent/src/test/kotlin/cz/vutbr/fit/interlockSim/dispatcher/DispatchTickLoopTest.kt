@@ -1051,7 +1051,7 @@ class DispatchTickLoopTest {
 		@DisplayName("a full queue is tolerated: the tick still completes and records the action")
 		fun queueBackpressureIsTolerated() {
 			val fullQueue = ActuatorCommandQueue(capacity = 1)
-			fullQueue.postAll(listOf(DispatchDecision.ApproveTrain("filler")), ActionAuthor.LLM)
+			fullQueue.postAll(listOf(DispatchDecision.ApproveTrain("filler")), ActionAuthor.RULE_BASED)
 			val h =
 				harness(
 					observationScript = listOf(observation()),
