@@ -20,6 +20,8 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.ExampleNames
+import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
+import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -138,6 +140,34 @@ class CleanRunRuleTest {
 		// Counted once, under its own author, and not also under LLM (C10/C11 rule of #1475).
 		assertThat(snapshot.actionsByAuthor[ActionAuthor.LLM.name], name = "$row LLM counter").isEqualTo(3L)
 		assertThat(CleanRunRule.isClean(snapshot), name = row).isFalse()
+	}
+
+	@Test
+	fun `a refused RULE_FALLBACK request still breaks a clean run`() {
+		// C8 counts the actions a rule policy originates (#1475 §1b.2), applied or refused; the
+		// once-per-state-change rule of §1b.1 is the automatics' rule only.
+		val recorder = llmRun()
+		recorder.onActionOutcome(
+			ActionOutcome(
+				phase = ActionPhase.APPLIED_THEN_FAILED,
+				rejection = null,
+				applyFailure = ApplyFailureCode.ALL_PATHS_BLOCKED,
+				authored = AuthoredAction(ActionAuthor.RULE_FALLBACK, "fallback", "RequestRoute", tickIndex = 7L)
+			)
+		)
+		recorder.onActionOutcome(
+			ActionOutcome(
+				phase = ActionPhase.REJECTED_BY_VALIDATOR,
+				rejection = RejectionCode.entries.first(),
+				applyFailure = null,
+				authored = AuthoredAction(ActionAuthor.RULE_FALLBACK, "fallback", "RequestRoute", tickIndex = 8L)
+			)
+		)
+		val snapshot = recorder.finish(RunEndCause.NATURAL_COMPLETION)
+
+		assertThat(snapshot.actionsByAuthor[ActionAuthor.RULE_FALLBACK.name]).isEqualTo(2L)
+		assertThat(snapshot.c7Clean).isFalse()
+		assertThat(CleanRunRule.violations(snapshot)).containsExactly(CleanRunRule.Violation.COUNTED_AUTHOR_ACTED)
 	}
 
 	@Test

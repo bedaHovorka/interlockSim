@@ -24,7 +24,11 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  * @since Issue #1476 (Goal 9B SP5.3)
  */
 enum class SilentCycleCause {
-	/** [TickOutcome.TIMEOUT_NOOP] with [TimeoutNoOpCause.DEADLINE_MISS]. */
+	/**
+	 * [TickOutcome.TIMEOUT_NOOP] with [TimeoutNoOpCause.DEADLINE_MISS]. A timed-out cycle that already posted
+	 * an emergency command is not counted here: it is not silent, and its emergency commands are `LLM`
+	 * actions (ADR part 1 §3.2; its cycle-outcome key is spelled in [CleanRunRule]).
+	 */
 	TIMEOUT,
 
 	/**

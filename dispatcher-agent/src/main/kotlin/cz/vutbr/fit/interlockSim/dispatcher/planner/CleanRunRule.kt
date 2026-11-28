@@ -51,6 +51,12 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * - Whether `LLM_EXCEPTION` and the open-breaker skip become silent-cycle causes after #1413: **decided in
  *   #1413.** Until #1413 both run the rule fallback, so their cycles are counted under `RULE_FALLBACK`
  *   (C8) and are not silent. #1413 adds the causes to [SilentCycleCause] if its cycles become silent.
+ * - The cycle-outcome key of a timed-out cycle that already posted an emergency command (ADR part 1 §3.2):
+ *   `TIMEOUT_WITH_EMERGENCY` in [DispatcherRunSnapshot.ticksByOutcome], never `TIMEOUT_NOOP` with
+ *   `DEADLINE_MISS` and never a [SilentCycleCause]; its emergency commands count under `LLM`. The table
+ *   below names its writer. The #1475 test that such a cycle is not silent lands with that producer.
+ * - Authors with an action path (C8-C12, C15) count every action they originate, refused or applied; the
+ *   once-per-state-change rule of #1475 §1b.1 applies to the automatics only.
  *
  * ## Keys spelled here, written by later leaves
  *
@@ -65,6 +71,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
  * | `pacingRateDistribution`, `secondsAtMinimumSpeed` | pacing rate, time at minimum speed | #1440 |
  * | `emergencyLatencyBreaches` | R9 latency breaches | #1484 |
  * | `operatorRejected` | SEMI_AUTO approvals the operator rejected | #1440 |
+ * | `TIMEOUT_WITH_EMERGENCY` (a `ticksByOutcome` key) | a timed-out cycle that posted an emergency command | #1484 |
  * | `seq`, `cycleId`, `observedAt`, `snapshotAt`, `drainedAt` | seq, cycle id, O, N, D (own schema number) | #1482 |
  *
  * Also open elsewhere: O4 of #1475, the end cause of the live-conflict auto-pause, is #1485's.
