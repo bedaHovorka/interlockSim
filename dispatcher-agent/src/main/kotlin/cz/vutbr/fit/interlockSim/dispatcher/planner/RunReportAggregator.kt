@@ -68,6 +68,9 @@ class RunReportAggregator(
 	private val store: RunSnapshotStore
 ) {
 	companion object {
+		/** The arms whose runs an LLM issues; a run of one counts only with an LLM command source (#1479). */
+		private val LLM_ARMS: Set<DispatcherArm> = setOf(DispatcherArm.LLM_TOOL_CALLING, DispatcherArm.LLM_CONSTRAINED_JSON)
+
 		private val logger = KotlinLogging.logger {}
 
 		/** Minimum run count for the arm gate. */
@@ -195,35 +198,58 @@ class RunReportAggregator(
 	 *
 	 * All snapshots are expected to share the same [DispatcherRunSnapshot.arm].
 	 * If [snapshots] is empty the result has `runCount = 0` and `gatePassed = false`.
+	 *
+	 * Issue #1479: a run of an LLM arm counts only when its command source is an LLM
+	 * ([countsInArmReport]); a scripted CI twin carries an LLM arm and author `LLM`, so without
+	 * this filter it would count in an LLM campaign (ADR part 1 §3.4 of #1474). When every snapshot
+	 * is left out, the report is empty and keeps the snapshots' arm.
 	 */
 	fun aggregate(snapshots: List<DispatcherRunSnapshot>): ArmReport {
-		if (snapshots.isEmpty()) {
-			logger.warn { "[RunReportAggregator] aggregate called with empty snapshot list" }
-			val emptyParams = RunParameters(0L, 0, 0.0, 0, "", null)
-			return ArmReport(
-				arm = DispatcherArm.RULE_BASED,
-				params = emptyParams,
-				runCount = 0,
-				passingRuns = 0,
-				gatePassed = false,
-				medianLlmSuccessRate = 0.0,
-				iqrLlmSuccessRate = 0.0,
-				medianActionableTickRate = 0.0,
-				medianNoOpRate = 0.0,
-				iqrNoOpRate = 0.0,
-				medianValidAt1 = 0.0,
-				iqrValidAt1 = 0.0,
-				medianCorrectAt1 = null,
-				iqrCorrectAt1 = null,
-				p95LatencyMs = null,
-				allC7Clean = true,
-				rejectionCounts = emptyMap(),
-				applyFailureCounts = emptyMap(),
-				authorCounts = emptyMap(),
-				snapshots = emptyList()
-			)
+		val counted = snapshots.filter(::countsInArmReport)
+		if (counted.isEmpty()) {
+			if (snapshots.isEmpty()) {
+				logger.warn { "[RunReportAggregator] aggregate called with empty snapshot list" }
+			}
+			return emptyReport(snapshots.firstOrNull()?.arm ?: DispatcherArm.RULE_BASED)
 		}
+		return aggregateCounted(counted)
+	}
 
+	/**
+	 * Whether [snapshot] counts in its arm's report (Issue #1479): every run of an arm without an
+	 * LLM, and a run of an LLM arm only when [commandSourceOrDerived] is [CommandSourceKind.LLM].
+	 * A file before the `commandSource` field derives LLM from its arm and still counts.
+	 */
+	fun countsInArmReport(snapshot: DispatcherRunSnapshot): Boolean =
+		snapshot.arm !in LLM_ARMS || snapshot.commandSourceOrDerived().kind == CommandSourceKind.LLM
+
+	private fun emptyReport(arm: DispatcherArm): ArmReport {
+		val emptyParams = RunParameters(0L, 0, 0.0, 0, "", null)
+		return ArmReport(
+			arm = arm,
+			params = emptyParams,
+			runCount = 0,
+			passingRuns = 0,
+			gatePassed = false,
+			medianLlmSuccessRate = 0.0,
+			iqrLlmSuccessRate = 0.0,
+			medianActionableTickRate = 0.0,
+			medianNoOpRate = 0.0,
+			iqrNoOpRate = 0.0,
+			medianValidAt1 = 0.0,
+			iqrValidAt1 = 0.0,
+			medianCorrectAt1 = null,
+			iqrCorrectAt1 = null,
+			p95LatencyMs = null,
+			allC7Clean = true,
+			rejectionCounts = emptyMap(),
+			applyFailureCounts = emptyMap(),
+			authorCounts = emptyMap(),
+			snapshots = emptyList()
+		)
+	}
+
+	private fun aggregateCounted(snapshots: List<DispatcherRunSnapshot>): ArmReport {
 		val arm = snapshots.first().arm
 		val params = snapshots.first().params
 
@@ -298,7 +324,9 @@ class RunReportAggregator(
 	 * @since Issue #676 (Goal 6 SP5)
 	 */
 	fun aggregateByArm(snapshots: List<DispatcherRunSnapshot>): List<ArmReport> {
-		val byArm = snapshots.groupBy { it.arm }
+		// Issue #1479: a scripted run of an LLM arm is left out here as well as in aggregate(), so it
+		// neither counts nor makes the arm appear.
+		val byArm = snapshots.filter(::countsInArmReport).groupBy { it.arm }
 		return DispatcherArm.entries
 			.filter { it.hasDispatcher || it in byArm }
 			.map { arm ->

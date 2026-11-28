@@ -1190,6 +1190,47 @@ class RunReportAggregatorTest {
 		assertThat(rowCells(armRow)[1], "pooled run count").isEqualTo("10")
 	}
 
+	// ── Issue #1479: a scripted run never counts in an LLM campaign ─────────────
+
+	@Test
+	fun `a scripted run with an LLM arm is not counted in that arm's report`() {
+		val llm = DispatcherArm.LLM_TOOL_CALLING
+		val llmRun = runSnapshot(runId = "llm", arm = llm, model = "qwen")
+		val explicitLlmRun =
+			runSnapshot(runId = "llm-explicit", arm = llm, model = "qwen")
+				.copy(commandSource = CommandSource(CommandSourceKind.LLM, "qwen"))
+		val scripted =
+			runSnapshot(runId = "scripted", arm = llm)
+				.copy(commandSource = CommandSource(CommandSourceKind.SCRIPTED, "perfect-dispatcher"))
+
+		val report = aggregator.aggregateByArm(listOf(llmRun, explicitLlmRun, scripted)).single { it.arm == llm }
+
+		assertThat(report.runCount).isEqualTo(2)
+		assertThat(report.snapshots.map { it.runId }).isEqualTo(listOf("llm", "llm-explicit"))
+	}
+
+	@Test
+	fun `an LLM arm report of scripted runs only is empty and keeps its arm`() {
+		val scripted =
+			runSnapshot(runId = "scripted", arm = DispatcherArm.LLM_CONSTRAINED_JSON)
+				.copy(commandSource = CommandSource(CommandSourceKind.SCRIPTED, "perfect-dispatcher"))
+
+		val report = aggregator.aggregate(listOf(scripted))
+
+		assertThat(report.runCount).isEqualTo(0)
+		assertThat(report.arm).isEqualTo(DispatcherArm.LLM_CONSTRAINED_JSON)
+		assertThat(report.gatePassed).isFalse()
+	}
+
+	@Test
+	fun `the rule-based arm keeps its runs whatever their command source`() {
+		val control = runSnapshot(runId = "control", arm = DispatcherArm.RULE_BASED)
+
+		val report = aggregator.aggregate(listOf(control))
+
+		assertThat(report.runCount).isEqualTo(1)
+	}
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	/**
