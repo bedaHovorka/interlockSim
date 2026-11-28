@@ -495,17 +495,24 @@ class DispatchTickLoop(
 	 * [DispatcherObservation.appliedOutcomes] on the next tick. The function is intentionally
 	 * conservative — it only projects the fields that the [ActionValidator] checks:
 	 *
-	 * - [DispatchAction.ApproveTrain]: increments [DispatcherObservation.activeCount], removes
-	 *   the train from [DispatcherObservation.queued], moves its [TrainPhase] to [TrainPhase.RUNNING].
+	 * - [DispatchAction.ApproveTrain]: increments [DispatcherObservation.activeCount] and removes
+	 *   the train from [DispatcherObservation.queued] — and deliberately leaves its view phase at
+	 *   [TrainPhase.QUEUED]. The view's entry facts (origin, front section, signal ahead) are not
+	 *   real until the sim-thread applier runs, so a [DispatchAction.RequestRoute] for the train in
+	 *   the same tick is still refused [RejectionCode.TRAIN_NOT_ADMITTED] — deferred one tick —
+	 *   instead of being validated against a phantom active view whose facts the shared origin rule
+	 *   ([RouteRequestAdmission.legalOriginsOf]) cannot bind, which would let any origin through
+	 *   (Issue #1414).
 	 * - [DispatchAction.RequestRoute]: adds a [ReservationView] with empty [ReservationView.blockIds]
 	 *   if none exists yet (guards [RejectionCode.ROUTE_ALREADY_HELD_TO_SAME_TARGET] /
 	 *   [RejectionCode.ROUTE_HELD_TO_DIFFERENT_TARGET]).
 	 * - [DispatchAction.CancelRoute]: removes the train's [ReservationView].
 	 * - [DispatchAction.NoOp]: no change.
 	 *
-	 * Non-modelled fields (block states, signal aspects, switch positions) are left unchanged —
-	 * a second action that depends on those would be validated as if they haven't changed, which
-	 * is safe given the per-tick action limit and the validator's observation-only checks.
+	 * Non-modelled fields (block states, signal aspects, switch positions, and the approved train's
+	 * phase, per the bullet above) are left unchanged — a second action that depends on those would
+	 * be validated as if they haven't changed, which is safe given the per-tick action limit and the
+	 * validator's observation-only checks.
 	 */
 	private fun applyOptimistically(
 		obs: DispatcherObservation,
@@ -515,11 +522,7 @@ class DispatchTickLoop(
 			is DispatchAction.ApproveTrain ->
 				obs.copy(
 					activeCount = obs.activeCount + 1,
-					queued = obs.queued.filter { it.trainId != action.trainId },
-					trains =
-						obs.trains.map { tv ->
-							if (tv.trainId == action.trainId) tv.copy(phase = TrainPhase.RUNNING) else tv
-						}
+					queued = obs.queued.filter { it.trainId != action.trainId }
 				)
 
 			is DispatchAction.RequestRoute -> {

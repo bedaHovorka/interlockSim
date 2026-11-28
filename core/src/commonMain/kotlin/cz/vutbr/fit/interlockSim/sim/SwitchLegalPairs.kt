@@ -19,6 +19,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
  * A pair is asked [cz.vutbr.fit.interlockSim.context.RouteFinder.isRouteAvailable], the check
  * `MultiTrainStressSpecsTest` uses (1-22 ms per Praha pair), the first time it is drawn; the answer
  * is cached, so there is no setup cost and each pair is checked at most once per run.
+ *
+ * Not a route-request rule (Issue #1414, spec SP3.1 #1456 Q6): it asks whether an InOut pair has
+ * *any* switch-legal route, over static topology, before the train exists. The route-request
+ * guards in [RouteRequestAdmission] ask where *this* train's next route may start from its
+ * perceived position. Neither answer follows from the other, so the two rules stay separate.
  */
 internal class SwitchLegalPairs(
 	private val env: SimulationEnvironment

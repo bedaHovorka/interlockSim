@@ -786,6 +786,65 @@ class DispatchTickLoopTest {
 		}
 
 		/**
+		 * The #1414 same-tick order regression, two ticks: an `approve_train` and a `request_route`
+		 * for the same train in one tick, against a queued view whose entry facts are still the
+		 * projector's queued shape (`originInOutName`, `frontSectionName` and `signalAheadName`
+		 * null). While the approve arm promoted that view to [TrainPhase.RUNNING], the shared origin
+		 * rule saw no applicable rule (`legalOriginsOf == null`) and the request to the unrelated
+		 * Signal `doB1` — which a queued train standing at its entry InOut "B" could never depart
+		 * from — was accepted. The approve arm now keeps the phase QUEUED, so the same tick's
+		 * request is honestly deferred ([RejectionCode.TRAIN_NOT_ADMITTED]) and only next tick,
+		 * with the entry facts captured, does the rule apply at all: the same wrong origin is then
+		 * refused [RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION]. Would fail if the approve arm
+		 * promoted the phase to RUNNING again.
+		 */
+		@Test
+		@DisplayName(
+			"a wrong-origin request_route in the same tick as its approve_train is deferred, " +
+				"and the rule applies once the facts are captured"
+		)
+		fun requestRouteAfterApproveInSameTickIsDeferredUntilFactsApply() {
+			val wrongOrigin = DispatchAction.RequestRoute("T-1", "doB1", "B")
+			val queuedObs =
+				observation(
+					trains = listOf(queuedTrain("T-1")),
+					queued = listOf(QueuedTrainView("T-1", "B", 0.0)),
+					activeCount = 0
+				)
+			val admittedObs =
+				observation(
+					tick = 2L,
+					trains = listOf(queuedTrain("T-1").copy(phase = TrainPhase.RUNNING, originInOutName = "B")),
+					queued = emptyList(),
+					activeCount = 1
+				)
+			val h =
+				harness(
+					listOf(queuedObs, admittedObs),
+					listOf(
+						listOf(action(DispatchAction.ApproveTrain("T-1")), action(wrongOrigin)),
+						listOf(action(wrongOrigin))
+					)
+				)
+
+			val first = runBlocking { h.loop.runTick() }!!
+
+			assertThat(first.verdicts[0]).isEqualTo(ValidationVerdict.Valid)
+			val deferred = first.verdicts[1]
+			assertThat(deferred).isInstanceOf(ValidationVerdict.Rejected::class)
+			assertThat((deferred as ValidationVerdict.Rejected).code)
+				.isEqualTo(RejectionCode.TRAIN_NOT_ADMITTED)
+			// Only the approve decision may reach the kernel this tick.
+			assertThat(h.queue.drain()).hasSize(1)
+
+			val second = runBlocking { h.loop.runTick() }!!
+			val entryCheck = second.verdicts[0]
+			assertThat(entryCheck).isInstanceOf(ValidationVerdict.Rejected::class)
+			assertThat((entryCheck as ValidationVerdict.Rejected).code)
+				.isEqualTo(RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION)
+		}
+
+		/**
 		 * Would fail if [DispatchTickLoop.applyOptimistically] stopped adding a [ReservationView]
 		 * for `request_route`.
 		 */
