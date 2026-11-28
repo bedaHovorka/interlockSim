@@ -183,7 +183,10 @@ class AgentLoopDriver(
 	 * Invoked on the dispatcher-agent driver thread, like [onTickRecord]. In production it is the same
 	 * [ActionOutcomeSink] the applier reports to (the aggregator and the run recorder, both thread-safe).
 	 *
-	 * `null` for wirings with no recorder — the rule-based baseline included.
+	 * The only production construction site (`ExampleRegistry`) always passes a non-null
+	 * `CompositeActionOutcomeSink` (possibly with no delegates) on both arms; on the rule-based arm
+	 * ([plannerTickSource] `null`) it is passed but can never be called. The parameter is nullable only
+	 * so that test wirings without a recorder compile and behave as before.
 	 */
 	private val droppedActionSink: ActionOutcomeSink? = null,
 	/**

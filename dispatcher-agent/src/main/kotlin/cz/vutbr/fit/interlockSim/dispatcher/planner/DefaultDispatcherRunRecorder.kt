@@ -40,7 +40,8 @@ import java.util.concurrent.atomic.AtomicReference
  * ## Thread safety
  *
  * [onTick] is called on the dispatcher-agent-driver thread; [onActionOutcome] on the kDisco
- * simulation thread. All counters use [AtomicLong] or [ConcurrentHashMap] with pre-populated
+ * simulation thread by the applier and on the driver thread for the dropped batch of a cycle that
+ * reported no tick outcome (`AgentLoopDriver.failUnreportedCycle`, Issue #1477). All counters use [AtomicLong] or [ConcurrentHashMap] with pre-populated
  * [AtomicLong] values, and latency samples use a [java.util.concurrent.ConcurrentLinkedQueue].
  * [snapshot] and [finish] may be called from any thread. The skipped NEXT SECTION offer group is
  * the one counter set [snapshot] reads under a lock ([offerStateLock]): its sums, its measured
