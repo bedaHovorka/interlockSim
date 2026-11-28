@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.EmittedActionSink
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
@@ -97,7 +98,7 @@ class ActuatorToolMarshallingIntegrationTest : DispatcherKoinTestBase() {
 								)
 							else -> error("Unexpected action in this test: $action")
 						}
-					queue.postAll(decisions)
+					queue.postAll(decisions, ActionAuthor.LLM)
 				}
 			)
 		val tools = ToolGroupRegistry().assembleAllTools(setOf("zA", "doB1"), sinkHolder)

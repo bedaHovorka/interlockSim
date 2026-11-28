@@ -93,7 +93,7 @@ class WorkingMemoryUpdateTest {
 					tick = 5L,
 					simTime = 50.0,
 					stateDigest = "a".repeat(64),
-					actions = listOf(AttributedAction(cmdId(5L), 5L, routeAction())),
+					actions = listOf(AttributedAction(cmdId(5L), 5L, routeAction(), ActionAuthor.LLM)),
 					verdicts = listOf(ValidationVerdict.Valid),
 					outcomes = emptyList()
 				)
@@ -179,7 +179,7 @@ class WorkingMemoryUpdateTest {
 					tick = 1L,
 					simTime = 10.0,
 					stateDigest = "0".repeat(64),
-					actions = listOf(AttributedAction(corr, 1L, action)),
+					actions = listOf(AttributedAction(corr, 1L, action, ActionAuthor.LLM)),
 					verdicts = listOf(ValidationVerdict.Valid),
 					outcomes = emptyList()
 				)
@@ -195,7 +195,7 @@ class WorkingMemoryUpdateTest {
 			// After tick 1: action is pending
 			val wmAfterTick1 =
 				WorkingMemory.EMPTY.copy(
-					pendingRequests = mapOf(corr to AttributedAction(corr, 1L, action))
+					pendingRequests = mapOf(corr to AttributedAction(corr, 1L, action, ActionAuthor.LLM))
 				)
 			// Tick 2: outcome arrives with matching CommandId
 			val outcome = outcomeFor("T-1", corr, 2L)
@@ -223,8 +223,8 @@ class WorkingMemoryUpdateTest {
 				WorkingMemory.EMPTY.copy(
 					pendingRequests =
 						mapOf(
-							corr1 to AttributedAction(corr1, 1L, action1),
-							corr2 to AttributedAction(corr2, 1L, action2)
+							corr1 to AttributedAction(corr1, 1L, action1, ActionAuthor.LLM),
+							corr2 to AttributedAction(corr2, 1L, action2, ActionAuthor.LLM)
 						)
 				)
 			// Outcome arrives only for corr1
@@ -253,7 +253,7 @@ class WorkingMemoryUpdateTest {
 					tick = 1L,
 					simTime = 10.0,
 					stateDigest = "0".repeat(64),
-					actions = listOf(AttributedAction(corr, 1L, DispatchAction.NoOp)),
+					actions = listOf(AttributedAction(corr, 1L, DispatchAction.NoOp, ActionAuthor.LLM)),
 					verdicts = listOf(ValidationVerdict.Valid),
 					outcomes = emptyList()
 				)
@@ -275,7 +275,7 @@ class WorkingMemoryUpdateTest {
 			val action = routeAction()
 			val wmWithPending =
 				WorkingMemory.EMPTY.copy(
-					pendingRequests = mapOf(corr to AttributedAction(corr, addedTick, action))
+					pendingRequests = mapOf(corr to AttributedAction(corr, addedTick, action, ActionAuthor.LLM))
 				)
 			// Tick 5: TTL threshold reached (5 - 0 = 5 >= PENDING_TTL_TICKS)
 			val expiryTick = addedTick + PENDING_TTL_TICKS
@@ -297,7 +297,7 @@ class WorkingMemoryUpdateTest {
 			val action = routeAction()
 			val wmWithPending =
 				WorkingMemory.EMPTY.copy(
-					pendingRequests = mapOf(corr to AttributedAction(corr, addedTick, action))
+					pendingRequests = mapOf(corr to AttributedAction(corr, addedTick, action, ActionAuthor.LLM))
 				)
 			// Tick 4: not yet expired (4 - 0 = 4 < PENDING_TTL_TICKS = 5)
 			val record = emptyRecord(addedTick + PENDING_TTL_TICKS - 1)
@@ -314,7 +314,7 @@ class WorkingMemoryUpdateTest {
 			val action = routeAction()
 			val wmWithPending =
 				WorkingMemory.EMPTY.copy(
-					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, action))
+					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, action, ActionAuthor.LLM))
 				)
 			// Force expiry at tick 5
 			val wmAfterExpiry = wmWithPending.update(emptyRecord(PENDING_TTL_TICKS), observation())
@@ -332,7 +332,7 @@ class WorkingMemoryUpdateTest {
 			val action = routeAction()
 			val wmWithPending =
 				WorkingMemory.EMPTY.copy(
-					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, action))
+					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, action, ActionAuthor.LLM))
 				)
 			val expiryTick = PENDING_TTL_TICKS
 			val result = wmWithPending.update(emptyRecord(expiryTick), observation())
@@ -350,8 +350,8 @@ class WorkingMemoryUpdateTest {
 				WorkingMemory.EMPTY.copy(
 					pendingRequests =
 						mapOf(
-							corr1 to AttributedAction(corr1, 0L, DispatchAction.RequestRoute("T-1", "A", "B")),
-							corr2 to AttributedAction(corr2, 0L, DispatchAction.RequestRoute("T-2", "C", "D"))
+							corr1 to AttributedAction(corr1, 0L, DispatchAction.RequestRoute("T-1", "A", "B"), ActionAuthor.LLM),
+							corr2 to AttributedAction(corr2, 0L, DispatchAction.RequestRoute("T-2", "C", "D"), ActionAuthor.LLM)
 						)
 				)
 			val result = wmWithTwo.update(emptyRecord(PENDING_TTL_TICKS), observation())
@@ -365,7 +365,7 @@ class WorkingMemoryUpdateTest {
 			val corr = cmdId(0L)
 			val wmWithPending =
 				WorkingMemory.EMPTY.copy(
-					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, routeAction()))
+					pendingRequests = mapOf(corr to AttributedAction(corr, 0L, routeAction(), ActionAuthor.LLM))
 				)
 			// Tick 5: TTL threshold reached AND a real outcome arrives for the same commandId.
 			val outcome = outcomeFor("T-1", corr, 5L)
@@ -402,7 +402,7 @@ class WorkingMemoryUpdateTest {
 					tick = 5L,
 					simTime = 50.0,
 					stateDigest = "0".repeat(64),
-					actions = listOf(AttributedAction(corr, 5L, routeAction("T-3"))),
+					actions = listOf(AttributedAction(corr, 5L, routeAction("T-3"), ActionAuthor.LLM)),
 					verdicts = listOf(ValidationVerdict.Valid),
 					outcomes = emptyList()
 				)
@@ -421,7 +421,7 @@ class WorkingMemoryUpdateTest {
 					tick = 5L,
 					simTime = 50.0,
 					stateDigest = "0".repeat(64),
-					actions = listOf(AttributedAction(corr, 5L, DispatchAction.NoOp)),
+					actions = listOf(AttributedAction(corr, 5L, DispatchAction.NoOp, ActionAuthor.LLM)),
 					verdicts = listOf(ValidationVerdict.Valid),
 					outcomes = emptyList()
 				)
@@ -442,7 +442,7 @@ class WorkingMemoryUpdateTest {
 					tick = 7L,
 					simTime = 70.0,
 					stateDigest = "0".repeat(64),
-					actions = listOf(AttributedAction(corr, 7L, routeAction("T-1"))),
+					actions = listOf(AttributedAction(corr, 7L, routeAction("T-1"), ActionAuthor.LLM)),
 					verdicts = listOf(ValidationVerdict.Valid),
 					outcomes = emptyList()
 				)
@@ -463,8 +463,8 @@ class WorkingMemoryUpdateTest {
 					stateDigest = "0".repeat(64),
 					actions =
 						listOf(
-							AttributedAction(corrA, 1L, DispatchAction.ApproveTrain("T-1")),
-							AttributedAction(corrB, 1L, routeAction("T-2"))
+							AttributedAction(corrA, 1L, DispatchAction.ApproveTrain("T-1"), ActionAuthor.LLM),
+							AttributedAction(corrB, 1L, routeAction("T-2"), ActionAuthor.LLM)
 						),
 					verdicts = listOf(ValidationVerdict.Valid, ValidationVerdict.Valid),
 					outcomes = emptyList()

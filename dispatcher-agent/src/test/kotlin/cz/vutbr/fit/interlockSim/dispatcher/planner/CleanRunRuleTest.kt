@@ -245,6 +245,8 @@ class CleanRunRuleTest {
 		val snapshot = recorder.finish(RunEndCause.NATURAL_COMPLETION)
 
 		assertThat(snapshot.unattributedApplies).isEqualTo(1L)
+		// Issue #1477: the unattributed action is not credited to LLM (llmRun's three actions only).
+		assertThat(snapshot.actionsByAuthor[ActionAuthor.LLM.name]).isEqualTo(3L)
 		assertThat(CleanRunRule.violations(snapshot)).containsExactly(CleanRunRule.Violation.UNATTRIBUTED_ACTIONS)
 	}
 

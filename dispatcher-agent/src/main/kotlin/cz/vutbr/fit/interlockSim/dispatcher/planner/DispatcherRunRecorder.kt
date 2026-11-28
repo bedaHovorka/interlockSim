@@ -56,7 +56,9 @@ interface DispatcherRunRecorder {
 	/**
 	 * Records the outcome of one action through the full validate-and-apply pipeline.
 	 *
-	 * Called on the kDisco simulation thread (same contract as [ActionOutcomeSink]).
+	 * Called on the kDisco simulation thread by the applier, and on the dispatcher-agent driver thread
+	 * for the dropped batch of a cycle that reported no tick outcome (Issue #1477) — the same contract
+	 * as [ActionOutcomeSink]; implementations must be thread-safe.
 	 *
 	 * @param outcome Complete outcome record for one dispatching action.
 	 */

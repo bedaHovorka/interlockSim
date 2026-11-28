@@ -611,7 +611,10 @@ class KoogAgentFactory(
 								listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
 							is DispatchAction.NoOp -> emptyList()
 						}
-					commandQueue.postAll(decisions)
+					// Issue #1477: every command an actuator tool emits is the LLM's (a scripted
+					// test planner calling the tools is LLM too; the run's command source tells
+					// the two apart).
+					commandQueue.postAll(decisions, ActionAuthor.LLM)
 				}
 
 			// Assemble the four-tool actuator surface for this context. Both ports are passed through so

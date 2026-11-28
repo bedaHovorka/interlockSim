@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
@@ -89,7 +90,8 @@ class DispatchDecisionApplierModeGatingTest {
 				DispatchDecision.ReservePath("T1", "zA", "doA1"),
 				DispatchDecision.HoldTrain("T1", 10.0),
 				DispatchDecision.NoAction
-			)
+			),
+			ActionAuthor.LLM
 		)
 
 		applier.onControlStep()
@@ -114,7 +116,8 @@ class DispatchDecisionApplierModeGatingTest {
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ReservePath("T1", "zA", "doA1"),
 					DispatchDecision.HoldTrain("T1", 5.0)
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -129,7 +132,7 @@ class DispatchDecisionApplierModeGatingTest {
 		fun auto_allowsNoAction() {
 			val state = DispatcherModeState() // defaults to AUTO
 			val (queue, applier) = makeApplier(modeState = state)
-			queue.postAll(listOf(DispatchDecision.NoAction))
+			queue.postAll(listOf(DispatchDecision.NoAction), ActionAuthor.LLM)
 
 			// Must not throw and must not touch any actuator — NoAction is a no-op
 			// regardless of mode and bypasses the mode gate in all three modes.
@@ -151,7 +154,7 @@ class DispatchDecisionApplierModeGatingTest {
 		fun manual_dropsApproveTrain() {
 			val state = DispatcherModeState().apply { setOverride(DispatcherMode.MANUAL) }
 			val (queue, applier) = makeApplier(modeState = state)
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -163,7 +166,7 @@ class DispatchDecisionApplierModeGatingTest {
 		fun manual_dropsReservePath() {
 			val state = DispatcherModeState().apply { setOverride(DispatcherMode.MANUAL) }
 			val (queue, applier) = makeApplier(modeState = state)
-			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -175,7 +178,7 @@ class DispatchDecisionApplierModeGatingTest {
 		fun manual_dropsHoldTrain() {
 			val state = DispatcherModeState().apply { setOverride(DispatcherMode.MANUAL) }
 			val (queue, applier) = makeApplier(modeState = state)
-			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 5.0)))
+			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 5.0)), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -187,7 +190,7 @@ class DispatchDecisionApplierModeGatingTest {
 		fun manual_allowsNoAction() {
 			val state = DispatcherModeState().apply { setOverride(DispatcherMode.MANUAL) }
 			val (queue, applier) = makeApplier(modeState = state)
-			queue.postAll(listOf(DispatchDecision.NoAction))
+			queue.postAll(listOf(DispatchDecision.NoAction), ActionAuthor.LLM)
 
 			// Must not throw and must not touch any actuator.
 			applier.onControlStep()
@@ -212,7 +215,8 @@ class DispatchDecisionApplierModeGatingTest {
 				listOf(
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ReservePath("T1", "zA", "doA1")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -230,7 +234,8 @@ class DispatchDecisionApplierModeGatingTest {
 				listOf(
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ReservePath("T1", "zA", "doA1")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -251,7 +256,7 @@ class DispatchDecisionApplierModeGatingTest {
 			val (queue, applier) = makeApplier(modeState = state, semiAutoApprover = approver)
 			val d1 = DispatchDecision.ApproveTrain("T1")
 			val d2 = DispatchDecision.ReservePath("T1", "zA", "doA1")
-			queue.postAll(listOf(d1, d2))
+			queue.postAll(listOf(d1, d2), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -267,7 +272,8 @@ class DispatchDecisionApplierModeGatingTest {
 				listOf(
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ReservePath("T1", "zA", "doA1")
-				)
+				),
+				ActionAuthor.LLM
 			)
 
 			applier.onControlStep()
@@ -286,7 +292,7 @@ class DispatchDecisionApplierModeGatingTest {
 				false
 			}
 			val (queue, applier) = makeApplier(modeState = state, semiAutoApprover = approver)
-			queue.postAll(listOf(DispatchDecision.NoAction))
+			queue.postAll(listOf(DispatchDecision.NoAction), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -307,12 +313,12 @@ class DispatchDecisionApplierModeGatingTest {
 			val state = DispatcherModeState()
 			val (queue, applier) = makeApplier(modeState = state)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 			applier.onControlStep()
 			assertThat(approvedTrains).containsExactly("T1")
 
 			state.setOverride(DispatcherMode.MANUAL)
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T2")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T2")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			// T2 must be dropped; approved list still contains only T1.
@@ -325,12 +331,12 @@ class DispatchDecisionApplierModeGatingTest {
 			val state = DispatcherModeState().apply { setOverride(DispatcherMode.MANUAL) }
 			val (queue, applier) = makeApplier(modeState = state)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 			applier.onControlStep()
 			assertThat(approvedTrains).isEmpty()
 
 			state.clearOverride()
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T2")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T2")), ActionAuthor.LLM)
 			applier.onControlStep()
 			assertThat(approvedTrains).containsExactly("T2")
 		}

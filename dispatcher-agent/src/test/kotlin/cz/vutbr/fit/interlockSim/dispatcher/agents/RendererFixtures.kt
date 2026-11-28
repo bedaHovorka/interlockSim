@@ -154,7 +154,7 @@ object RendererFixtures {
 				tick = 39L,
 				simTime = 496.2,
 				stateDigest = "f7e8d9c0b1a20000000000000000000000000000000000000000000000000000",
-				actions = listOf(AttributedAction(CommandId(39L), 39L, DispatchAction.NoOp)),
+				actions = listOf(AttributedAction(CommandId(39L), 39L, DispatchAction.NoOp, ActionAuthor.LLM)),
 				verdicts = listOf(ValidationVerdict.Valid),
 				outcomes = emptyList()
 			),
@@ -162,7 +162,10 @@ object RendererFixtures {
 				tick = 40L,
 				simTime = 504.8,
 				stateDigest = "1a2b3c4d5e6f0000000000000000000000000000000000000000000000000000",
-				actions = listOf(AttributedAction(CommandId(40L), 40L, DispatchAction.RequestRoute("T-3", "A", "B"))),
+				actions =
+					listOf(
+						AttributedAction(CommandId(40L), 40L, DispatchAction.RequestRoute("T-3", "A", "B"), ActionAuthor.LLM)
+					),
 				verdicts = listOf(ValidationVerdict.Valid),
 				outcomes = emptyList()
 			)

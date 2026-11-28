@@ -150,12 +150,10 @@ data class AttributedAction(
 	/**
 	 * Attribution tag identifying the decision-maker that produced this action.
 	 *
-	 * Defaults to [ActionAuthor.LLM] for backwards-compatibility with existing code that
-	 * creates [AttributedAction] instances without explicitly specifying an author. New code
-	 * (particularly [DispatchTickLoop] and [RuleBasedEmissionStrategy]) should always pass an
-	 * explicit value.
+	 * Required, with no default (Issue #1477): every producer names its author, so an unknown
+	 * actor is never credited to [ActionAuthor.LLM].
 	 */
-	val author: ActionAuthor = ActionAuthor.LLM,
+	val author: ActionAuthor,
 	/**
 	 * Human-readable reason explaining why this action was chosen by [author].
 	 *

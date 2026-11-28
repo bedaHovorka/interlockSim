@@ -40,7 +40,8 @@ import java.util.concurrent.atomic.AtomicReference
  * ## Thread safety
  *
  * [onTick] is called on the dispatcher-agent-driver thread; [onActionOutcome] on the kDisco
- * simulation thread. All counters use [AtomicLong] or [ConcurrentHashMap] with pre-populated
+ * simulation thread by the applier and on the driver thread for the dropped batch of a cycle that
+ * reported no tick outcome (`AgentLoopDriver.failUnreportedCycle`, Issue #1477). All counters use [AtomicLong] or [ConcurrentHashMap] with pre-populated
  * [AtomicLong] values, and latency samples use a [java.util.concurrent.ConcurrentLinkedQueue].
  * [snapshot] and [finish] may be called from any thread. The skipped NEXT SECTION offer group is
  * the one counter set [snapshot] reads under a lock ([offerStateLock]): its sums, its measured
@@ -304,12 +305,14 @@ class DefaultDispatcherRunRecorder(
 		// Apply-failure counts
 		outcome.applyFailure?.let { code -> applyFailuresByCode.getValue(code.name).incrementAndGet() }
 
-		// Author counts
-		actionsByAuthor.getValue(outcome.authored.author.name).incrementAndGet()
-
-		// Unattributed applies: tickIndex == -1 means the correlation map had no entry
-		if (outcome.authored.tickIndex == -1L) {
+		// Author counts. Issue #1477: an action with no known author (AuthoredAction.isUnattributed)
+		// goes to the unattributed counter only, never under an author — LLM included.
+		val author = outcome.authored.author
+		// `|| author == null` adds no case (isUnattributed covers it); it only smart-casts author below.
+		if (outcome.authored.isUnattributed || author == null) {
 			unattributedApplies.incrementAndGet()
+		} else {
+			actionsByAuthor.getValue(author.name).incrementAndGet()
 		}
 
 		// Issue #1365: a non-contiguous-origin refusal of a decision the silent cycle posted

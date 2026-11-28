@@ -176,6 +176,24 @@ class DefaultDispatcherRunRecorderTest {
 		)
 		val snap = r.snapshot()
 		assertThat(snap.unattributedApplies).isEqualTo(1L)
+		// Issue #1477: an unattributed apply is never credited to an author, LLM included.
+		assertThat(snap.actionsByAuthor[ActionAuthor.LLM.name] ?: 0L).isEqualTo(0L)
+	}
+
+	@Test
+	fun `onActionOutcome counts an outcome with no author as unattributed and under no author`() {
+		val r = recorder()
+		r.onActionOutcome(
+			ActionOutcome(
+				phase = ActionPhase.APPLIED,
+				rejection = null,
+				applyFailure = null,
+				authored = AuthoredAction(author = null, reason = "", decisionKind = "ApproveTrain", tickIndex = -1L)
+			)
+		)
+		val snap = r.snapshot()
+		assertThat(snap.unattributedApplies).isEqualTo(1L)
+		assertThat(snap.actionsByAuthor.values.sum()).isEqualTo(0L)
 	}
 
 	@Test

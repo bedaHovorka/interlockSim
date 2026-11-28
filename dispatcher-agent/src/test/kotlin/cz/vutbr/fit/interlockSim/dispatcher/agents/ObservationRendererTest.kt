@@ -632,7 +632,8 @@ class ObservationRendererTest {
 				AttributedAction(
 					commandId = CommandId(99L),
 					tick = 40L,
-					action = DispatchAction.RequestRoute("T-7", "A", "B")
+					action = DispatchAction.RequestRoute("T-7", "A", "B"),
+					author = ActionAuthor.LLM
 				)
 			val wmWithDrop = ctx.workingMemory.copy(droppedThisTick = listOf(droppedAction))
 			val output = CompactTextRenderer().render(ctx.copy(workingMemory = wmWithDrop))

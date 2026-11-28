@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.dispatcher.observation.QueuedTrainView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.ReservationView
@@ -63,7 +64,7 @@ class ActionValidatorQueueGatingIntegrationTest {
 		if (verdict is ValidationVerdict.Valid) {
 			// In production this would be the actual DispatchDecision derived from the action;
 			// here we post a NoAction placeholder so the queue interaction is observable.
-			queue.postAll(listOf(cz.vutbr.fit.interlockSim.sim.DispatchDecision.NoAction))
+			queue.postAll(listOf(cz.vutbr.fit.interlockSim.sim.DispatchDecision.NoAction), ActionAuthor.LLM)
 		}
 		return verdict
 	}
@@ -116,7 +117,7 @@ class ActionValidatorQueueGatingIntegrationTest {
 		assertThat((verdict as ValidationVerdict.Rejected).code)
 			.isEqualTo(RejectionCode.ROUTE_ALREADY_HELD_TO_SAME_TARGET)
 
-		verify(exactly = 0) { queue.postAll(any()) }
+		verify(exactly = 0) { queue.postAll(any(), any()) }
 	}
 
 	@Test
@@ -142,7 +143,7 @@ class ActionValidatorQueueGatingIntegrationTest {
 		assertThat(verdict).isInstanceOf(ValidationVerdict.Rejected::class)
 		assertThat((verdict as ValidationVerdict.Rejected).code).isEqualTo(RejectionCode.CAPACITY_FULL)
 
-		verify(exactly = 0) { queue.postAll(any()) }
+		verify(exactly = 0) { queue.postAll(any(), any()) }
 	}
 
 	@Test
@@ -166,7 +167,7 @@ class ActionValidatorQueueGatingIntegrationTest {
 		val verdict = validateAndMaybePost(DispatchAction.ApproveTrain("T1"), observation)
 
 		assertThat(verdict).isEqualTo(ValidationVerdict.Valid)
-		verify(exactly = 1) { queue.postAll(any()) }
+		verify(exactly = 1) { queue.postAll(any(), ActionAuthor.LLM) }
 	}
 
 	@Test
@@ -183,7 +184,7 @@ class ActionValidatorQueueGatingIntegrationTest {
 			assertThat(verdict, name = "verdict for ${action.kind}").isInstanceOf(ValidationVerdict.Rejected::class)
 		}
 
-		verify(exactly = 0) { queue.postAll(any()) }
+		verify(exactly = 0) { queue.postAll(any(), any()) }
 	}
 
 	@Test
@@ -193,6 +194,6 @@ class ActionValidatorQueueGatingIntegrationTest {
 
 		assertThat(verdict).isEqualTo(ValidationVerdict.Valid)
 		// NoOp is valid but the caller (by convention) does not post a decision for it
-		verify(exactly = 0) { queue.postAll(any()) }
+		verify(exactly = 0) { queue.postAll(any(), any()) }
 	}
 }

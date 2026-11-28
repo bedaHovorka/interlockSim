@@ -17,6 +17,7 @@ import assertk.assertions.isTrue
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.toRationaleLogSuffix
@@ -141,7 +142,7 @@ class DispatchDecisionApplierSp2b5Test {
 		@DisplayName("ApproveTrain with non-empty rationale logs the suffix on the DEBUG line")
 		fun approveTrainWithRationale_logsSuffix() {
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1", rationale = listOf("Slot available"))))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1", rationale = listOf("Slot available"))), ActionAuthor.LLM)
 
 			applier.onControlStep()
 
@@ -155,7 +156,7 @@ class DispatchDecisionApplierSp2b5Test {
 		@DisplayName("ApproveTrain with empty rationale logs no 'rationale:' substring")
 		fun approveTrainWithoutRationale_logsNoSuffix() {
 			val (queue, applier) = makeApplier()
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T1")), ActionAuthor.LLM)
 
 			applier.onControlStep()
 

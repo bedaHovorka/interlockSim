@@ -194,9 +194,9 @@ class TickRingBufferTest {
 				val tick = (38 + i).toLong()
 				val actions =
 					listOf(
-						AttributedAction(CommandId(tick * 1000), tick, DispatchAction.RequestRoute("T-1", "A", "B")),
-						AttributedAction(CommandId(tick * 1000 + 1), tick, DispatchAction.ApproveTrain("T-2")),
-						AttributedAction(CommandId(tick * 1000 + 2), tick, DispatchAction.CancelRoute("T-3"))
+						AttributedAction(CommandId(tick * 1000), tick, DispatchAction.RequestRoute("T-1", "A", "B"), ActionAuthor.LLM),
+						AttributedAction(CommandId(tick * 1000 + 1), tick, DispatchAction.ApproveTrain("T-2"), ActionAuthor.LLM),
+						AttributedAction(CommandId(tick * 1000 + 2), tick, DispatchAction.CancelRoute("T-3"), ActionAuthor.LLM)
 					)
 				val verdicts =
 					listOf(

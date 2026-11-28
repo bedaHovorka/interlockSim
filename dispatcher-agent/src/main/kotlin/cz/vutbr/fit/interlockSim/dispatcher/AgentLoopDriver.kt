@@ -11,6 +11,10 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcome
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeSink
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionPhase
+import cz.vutbr.fit.interlockSim.dispatcher.planner.AuthoredAction
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.KoogAgentPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.LatestObservationReader
@@ -24,6 +28,7 @@ import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -136,7 +141,7 @@ class AgentLoopDriver(
 	 *
 	 * When non-null, this driver installs a [PlannerTickListener] on it and attributes each
 	 * cycle's `commandQueue.postAll` call via [TickOutcome.toActionAuthor] on the tick
-	 * outcome most recently reported. When `null` (the default — a pure deterministic
+	 * outcome reported during this cycle's `plan()`. When `null` (the default — a pure deterministic
 	 * planner such as [RuleBasedPlanAdapter]), every cycle is attributed
 	 * [ActionAuthor.RULE_BASED] — safe because a synchronous rule-based planner has no
 	 * internal LLM/fallback blend to distinguish.
@@ -168,6 +173,22 @@ class AgentLoopDriver(
 	 * `null` for wirings with no recorder — the rule-based baseline included.
 	 */
 	private val onTickRecord: ((TickRecord) -> Unit)? = null,
+	/**
+	 * Receives every dispatching decision of a batch [runCycle] drops because the LLM-backed cycle
+	 * reported no tick outcome (Issue #1477): each one as an [ActionOutcome] with a `null` author and
+	 * [AuthoredAction.UNATTRIBUTED_TICK_INDEX], so the run recorder counts it in its unattributed-action
+	 * counter (`unattributedApplies`) and the clean-run rule judges the run not clean. A
+	 * [DispatchDecision.NoAction] is not an action and is not reported; an empty batch reports nothing.
+	 *
+	 * Invoked on the dispatcher-agent driver thread, like [onTickRecord]. In production it is the same
+	 * [ActionOutcomeSink] the applier reports to (the aggregator and the run recorder, both thread-safe).
+	 *
+	 * The only production construction site (`ExampleRegistry`) always passes a non-null
+	 * `CompositeActionOutcomeSink` (possibly with no delegates) on both arms; on the rule-based arm
+	 * ([plannerTickSource] `null`) it is passed but can never be called. The parameter is nullable only
+	 * so that test wirings without a recorder compile and behave as before.
+	 */
+	private val droppedActionSink: ActionOutcomeSink? = null,
 	/**
 	 * Minimum wall-clock spacing between the end of one cycle and the end of the next, in
 	 * milliseconds. `0` (the default) imposes nothing and reproduces the original cadence.
@@ -415,7 +436,17 @@ class AgentLoopDriver(
 	 *   assume every call did real work — see
 	 *   [cz.vutbr.fit.interlockSim.dispatcher.RuleBasedDispatcherDeterminismTest] for
 	 *   why: releasing such a barrier unconditionally after a no-op call lets the sim
-	 *   thread proceed before the corresponding decision is actually posted.
+	 *   thread proceed before the corresponding decision is actually posted. A third
+	 *   outcome returns neither value: an LLM-backed cycle with no tick outcome throws
+	 *   [IllegalStateException] (see `@throws`).
+	 * @throws IllegalStateException if an LLM-backed cycle (non-null [plannerTickSource]) returned
+	 *   from `plan()` without reporting a tick outcome (Issue #1477). This cycle's RETURNED batch is
+	 *   not posted; its dispatching decisions go to [droppedActionSink] as unattributed actions.
+	 *   Actuator-tool emissions made inside `plan()` were already posted under [ActionAuthor.LLM] and
+	 *   stay posted. A dropped release keeps a route locked (liveness, not safety). As on the
+	 *   existing path where `plan()` itself throws, PACE is skipped for that cycle: no
+	 *   [SimulationController.awaitIfPaused], no [SimulationController.throttle] and no
+	 *   [tickPeriodMs] floor.
 	 */
 	suspend fun runCycle(): Boolean {
 		// 0. WAIT + 1. SENSE — see awaitFreshSnapshot's KDoc for the polling-vs-signal-based
@@ -430,6 +461,9 @@ class AgentLoopDriver(
 		// from the same sim tick (Issue #1354).
 		val observation = record.toDispatchObservation()
 		val planStart = TimeSource.Monotonic.markNow()
+		// Issue #1477: forget the previous cycle's outcome, so a cycle that reports none is never
+		// credited to the author of the cycle before. The listener fires synchronously inside plan().
+		lastTickOutcome = null
 		val decisions = planner.plan(observation)
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
 
@@ -451,14 +485,19 @@ class AgentLoopDriver(
 			return false
 		}
 
-		// Attribute this cycle's decisions correctly instead of silently defaulting to
-		// ActionAuthor.LLM (postAll's pre-fix default) regardless of which planner
-		// actually produced them.
+		// Attribute this cycle's decisions to the planner that produced them. postAll has no default
+		// author (Issue #1477), and an LLM-backed cycle always reports its tick outcome before plan()
+		// returns (see the listener in init; lastTickOutcome is cleared before every plan()), so a
+		// cycle that reported none is a wiring defect: fail loudly rather than credit an unknown actor
+		// to ActionAuthor.LLM. failUnreportedCycle reports the dropped batch as unattributed and throws;
+		// AgentDriverLoop logs the failure at ERROR and goes on. Only this cycle's RETURNED batch is
+		// not posted: actuator-tool emissions made inside plan() were already posted under LLM and stay
+		// posted. A dropped release keeps a route locked (liveness, not safety).
 		val author =
 			if (plannerTickSource == null) {
 				ActionAuthor.RULE_BASED
 			} else {
-				lastTickOutcome?.toActionAuthor ?: ActionAuthor.LLM
+				lastTickOutcome?.toActionAuthor ?: failUnreportedCycle(decisions)
 			}
 		val reason = lastTickOutcome?.name ?: ""
 
@@ -511,6 +550,43 @@ class AgentLoopDriver(
 		prevPaceSpeed = paceSpeed
 		hasProcessedSnapshot = true
 		return true
+	}
+
+	/**
+	 * The loud failure of an LLM-backed cycle that reported no tick outcome (Issue #1477).
+	 *
+	 * Before throwing, every dispatching decision of the dropped [decisions] batch goes to
+	 * [droppedActionSink] as an unattributed action — a `null` author and
+	 * [AuthoredAction.UNATTRIBUTED_TICK_INDEX] — so the run record carries the unattributed-action
+	 * count the clean-run rule reads instead of no trace at all. [DispatchDecision.NoAction] is not an
+	 * action and is skipped; an empty batch reports nothing.
+	 *
+	 * @throws IllegalStateException always
+	 */
+	private fun failUnreportedCycle(decisions: List<DispatchDecision>): Nothing {
+		droppedActionSink?.let { sink ->
+			for (decision in decisions) {
+				if (decision is DispatchDecision.NoAction) continue
+				sink.onActionOutcome(
+					ActionOutcome(
+						phase = ActionPhase.EMITTED,
+						rejection = null,
+						applyFailure = null,
+						authored =
+							AuthoredAction(
+								author = null,
+								reason = "",
+								decisionKind = decision::class.simpleName ?: "Unknown",
+								tickIndex = AuthoredAction.UNATTRIBUTED_TICK_INDEX
+							)
+					)
+				)
+			}
+		}
+		error(
+			"AgentLoopDriver: the LLM planner returned without reporting a tick outcome; " +
+				"the decisions of this cycle have no known author"
+		)
 	}
 
 	/**

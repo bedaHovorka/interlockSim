@@ -406,7 +406,7 @@ class Sp2c20ActionAttributionTest {
 			// Clear any log events from setup
 			appender.list.clear()
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-1")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			// The sink was called exactly once (one ApproveTrain decision)
@@ -435,7 +435,7 @@ class Sp2c20ActionAttributionTest {
 					actionOutcomeSink = sink
 				)
 
-			queue.postAll(listOf(DispatchDecision.NoAction))
+			queue.postAll(listOf(DispatchDecision.NoAction), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(outcomes).hasSize(0)
@@ -454,7 +454,7 @@ class Sp2c20ActionAttributionTest {
 					// actionOutcomeSink = null (default)
 				)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-1")), ActionAuthor.LLM)
 			applier.onControlStep() // must not throw
 		}
 
@@ -480,7 +480,7 @@ class Sp2c20ActionAttributionTest {
 					actionOutcomeSink = sink
 				)
 
-			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-1")))
+			queue.postAll(listOf(DispatchDecision.ApproveTrain("T-1")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(outcomes).hasSize(1)
@@ -513,7 +513,7 @@ class Sp2c20ActionAttributionTest {
 					actionOutcomeSink = sink
 				)
 
-			queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+			queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 			applier.onControlStep()
 
 			assertThat(outcomes).hasSize(1)
@@ -728,7 +728,7 @@ class Sp2c20ActionAttributionTest {
 			val map = CommandCorrelationMap()
 			map.newCycle()
 			val decisions = listOf(DispatchDecision.ApproveTrain("T-1"))
-			map.register(decisions)
+			map.register(decisions, ActionAuthor.LLM)
 			map.correlate(decisions[0]) // evict
 			assertThat(map.unattributedApplies).isZero()
 		}

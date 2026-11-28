@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.observation.BlockView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservation
 import cz.vutbr.fit.interlockSim.dispatcher.observation.ReservationView
@@ -142,7 +143,7 @@ class ActionValidator814RegressionTest {
 			// This branch is intentionally unreachable in this test scenario —
 			// it is present to make the "validate-first, post-only-if-valid" contract
 			// explicit in the test rather than implicit.
-			queueSpy.postAll(emptyList())
+			queueSpy.postAll(emptyList(), ActionAuthor.LLM)
 		}
 
 		// ── Assert ────────────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ class ActionValidator814RegressionTest {
 		assert(verdict.detail.contains("B")) { "detail must name the target, was: ${verdict.detail}" }
 
 		// 3. postAll was never called — the action never reached the queue
-		verify(exactly = 0) { queueSpy.postAll(any()) }
+		verify(exactly = 0) { queueSpy.postAll(any(), any()) }
 	}
 
 	/**
@@ -208,12 +209,12 @@ class ActionValidator814RegressionTest {
 
 		val verdict = validator.validate(action, observation)
 		if (verdict is ValidationVerdict.Valid) {
-			queueSpy.postAll(emptyList()) // unreachable in this test scenario
+			queueSpy.postAll(emptyList(), ActionAuthor.LLM) // unreachable in this test scenario
 		}
 
 		assertThat(verdict).isInstanceOf(ValidationVerdict.Rejected::class)
 		assertThat((verdict as ValidationVerdict.Rejected).code)
 			.isEqualTo(RejectionCode.ROUTE_HELD_TO_DIFFERENT_TARGET)
-		verify(exactly = 0) { queueSpy.postAll(any()) }
+		verify(exactly = 0) { queueSpy.postAll(any(), any()) }
 	}
 }

@@ -18,6 +18,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
@@ -206,7 +207,7 @@ class ThinkingTruncatedCycleTest {
 									listOf(DispatchDecision.ReleaseRoute(trainName = action.trainId))
 								is DispatchAction.NoOp -> emptyList()
 							}
-						queue.postAll(decisions)
+						queue.postAll(decisions, ActionAuthor.LLM)
 					}
 			}
 			val adapter =

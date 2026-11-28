@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchAction
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgent
@@ -984,11 +985,11 @@ class KoogAgentPlanAdapterTest {
 		val planAdapter = adapter(koogAgent, fallback, commandQueue = commandQueue, circuitBreaker = breaker)
 
 		val result1 = runBlocking { planAdapter.plan(observationAt(1.0)) }
-		commandQueue.postAll(result1)
+		commandQueue.postAll(result1, ActionAuthor.LLM)
 		val tick1 = correlationMap.correlate(result1.single())?.tickIndex
 
 		val result2 = runBlocking { planAdapter.plan(observationAt(2.0)) }
-		commandQueue.postAll(result2)
+		commandQueue.postAll(result2, ActionAuthor.LLM)
 		val tick2 = correlationMap.correlate(result2.single())?.tickIndex
 
 		assertThat(tick1).isNotNull()

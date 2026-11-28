@@ -22,6 +22,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgentImpl
 import cz.vutbr.fit.interlockSim.dispatcher.observation.AppliedOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcome
@@ -147,7 +148,7 @@ class RequestRouteApplyFailureCodeTest {
 		val outcomes = mutableListOf<ActionOutcome>()
 		val (queue, applier) = applierWithSink(networkActuator, outcomes)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -181,7 +182,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -209,7 +210,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -236,7 +237,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -263,7 +264,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -346,7 +347,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -394,7 +395,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -437,7 +438,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -475,7 +476,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doA1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -509,7 +510,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doB1")))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", "zA", "doB1")), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		assertThat(outcomes).hasSize(1)
@@ -558,7 +559,7 @@ class RequestRouteApplyFailureCodeTest {
 				actionOutcomeSink = ActionOutcomeSink { outcome -> outcomes.add(outcome) }
 			)
 
-		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", from, to)))
+		queue.postAll(listOf(DispatchDecision.RequestRoute("T1", from, to)), ActionAuthor.LLM)
 		applier.onControlStep()
 
 		return outcomes to outcomeChannel.drainSince(0L)

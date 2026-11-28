@@ -13,7 +13,9 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
+import cz.vutbr.fit.interlockSim.dispatcher.CommandCorrelationMap
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeSink
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
@@ -81,6 +83,9 @@ class LiftedStackFixture(
 	 * time, so registering them earlier in the test is the correct and only ordering that
 	 * makes them live for the whole run.
 	 *
+	 * @param correlationMap Registers every posted decision with its author, as the production wiring
+	 *   does; `null` (the default) keeps the pre-existing gates' unattributed queue.
+	 * @param actionOutcomeSink Receives the applier's per-action outcomes (author, phase); `null` by default.
 	 * @param plannerFactory Builds the [DispatcherPlanner] this run drives, given the shared
 	 *   [ActuatorCommandQueue]. Defaults to the [RuleBasedPlanAdapter] both pre-existing gates
 	 *   use, so their behaviour is unchanged. Issue #814's regression tests substitute scripted
@@ -89,6 +94,8 @@ class LiftedStackFixture(
 	fun run(
 		loop: ShuntingLoop,
 		context: DefaultSimulationContext,
+		correlationMap: CommandCorrelationMap? = null,
+		actionOutcomeSink: ActionOutcomeSink? = null,
 		plannerFactory: (ActuatorCommandQueue) -> DispatcherPlanner = { RuleBasedPlanAdapter(RuleBasedDispatcher()) }
 	): RunResult {
 		// Wire the full lifted stack — same components as production.
@@ -98,7 +105,7 @@ class LiftedStackFixture(
 				activeTrains = loop::getApprovedTrains
 			)
 		val actuatorPort = DefaultNetworkActuatorPort(env = context)
-		val queue = ActuatorCommandQueue()
+		val queue = ActuatorCommandQueue(correlationMap = correlationMap)
 		// Default: the rule-based planner both existing gates use. Issue #814's regression tests
 		// pass a scripted planner instead so they can reproduce specific LLM misbehaviours
 		// deterministically; the queue is handed in because a planner that models the SP2b.9
@@ -110,7 +117,9 @@ class LiftedStackFixture(
 				networkActuator = actuatorPort,
 				onApproveTrain = loop::approveQueuedTrain,
 				onBlockTransition = loop::incrementBlockTransition,
-				onFailedReservation = loop::incrementFailedReservation
+				onFailedReservation = loop::incrementFailedReservation,
+				correlationMap = correlationMap,
+				actionOutcomeSink = actionOutcomeSink
 			)
 		val driver =
 			AgentLoopDriver(
