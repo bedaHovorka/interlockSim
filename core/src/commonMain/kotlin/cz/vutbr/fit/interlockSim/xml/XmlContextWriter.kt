@@ -160,7 +160,7 @@ class XmlContextWriter {
 		writtenNames: Set<String>
 	) {
 		builder.append('\t')
-		builder.append('<').append(NodeCellFactory.tagNameFor(cell)).append(' ')
+		builder.append("<" + NodeCellFactory.tagNameFor(cell) + " ")
 		appendAttribute(builder, X, point.x)
 		appendAttribute(builder, Y, point.y)
 		cell.getSpatialType().let {
