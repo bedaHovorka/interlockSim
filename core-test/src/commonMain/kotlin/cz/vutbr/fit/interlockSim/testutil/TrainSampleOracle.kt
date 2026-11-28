@@ -23,7 +23,9 @@ import cz.vutbr.fit.interlockSim.util.BlockIdentity
  * after publication (#1467 spec rule P3), where live state still equals the published snapshot.
  *
  * The [TrainMotionState] order is the one [TrainMotionState] documents: no front section first,
- * then a station dwell, then standing (velocity exactly 0.0), else moving.
+ * then a station dwell, then standing (velocity exactly 0.0), else moving. That precedence
+ * intentionally mirrors `DefaultNetworkPerceptionPort.motionState`: the oracle is independent in
+ * source (it reads the live [Train], not the port) but not in logic, by design.
  */
 object TrainSampleOracle {
 	fun liveSample(train: Train): TrainPositionReading =
@@ -66,7 +68,9 @@ object TrainSampleOracle {
 
 	/**
 	 * Names every field in which [published] differs from [live], or returns `null` when they are
-	 * equal. A per-field message makes a failure say what tore, not only that something did.
+	 * equal. A per-field message makes a failure say what tore, not only that something did. If the
+	 * field list ever goes out of sync with [TrainPositionReading] it returns a message saying so
+	 * instead of throwing, because this runs in the control-step listener, where a throw ends the run.
 	 */
 	fun fieldDiff(
 		published: TrainPositionReading,
@@ -83,9 +87,10 @@ object TrainSampleOracle {
 				Triple("state", published.state, live.state)
 			)
 		val differing = fields.filter { (_, p, l) -> p != l }
-		check(differing.isNotEmpty() == (published != live)) { "fieldDiff misses a TrainPositionReading field" }
-		return differing
-			.takeIf { it.isNotEmpty() }
-			?.joinToString { (name, p, l) -> "$name published=$p live=$l" }
+		val described = differing.joinToString { (name, p, l) -> "$name published=$p live=$l" }
+		return when {
+			differing.isNotEmpty() == (published != live) -> described.takeIf { it.isNotEmpty() }
+			else -> "oracle out of sync with TrainPositionReading: $published != $live, differing fields [$described]"
+		}
 	}
 }

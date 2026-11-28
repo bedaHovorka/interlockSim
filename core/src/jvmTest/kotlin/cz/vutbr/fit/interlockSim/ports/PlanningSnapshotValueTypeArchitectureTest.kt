@@ -172,7 +172,7 @@ class PlanningSnapshotValueTypeArchitectureTest {
 				TrackFacility.State::class,
 				RailSwitch.Conf::class,
 				SeparatorKind::class,
-				TrainMotionState::class // #1472
+				TrainMotionState::class
 			)
 
 		val COLLECTION_CLASSES: Set<KClass<*>> = setOf(List::class, Set::class, Map::class)
