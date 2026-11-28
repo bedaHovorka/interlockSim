@@ -107,9 +107,9 @@ All items below exist on `develop` today (Goal 9 marked ✅ COMPLETE 2026-07-06 
 | SP2 | `TemporalConflictDetector` + `ProjectedOccupancy` + `TemporalConflictEvent` | `sim/conflict/TemporalConflictDetector.kt` | **Wired but inert** — its own KDoc: "no production code path calls `registerProjectionProvider` yet … it never emits a `TemporalConflictEvent` in a real simulation run" |
 | SP3 | `ConflictResolution` sealed hierarchy: `HoldTrain`, `Reroute`, `SpeedAdjust`, each with `EstimatedImpact` | `sim/conflict/ConflictResolution.kt` | Model only — advisory, nothing enacts them |
 | SP3 | `DefaultConflictResolver.generateResolutions` (hold always; reroutes via `RouteFinder` over all InOut pairs, deduped, cost-sorted, capped; speed-adjust always) | `sim/conflict/DefaultConflictResolver.kt` | Live for the UI path; **position-agnostic** (its KDoc: actionability deferred to SP4/#568) |
-| SP4 | `ConflictResolutionRanker` — deterministic impact scoring, plus preference-weighted overload | `sim/conflict/ConflictResolutionRanker.kt` | Live |
+| SP4 | `ConflictResolutionRanker` — deterministic impact scoring, plus preference-weighted overload | `sim/conflict/ConflictResolutionRanker.kt` | **Live** (the preference-weighted overload was removed by #1454) |
 | SP5 | `AutoConflictResolutionService.applyTopRanked(event)` — headless top-choice picker | `sim/conflict/AutoConflictResolutionService.kt`, `DefaultAutoConflictResolutionService.kt` | **Intentionally inert** — documented as "the headless wiring point for Goal 10's deliberative dispatcher" (removed by #1453) |
-| SP6/SC4 | `StrategyPreferenceStore` + `DispatcherPreferenceStore` — per-conflict-type strategy learning | `sim/conflict/StrategyPreferenceStore.kt`, `DispatcherPreferenceStore.kt` | Live (operator Apply path) |
+| SP6/SC4 | `StrategyPreferenceStore` + `DispatcherPreferenceStore` — per-conflict-type strategy learning | `sim/conflict/StrategyPreferenceStore.kt`, `DispatcherPreferenceStore.kt` | Removed by #1454 (the operator Apply path is now advisory-only) |
 | SP7 | `ConflictResolutionPanel` operator UI | `desktop-ui/.../gui/conflict/` | Live (GUI only; irrelevant to headless scale test) |
 | — | Contention telemetry: `blockedSince` map, `clearBlockedTracking`, `flushUnresolvedConflicts` | `context/navigation/DefaultPathReservationService.kt` | Live |
 

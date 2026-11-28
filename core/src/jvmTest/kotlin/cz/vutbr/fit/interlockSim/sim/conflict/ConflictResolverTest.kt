@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.conflict
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -18,6 +19,10 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.vutbr.fit.interlockSim.context.NetworkState
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -32,6 +37,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 
 /**
  * Unit tests for [DefaultConflictResolver] — Goal 9 SP3 (#585).
@@ -98,6 +104,33 @@ class ConflictResolverTest {
 			cost = cost ?: segments.size.toDouble(),
 			costBreakdown = segments.map { SegmentCost(it, 1.0) }
 		)
+
+	// ── Debug summary line ───────────────────────────────────────────────────
+
+	@Test
+	@DisplayName("generateResolutions logs one DEBUG summary naming the trains, the block and the candidate count")
+	fun generateResolutionsLogsDebugSummary() {
+		val resolver = DefaultConflictResolver(routeFinder, emptyList(), networkState)
+		val logger = LoggerFactory.getLogger(DefaultConflictResolver::class.java.name) as Logger
+		val appender = ListAppender<ILoggingEvent>().also { it.start() }
+		val levelBefore = logger.level
+		logger.level = Level.DEBUG
+		logger.addAppender(appender)
+		try {
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val lines = appender.list.filter { it.formattedMessage.startsWith("generateResolutions:") }
+			assertThat(lines).hasSize(1)
+			assertThat(lines.single().level).isEqualTo(Level.DEBUG)
+			val message = lines.single().formattedMessage
+			assertThat(message).contains("conflict=(TrainBlocked vs TrainHolder)")
+			assertThat(message).contains("block=$contestedBlock")
+			assertThat(message).contains("${resolutions.size} candidates")
+		} finally {
+			logger.detachAppender(appender)
+			logger.level = levelBefore
+		}
+	}
 
 	// ── 1. HoldTrain candidate ───────────────────────────────────────────────
 
@@ -856,59 +889,41 @@ class ConflictResolverTest {
 		}
 	}
 
-	// ── 5. Preference-aware ranking (Goal 9 SC4 wiring, Issue #592) ─────────────
+	// ── 5. Base ranking only (the Goal 9 SC4 preference learning was removed, Issue #1454) ──
 
 	@Nested
-	@DisplayName("Preference-aware ranking via StrategyPreferenceStore")
-	inner class PreferenceAwareRanking {
+	@DisplayName("Base ranking: the order does not depend on earlier conflicts")
+	inner class BaseRankingOnly {
 		/**
 		 * With no reroute available the resolver produces HoldTrain + SpeedAdjust.
 		 * Base scores (1 affected train each; AFFECTED_TRAIN_WEIGHT = 10 000):
 		 *   HoldTrain   → 30 s delay → 10 000 + 30   = 10 030
 		 *   SpeedAdjust → 0 s delay  → 10 000 + 0    = 10 000
-		 * So SpeedAdjust ranks first by default.
-		 *
-		 * After recording HOLD_TRAIN three times for the contested block, the
-		 * preference-aware overload subtracts a 3 × 100 = 300 boost from HoldTrain's
-		 * score (10 030 − 300 = 9 730), promoting it above SpeedAdjust (10 000).
-		 *
-		 * This proves [DefaultConflictResolver] routes through the preference-weighted
-		 * [ConflictResolutionRanker.rank] overload when a [StrategyPreferenceStore] is
-		 * wired — the Goal 9 SC4 learning loop on the resolver side.
+		 * So SpeedAdjust ranks first, and it stays first however often the same conflict is
+		 * resolved: until Issue #1454 a wired `StrategyPreferenceStore` promoted HoldTrain after
+		 * three recorded choices; the resolver now has no choice history to learn from.
 		 */
 		@Test
-		@DisplayName("wired StrategyPreferenceStore reorders candidates after learning")
-		fun wiredStrategyPreferenceStore_reordersCandidatesAfterLearning() {
+		@DisplayName("repeated generation for the same conflict keeps the same order")
+		fun repeatedGeneration_keepsTheSameOrder() {
 			every { contestedBlock.name } returns "Block-7"
-			val strategyStore = StrategyPreferenceStore()
-			val resolver =
-				DefaultConflictResolver(
-					routeFinder = routeFinder,
-					inOuts = emptyList(),
-					networkState = networkState,
-					preferenceStore = strategyStore
-				)
+			val resolver = DefaultConflictResolver(routeFinder, emptyList(), networkState)
 
-			// Baseline: SpeedAdjust (10 000) outranks HoldTrain (10 030).
-			val baseline = resolver.generateResolutions(conflict)
-			assertThat(baseline.first()).isInstanceOf<ConflictResolution.SpeedAdjust>()
+			val first = resolver.generateResolutions(conflict)
+			assertThat(first.first()).isInstanceOf<ConflictResolution.SpeedAdjust>()
 
-			// Learn: operator chose HOLD_TRAIN three times for "Block-7".
 			repeat(3) {
-				strategyStore.recordChoice("Block-7", ConflictResolution.Strategy.HOLD_TRAIN)
+				assertThat(resolver.generateResolutions(conflict).map { it.strategy })
+					.isEqualTo(first.map { it.strategy })
 			}
-
-			// After learning: HoldTrain (9 730) outranks SpeedAdjust (10 000).
-			val afterLearning = resolver.generateResolutions(conflict)
-			assertThat(afterLearning.first()).isInstanceOf<ConflictResolution.HoldTrain>()
 		}
 
 		@Test
-		@DisplayName("resolver without a preference store uses the base (non-preference) ranking")
-		fun resolverWithoutPreferenceStore_usesBaseRanking() {
+		@DisplayName("the resolver orders candidates exactly as the base ranker does")
+		fun resolver_usesBaseRanking() {
 			val resolver = DefaultConflictResolver(routeFinder, emptyList(), networkState)
 
-			// No store wired — baseline ranking must be identical to the base ranker.
+			// The resolver ranking must be identical to the base ranker.
 			val expected =
 				ConflictResolutionRanker
 					.rank(

@@ -32,9 +32,6 @@ import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
@@ -251,27 +248,14 @@ val navigationModule: Module =
 			// MUST be built via forEnvironment(context) so routeFinder/inOuts/networkState
 			// come from the same SimulationEnvironment that emits ConflictDetectedEvents —
 			// otherwise the contested-block filter silently breaks (see DefaultConflictResolver
-			// "Context coupling" KDoc). The scoped StrategyPreferenceStore is injected so the
-			// resolver uses the preference-aware ranker overload (Goal 9 SC4 learning loop).
+			// "Context coupling" KDoc). It ranks with the base ranker only: the in-run
+			// preference learning of Goal 9 SC4 was removed by Goal 9B SP2.2 (Issue #1454).
 			scoped<ConflictResolver> {
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException(NO_SIMULATION_CONTEXT_SOURCE)
-				DefaultConflictResolver.forEnvironment(
-					context,
-					preferenceStore = get<StrategyPreferenceStore>()
-				)
+				DefaultConflictResolver.forEnvironment(context)
 			}
-
-			// StrategyPreferenceStore: scoped to simulation context (Issue #592 Goal 9 SC4)
-			// One learning counter per simulation run; scoped (not single) so concurrent runs
-			// don't mix. Thread-safe: read by the resolver on the simulation thread and written
-			// by the operator-selection UI on the EDT.
-			scoped<StrategyPreferenceStore> { StrategyPreferenceStore() }
-
-			// DispatcherPreferenceStore: scoped to simulation context (Issue #568 Goal 9 SP5)
-			// One history per simulation run; scoped (not single) so concurrent runs don't mix.
-			scoped<DispatcherPreferenceStore> { DefaultDispatcherPreferenceStore() }
 
 			// MetricsCollectionService: scoped to simulation context (Issue #672 Goal 6 SP1)
 			// Subscribes to block events in its init{} block to derive all KPIs.

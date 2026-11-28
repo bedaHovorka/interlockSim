@@ -47,51 +47,36 @@ import java.util.concurrent.TimeUnit
 /**
  * End-to-end integration and false-positive validation suite for Goal 9 (#593).
  *
- * Wires the spatial/temporal detectors, resolution generator, ranking engine, and
- * [StrategyPreferenceStore] together and validates the complete Goal 9 flow against
- * the parent-issue verification plan (#531).
- *
- * ## Naming note
- *
- * Two stores exist in the `sim.conflict` package with similar names:
- * - **[DispatcherPreferenceStore]** (Issue #568) — the choice ledger: records every
- *   `(event, resolution, source)` triple applied during a run. Only the operator-selection
- *   UI writes to it; nothing records automatically (Issue #1453).
- * - **[StrategyPreferenceStore]** (Issue #592) — the learning counter: accumulates
- *   per-`(conflictTypeKey, strategy)` selection counts and feeds
- *   [ConflictResolutionRanker.rank]'s preference-weighted overload to promote
- *   frequently chosen strategies in future rankings.
- *
- * The preference-learning acceptance criterion (AC4) exercises [StrategyPreferenceStore],
- * not [DispatcherPreferenceStore]; test method names reflect the correct type.
+ * Wires the spatial/temporal detectors, resolution generator and ranking engine together
+ * and validates the Goal 9 flow against the parent-issue verification plan (#531).
  *
  * ## Acceptance criteria verified
  *
  * - AC1: Two trains reserving the same block trigger a [ConflictDetectedEvent] before
  *   any collision; the scoped [ConflictResolver] turns the event into a non-empty, ranked
- *   candidate list, and nothing records a choice automatically in the scoped
- *   [DispatcherPreferenceStore].
+ *   candidate list ordered exactly as the base [ConflictResolutionRanker.rank] orders it.
  * - AC2: Converging-path projections trigger a [TemporalConflictEvent] within the
  *   30-second lookahead window configured on [TemporalConflictDetector].
  * - AC3: [DefaultConflictResolver] generates both [ConflictResolution.HoldTrain] and
  *   [ConflictResolution.Reroute] candidates, ranked correctly by
  *   [ConflictResolutionRanker].
- * - AC4: Selecting [ConflictResolution.Strategy.REROUTE] 3 times via
- *   [StrategyPreferenceStore] causes it to rank above [ConflictResolution.Strategy.HOLD_TRAIN]
- *   in subsequent similar conflicts.
+ * - AC4 (converted by Issue #1454): the ranking has no choice history. It used to pin that
+ *   selecting [ConflictResolution.Strategy.REROUTE] 3 times via the `StrategyPreferenceStore`
+ *   ranks it above [ConflictResolution.Strategy.HOLD_TRAIN]; Goal 9B SP2.2 removed that
+ *   in-memory learning (owner rulings R1 and R14, #1434; learning from run records is Goal 9C,
+ *   #1490), so AC4 now pins that the base order is the same on every ranking.
  * - AC5: Trains on separate non-conflicting paths produce no [ConflictDetectedEvent].
  *
  * ## Scope note
  *
- * AC4 exercises [StrategyPreferenceStore] + [ConflictResolutionRanker] in isolation
- * (it does not flow through a live `run()`).
+ * AC4 exercises [ConflictResolutionRanker] in isolation (it does not flow through a live `run()`).
  *
  * Until Issue #1453 (Goal 9B SP2.1) AC1 consumed the event through the headless
  * auto-resolution picker, which took the top candidate and recorded it with source `AUTO`.
  * The picker had no production caller and was deleted under owner ruling R1 (#1434:
  * conflict resolution moves to the dispatcher thread); AC1 keeps the detection, generation
- * and ranking steps. The store's `AUTO` record path stays covered by
- * `DispatcherPreferenceStoreTest` until the store itself goes (#1454).
+ * and ranking steps. Issue #1454 then removed the `sim.conflict` preference stores, so AC1 no
+ * longer checks the empty choice ledger; it pins the base ranking instead.
  *
  * @since Issue #593 (Goal 9 SP7)
  */
@@ -144,8 +129,8 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		/**
 		 * Two trains reserving the same block emit a [ConflictDetectedEvent] **before any
 		 * collision** (mid-run), and the production-scoped [ConflictResolver] generates a
-		 * non-empty candidate list for it, ordered by [ConflictResolutionRanker]. Nothing
-		 * records a choice in the scoped [DispatcherPreferenceStore] during the run.
+		 * non-empty candidate list for it, ordered exactly as the base [ConflictResolutionRanker.rank]
+		 * orders it (no preference re-weighting, Issue #1454).
 		 *
 		 * Verification plan (Issue #531):
 		 * > "Two trains reserve the same block; verify [ConflictDetectedEvent] fired before
@@ -164,7 +149,6 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 
 			val conflictEvents = mutableListOf<ConflictDetectedEvent>()
 			val resolver = ctx.scope.get<ConflictResolver>()
-			val preferenceStore = ctx.scope.get<DispatcherPreferenceStore>()
 			val generatedCandidates = mutableListOf<List<ConflictResolution>>()
 
 			// Detection → generation → ranking via the production-scoped beans.
@@ -209,9 +193,8 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 			ctx.run()
 
 			// Post-run: exactly one conflict event, and the resolver generated a non-empty
-			// candidate list for it, ordered by ConflictResolutionRanker (score ascending —
-			// the store is empty here, so plain-score ordering coincides with the
-			// preference-adjusted ranking the scoped resolver actually performs).
+			// candidate list for it, ordered by ConflictResolutionRanker (score ascending;
+			// the base ranker is the only ranking since Issue #1454).
 			assertThat(conflictEvents).hasSize(1)
 			assertThat(generatedCandidates).hasSize(1)
 			val ranked = generatedCandidates[0]
@@ -221,9 +204,11 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 					.isLessThanOrEqualTo(ConflictResolutionRanker.score(ranked[i + 1]) + 0.0001)
 			}
 
-			// No automatic writer exists: the scoped store holds no choice after the run.
-			assertThat(preferenceStore).isInstanceOf(DefaultDispatcherPreferenceStore::class)
-			assertThat(preferenceStore.getChoices()).isEmpty()
+			// The scoped resolver ranks with the base ranker only (Issue #1454): ranking the
+			// resolver's candidates again must reproduce their natural (ascending-score)
+			// order, not any preference order.
+			assertThat(ConflictResolutionRanker.rank(ranked))
+				.isEqualTo(ranked.sortedBy { ConflictResolutionRanker.score(it) })
 		}
 	}
 
@@ -389,42 +374,28 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// AC4: Selecting REROUTE 3 times via StrategyPreferenceStore causes it
-	//      to rank above HOLD_TRAIN in subsequent similar conflicts.
+	// AC4 (converted by Issue #1454): the ranking has no choice history; the
+	//      base order is the only order.
 	// ─────────────────────────────────────────────────────────────────────────
 
 	@Nested
-	@DisplayName("AC4 — StrategyPreferenceStore: selecting REROUTE 3× promotes it above HOLD_TRAIN")
-	inner class Ac4StrategyPreferenceStoreLearning {
+	@DisplayName("AC4 — the ranking has no choice history: the base order holds on every ranking")
+	inner class Ac4RankingHasNoChoiceHistory {
 		/**
-		 * Demonstrates the preference-learning acceptance criterion:
+		 * Until Issue #1454 this case recorded [ConflictResolution.Strategy.REROUTE] three times
+		 * in the `StrategyPreferenceStore` and pinned that the preference-weighted overload of
+		 * [ConflictResolutionRanker.rank] then ranked the reroute first. Goal 9B SP2.2 removed
+		 * the store and the overload: the base order (hold 30 s → score 10 030; reroute 400 m →
+		 * score 10 040) is the only order, whatever the input order.
 		 *
-		 * 1. Build a pair of candidates where [ConflictResolution.HoldTrain] initially ranks
-		 *    above [ConflictResolution.Reroute] (hold delay = 30 s → score 10 030;
-		 *    reroute length = 400 m → score 10 040 — hold wins by 10 points).
-		 * 2. Record [ConflictResolution.Strategy.REROUTE] three times via
-		 *    [StrategyPreferenceStore.recordChoice] for a fixed conflict-type key.
-		 * 3. Re-rank with the preference-weighted overload:
-		 *    [ConflictResolutionRanker.rank]`(candidates, store, key)`.
-		 * 4. Verify [ConflictResolution.Reroute] now appears first (the 3 × 100-point
-		 *    boost lowers its adjusted score to 9 740, below hold's unchanged 10 030).
-		 *
-		 * Uses [StrategyPreferenceStore] (Issue #592), **not** [DispatcherPreferenceStore]
-		 * (Issue #568) — the two classes are distinct and were renamed to avoid a collision.
-		 *
-		 * Verification plan (Issue #531):
-		 * > "Dispatcher selects reroute 3 times; verify reroute moves up in ranking."
-		 *
-		 * @since Issue #593 (Goal 9 SP7)
+		 * @since Issue #593 (Goal 9 SP7); converted by Issue #1454
 		 */
 		@Test
-		@DisplayName("selecting REROUTE 3× via StrategyPreferenceStore causes it to rank above HOLD_TRAIN")
-		fun selectingReroute3Times_viaStrategyPreferenceStore_promotesRerouteAboveHoldTrain() {
+		@DisplayName("both input orders keep HOLD_TRAIN above REROUTE")
+		fun bothInputOrders_keepsHoldTrainAboveReroute() {
 			// Score layout (1 affected train each; AFFECTED_TRAIN_WEIGHT = 10 000):
 			//   HoldTrain   → delaySeconds=30   → score = 10 000 + 30×1.0  = 10 030
 			//   Reroute     → routeLength=400 m → score = 10 000 + 400×0.1 = 10 040
-			// Initial ranking (without preferences): HoldTrain (10 030) < Reroute (10 040)
-			// → HoldTrain is first.
 			val holdCandidate =
 				ConflictResolution.HoldTrain(
 					trainId = "T-Pref",
@@ -439,30 +410,11 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 					affectedTrains = listOf("T-Pref"),
 					estimatedImpact = ConflictResolution.EstimatedImpact(0.0, "Reroute via 400 m alternative")
 				)
-			val candidates = listOf(holdCandidate, rerouteCandidate)
 
-			// --- STEP 1: baseline ranking without preferences ---
-			val baselineRanked = ConflictResolutionRanker.rank(candidates)
-			// HoldTrain has a lower base score → must rank first.
-			assertThat(baselineRanked).containsExactly(holdCandidate, rerouteCandidate)
-
-			// --- STEP 2: record REROUTE three times via StrategyPreferenceStore ---
-			val strategyStore = StrategyPreferenceStore()
-			val conflictTypeKey = "junction-S1"
-			repeat(3) {
-				strategyStore.recordChoice(conflictTypeKey, ConflictResolution.Strategy.REROUTE)
-			}
-			assertThat(strategyStore.selectionCount(conflictTypeKey, ConflictResolution.Strategy.REROUTE))
-				.isEqualTo(3)
-
-			// --- STEP 3: preference-weighted ranking ---
-			// After 3 selections of REROUTE:
-			//   REROUTE boost = 3 × 100 = 300
-			//   Adjusted Reroute score = 10 040 - 300 = 9 740
-			//   Adjusted HoldTrain score = 10 030 - 0   = 10 030
-			// → Reroute (9 740) now ranks first.
-			val preferenceRanked = ConflictResolutionRanker.rank(candidates, strategyStore, conflictTypeKey)
-			assertThat(preferenceRanked).containsExactly(rerouteCandidate, holdCandidate)
+			assertThat(ConflictResolutionRanker.rank(listOf(holdCandidate, rerouteCandidate)))
+				.containsExactly(holdCandidate, rerouteCandidate)
+			assertThat(ConflictResolutionRanker.rank(listOf(rerouteCandidate, holdCandidate)))
+				.containsExactly(holdCandidate, rerouteCandidate)
 		}
 	}
 

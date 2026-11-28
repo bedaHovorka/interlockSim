@@ -16,7 +16,7 @@ import cz.vutbr.fit.interlockSim.objects.paths.Route
  *
  * Each subclass represents a distinct mitigation strategy.  Resolutions are generated
  * by [ConflictResolver.generateResolutions] and are purely advisory — this layer does
- * **not** apply them automatically (auto-application is tracked in Issue #568).
+ * **not** apply them; they stay advisory until Goal 9B SP9 (b) (Issue #1443).
  *
  * All subclasses carry:
  * - [strategy]        — which mitigation type was chosen

@@ -162,7 +162,7 @@ kotlin {
                 // kotlinx-io: multiplatform file I/O — used by native Resources actual to read
                 // resource files from disk (JVM uses classpath instead).
                 implementation("org.jetbrains.kotlinx:kotlinx-io-core:$kotlinxIoVersion")
-                // atomicfu: multiplatform synchronization for DefaultDispatcherPreferenceStore
+                // atomicfu: multiplatform synchronization (SynchronizedObject) in commonMain
                 implementation("org.jetbrains.kotlinx:atomicfu:$atomicfuVersion")
             }
         }

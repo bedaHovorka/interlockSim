@@ -11,8 +11,10 @@ package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.DispatcherRunSummaries
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
@@ -20,16 +22,24 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.MeasuringPlanAdapter
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.publish
 import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolution
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
+import cz.vutbr.fit.interlockSim.testutil.flushEDT
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
+import io.mockk.Runs
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import io.mockk.mockkObject
+import io.mockk.slot
 import io.mockk.unmockkObject
 import io.mockk.verify
 import io.mockk.verifyOrder
@@ -215,6 +225,43 @@ class SimulationRunWiringTest : KoinTestBase() {
 			verify(exactly = 1) { DispatcherRunSummaries.finishAndPersist(any(), any(), "staged-example") }
 		} finally {
 			unmockkObject(DispatcherRunSummaries)
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("wireConflictResolution needs only the resolver: a conflict fills the panel, Apply stays disabled")
+	fun wireConflictResolutionNeedsOnlyTheResolver() {
+		// The scope holds the resolver and nothing else: no preference store (Issue #1454).
+		val resolutions =
+			listOf(
+				ConflictResolution.HoldTrain(
+					trainId = "Train-A",
+					holdDurationSeconds = 30.0,
+					affectedTrains = listOf("Train-A"),
+					estimatedImpact = ConflictResolution.EstimatedImpact(30.0, "Hold Train-A for 30s")
+				)
+			)
+		val resolver = mockk<ConflictResolver> { every { generateResolutions(any()) } returns resolutions }
+		emptyScope.declare(resolver)
+		val listener = slot<(ConflictDetectedEvent) -> Unit>()
+		val conflictContext: SimContext =
+			mockk(relaxed = true) {
+				every { scope } returns emptyScope
+				every { onConflictDetectedEvent(capture(listener)) } just Runs
+			}
+
+		SwingUtilities.invokeAndWait { wiring.wireConflictResolution(conflictContext) }
+		val block = mockk<DynamicTrackBlock>(relaxed = true) { every { name } returns "Block-7" }
+		val conflict = ConflictDetectedEvent(block, "Train-A", "Train-B", 12.5)
+		listener.captured.invoke(conflict)
+		flushEDT()
+
+		verify(exactly = 1) { resolver.generateResolutions(conflict) }
+		SwingUtilities.invokeAndWait {
+			assertThat(conflictResolutionPanel.isVisible).isTrue()
+			assertThat(conflictResolutionPanel.listModel.getElementAt(0)).isEqualTo(resolutions.single())
+			assertThat(conflictResolutionPanel.applyButton.isEnabled).isFalse()
 		}
 	}
 }

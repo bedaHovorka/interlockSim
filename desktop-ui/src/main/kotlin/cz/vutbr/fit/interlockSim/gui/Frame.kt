@@ -694,7 +694,7 @@ class Frame internal constructor(
 		// Apply the current auto-halt setting to the newly created service (Goal 3 SP6).
 		applyAutoHaltSetting(autoHaltTrainOnViolation)
 
-		// Register conflict-detected listener to drive ConflictResolutionPanel (Goal 9 SP5, SC3 + SC4).
+		// Register conflict-detected listener to drive ConflictResolutionPanel (Goal 9 SP5).
 		runWiring.wireConflictResolution(context)
 
 		// Clear any stale warnings from a previous run.
@@ -767,8 +767,6 @@ class Frame internal constructor(
 		// Clear the warning indicator when the simulation stops (Issue #616).
 		statusBar.setWarningIndicator(false)
 		// Clear and hide the conflict resolution panel when the simulation stops (Goal 9 SP5).
-		// Drop the operator-Apply callback so it can no longer reference this run's stores.
-		runWiring.unwireConflictResolution()
 		conflictResolutionPanel.clearResolutions()
 	}
 

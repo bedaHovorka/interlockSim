@@ -146,6 +146,9 @@ Complete animated GUI visualization system for real-time railway simulation.
 
 ### Removed
 
+#### Conflict Resolution: in-run preference learning (Issue #1454, Goal 9B SP2.2)
+- Conflict Resolution: "Apply" is disabled until Goal 9B SP9; the in-run preference learning is removed (it was in memory only, so nothing saved is lost).
+
 #### Path Discovery APIs - Phase 5 Complete (Issue #292 Phase 5, Issue #297)
 - **REMOVED** `SimulationEnvironment.pathToNextSemaphore(separator, next)` - Replaced by:
   - `TrainNavigationService.findReservedPathForTrain()` for train navigation through owned blocks

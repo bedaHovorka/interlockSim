@@ -22,8 +22,6 @@ import cz.vutbr.fit.interlockSim.sim.DispatchDecisionListenerHub
 import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.SemiAutoApprovalGateway
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
-import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricGroup
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsConfig
@@ -295,30 +293,12 @@ internal class SimulationRunWiring(
 	/**
 	 * Registers the conflict-detected listener to drive [ConflictResolutionPanel] (Goal 9 SP5).
 	 * The listener is delivered on the simulation thread; UI updates are dispatched to the EDT.
-	 * Resolver + preference stores are retrieved from the context's Koin scope so every
-	 * collaborator shares the same scoped instances (Goal 9 SC3 + SC4 wiring).
+	 * The resolver comes from the context's Koin scope. The suggestions are advisory: nothing
+	 * records the operator's choice, and the panel's Apply stays disabled until Goal 9B SP9
+	 * (the in-run preference learning of Goal 9 SC3 + SC4 was removed by Issue #1454).
 	 */
 	fun wireConflictResolution(context: SimulationContext) {
 		val resolver = context.scope.get<ConflictResolver>()
-		val dispatcherStore = context.scope.get<DispatcherPreferenceStore>()
-		val strategyStore = context.scope.get<StrategyPreferenceStore>()
-
-		// Operator Apply: record the chosen resolution (SC3) and feed the choice into the
-		// preference-learning store so future rankings reflect it (SC4). Invoked on the EDT.
-		conflictResolutionPanel.onResolutionApplied = { conflict, resolution ->
-			dispatcherStore.record(
-				conflict,
-				resolution,
-				DispatcherPreferenceStore.ApplicationSource.OPERATOR
-			)
-			val conflictTypeKey = conflict.block.name ?: "unknown-block"
-			strategyStore.recordChoice(conflictTypeKey, resolution.strategy)
-			logger.debug {
-				"Operator applied ${resolution.strategy} to conflict " +
-					"(${conflict.trainId} vs ${conflict.conflictingTrainId}) " +
-					"on block ${conflict.block.name} — recorded for preference learning"
-			}
-		}
 
 		context.onConflictDetectedEvent { conflict ->
 			val resolutions = resolver.generateResolutions(conflict)
@@ -328,10 +308,5 @@ internal class SimulationRunWiring(
 					"on block ${conflict.block.name} — ${resolutions.size} resolution candidates shown"
 			}
 		}
-	}
-
-	/** Drops the operator-Apply callback so it can no longer reference this run's stores. */
-	fun unwireConflictResolution() {
-		conflictResolutionPanel.onResolutionApplied = null
 	}
 }

@@ -13,18 +13,16 @@ package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
-import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolution
-import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
-import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.testutil.createMockShuntingContext
 import io.mockk.every
 import io.mockk.mockk
@@ -128,54 +126,52 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 		context.close()
 	}
 
-	// ── Goal 9 SC3 + SC4: operator-Apply wiring ─────────────────────────────
+	// ── Goal 9 SP5 suggestions, without the SC3 + SC4 recording (Issue #1454) ──
 
+	/**
+	 * Until Issue #1454 this case pinned that startSimulation wired the operator-Apply callback to
+	 * the scoped preference stores (Goal 9 SC3 + SC4). The stores and the callback are gone: the
+	 * run still turns each [ConflictDetectedEvent] into suggestions on the panel through the
+	 * scoped resolver, and Apply stays disabled, so nothing is recorded.
+	 */
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("startSimulation wires onResolutionApplied to record operator choices in the scoped preference stores")
-	fun startSimulationWiresOnResolutionAppliedToScopedStores() {
-		val context = createMockShuntingContext()
+	@DisplayName("startSimulation shows conflict suggestions on the panel and records nothing (Apply disabled)")
+	fun startSimulationShowsConflictSuggestionsAndRecordsNothing() {
+		val mockContext = createMockShuntingContext()
+		var conflictListener: ((ConflictDetectedEvent) -> Unit)? = null
+		val context =
+			object : SimulationContext by mockContext {
+				override fun onConflictDetectedEvent(listener: (ConflictDetectedEvent) -> Unit) {
+					conflictListener = listener
+					mockContext.onConflictDetectedEvent(listener)
+				}
+			}
 
 		runOnEDT {
 			frame.setContext(context)
 			frame.startSimulation()
 		}
 
-		// startSimulation must wire the operator-Apply callback (Goal 9 SC3 + SC4).
-		val applyCallback = frame.conflictResolutionPanel.onResolutionApplied
-		assertThat(applyCallback).isNotNull()
-
-		// Build a conflict + resolution and invoke the callback exactly as the panel
-		// does when the dispatcher selects a candidate and clicks Apply.
+		// startSimulation registers the conflict listener; deliver one conflict as the run would.
+		val listener = conflictListener
+		assertThat(listener).isNotNull()
 		val block =
 			mockk<DynamicTrackBlock>(relaxed = true) {
 				every { name } returns "Block-7"
 			}
-		val conflict = ConflictDetectedEvent(block, "Train-A", "Train-B", 12.5)
-		val resolution =
-			ConflictResolution.HoldTrain(
-				trainId = "Train-A",
-				holdDurationSeconds = 30.0,
-				affectedTrains = listOf("Train-A"),
-				estimatedImpact = ConflictResolution.EstimatedImpact(30.0, "Hold Train-A")
-			)
-		runOnEDT { applyCallback!!.invoke(conflict, resolution) }
+		listener!!.invoke(ConflictDetectedEvent(block, "Train-A", "Train-B", 12.5))
 
-		// SC3: the operator's choice is recorded in the scoped DispatcherPreferenceStore.
-		val dispatcherStore = context.scope.get<DispatcherPreferenceStore>()
-		val choices = dispatcherStore.getChoices()
-		assertThat(choices).hasSize(1)
-		val choice = choices.single()
-		assertThat(choice.source).isEqualTo(DispatcherPreferenceStore.ApplicationSource.OPERATOR)
-		assertThat(choice.applied).isEqualTo(resolution)
-
-		// SC4: the choice feeds the scoped StrategyPreferenceStore learning counter.
-		val strategyStore = context.scope.get<StrategyPreferenceStore>()
-		assertThat(strategyStore.selectionCount("Block-7", ConflictResolution.Strategy.HOLD_TRAIN))
-			.isEqualTo(1)
+		runOnEDT {
+			val panel = frame.conflictResolutionPanel
+			assertThat(panel.isVisible).isTrue()
+			assertThat(panel.listModel.hasNoResolutions).isFalse()
+			assertThat(panel.applyButton.isEnabled).isFalse()
+			assertThat(panel.applyButton.toolTipText).isEqualTo(ConflictResolutionPanel.APPLY_DISABLED_TOOLTIP)
+		}
 
 		runOnEDT { frame.stopSimulation() }
-		context.close()
+		mockContext.close()
 	}
 
 	// ── stopSimulation ────────────────────────────────────────────────────────

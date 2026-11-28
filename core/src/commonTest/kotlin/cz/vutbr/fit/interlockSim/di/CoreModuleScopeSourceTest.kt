@@ -13,17 +13,21 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
+import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import org.koin.core.component.KoinComponent
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -126,6 +130,24 @@ class CoreModuleScopeSourceTest : KoinComponent {
 
 	@Test
 	fun conflictResolverReportsMissingSource() = assertMissingSourceIsReported<ConflictResolver>()
+
+	/**
+	 * The success path of the shipped `scoped<ConflictResolver>` binding: a real simulation
+	 * context opens its scope with itself as the source, so the binding builds a
+	 * [DefaultConflictResolver] through `forEnvironment(context)`.
+	 */
+	@Test
+	fun conflictResolverIsBuiltFromTheContextSource() {
+		val context = CommonTestFixtures.createEmptySimulationContext(DefaultSimulationProcessFactory())
+		try {
+			val resolver = context.scope.get<ConflictResolver>()
+
+			assertThat(resolver).isInstanceOf(DefaultConflictResolver::class)
+			assertThat(context.scope.get<ConflictResolver>()).isSameInstanceAs(resolver)
+		} finally {
+			context.close()
+		}
+	}
 
 	@Test
 	fun metricsCollectionServiceReportsMissingSource() = assertMissingSourceIsReported<MetricsCollectionService>()
