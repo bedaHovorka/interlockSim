@@ -243,7 +243,8 @@ class OrphanReservationSweeper(
 	/**
 	 * Acts of the phantom branch (row C6 of the #1475 counted automatics, author `ORPHAN_SWEEP`, Issue
 	 * #1476): counted once per episode, on its first release call that changed railway state (a freed
-	 * block or a signal set to STOP, `RouteRelease.changedState`; a refused release changes nothing). Unlike [phantomReleaseCount], a
+	 * block or a signal set to STOP, `RouteRelease.changedState`; a refused release changes
+	 * nothing). Unlike [phantomReleaseCount], a
 	 * deferred release retried on the next sweep is not counted again. An episode ends when its release
 	 * completes or its owner holds nothing any more.
 	 */

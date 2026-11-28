@@ -16,6 +16,7 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -302,7 +303,8 @@ class CleanRunRuleTest {
 	fun `the keys a schema-17 file must carry stay pinned to schema 17`() {
 		assertThat(CleanRunRule.requiredCountedAutomaticKeys(SCHEMA_OF_1476))
 			.isEqualTo(CountedAutomatic.entries.map { it.name }.toSet())
-		assertThat(CleanRunRule.requiredAuthorKeys(SCHEMA_OF_1476)).isEqualTo(ActionAuthor.entries.map { it.name }.toSet())
+		assertThat(CleanRunRule.requiredAuthorKeys(SCHEMA_OF_1476))
+			.isEqualTo(ActionAuthor.entries.map { it.name }.toSet())
 		assertThat(CleanRunRule.requiredCountedAutomaticKeys(SCHEMA_BEFORE_1476)).isEmpty()
 		assertThat(CleanRunRule.requiredAuthorKeys(SCHEMA_BEFORE_1476)).isEmpty()
 	}
@@ -316,7 +318,10 @@ class CleanRunRuleTest {
 	@ParameterizedTest(name = "{0} is required from a pinned schema")
 	@EnumSource(ActionAuthor::class)
 	fun `every ActionAuthor has a since-schema`(author: ActionAuthor) {
-		assertThat(CleanRunRule.requiredAuthorKeys(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)).contains(author.name)
+		// The table is written by hand: a new ActionAuthor value without its entry fails here.
+		assertThat(CleanRunRule.AUTHOR_SINCE_SCHEMA[author], name = "since-schema of $author").isNotNull()
+		assertThat(CleanRunRule.AUTHOR_SINCE_SCHEMA.getValue(author), name = "since-schema of $author")
+			.isLessThanOrEqualTo(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION)
 	}
 
 	@Test

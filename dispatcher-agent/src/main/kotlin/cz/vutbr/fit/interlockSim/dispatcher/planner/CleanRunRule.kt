@@ -110,13 +110,28 @@ object CleanRunRule {
 		NO_COMMAND_SOURCE
 	}
 
+	/** The #1476 schema, the floor of [AUTHOR_SINCE_SCHEMA]. */
+	private const val SCHEMA_OF_1476: Int = DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_CLEAN_RUN_RULE
+
 	/**
-	 * The run JSON schema from which each author's `actionsByAuthor` key is required (Issue #1476). The
-	 * floor is the #1476 schema, since an older file is refused whatever it carries; an author added later
-	 * enters with the schema it bumps to. Every [ActionAuthor] has an entry (`CleanRunRuleTest`).
+	 * The run JSON schema from which each author's `actionsByAuthor` key is required (Issue #1476), written
+	 * out by hand. The floor is the #1476 schema, since an older file is refused whatever it carries. A leaf
+	 * that adds an [ActionAuthor] value must add its entry here with the schema it bumps to, so a file of an
+	 * older schema is not required to carry the new key; `CleanRunRuleTest` fails while an author has no entry.
 	 */
 	internal val AUTHOR_SINCE_SCHEMA: Map<ActionAuthor, Int> =
-		ActionAuthor.entries.associateWith { DispatcherRunSnapshot.SCHEMA_VERSION_INTRODUCING_CLEAN_RUN_RULE }
+		mapOf(
+			ActionAuthor.LLM to SCHEMA_OF_1476,
+			ActionAuthor.OPERATOR to SCHEMA_OF_1476,
+			ActionAuthor.RULE_BASED to SCHEMA_OF_1476,
+			ActionAuthor.EXPIRY to SCHEMA_OF_1476,
+			ActionAuthor.ORPHAN_SWEEP to SCHEMA_OF_1476,
+			ActionAuthor.EMERGENCY_SYSTEM to SCHEMA_OF_1476,
+			ActionAuthor.WATCHDOG to SCHEMA_OF_1476,
+			ActionAuthor.SAFETY_NET to SCHEMA_OF_1476,
+			ActionAuthor.RULE_FALLBACK to SCHEMA_OF_1476,
+			ActionAuthor.TIMEOUT_NOOP to SCHEMA_OF_1476
+		)
 
 	/** The [CountedAutomatic] keys a file of [schemaVersion] must carry in `countedAutomatics`. */
 	internal fun requiredCountedAutomaticKeys(schemaVersion: Int): Set<String> =
