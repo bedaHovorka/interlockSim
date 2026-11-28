@@ -82,6 +82,9 @@ data class SimulationSnapshot(
 	// Declared in the class body, so they stay out of the data class's equals/hashCode/toString/copy.
 	// Each map is built once per instance, on the first lookup, which is O(1) from then on.
 	// On a duplicate key the first reading wins, exactly like the firstOrNull scans these replace.
+	// EXCEPTION — the switch map (Issue #1468 review): the switch facet follows the actuator's
+	// documented last-wins duplicate-name contract (DefaultNetworkActuatorPort), so a duplicate
+	// switch name resolves to the scan-last reading, not the first one.
 
 	private val semaphoreByName: Map<String, SemaphoreReading> by lazy {
 		semaphores.associateFirstBy { it.name }
@@ -104,7 +107,9 @@ data class SimulationSnapshot(
 	}
 
 	private val switchByName: Map<String, SwitchReading> by lazy {
-		switches.associateFirstBy { it.name }
+		// The switch-facet exception: last wins, like the actuator's documented duplicate-name
+		// contract (Issue #1473) — NOT first-wins like the other facets of this class above.
+		switches.associateBy { it.name }
 	}
 
 	/**
@@ -139,7 +144,8 @@ data class SimulationSnapshot(
 
 	/**
 	 * Returns the [SwitchReading] whose [SwitchReading.name] matches [switchName], or `null` if this
-	 * snapshot contains no such switch.
+	 * snapshot contains no such switch. On a duplicate switch name the scan-last reading wins — the
+	 * actuator's documented contract for the switch facet (the other lookup facets are first-wins).
 	 */
 	fun switchReading(switchName: String): SwitchReading? = switchByName[switchName]
 

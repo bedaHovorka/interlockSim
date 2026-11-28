@@ -139,6 +139,12 @@ class SwitchReadingLiveEqualityTest : KoinTestBase() {
 	private companion object {
 		const val END_TIME: Long = 600L
 		const val SEED: Long = 1468L
+
+		/**
+		 * The same fact the desktop-ui fixture pin `CERVENY_UJEZD_SWITCHES` holds
+		 * (`cz.vutbr.fit.interlockSim.testutil`, :desktop-ui's test/CervenyUjezdStructure.kt); a
+		 * fixture edit that moves one pin moves both.
+		 */
 		const val CU_SWITCHES = 12
 		const val PRAHA_SWITCHES = 50
 	}

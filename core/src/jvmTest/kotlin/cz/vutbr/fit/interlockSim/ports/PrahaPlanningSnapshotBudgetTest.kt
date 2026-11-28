@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.core.component.get
 import java.lang.management.ManagementFactory
+import java.util.Locale
 
 /**
  * The #1467 spec §6 measurement of the planning snapshot on Praha (Issue #1468, the first SP4 leaf
@@ -100,8 +101,8 @@ class PrahaPlanningSnapshotBudgetTest : KoinTestBase() {
 				"allocated bytes per capture median ${bytes.percentile(MEDIAN)} p99 ${bytes.percentile(P99)} " +
 				"max ${bytes.max()}; capture time median ${nanos.percentile(MEDIAN) / NANOS_PER_MICRO} us " +
 				"p99 ${nanos.percentile(P99) / NANOS_PER_MICRO} us; captures total ${captureNanos / NANOS_PER_MILLI} ms " +
-				"of a ${runNanos / NANOS_PER_MILLI} ms run (${"%.3f".format(share * PERCENT)} %, " +
-				"median-based ${"%.3f".format(medianShare * PERCENT)} %)"
+				"of a ${runNanos / NANOS_PER_MILLI} ms run (${"%.3f".format(Locale.ROOT, share * PERCENT)} %, " +
+				"median-based ${"%.3f".format(Locale.ROOT, medianShare * PERCENT)} %)"
 		)
 
 		assertThat(nanos.size, name = "captures").isGreaterThan(0)

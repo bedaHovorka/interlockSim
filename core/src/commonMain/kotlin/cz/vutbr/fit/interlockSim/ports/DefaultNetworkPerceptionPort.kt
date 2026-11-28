@@ -108,7 +108,10 @@ class DefaultNetworkPerceptionPort(
 	/**
 	 * Every [DynamicRailSwitch] cell with its stable name, in grid scan order ([switchesByStableName]):
 	 * the XML name, or for a blank name (a context built in code) the generated `SW_<x>_<y>` of its grid
-	 * position, so a [SwitchReading.name] is never blank. Cells are stable for the lifetime of a
+	 * position, so a [SwitchReading.name] is never blank. Construction fails loudly when a
+	 * fallback-generated name collides with an already-indexed switch name — [switchesByStableName]
+	 * throws the same rejecting [IllegalArgumentException] as the actuator's scan, so a duplicate
+	 * name can never serve two switches here. Cells are stable for the lifetime of a
 	 * context, like [semaphoreCache].
 	 */
 	private val switchCache: List<Pair<String, DynamicRailSwitch>> = env.getRailWayNetGrid().switchesByStableName()

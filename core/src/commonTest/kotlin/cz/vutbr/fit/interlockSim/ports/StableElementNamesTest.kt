@@ -15,6 +15,7 @@ import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import assertk.assertions.message
@@ -220,6 +221,30 @@ class StableElementNamesTest : CommonKoinTestBase() {
 		assertThat(port.setSwitchPosition(TWIN_NAME, target)).isTrue()
 		assertThat(lastScanned.conf, name = "the last-scanned twin answers the name").isEqualTo(target)
 		assertThat(firstScanned.conf, name = "the first-scanned twin keeps its conf").isEqualTo(firstSaved)
+	}
+
+	@Test
+	fun theSnapshotSwitchReadingKeepsTheLastWinsOrderOfEqualSwitchNames() {
+		// Copilot thread PRRT_kwDOQyJ9Cc68uzeu (#1468 review): the snapshot's switch lookup follows
+		// the actuator's documented last-wins contract for plain duplicate explicit names, so a
+		// planner reading by name gets the state of the same switch setSwitchPosition moves -- the
+		// twin the scan met last, not the first one.
+		val ctx =
+			laneJunction(EXPLICIT_AT to TWIN_NAME, COLLISION_AT to TWIN_NAME)
+				.use { DefaultSimulationContext.fromEditingContext(it, get()) }
+				.tracked()
+		ctx.getInOuts()
+		val firstScanned = ctx.getRailWayNetGrid()[EXPLICIT_AT] as DynamicRailSwitch
+		val lastScanned = ctx.getRailWayNetGrid()[COLLISION_AT] as DynamicRailSwitch
+		if (firstScanned.conf == lastScanned.conf) firstScanned.changeConf()
+		lastScanned.lock()
+		val port = DefaultNetworkPerceptionPort(ctx, activeTrains = { emptyList() })
+
+		val reading = port.captureSnapshot().switchReading(TWIN_NAME)
+
+		assertThat(firstScanned.conf, name = "the twins disagree on conf").isNotEqualTo(lastScanned.conf)
+		assertThat(reading?.conf, name = "the scan-last twin's conf answers the name").isEqualTo(lastScanned.conf)
+		assertThat(reading?.locked, name = "the scan-last twin's lock answers the name").isEqualTo(true)
 	}
 
 	@Test
