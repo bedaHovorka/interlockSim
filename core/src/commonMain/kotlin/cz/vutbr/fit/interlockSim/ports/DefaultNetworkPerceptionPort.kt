@@ -309,8 +309,22 @@ class DefaultNetworkPerceptionPort(
 			velocity = getVelocity(),
 			acceleration = getAcceleration(),
 			totalDistance = totalDistance,
-			frontSectionName = frontSectionName(this)
+			frontSectionName = frontSectionName(this),
+			length = trainLength,
+			state = motionState(this)
 		)
+
+	/**
+	 * Issue #1472: the [TrainMotionState] of [train], in the order [TrainMotionState] documents.
+	 * Read on the simulation thread with the rest of the reading, so it belongs to the same instant.
+	 */
+	private fun motionState(train: Train): TrainMotionState =
+		when {
+			train.frontSection == null -> TrainMotionState.NOT_ENTERED
+			train.isStationDwelling -> TrainMotionState.STATION_DWELL
+			train.getVelocity() == 0.0 -> TrainMotionState.STANDING
+			else -> TrainMotionState.MOVING
+		}
 
 	// ── NetworkPerceptionPort — train timetables ──────────────────────────
 

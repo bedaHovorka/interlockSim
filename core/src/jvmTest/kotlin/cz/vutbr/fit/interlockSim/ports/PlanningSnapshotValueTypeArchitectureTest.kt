@@ -163,10 +163,17 @@ class PlanningSnapshotValueTypeArchitectureTest {
 
 		/**
 		 * The named enums of spec §2, plus [SeparatorKind]: the existing `sim` observation enum
-		 * of [CandidateTarget] (Issue #1152), already a plain value.
+		 * of [CandidateTarget] (Issue #1152), already a plain value; and [TrainMotionState], the
+		 * state of a train-sample reading (Issue #1472).
 		 */
 		val ALLOWED_ENUMS: Set<KClass<*>> =
-			setOf(Signal::class, TrackFacility.State::class, RailSwitch.Conf::class, SeparatorKind::class)
+			setOf(
+				Signal::class,
+				TrackFacility.State::class,
+				RailSwitch.Conf::class,
+				SeparatorKind::class,
+				TrainMotionState::class
+			)
 
 		val COLLECTION_CLASSES: Set<KClass<*>> = setOf(List::class, Set::class, Map::class)
 

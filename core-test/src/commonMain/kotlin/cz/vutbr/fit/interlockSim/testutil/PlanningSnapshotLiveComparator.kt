@@ -19,6 +19,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.ports.ContentionReading
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.ports.SwitchReading
+import cz.vutbr.fit.interlockSim.ports.TrainMotionState
+import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
+import cz.vutbr.fit.interlockSim.sim.ApprovesTrains
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.ProvidesDispatchLoopObservation
 import cz.vutbr.fit.interlockSim.util.Array2DMap
@@ -44,14 +47,19 @@ import cz.vutbr.fit.interlockSim.xml.GeneratedElementName
  * [PathReservationRegistry.getSwitchOwner]; the open contentions (#1470): entry by entry and in order
  * against [ContentionQuery.openContentions] — waiting train, section id (the grid id of the live
  * block, computed from the grid locations of its ends, an oracle independent of the port's graph
- * scan), owning train and first-observed time. Later SP4 leaves (#1469, #1472) add their facets here.
+ * scan), owning train and first-observed time; the train sample (#1472): the train list by id and
+ * in order against [ApprovesTrains.getApprovedTrains], then every [TrainPositionReading] field against
+ * [TrainSampleOracle.liveSample], doubles exactly. Later SP4 leaves (#1469) add their facets here.
  *
  * @param context the simulation context whose live state is compared; its scope serves the registry
  * @param observation the publisher of the planning snapshot, normally the `ShuntingLoop`
+ * @param approvedTrains the live trains the train sample is compared with; by default [observation]
+ *   itself when it approves trains (the `ShuntingLoop` does), else the train facet is not compared
  */
 class PlanningSnapshotLiveComparator(
 	private val context: SimulationContext,
-	private val observation: ProvidesDispatchLoopObservation
+	private val observation: ProvidesDispatchLoopObservation,
+	private val approvedTrains: ApprovesTrains? = observation as? ApprovesTrains
 ) {
 	private val registry: PathReservationRegistry by lazy { context.scope.get<PathReservationRegistry>() }
 
@@ -94,6 +102,15 @@ class PlanningSnapshotLiveComparator(
 	var contentionsWaitingForAnotherTrain: Int = 0
 		private set
 
+	/** The number of train readings compared so far (all ticks). */
+	var comparedTrainReadings: Int = 0
+		private set
+
+	private val statesSeen = mutableSetOf<TrainMotionState?>()
+
+	/** Every [TrainPositionReading.state] seen in a compared train sample. */
+	val trainStatesSeen: Set<TrainMotionState?> get() = statesSeen.toSet()
+
 	/** Returns a listener that compares the tick's snapshot with live state, then calls [delegate]. */
 	fun wrap(delegate: ControlStepListener?): ControlStepListener =
 		ControlStepListener {
@@ -104,6 +121,7 @@ class PlanningSnapshotLiveComparator(
 	private fun compare(published: DispatchLoopSnapshot) {
 		compareSwitches(published.tick, published.snapshot.switches)
 		compareContentions(published.tick, published.snapshot.contentions)
+		compareTrains(published.tick, published.snapshot.trainPositions)
 		comparedTicks++
 	}
 
@@ -140,6 +158,16 @@ class PlanningSnapshotLiveComparator(
 			comparedContentionReadings++
 		}
 		contentionsWaitingForAnotherTrain += live.count { it.owner != null && it.owner != it.trainId }
+	}
+
+	private fun compareTrains(
+		tick: Long,
+		sample: List<TrainPositionReading>
+	) {
+		val live = approvedTrains ?: return
+		collected += TrainSampleOracle.compareWithLive(tick, sample, live.getApprovedTrains())
+		comparedTrainReadings += sample.size
+		statesSeen += sample.map { it.state }
 	}
 
 	private fun OpenContention.toReading(): ContentionReading =

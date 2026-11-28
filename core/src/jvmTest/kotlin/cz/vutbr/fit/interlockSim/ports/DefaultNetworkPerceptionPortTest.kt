@@ -365,10 +365,63 @@ class DefaultNetworkPerceptionPortTest {
 					velocity = 20.0,
 					acceleration = 1.5,
 					totalDistance = 300.0,
-					frontSectionName = null
+					frontSectionName = null,
+					length = 0.0,
+					state = TrainMotionState.NOT_ENTERED
 				)
 			)
 		}
+
+		@Test
+		@DisplayName("length is the train's length (Issue #1472)")
+		fun lengthIsTheTrainLength() {
+			val t = train("Train #1")
+			every { t.trainLength } returns 120.0
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			assertThat(port.trainPosition("Train #1")?.length).isEqualTo(120.0)
+		}
+
+		@Test
+		@DisplayName("state is NOT_ENTERED while the front occupies no section, even when moving (Issue #1472)")
+		fun stateNotEnteredWithoutFrontSection() {
+			val t = train("Train #1", velocity = 5.0, frontSection = null, stationDwelling = true)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			assertThat(port.trainPosition("Train #1")?.state).isEqualTo(TrainMotionState.NOT_ENTERED)
+		}
+
+		@Test
+		@DisplayName("state is STATION_DWELL during a commanded station dwell (Issue #1472)")
+		fun stateStationDwell() {
+			val t = train("Train #1", velocity = 0.0, frontSection = onBlock(), stationDwelling = true)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			assertThat(port.trainPosition("Train #1")?.state).isEqualTo(TrainMotionState.STATION_DWELL)
+		}
+
+		@Test
+		@DisplayName("state is STANDING at velocity 0.0 outside a station dwell (Issue #1472)")
+		fun stateStanding() {
+			val t = train("Train #1", velocity = 0.0, frontSection = onBlock())
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			assertThat(port.trainPosition("Train #1")?.state).isEqualTo(TrainMotionState.STANDING)
+		}
+
+		@Test
+		@DisplayName("state is MOVING at a positive velocity (Issue #1472)")
+		fun stateMoving() {
+			val t = train("Train #1", velocity = 0.5, frontSection = onBlock())
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			assertThat(port.trainPosition("Train #1")?.state).isEqualTo(TrainMotionState.MOVING)
+		}
+
+		private fun onBlock(): TrackSection =
+			mockk<TrackSection>(relaxed = true).also {
+				every { it.getTrackBlock() } returns block(name = "k1")
+			}
 
 		@Test
 		@DisplayName("returns null for a train not in the active list")

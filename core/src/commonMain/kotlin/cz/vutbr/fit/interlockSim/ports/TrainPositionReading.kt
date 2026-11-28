@@ -34,13 +34,34 @@ package cz.vutbr.fit.interlockSim.ports
  * @property frontSectionName Name of the track block currently containing the train's
  *   front (derived from block name or endpoint separator names), or `null` if not yet
  *   entered.
+ * @property length Physical train length in **metres** — the value
+ *   [cz.vutbr.fit.interlockSim.sim.MultiTrainLoop.getTrainSnapshot] reads live, published here so an
+ *   off-thread reader needs no live read (Issue #1472). `0.0` in a reading not sampled from a live
+ *   train (hand-built test readings and projections).
+ * @property state The train's [TrainMotionState] at the same instant; `null` in a reading not
+ *   sampled from a live train.
+ *
+ * ## Threading (Issue #1472)
+ *
+ * The readings in [SimulationSnapshot.trainPositions] are the train sample of the planning
+ * snapshot: [DefaultNetworkPerceptionPort.captureSnapshot] takes them on the simulation thread in the
+ * same control step as the rest of the snapshot, and `ShuntingLoop` publishes them inside its one
+ * `@Volatile` tick record, read as [DispatchLoopSnapshot] (#1467 spec rules P1, P2). An off-thread
+ * reader reads that published value only, never a live `Train`, so it cannot see one train from one
+ * step and another from the next. A train's held routes are not a field of this reading: they belong
+ * to the snapshot's route facet (#1469), filtered by [trainId]. The GUI's EDT reads
+ * (`AnimationStateCapture`) are outside this rule per #1467 spec §8: they still read live trains,
+ * and they only paint.
  *
  * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
+ * @since Issue #1472 — [length] and [state]; the threading rule above
  */
 data class TrainPositionReading(
 	val trainId: String,
 	val velocity: Double,
 	val acceleration: Double,
 	val totalDistance: Double,
-	val frontSectionName: String?
+	val frontSectionName: String?,
+	val length: Double = 0.0,
+	val state: TrainMotionState? = null
 )
