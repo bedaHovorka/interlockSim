@@ -881,7 +881,8 @@ questions. Each such case is marked.
   carried out all or nothing.
 - The **emergency channel** accepts only restricting commands and reads no snapshot. An emergency on an entered
   route still puts a signal to STOP.
-- One denial code is new: `AMBIGUOUS_TARGET`. It is added as an amendment to #1463.
+- Two denial codes are new: `AMBIGUOUS_TARGET` (an amendment to #1463) and the candidate
+  `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` (owner ruling 2026-11-28, pending #1463 / #1464).
 
 ---
 
@@ -968,7 +969,7 @@ Class letters: N = NEVER, R = REPLAN, W = WAIT.
 | `reroute(train, target)` | **Changed**: adds `via` | `reroute(train, target, via?)` | The train holds a live route it has **not entered**, and the target differs from the held one. The cancel half is the §2.4 chain cancel. The result lists every id released. | `NO_ROUTE_HELD` R, `TRAIN_ON_RESERVED_BLOCK` R (entered), `ROUTE_ALREADY_HELD_TO_SAME_TARGET` R, every `set_route` denial. Commit: `RELEASE_REFUSED` W, on the whole chain. |
 | `cancel_route(route id)` | **Changed**: adds `emergency` | `cancel_route(route, emergency?)` | The id is live. Any owner phase is accepted (#1475 O1). For an active owner, the route is not entered. With `emergency`, an entered route is accepted for the STOP half only (§2.6). | `NO_ROUTE_HELD` R (unknown or freed id), `TRAIN_ON_RESERVED_BLOCK` R (entered; with `emergency`, the release half only). Commit: `RELEASE_REFUSED` W on the whole chain, `PRECONDITION_CHANGED` R. |
 | `renew_route(route id)` | **Kept** | `renew_route(route)` | The id is live, the owner is active or queued, and the command is not on the emergency channel. The description says: "keeps the route set against the simulator's expiry. Real routes do not expire." | `NO_ROUTE_HELD` R, `TRAIN_ALREADY_EXITED` N, `UNKNOWN_TRAIN` N (phantom owner). On the emergency channel: `DROPPED_INVALID` N. |
-| `hold_train(train, until = after_train X clears P \| sim time T)` | **Changed**: the give-way form only, with arguments renamed | `hold_train(train, for_train, clear_of)` | `train` is active and not held. `for_train` ≠ `train`, and is queued or active. `clear_of` names a signal, switch or InOut. A route-table chain from the position of `for_train` (its entry InOut when queued) to its exit passes `clear_of` (owner ruling 2026-11-28). No set route of `train` conflicts (#1487 row) with a live route of `for_train`, or with a route-table route of `for_train` that passes `clear_of`. | `UNKNOWN_TRAIN` N, `TRAIN_NOT_ADMITTED` R, `UNKNOWN_ENDPOINT` N, `BLANK_ARGUMENT` N (`for_train` = `train`), **`CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` R** (*#1463 denial candidate*: no chain of `for_train` passes `clear_of`; raised at O and again at N, recorded as `PRE_CHECK` with `tick` = N, as `AMBIGUOUS_TARGET` is), **`CONFLICT` W** (`conflictAt` = the route; alternative = `cancel_route <id>`). Commit: `DROPPED_INVALID` N (no signal left ahead, or no chain of `for_train` from its live position passes `clear_of` at D). |
+| `hold_train(train, until = after_train X clears P \| sim time T)` | **Changed**: the give-way form only, with arguments renamed | `hold_train(train, for_train, clear_of)` | `train` is active and not held. `for_train` ≠ `train`, and is queued or active. `clear_of` names a signal, switch or InOut. A route-table chain from the position of `for_train` (the block of its tail, or its entry InOut when queued) to its exit passes `clear_of` (owner ruling 2026-11-28); a `for_train` whose tail has already passed `clear_of` (far side, §2.5) is refused. No set route of `train` conflicts (#1487 row) with a live route of `for_train`, or with a route-table route of `for_train` that passes `clear_of`. | `UNKNOWN_TRAIN` N, `TRAIN_NOT_ADMITTED` R, `UNKNOWN_ENDPOINT` N, `BLANK_ARGUMENT` N (`for_train` = `train`), **`CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` R** (*#1463 denial candidate*: no chain of `for_train` passes `clear_of`; raised at O and again at N, recorded as `PRE_CHECK` with `tick` = N, as `AMBIGUOUS_TARGET` is), **`CONFLICT` W** (`conflictAt` = the route; alternative = `cancel_route <id>`). Commit: `DROPPED_INVALID` N (no signal left ahead, or no chain of `for_train` from its live position passes `clear_of` at D). |
 | `release_hold(train)` | **Kept** | same | The train holds a hold, and the command is not on the emergency channel. | `NO_ROUTE_HELD` R (`detail`: "no hold to release"). On the emergency channel: `DROPPED_INVALID` N. |
 | `no_op(reason)` | **Changed**: `reason` optional, at most 8 words | `no_op(reason?)` | Always legal. It is counted as a silent cycle (`TickOutcome.LLM_NO_OP`). | — |
 
@@ -1127,16 +1128,24 @@ routing thread has no retry loop and reads no live state (#1474 §3.3). The rule
   Without the initial read, an X already standing on such a block when the hold arrives would never set the
   latch, because its occupancy event predates the hold, and the held train would wait until X exits. Sampling
   every 2 s would miss an X that crosses a 5 m block in well under 2 s (estimate).
+- **X's position and the side of P.** X's position is the block of X's tail, its rearmost occupied block, or
+  its entry InOut while X is queued. A train has cleared a point only when its tail has passed it, so the tail
+  decides the side:
+  - **Approach side:** X's tail has not passed P. This includes an X that straddles P, with its front beyond P
+    and its tail still on the approach block. The hold is legal, and if X occupies a block bounded by P at D, the
+    install-time latch rule above applies.
+  - **Far side:** X's tail has passed P, so P is behind the whole train. The refusal rule below applies.
 - **An X that will never pass P is refused (owner ruling 2026-11-28).** The hold is refused when no route-table
-  chain from X's position to its exit passes P: at pre-check (O and N) with `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` R
-  (a #1463 denial candidate, §2.3) and again at commit at D with `DROPPED_INVALID` N. Such a hold could otherwise
-  end only when X exits or by the #1485 idle-work trigger.
+  chain from X's position to its exit passes P, which includes every far-side X: at pre-check (O and N) with
+  `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` R (a #1463 denial candidate, §2.3) and again at commit at D with
+  `DROPPED_INVALID` N. The commit rule catches an X whose tail passed P between N and D. Such a hold could
+  otherwise end only when X exits or by the #1485 idle-work trigger.
 - **Release test.** X clears P when the latch is set and X now neither occupies nor holds a block bounded by P,
   or when X has exited.
 - **Where it is evaluated.** In `ShuntingLoop.iteration`, after `expireStaleReservations` and before the
   `TickObservation` is published, so the snapshot shows the released state. This is a `sim/` change, approved by
   the TSE.
-- **What the hold may not add.** No kDisco `Process`, `waitUntil` or scheduled event. With an empty hold table
+- **What the hold may not add.** No new kDisco `Process`, no new `waitUntil` and no scheduled event. With an empty hold table
   the evaluation is a no-op, so #895 stays byte-equal.
 - **Train side.** A held train whose route is still set waits level-triggered in
   `Front.holdShortOfRestrictiveSignal` or in `semaphoreAction` (`waitUntil(allowingSignal)`). The aspect change on
@@ -1268,11 +1277,15 @@ it arrives, and is refused with `STALE_SNAPSHOT` when D−N > K (requirement 1).
   - the fixture conversions (§2.5);
   - `TrainLifecyclePortHoldReleaseTest`: `AfterTrainClears` with X passing, X exiting and X never arriving; X
     already on a block bounded by P when the hold is installed (the hold releases when X leaves P, not when X
-    exits); `AtSimTime` (a hold of d = 10 s committed at a late tick, for example tick 50, releases at t_D + 10 s,
+    exits). The install-case fixtures put X on the **approach-side** block bounded by P, once wholly on it and
+    once straddling P with its tail still on it (§2.5), so this case exercises only the install-time latch
+    rule; `AtSimTime` (a hold of d = 10 s committed at a late tick, for example tick 50, releases at t_D + 10 s,
     not at once); `releaseHold`.
   - `HoldClearOfNotAheadRefusedTest`: a hold whose `for_train` has no route-table chain to its exit that passes
     `clear_of` is refused with `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` at O and at N (recorded with `tick` = N), and
-    with `DROPPED_INVALID` at commit when X passes `clear_of` between N and D.
+    with `DROPPED_INVALID` at commit when X's tail passes `clear_of` between N and D. Its fixtures put X on the
+    **far side** of `clear_of` (tail past it, §2.5), so this test exercises only the refusal rule; the
+    approach-side and straddle fixtures belong to `TrainLifecyclePortHoldReleaseTest`.
 - **#1484:**
   - `EmergencyChannelRestrictingOnlyTest`: every non-restricting command and a lone release give
     `DROPPED_INVALID`.
@@ -1291,7 +1304,7 @@ it arrives, and is refused with `STALE_SNAPSHOT` when D−N > K (requirement 1).
     - **no-route case:** a train whose route was cancelled and that is then held (fixture `AtSimTime` hold
       longer than `OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS`) waits beyond 180 simulated s with no WARN and no
       `errorStop`;
-    - after the hold ends, an unextended train WARNs 60 s and stops 180 s after the hold end;
+    - after the hold ends, a train that still gets no route WARNs 60 s and stops 180 s after the hold end;
     - an unheld train in the same fixture still stops at 180 s.
   - `HoldStopsExpiryClocksTest`.
   - `HoldTableEmptyByteEqualTest` (#895).
@@ -1321,7 +1334,7 @@ it arrives, and is refused with `STALE_SNAPSHOT` when D−N > K (requirement 1).
 ### Open points
 
 - **P1 → #1475:** the C5 "LLM first" cell, now in part 1b (§1b.2).
-- **P2 → #1463 / #1464:** the `AMBIGUOUS_TARGET` row and the `NO_ROUTE_HELD` reuse for `release_hold` with no hold (§2.3); the candidate row `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` (PRE_CHECK, REPLAN, PLAIN; owner ruling 2026-11-28, §2.3, §2.5).
+- **P2 → #1463 / #1464:** the `AMBIGUOUS_TARGET` row and the `NO_ROUTE_HELD` reuse for `release_hold` with no hold (§2.3); the candidate row `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` (PRE_CHECK, REPLAN, PLAIN; owner ruling 2026-11-28, §2.3, §2.5). Also check the pre-check use of `CONFLICT` in the `hold_train` row against the #1463 table, where `CONFLICT` is a commit code.
 - **P3 → #1476:** the new author values; the surface-version key; the operator-rejected key; the R9
   latency-breach key; the `emergencyPostedTick` key.
 - **P4 → #1469:** the per-route block sets, the per-registry id counter and the per-route approach-locked
