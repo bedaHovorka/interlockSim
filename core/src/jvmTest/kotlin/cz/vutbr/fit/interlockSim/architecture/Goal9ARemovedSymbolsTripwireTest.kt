@@ -69,9 +69,11 @@ class Goal9ARemovedSymbolsTripwireTest {
 				.flatMap { src -> src.listFiles().orEmpty().filter { it.isDirectory && isMainSourceSet(it.name) } }
 				.flatMap { sourceSet -> sourceSet.walkTopDown().filter { it.isFile && it.extension == "kt" } }
 		val buildScripts =
-			(listOf(root) + modules).flatMap { dir ->
-				dir.listFiles().orEmpty().filter { it.isFile && it.name.endsWith(".gradle.kts") }
-			}
+			root
+				.walkTopDown()
+				.onEnter { it.name !in SKIPPED_DIRECTORIES }
+				.filter { it.isFile && it.name.endsWith(".gradle.kts") }
+				.toList()
 		mainSources + buildScripts
 	}
 
