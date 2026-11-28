@@ -189,6 +189,43 @@ class RunRecordJsonWriterTest {
 	}
 
 	@Test
+	fun `the counted automatics carry the expiry acts by row and add up under the EXPIRY author - Issue 1476`() {
+		val acts = record().copy(wholeHoldingExpiryActs = 3, tailExpiryActs = 2, requestExpiryActs = 1)
+		val json = parse(RunRecordJsonWriter.snapshotJson(run(acts)))
+
+		val counted = json.getValue("countedAutomatics").jsonObject
+		assertThat(counted.keys).isEqualTo(RunRecordJsonWriter.COUNTED_AUTOMATIC_KEYS.toSet())
+		assertThat(counted.getValue("EXPIRY_WHOLE_HOLDING").jsonPrimitive.long).isEqualTo(3L)
+		assertThat(counted.getValue("EXPIRY_OCCUPYING_TAIL").jsonPrimitive.long).isEqualTo(2L)
+		assertThat(counted.getValue("EXPIRY_ON_REQUEST").jsonPrimitive.long).isEqualTo(1L)
+		listOf("SWEEP_STALE", "SWEEP_PARTIAL", "SWEEP_PHANTOM", "EMERGENCY_RESTRICTION", "WATCHDOG_STOP").forEach {
+			assertThat(counted.getValue(it).jsonPrimitive.long, name = it).isEqualTo(0L)
+		}
+		val byAuthor = json.getValue("actionsByAuthor").jsonObject
+		assertThat(byAuthor.keys).isEqualTo(RunRecordJsonWriter.AUTHOR_KEYS.toSet())
+		assertThat(byAuthor.getValue("EXPIRY").jsonPrimitive.long).isEqualTo(6L)
+		byAuthor.filterKeys { it != "EXPIRY" }.forEach { (author, count) ->
+			assertThat(count.jsonPrimitive.long, name = author).isEqualTo(0L)
+		}
+	}
+
+	@Test
+	fun `a run without a dispatcher agent writes its command source and silent cycles and unattributed count`() {
+		val ruleBased = parse(RunRecordJsonWriter.snapshotJson(run()))
+		val noDispatcher = parse(RunRecordJsonWriter.snapshotJson(run(record(capacityShownToDispatcher = null))))
+
+		val source = ruleBased.getValue("commandSource").jsonObject
+		assertThat(source.getValue("kind").jsonPrimitive.content).isEqualTo(RunRecordJsonWriter.SOURCE_RULE_BASED)
+		assertThat(source.getValue("name").jsonPrimitive.content).isEqualTo("")
+		val none = noDispatcher.getValue("commandSource").jsonObject
+		assertThat(none.getValue("kind").jsonPrimitive.content).isEqualTo(RunRecordJsonWriter.SOURCE_NONE)
+		val silent = ruleBased.getValue("silentCyclesByCause").jsonObject
+		assertThat(silent.keys).isEqualTo(setOf("TIMEOUT", "THINKING_TRUNCATED", "EMPTY_PLAN", "NO_OP"))
+		silent.forEach { (cause, count) -> assertThat(count.jsonPrimitive.long, name = cause).isEqualTo(0L) }
+		assertThat(ruleBased.getValue("unattributedApplies").jsonPrimitive.long).isEqualTo(0L)
+	}
+
+	@Test
 	fun `a natural completion is recorded as completed naturally`() {
 		val json = parse(RunRecordJsonWriter.snapshotJson(run()))
 
@@ -306,6 +343,7 @@ class RunRecordJsonWriterTest {
 
 	@Test
 	fun `the schema version is a number the store accepts`() {
-		assertThat(JsonPrimitive(RunRecordJsonWriter.SCHEMA_VERSION).int).isEqualTo(16)
+		// Schema 17: #1514 added generationCutCycles (16); #1476 added the clean-run rule rows.
+		assertThat(JsonPrimitive(RunRecordJsonWriter.SCHEMA_VERSION).int).isEqualTo(17)
 	}
 }

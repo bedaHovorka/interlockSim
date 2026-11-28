@@ -20,6 +20,9 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.ExampleNames
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CleanRunRule
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CommandSource
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CommandSourceKind
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DefaultRunSnapshotStore
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunSnapshot
@@ -515,5 +518,17 @@ class AiSweepDriverTest {
 			assertThat(hygieneRows.single { it.contains("| $example | ") }, example).contains("| $example | 2 | ")
 		}
 		assertThat(report).contains("| ${DispatcherArm.LLM_TOOL_CALLING} | 4 |")
+	}
+
+	@Test
+	@DisplayName("an aborted run writes the command source of its arm and no counted automatics (Issue #1476)")
+	fun abortedSnapshotCarriesTheCommandSource() {
+		val params = SweepAxes().cells().single().runParameters()
+		val snapshot = abortedSnapshot("aborted", DispatcherArm.LLM_TOOL_CALLING, params, RunEndCause.TIMEOUT_ABORT)
+
+		assertThat(snapshot.commandSource).isEqualTo(CommandSource(CommandSourceKind.LLM, params.model))
+		// Not measured: an absent counter is never clean.
+		assertThat(snapshot.countedAutomatics).isNull()
+		assertThat(CleanRunRule.isClean(snapshot)).isFalse()
 	}
 }

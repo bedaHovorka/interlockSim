@@ -82,6 +82,21 @@ interface DispatcherRunRecorder {
 	fun recordRailwayOutcome(outcome: RailwayOutcome)
 
 	/**
+	 * Adds [counts] to the counters of the counted automatics without an action path (Issue #1476): each
+	 * row's [DispatcherRunSnapshot.countedAutomatics] entry and its author's
+	 * [DispatcherRunSnapshot.actionsByAuthor] entry. An accumulator, like [onActionOutcome]: the run-end
+	 * path adds the expiry and sweeper acts once, and a producer of C13 or C14 adds one per act. A call
+	 * after [finish] cannot change the frozen snapshot.
+	 */
+	fun onCountedAutomatics(counts: Map<CountedAutomatic, Long>)
+
+	/**
+	 * Records the run's [CommandSource] (Issue #1476), replacing the one derived from the arm and model:
+	 * the scripted source of #1479 calls it. Call it before [finish].
+	 */
+	fun recordCommandSource(source: CommandSource)
+
+	/**
 	 * Returns an immutable snapshot of the current accumulated metrics.
 	 *
 	 * May be called at any time during the run; the returned snapshot is independent of

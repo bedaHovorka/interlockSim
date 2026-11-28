@@ -41,6 +41,9 @@ class RunEndAccountingTest {
 	private class FakeExpiryTotals : ExpiryTotalsQuery {
 		override var expiredHoldingCount: Int = 0
 		override var expiredTailCount: Int = 0
+		override var wholeHoldingExpiryActs: Int = 0
+		override var tailExpiryActs: Int = 0
+		override var requestExpiryActs: Int = 0
 	}
 
 	private val expiryTotals = FakeExpiryTotals()
@@ -181,11 +184,26 @@ class RunEndAccountingTest {
 	}
 
 	@Test
+	fun `the expiry acts of the counted automatics come from the view by row - Issue 1476`() {
+		expiryTotals.wholeHoldingExpiryActs = 3
+		expiryTotals.tailExpiryActs = 2
+		expiryTotals.requestExpiryActs = 1
+
+		val s = summary()
+		assertThat(s.wholeHoldingExpiryActs).isEqualTo(3)
+		assertThat(s.tailExpiryActs).isEqualTo(2)
+		assertThat(s.requestExpiryActs).isEqualTo(1)
+	}
+
+	@Test
 	fun `without an expiry view the expiry totals read zero`() {
 		val s = RunEndAccounting().summary(EMPTY)
 
 		assertThat(s.expiredHoldingCount).isZero()
 		assertThat(s.expiredTailCount).isZero()
+		assertThat(s.wholeHoldingExpiryActs).isZero()
+		assertThat(s.tailExpiryActs).isZero()
+		assertThat(s.requestExpiryActs).isZero()
 	}
 
 	@Test

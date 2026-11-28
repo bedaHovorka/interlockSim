@@ -281,11 +281,16 @@ interface NetworkActuatorPort {
  * @property deferredBlockIds stable ids of blocks kept reserved; non-empty means the release is
  *   not complete: a refused release (Issue #1242) lists the whole route, an approach-lock deferral
  *   or a partial release lists the blocks it kept (see [NetworkActuatorPort.releaseRouteDetailed])
+ * @property changedState whether the call changed railway state -- freed a block or set a signal to STOP
+ *   (`PathRelease.changedState`, Issue #1476) -- unlike [anyReleased], which also reports a refused
+ *   release that changed nothing. The counted automatics read it; it defaults to [anyReleased] for a
+ *   port that cannot tell.
  * @since Issue #1050
  */
 data class RouteRelease(
 	val anyReleased: Boolean,
-	val deferredBlockIds: List<String>
+	val deferredBlockIds: List<String>,
+	val changedState: Boolean = anyReleased
 ) {
 	/**
 	 * `true` when part of the route was kept back; see [NetworkActuatorPort.releaseRouteDetailed]

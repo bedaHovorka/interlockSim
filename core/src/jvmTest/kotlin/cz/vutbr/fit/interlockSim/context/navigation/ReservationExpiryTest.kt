@@ -468,6 +468,67 @@ class ReservationExpiryTest : ReservationExpiryTestBase() {
 	}
 
 	@Test
+	fun `a deferred holding expiry counts one act on its first call, not again when it completes (Issue 1476)`() {
+		atSimTimes(
+			0.0 to { assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)) },
+			TTL to {
+				// The approach lock defers the release, but the signals already dropped: the act counts now.
+				service.expireStaleReservations()
+				assertThat(expiry.expiredHoldingCount).isEqualTo(0)
+				assertThat(service.wholeHoldingExpiryActs).isEqualTo(1)
+			},
+			PAST_TTL to { service.expireStaleReservations() },
+			(PAST_TTL + 1.0) to { service.expireStaleReservations() }
+		)
+
+		assertThat(expiry.expiredHoldingCount).isEqualTo(1)
+		assertThat(service.wholeHoldingExpiryActs).isEqualTo(1)
+		assertThat(service.tailExpiryActs).isEqualTo(0)
+		assertThat(service.requestExpiryActs).isEqualTo(0)
+	}
+
+	@Test
+	fun `a deferred holding expiry that never completes still counts its act (Issue 1476)`() {
+		atSimTimes(
+			0.0 to { assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)) },
+			// The run ends right after the deferring call: the release never completes.
+			TTL to { service.expireStaleReservations() }
+		)
+
+		assertThat(expiry.expiredHoldingCount).isEqualTo(0)
+		assertThat(service.wholeHoldingExpiryActs).isEqualTo(1)
+	}
+
+	@Test
+	fun `an expiry at the top of another train's request counts as a request act, not a loop-tick act (Issue 1476)`() {
+		lateinit var blocks: List<DynamicTrackBlock>
+
+		atSimTimes(
+			0.0 to {
+				blocks = assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)).reservedBlocks
+				entrySemaphoreOf(blocks).signal = Signal.STOP
+			},
+			TTL to { assertReservationSuccess(service.reservePath("train2", inOut1, inOut2)) }
+		)
+
+		assertThat(expiry.expiredHoldingCount).isEqualTo(1)
+		assertThat(service.requestExpiryActs).isEqualTo(1)
+		assertThat(service.wholeHoldingExpiryActs).isEqualTo(0)
+		assertThat(service.tailExpiryActs).isEqualTo(0)
+	}
+
+	@Test
+	fun `a holding below the TTL counts no act (Issue 1476)`() {
+		atSimTimes(
+			0.0 to { assertReservationSuccess(service.reservePath("train1", inOut1, inOut2)) },
+			BELOW_TTL to { service.expireStaleReservations() }
+		)
+
+		assertThat(service.wholeHoldingExpiryActs).isEqualTo(0)
+		assertThat(service.requestExpiryActs).isEqualTo(0)
+	}
+
+	@Test
 	fun `the TTL must be positive`() {
 		assertFailure {
 			DefaultPathReservationService(navigator, environment, registry, pathInfoBuilder, routeFinder, 0.0)

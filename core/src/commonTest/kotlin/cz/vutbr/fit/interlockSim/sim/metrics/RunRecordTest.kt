@@ -54,7 +54,10 @@ class RunRecordTest {
 			unfinishedJourneys = 1,
 			endTime = 600.0,
 			endTimeReached = true,
-			classification = RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS
+			classification = RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS,
+			wholeHoldingExpiryActs = 8,
+			tailExpiryActs = 9,
+			requestExpiryActs = 10
 		)
 
 	@Test
@@ -91,7 +94,10 @@ class RunRecordTest {
 				unfinishedJourneys = 1,
 				endTime = 600.0,
 				endTimeReached = true,
-				classification = RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS
+				classification = RunEndClassification.CUTOFF_WITH_UNFINISHED_JOURNEYS,
+				wholeHoldingExpiryActs = 8,
+				tailExpiryActs = 9,
+				requestExpiryActs = 10
 			)
 		)
 	}

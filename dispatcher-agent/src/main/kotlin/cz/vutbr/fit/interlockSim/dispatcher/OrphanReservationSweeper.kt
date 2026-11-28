@@ -241,6 +241,64 @@ class OrphanReservationSweeper(
 		private set
 
 	/**
+	 * Acts of the phantom branch (row C6 of the #1475 counted automatics, author `ORPHAN_SWEEP`, Issue
+	 * #1476): counted once per episode, on its first release call that changed railway state (a freed
+	 * block or a signal set to STOP, `RouteRelease.changedState`; a refused release changes
+	 * nothing). Unlike [phantomReleaseCount], a
+	 * deferred release retried on the next sweep is not counted again. An episode ends when its release
+	 * completes or its owner holds nothing any more.
+	 */
+	var phantomActCount: Int = 0
+		private set
+
+	/** Acts of the stale branch (row C4), counted like [phantomActCount]; see [staleReleaseCount]. */
+	var staleActCount: Int = 0
+		private set
+
+	/** Acts of the partial branch (row C5), counted like [phantomActCount]; see [partialReleaseCount]. */
+	var partialActCount: Int = 0
+		private set
+
+	/**
+	 * Owners whose current episode was already counted as an act, per branch (Issue #1476). An episode
+	 * ends where its branch completes the release, restarts or forgets the holding, or hands the owner
+	 * to another branch, and when the owner holds nothing any more ([endEpisode]).
+	 */
+	private val countedEpisodes = mutableMapOf<SweepBranch, MutableSet<String>>()
+
+	/** The three branches that release, one act counter each. */
+	private enum class SweepBranch { PHANTOM, STALE, PARTIAL }
+
+	/** End the current [branch] episode of [owner]: its next state-changing call is a new act. */
+	private fun endEpisode(
+		branch: SweepBranch,
+		owner: String
+	) {
+		countedEpisodes[branch]?.remove(owner)
+	}
+
+	/**
+	 * Count one act of [branch] for [owner] if [changedState] and the episode is not yet counted; end the
+	 * episode when [completed]. Returns nothing: the counters are the result.
+	 */
+	private fun countAct(
+		branch: SweepBranch,
+		owner: String,
+		changedState: Boolean,
+		completed: Boolean
+	) {
+		val counted = countedEpisodes.getOrPut(branch) { mutableSetOf() }
+		if (changedState && counted.add(owner)) {
+			when (branch) {
+				SweepBranch.PHANTOM -> phantomActCount++
+				SweepBranch.STALE -> staleActCount++
+				SweepBranch.PARTIAL -> partialActCount++
+			}
+		}
+		if (completed) counted.remove(owner)
+	}
+
+	/**
 	 * Times [sweep] has run. Gives the release counts their denominator in the end-of-run summary,
 	 * and distinguishes "swept every tick and found nothing" from "never ran at all" — the latter
 	 * being the failure mode that made round 1's controller fix necessary in the first place.
@@ -274,6 +332,7 @@ class OrphanReservationSweeper(
 			if (owner !in knownTrainIds) {
 				releasePhantom(owner, blocks)
 			} else {
+				endEpisode(SweepBranch.PHANTOM, owner)
 				evaluateKnownTrain(owner, blocks, snapshot.simTime)
 			}
 		}
@@ -281,6 +340,8 @@ class OrphanReservationSweeper(
 		// Forget trains that no longer hold anything, so a later route of theirs starts a fresh
 		// clock rather than inheriting a stale one.
 		holdings.keys.retainAll(heldByTrain.keys)
+		// An owner that holds nothing any more ended its episode, however it ended (Issue #1476).
+		countedEpisodes.values.forEach { it.retainAll(heldByTrain.keys) }
 	}
 
 	private fun releasePhantom(
@@ -296,6 +357,7 @@ class OrphanReservationSweeper(
 		if (release.anyReleased) {
 			phantomReleaseCount++
 		}
+		countAct(SweepBranch.PHANTOM, owner, release.changedState, completed = !release.deferred)
 		// Issue #1050: a deferred release kept blocks reserved; the phantom is offered again next
 		// sweep like any unknown owner, so there is no clock to keep.
 		holdings.remove(owner)
@@ -310,13 +372,17 @@ class OrphanReservationSweeper(
 		// ahead of it. That case has its own path (Issue #847 round 4, R4-3) — it must never reach
 		// the whole-route release below, which would drop the occupied block too.
 		if (blocks.any { it.state == TrackFacility.State.OCCUPIED }) {
+			endEpisode(SweepBranch.STALE, owner)
 			evaluateOccupyingTrain(owner, blocks, simTime)
 			return
 		}
+		endEpisode(SweepBranch.PARTIAL, owner)
 
 		val blockIds = blocks.map { it.blockId }.sorted()
 		val previous = holdings[owner]
 		if (previous == null || previous.blockIds != blockIds) {
+			// A new holding, or a changed one: a new clock and a new episode (Issue #1476 review).
+			endEpisode(SweepBranch.STALE, owner)
 			holdings[owner] = Holding(blockIds, simTime)
 			return
 		}
@@ -329,6 +395,7 @@ class OrphanReservationSweeper(
 				"${staleAfterSimSeconds}s). Blocks: ${blockIds.joinToString(", ")}"
 		}
 		val release = actuatorPort.releaseRouteDetailed(owner)
+		countAct(SweepBranch.STALE, owner, release.changedState, completed = !release.deferred)
 		if (release.anyReleased) {
 			staleReleaseCount++
 			// Issue #1304: the same release for the metrics' run-end accounting; record only.
@@ -369,6 +436,7 @@ class OrphanReservationSweeper(
 		val releaser = partialReleaser
 		if (releaser == null) {
 			holdings.remove(owner)
+			endEpisode(SweepBranch.PARTIAL, owner)
 			return
 		}
 
@@ -377,11 +445,13 @@ class OrphanReservationSweeper(
 		val tailIds = blocks.filter { it.state == TrackFacility.State.RESERVED }.map { it.blockId }.sorted()
 		if (tailIds.isEmpty()) {
 			holdings.remove(owner)
+			endEpisode(SweepBranch.PARTIAL, owner)
 			return
 		}
 
 		val previous = holdings[owner]
 		if (previous == null || previous.blockIds != tailIds) {
+			endEpisode(SweepBranch.PARTIAL, owner)
 			// First sight, or the train advanced and now holds a different tail — restart the clock
 			// so a merely slow train is never mistaken for a stalled one.
 			holdings[owner] = Holding(tailIds, simTime)
@@ -397,6 +467,12 @@ class OrphanReservationSweeper(
 				"Tail: ${tailIds.joinToString(", ")}"
 		}
 		val outcome = releaser.releaseUntravelledTail(owner, tailIds)
+		countAct(
+			SweepBranch.PARTIAL,
+			owner,
+			outcome.deferred || outcome.released.isNotEmpty(),
+			completed = !outcome.deferred
+		)
 		if (outcome.deferred) {
 			// Approach lock (Issue #1025): the signals are now at STOP but the tail is still held.
 			// Keep the holding so the next sweep retries at once instead of waiting another

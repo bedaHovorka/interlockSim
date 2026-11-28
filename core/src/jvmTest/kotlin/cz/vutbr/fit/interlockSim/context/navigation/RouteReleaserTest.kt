@@ -51,10 +51,14 @@ class RouteReleaserTest : PathReservationServiceTestBase() {
 	private fun recordingReleaser(): RouteReleaser =
 		RouteReleaser(
 			registry = registry,
-			resetSemaphoresForReleasedBlocks = { trainId, blocks -> calls += "resetBlocks($trainId,${blocks.size})" },
+			resetSemaphoresForReleasedBlocks = { trainId, blocks ->
+				calls += "resetBlocks($trainId,${blocks.size})"
+				0
+			},
 			resetClearedSemaphores = { trainId ->
 				val stillHeld = registry.getBlocks(trainId).size
 				calls += "resetCleared($trainId,held=$stillHeld)"
+				0
 			},
 			clearBlockedTracking = { trainId -> calls += "clearBlocked($trainId)" }
 		)

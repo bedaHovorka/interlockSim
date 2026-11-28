@@ -179,8 +179,9 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 16`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_GENERATION_CUT)
+	fun `current schema version is 17`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_CLEAN_RUN_RULE)
+		assertThat(SCHEMA_VERSION_WITH_CLEAN_RUN_RULE).isEqualTo(SCHEMA_VERSION_WITH_GENERATION_CUT + 1)
 		assertThat(SCHEMA_VERSION_WITH_GENERATION_CUT).isEqualTo(SCHEMA_VERSION_WITH_MODEL_PROFILE + 1)
 		assertThat(SCHEMA_VERSION_WITH_MODEL_PROFILE).isEqualTo(SCHEMA_VERSION_WITH_REFUSED_ENTRIES + 1)
 		assertThat(SCHEMA_VERSION_WITH_REFUSED_ENTRIES).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW + 1)
@@ -661,7 +662,10 @@ class DispatcherRunSnapshotTest {
 		/** Issue #1280 split the contentions still open at run end out of the conflict count. */
 		private const val SCHEMA_VERSION_WITH_UNRESOLVED_AT_RUN_END: Int = 10
 
-		/** Issue #1306 added the performance row and the example name. */
+		/** Issue #1476 added the clean-run rule counters (Issue #1306 had added the performance row, 13; #1514 had reached 16). */
+		private const val SCHEMA_VERSION_WITH_CLEAN_RUN_RULE: Int = 17
+
+		/** Issue #1306 added the performance row. */
 		private const val SCHEMA_VERSION_WITH_PERFORMANCE_ROW: Int = 13
 
 		/** Issue #1457 added the refused entries at run end. */

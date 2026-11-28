@@ -25,7 +25,7 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing. Current version: **16** (version 2 added
+ * handle old JSON files without crashing. Current version: **17** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
@@ -39,7 +39,8 @@ import kotlinx.serialization.Serializable
  * added the performance row and [example], Issue #1306; version 14 added
  * [RailwayOutcome.refusedEntriesAtRunEnd], Issue #1457; version 15 added [modelProfile] and the
  * [TimeoutNoOpCause.THINKING_TRUNCATED] cause key, Issue #1342; version 16 added
- * [generationCutCycles], the owner ruling of the #1342 review round).
+ * [generationCutCycles], the owner ruling of the #1342 review round; version 17 added [commandSource],
+ * [countedAutomatics] and [silentCyclesByCause] and the four automatic authors, Issue #1476).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -123,8 +124,12 @@ import kotlinx.serialization.Serializable
  *   [latencyP50Ms].
  * @property latencyMaxMs Maximum tick latency in milliseconds; `null` when unmeasured — also
  *   `null` on [RunEndCause.TIMEOUT_ABORT] / [RunEndCause.CRASH] snapshots, like [latencyP50Ms].
- * @property actionsByAuthor Count of actions per [ActionAuthor] name.
- * @property unattributedApplies Count of applied decisions whose correlation entry was missing.
+ * @property actionsByAuthor Count of actions per [ActionAuthor] name. From schema 17 (Issue #1476) it also
+ *   holds the counted automatics of [countedAutomatics], added under their authors, so the clean-run rule
+ *   ([CleanRunRule]) reads one map.
+ * @property unattributedApplies Count of applied decisions whose correlation entry was missing: the
+ *   unattributed-action counter of the clean-run rule (Issue #1476), which #1477 fills for every action
+ *   without an author. Kept under its existing key.
  * @property terminalFallbackEngaged Whether the terminal fallback guard engaged during this run.
  * @property terminalFallbackTickIndex Tick at which the terminal fallback first engaged; `null` when [terminalFallbackEngaged] is false.
  * @property c7Clean Whether no [ActionAuthor.RULE_FALLBACK] or [ActionAuthor.SAFETY_NET] actions were observed.
@@ -221,6 +226,14 @@ import kotlinx.serialization.Serializable
  *   (the rule-based arm makes no LLM calls); `null` means *not measured* — a run JSON written
  *   before this field existed, or a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot whose child JVM
  *   never reported it.
+ * @property commandSource What issued the run's commands ([CommandSource], Issue #1476): the model tag of an
+ *   LLM run, the script name of a scripted run, `RULE_BASED` or `NONE`. `null` only in files before schema
+ *   17; [commandSourceOrDerived] maps those by arm.
+ * @property countedAutomatics One counter per counted automatic without an action path, keyed by
+ *   [CountedAutomatic] name, every row present (Issue #1476). `null` means *not measured*: a file before
+ *   schema 17, or a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot. Absent is never clean.
+ * @property silentCyclesByCause The silent cycles by [SilentCycleCause] name, every cause present (Issue
+ *   #1476); derived from [ticksByOutcome] and [timeoutNoOpByCause]. `null` in files before schema 17.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -283,7 +296,10 @@ data class DispatcherRunSnapshot(
 	val example: String? = null,
 	val processWallSeconds: Double? = null,
 	val modelProfile: ModelProfileRecord? = null,
-	val generationCutCycles: Long? = null
+	val generationCutCycles: Long? = null,
+	val commandSource: CommandSource? = null,
+	val countedAutomatics: Map<String, Long>? = null,
+	val silentCyclesByCause: Map<String, Long>? = null
 ) {
 	companion object {
 		/**
@@ -383,9 +399,26 @@ data class DispatcherRunSnapshot(
 		 *   with it absent (not measured) — the cuts before it shipped are only named in the cause
 		 *   map above, and only for their no-emission endings.
 		 *
+		 * - **17** — Issue #1476 (Goal 9B SP5.3), the clean-run rule ([CleanRunRule]). [ActionAuthor] gained
+		 *   `EXPIRY`, `ORPHAN_SWEEP`, `EMERGENCY_SYSTEM` and `WATCHDOG`; the snapshot gained [commandSource],
+		 *   [countedAutomatics] (one counter per counted automatic without an action path, rows C1-C6, C13
+		 *   and C14 of #1475) and [silentCyclesByCause]; [actionsByAuthor] now also holds the counted
+		 *   automatics under their authors. The expiry and sweeper acts are counted once per episode on its
+		 *   first state-changing call, so they can differ from [RailwayOutcome]'s release counts, which keep
+		 *   their meaning. The unattributed-action counter keeps its key, [unattributedApplies]. Every new
+		 *   field defaults to `null`, so every version 1-16 file still decodes, with them absent; such a file
+		 *   is never clean, and [commandSourceOrDerived] gives its source by arm.
+		 *
 		 * A bump also changes `RunRecordJsonWriter.SCHEMA_VERSION` (`:core`) and its keys (Issue #1327).
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 16
+		const val CURRENT_SCHEMA_VERSION: Int = 17
+
+		/**
+		 * Schema version that introduced the clean-run rule's counters (Issue #1476). A file of an older
+		 * schema is never clean ([CleanRunRule]). Pinned, like
+		 * [SCHEMA_VERSION_INTRODUCING_ACTIONABLE_TICK_RATE], so a later bump does not re-flag it.
+		 */
+		const val SCHEMA_VERSION_INTRODUCING_CLEAN_RUN_RULE: Int = 17
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.DefaultSnapshotSignal
 import cz.vutbr.fit.interlockSim.dispatcher.DispatcherRunConfig
 import cz.vutbr.fit.interlockSim.dispatcher.OrphanReservationSweeper
 import cz.vutbr.fit.interlockSim.dispatcher.agentDriverLoopOrNull
+import cz.vutbr.fit.interlockSim.dispatcher.planner.CommandSource
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DecisionRateReport
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
@@ -22,6 +23,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RailwayProgress
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunEndCause
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
+import cz.vutbr.fit.interlockSim.dispatcher.planner.countedAutomaticsFrom
 import cz.vutbr.fit.interlockSim.dispatcher.planner.progress
 import cz.vutbr.fit.interlockSim.dispatcher.planner.toRailwayOutcome
 import cz.vutbr.fit.interlockSim.dispatcher.planner.toUnfinishedRunOutcome
@@ -171,6 +173,14 @@ object DispatcherRunSummaries {
 		// its main process. Idempotent-safe: on a second finishAndPersist for the same run the
 		// recorder is already frozen and this write cannot alter the frozen snapshot.
 		recorder.recordRailwayOutcome(outcome)
+		// Issue #1476: the counted automatics without an action path -- the kernel's expiry acts from the
+		// run record, the sweeper's acts from the sweeper -- added once, before finish() freezes them.
+		recorder.onCountedAutomatics(
+			countedAutomaticsFrom(
+				scope.getOrNull<MetricsCollectionService>()?.runRecord(),
+				scope.publishedOrNull<OrphanReservationSweeper>()
+			)
+		)
 		// finish() is idempotent by contract (SP2c.22) precisely so several callers may invoke it,
 		// so it needs no guard of its own — and an earlier version that guarded it silently stopped
 		// the GUI finishing its recorder at all, which FrameDispatcherMetricsLogTest caught. Only
@@ -325,7 +335,15 @@ object DispatcherRunSummaries {
 	private fun withDispatcherArm(
 		scope: Scope,
 		snapshot: DispatcherRunSnapshot
-	): DispatcherRunSnapshot = if (wiresDispatcher(scope)) snapshot else snapshot.copy(arm = DispatcherArm.NO_DISPATCHER)
+	): DispatcherRunSnapshot =
+		if (wiresDispatcher(scope)) {
+			snapshot
+		} else {
+			snapshot.copy(
+				arm = DispatcherArm.NO_DISPATCHER,
+				commandSource = CommandSource.forArm(DispatcherArm.NO_DISPATCHER, snapshot.params.model)
+			)
+		}
 
 	/**
 	 * Whether the run owned by [scope] wired a dispatcher: a dispatcher agent, or a capacity

@@ -240,6 +240,30 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 		assertTailExpiryAnnounced(freedBefore = freedBeforeCompletion.size)
 	}
 
+	@Test
+	fun `a deferred tail expiry counts one act on its first call, not again when it completes (Issue 1476)`() {
+		val returned = mutableListOf<Int>()
+
+		runInOrder(
+			listOf(0.0 to { reserveWholeRouteStandingOnKa(TRAIN, ProgressStub(TRAIN)) }),
+			listOf(
+				0.0 to { returned += service.expireStaleReservations() },
+				TTL to {
+					expireAtTtlDeferred(returned)
+					assertThat(expiry.expiredTailCount).isEqualTo(0)
+					assertThat(service.tailExpiryActs).isEqualTo(1)
+				},
+				PAST_TTL to { returned += service.expireStaleReservations() },
+				(PAST_TTL + TICK) to { returned += service.expireStaleReservations() }
+			)
+		)
+
+		assertThat(expiry.expiredTailCount).isEqualTo(1)
+		assertThat(service.tailExpiryActs).isEqualTo(1)
+		assertThat(service.wholeHoldingExpiryActs).isEqualTo(0)
+		assertThat(service.requestExpiryActs).isEqualTo(0)
+	}
+
 	/**
 	 * The loop tick at the TTL, for a train stalled for exactly the TTL: the release has run (its first
 	 * step resets the signals) but deferred on the approach lock, so nothing is announced yet (Issue
@@ -467,6 +491,11 @@ class ReservationExpiryOccupyingTrainTest : ReservationExpiryTestBase() {
 			assertTailDeferredForever(stand.held, expiryLog)
 			assertAspectsAsGranted(stand.aspectsAfterGrant)
 			assertReleaserRefusedOnce(releaserLog)
+			// Issue #1476: a refused release changed nothing -- no block freed, no signal reset -- so the
+			// expiry acted on nothing and counts no act under any row.
+			assertThat(service.tailExpiryActs, "tail acts").isEqualTo(0)
+			assertThat(service.wholeHoldingExpiryActs, "whole-holding acts").isEqualTo(0)
+			assertThat(service.requestExpiryActs, "request acts").isEqualTo(0)
 		}
 	}
 

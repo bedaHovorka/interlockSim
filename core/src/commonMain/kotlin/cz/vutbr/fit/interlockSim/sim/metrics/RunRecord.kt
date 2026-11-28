@@ -65,6 +65,13 @@ import cz.vutbr.fit.interlockSim.sim.RefusedEntry
  * @property refusedEntriesAtRunEnd Trains still waiting at their InOut on a refused entry route when the
  *   run ended, with the InOut, the reason and the time of the first refusal (Issue #1457): a train an
  *   unresolved dispatcher error kept out of the network. Empty when none waited.
+ * @property wholeHoldingExpiryActs Expiry acts of whole holdings on the loop tick (row C1 of the #1475
+ *   counted automatics, author `EXPIRY`): one per act, on its first state-changing call, so unlike
+ *   [expiredHoldingCount] it includes a deferred expiry nothing completed (Issue #1476).
+ * @property tailExpiryActs Expiry acts of stalled tails on the loop tick (row C2), like
+ *   [wholeHoldingExpiryActs].
+ * @property requestExpiryActs Expiry acts at the top of another train's request (row C3), like
+ *   [wholeHoldingExpiryActs].
  * @since Issue #676 (Goal 6 SP5)
  */
 data class RunRecord(
@@ -92,7 +99,10 @@ data class RunRecord(
 	val endTimeReached: Boolean,
 	val classification: RunEndClassification,
 	val performance: RunPerformance? = null,
-	val refusedEntriesAtRunEnd: List<RefusedEntry> = emptyList()
+	val refusedEntriesAtRunEnd: List<RefusedEntry> = emptyList(),
+	val wholeHoldingExpiryActs: Int = 0,
+	val tailExpiryActs: Int = 0,
+	val requestExpiryActs: Int = 0
 ) {
 	/**
 	 * The record as one console line, starting `Run record:` -- printed by the native CLI after its
@@ -165,6 +175,9 @@ fun RunEndSummary.toRunRecord(): RunRecord? {
 		endTimeReached = endTimeReached,
 		classification = endedAs,
 		performance = performance,
-		refusedEntriesAtRunEnd = refusedEntriesAtRunEnd
+		refusedEntriesAtRunEnd = refusedEntriesAtRunEnd,
+		wholeHoldingExpiryActs = wholeHoldingExpiryActs,
+		tailExpiryActs = tailExpiryActs,
+		requestExpiryActs = requestExpiryActs
 	)
 }

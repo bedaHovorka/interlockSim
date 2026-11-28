@@ -850,6 +850,35 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
+		@DisplayName("a refused release reports anyReleased as before but no state change (Issue #1476)")
+		fun refusedReleaseReportsNoStateChange() {
+			val kept = mockk<DynamicTrackBlock>(relaxed = true)
+			every { kept.name } returns "k1"
+			val svc = mockk<PathReservationService>(relaxed = true)
+			// The #1242 refusal: the whole route deferred, no block freed, no signal reset -- while the
+			// train still holds cleared signals.
+			every { svc.releasePathDetailed("T1") } returns PathRelease(emptyList(), listOf(kept), signalsReset = 0)
+			every { svc.hasClearedSignals("T1") } returns true
+
+			val release = port(reservationService = svc).releaseRouteDetailed("T1")
+
+			assertThat(release.anyReleased, "the legacy flag keeps its meaning").isTrue()
+			assertThat(release.changedState, "nothing changed").isFalse()
+		}
+
+		@Test
+		@DisplayName("a deferral that set signals to STOP reports a state change (Issue #1476)")
+		fun deferralThatResetSignalsReportsAStateChange() {
+			val kept = mockk<DynamicTrackBlock>(relaxed = true)
+			every { kept.name } returns "k1"
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.releasePathDetailed("T1") } returns PathRelease(emptyList(), listOf(kept), signalsReset = 2)
+			every { svc.hasClearedSignals("T1") } returns true
+
+			assertThat(port(reservationService = svc).releaseRouteDetailed("T1").changedState).isTrue()
+		}
+
+		@Test
 		@DisplayName("releaseRouteDetailed reports a fully freed route with nothing deferred (Issue #1050)")
 		fun releaseRouteDetailedReportsAFullRelease() {
 			val released = listOf(mockk<DynamicTrackBlock>(relaxed = true))

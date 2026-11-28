@@ -104,9 +104,13 @@ internal class ClearedSignalLedger {
 	 * [Signal.STOP] is always the fail-safe direction -- it authorises nothing -- so resetting
 	 * a semaphore the train no longer needs can only ever be over-restrictive. Semaphores since
 	 * re-cleared for another train are skipped (see [semaphoreClearedFor]).
+	 *
+	 * @return how many semaphores this call changed from a proceed aspect to [Signal.STOP] (Issue #1476:
+	 *   the signal half of [PathRelease.signalsReset])
 	 */
-	fun resetClearedSemaphores(trainId: String) {
-		val owned: Set<DynamicRailSemaphore> = clearedSemaphores.remove(trainId) ?: return
+	fun resetClearedSemaphores(trainId: String): Int {
+		val owned: Set<DynamicRailSemaphore> = clearedSemaphores.remove(trainId) ?: return 0
+		var stopped = 0
 		owned.forEach { semaphore ->
 			if (semaphoreClearedFor[semaphore] != trainId) {
 				logger.debug {
@@ -116,6 +120,7 @@ internal class ClearedSignalLedger {
 				return@forEach
 			}
 			semaphoreClearedFor.remove(semaphore)
+			val wasAllowing = semaphore.signal.isAllowing()
 			try {
 				semaphore.signal = Signal.STOP
 			} catch (e: Exception) {
@@ -123,10 +128,12 @@ internal class ClearedSignalLedger {
 					"resetClearedSemaphores: Failed to reset semaphore ${semaphore.name} for '$trainId'"
 				}
 			}
+			if (wasAllowing && !semaphore.signal.isAllowing()) stopped++
 		}
 		logger.debug {
 			"resetClearedSemaphores: Returned ${owned.size} semaphore(s) to STOP for '$trainId'"
 		}
+		return stopped
 	}
 
 	/**
@@ -143,14 +150,17 @@ internal class ClearedSignalLedger {
 	 *
 	 * Same ownership semantics as [resetClearedSemaphores]: a semaphore since re-cleared for another
 	 * train is skipped (see [semaphoreClearedFor]).
+	 *
+	 * @return how many semaphores this call changed from a proceed aspect to [Signal.STOP] (Issue #1476)
 	 */
 	fun resetSemaphoreSet(
 		trainId: String,
 		toReset: Set<DynamicRailSemaphore>
-	) {
-		if (toReset.isEmpty()) return
-		val owned = clearedSemaphores[trainId] ?: return
+	): Int {
+		if (toReset.isEmpty()) return 0
+		val owned = clearedSemaphores[trainId] ?: return 0
 		var resetCount = 0
+		var stopped = 0
 		toReset.forEach { semaphore ->
 			// Forget this semaphore in the CALLER's ledger entry regardless of which branch
 			// runs below -- ownership having moved on means trainId doesn't hold it any more
@@ -165,6 +175,7 @@ internal class ClearedSignalLedger {
 				return@forEach
 			}
 			semaphoreClearedFor.remove(semaphore)
+			val wasAllowing = semaphore.signal.isAllowing()
 			try {
 				semaphore.signal = Signal.STOP
 				resetCount++
@@ -173,11 +184,13 @@ internal class ClearedSignalLedger {
 					"resetSemaphoreSet: Failed to reset semaphore ${semaphore.name} for '$trainId'"
 				}
 			}
+			if (wasAllowing && !semaphore.signal.isAllowing()) stopped++
 		}
 		if (owned.isEmpty()) clearedSemaphores.remove(trainId)
 		logger.debug {
 			"resetSemaphoreSet: Returned $resetCount of ${toReset.size} semaphore(s) to STOP for '$trainId'"
 		}
+		return stopped
 	}
 
 	/**
@@ -323,13 +336,14 @@ internal class ClearedSignalLedger {
 	 * route-position validation of its own, so a caller outside that scope is responsible for the
 	 * risk described there.
 	 *
+	 * @return how many semaphores this call changed from a proceed aspect to [Signal.STOP] (Issue #1476)
 	 * @since Issue #893 (phase alpha, task A3)
 	 */
 	fun resetSemaphoresForReleasedBlocks(
 		trainId: String,
 		blocks: Collection<DynamicTrackBlock>
-	) {
-		if (blocks.isEmpty()) return
+	): Int {
+		if (blocks.isEmpty()) return 0
 		val candidates = mutableSetOf<DynamicRailSemaphore>()
 		blocks.forEach { block ->
 			block.ends().forEach { end ->
@@ -345,6 +359,6 @@ internal class ClearedSignalLedger {
 				else -> Unit
 			}
 		}
-		resetSemaphoreSet(trainId, candidates)
+		return resetSemaphoreSet(trainId, candidates)
 	}
 }

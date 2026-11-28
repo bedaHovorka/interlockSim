@@ -709,6 +709,18 @@ class DefaultPathReservationService(
 	override val expiredTailCount: Int
 		get() = expiry.expiredTailCount
 
+	/** The total of [DefaultReservationExpiry.wholeHoldingExpiryActs] (Issue #1476). */
+	override val wholeHoldingExpiryActs: Int
+		get() = expiry.wholeHoldingExpiryActs
+
+	/** The total of [DefaultReservationExpiry.tailExpiryActs] (Issue #1476). */
+	override val tailExpiryActs: Int
+		get() = expiry.tailExpiryActs
+
+	/** The total of [DefaultReservationExpiry.requestExpiryActs] (Issue #1476). */
+	override val requestExpiryActs: Int
+		get() = expiry.requestExpiryActs
+
 	/** Delegates to [ReservationContentionTracker.flushUnresolvedConflicts] (Issue #612, #1167). */
 	override fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected> =
 		contention.flushUnresolvedConflicts(simulationEndTime)
