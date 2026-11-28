@@ -235,8 +235,10 @@ class SimulationSnapshotTest {
 	// ── Map-backed lookups (#967) ──────────────────────────────────────────
 	//
 	// Each "keeps the first reading" test also proves the lookup returns a matching reading.
-	// associateBy() alone would keep the LAST entry on a duplicate key; the snapshot must keep
-	// the old firstOrNull-scan semantics instead (first match wins).
+	// associateBy() alone would keep the LAST entry on a duplicate key; the snapshot keeps
+	// the old firstOrNull-scan semantics instead (first match wins) — with ONE exception,
+	// the switch facet: switchReading follows the actuator's documented last-wins duplicate-name
+	// contract (Issue #1468 review), and the test below pins it.
 
 	@Test
 	fun `every lookup returns null for an unknown key`() {
@@ -293,6 +295,18 @@ class SimulationSnapshotTest {
 		val snap = SimulationSnapshot.EMPTY.copy(trainPerceptions = listOf(first, second))
 
 		assertThat(snap.trainPerception("Train #1")).isEqualTo(first)
+	}
+
+	@Test
+	fun `switchReading keeps the last reading for a duplicate switch name`() {
+		// The switch-facet exception: the actuator's name index is last-wins on a duplicate explicit
+		// name (Issue #1473), so switchReading follows it and the scan-LAST reading answers the
+		// lookup -- the twin the actuator's setSwitchPosition addresses.
+		val first = SwitchReading("Twin", RailSwitch.Conf.MAIN, locked = false, ownerTrainId = null)
+		val second = SwitchReading("Twin", RailSwitch.Conf.BRANCH, locked = true, ownerTrainId = "Train #1")
+		val snap = SimulationSnapshot.EMPTY.copy(switches = listOf(first, second))
+
+		assertThat(snap.switchReading("Twin")).isEqualTo(second)
 	}
 
 	@Test

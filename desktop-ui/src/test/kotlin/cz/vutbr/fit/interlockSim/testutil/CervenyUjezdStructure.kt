@@ -21,6 +21,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
  */
 const val CERVENY_UJEZD_STATION_CAPACITY = 4
 
+/** The number of switches in `cerveny_ujezd.xml`, all named in the shipped file (Issue #1473). */
+const val CERVENY_UJEZD_SWITCHES = 12
+
 /**
  * Structure check for the `cerveny_ujezd.xml` fixture, shared by the parse test in
  * `XMLContextFactoryParseTest` and the stream round trip in `XMLContextFactoryOutputStreamTest`

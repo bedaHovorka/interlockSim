@@ -77,6 +77,12 @@ object TestTopologies {
 	/** Name of the branch-route exit [InOut] of [yJunctionWithSwitch]. */
 	const val Y_JUNCTION_EXIT_BRANCH = "ExitBranch"
 
+	/** Default name of the switch of [yJunctionWithSwitch]. */
+	const val Y_JUNCTION_SWITCH = "Junction"
+
+	/** Grid position of the switch of [yJunctionWithSwitch]. */
+	val Y_JUNCTION_SWITCH_AT: Point = Point(30, 30)
+
 	/**
 	 * The builder chain behind the single-semaphore linear family:
 	 * `A —[approachLength]— Sem —100 m— B`, all blocks at [LINEAR_BLOCK_MAX_SPEED_MPS].
@@ -114,16 +120,22 @@ object TestTopologies {
 		)
 	}
 
-	fun yJunctionWithSwitch(): EditingContext {
+	/**
+	 * A Y junction: entry, one switch at [Y_JUNCTION_SWITCH_AT], a main and a branch exit.
+	 *
+	 * @param switchName the switch's static name; `""` builds the unnamed switch of a context built
+	 *   in code (Issue #1473: such a switch is addressed by its generated `SW_<x>_<y>` name)
+	 */
+	fun yJunctionWithSwitch(switchName: String = Y_JUNCTION_SWITCH): EditingContext {
 		val context = DefaultEditingContext(60, 50)
 
 		val entry = InOut(Y_JUNCTION_ENTRY, false, Cell.SpatialType.HORIZONTAL)
 		val exitMain = InOut(Y_JUNCTION_EXIT_MAIN, true, Cell.SpatialType.HORIZONTAL)
 		val exitBranch = InOut(Y_JUNCTION_EXIT_BRANCH, true, Cell.SpatialType.HORIZONTAL)
-		val switch = RailSwitch("Junction", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val switch = RailSwitch(switchName, Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 		context.putCell(Point(5, 30), entry)
-		context.putCell(Point(30, 30), switch)
+		context.putCell(Y_JUNCTION_SWITCH_AT, switch)
 		context.putCell(Point(55, 30), exitMain)
 		context.putCell(Point(50, 40), exitBranch)
 
@@ -386,8 +398,8 @@ object TestTopologies {
 	fun linearPathWithSemaphoreSimulation(semaphoreAllowing: Boolean = false): DefaultSimulationContext =
 		linearPathWithSemaphoreBuilder(semaphoreAllowing = semaphoreAllowing).buildSimulationContext()
 
-	fun yJunctionWithSwitchSimulation(): DefaultSimulationContext =
-		yJunctionWithSwitch().use { toSimulationContext(it) }
+	fun yJunctionWithSwitchSimulation(switchName: String = Y_JUNCTION_SWITCH): DefaultSimulationContext =
+		yJunctionWithSwitch(switchName).use { toSimulationContext(it) }
 
 	fun linearPathWithSemaphoreSequenceSimulation(
 		semaphoreCount: Int = 3,

@@ -9,8 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.ports
 
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
@@ -22,6 +25,7 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 import cz.vutbr.fit.interlockSim.util.currentSimulationTime
 import cz.vutbr.fit.interlockSim.util.indexByNonBlankName
+import cz.vutbr.fit.interlockSim.util.switchesByStableName
 
 /**
  * Simulation-backed implementation of [NetworkPerceptionPort].
@@ -38,6 +42,9 @@ import cz.vutbr.fit.interlockSim.util.indexByNonBlankName
  *   construction time).
  * - **Block occupancies** — derived by iterating the graph edges (all
  *   [DynamicTrackBlock] instances) from the simulation environment's graph.
+ * - **Switches** (Issue #1468) — every [DynamicRailSwitch] cell, scanned once at construction
+ *   with its grid position; position and lock are read live from the switch, the owning train from
+ *   [PathReservationRegistry.getSwitchOwner] of the context's scope.
  * - **Train positions and timetables** — derived from the [activeTrains] supplier,
  *   which must provide the list of currently approved, running trains at the moment
  *   of each query.  Trains in the unapproved queue are intentionally excluded
@@ -95,6 +102,33 @@ class DefaultNetworkPerceptionPort(
 	 */
 	private val semaphoreByName: Map<String, DynamicRailSemaphore> =
 		semaphoreCache.indexByNonBlankName { it.name }
+
+	// ── Switch cache built once at construction (Issue #1468) ─────────────
+
+	/**
+	 * Every [DynamicRailSwitch] cell with its stable name, in grid scan order ([switchesByStableName]):
+	 * the XML name, or for a blank name (a context built in code) the generated `SW_<x>_<y>` of its grid
+	 * position, so a [SwitchReading.name] is never blank. Construction fails loudly when a
+	 * fallback-generated name collides with an already-indexed switch name — [switchesByStableName]
+	 * throws the same rejecting [IllegalArgumentException] as the actuator's scan, so a duplicate
+	 * name can never serve two switches here. Cells are stable for the lifetime of a
+	 * context, like [semaphoreCache].
+	 */
+	private val switchCache: List<Pair<String, DynamicRailSwitch>> = env.getRailWayNetGrid().switchesByStableName()
+
+	/**
+	 * The owning-train lookup, [PathReservationRegistry.getSwitchOwner] of the context's scope (the
+	 * same registry instance the reservation service writes). Resolved on the first switch reading,
+	 * on the simulation thread. A [SimulationContext] without the registry fails loudly: reporting
+	 * every lock without an owner would look like orphan locks to a planner. Only an environment that
+	 * is not a [SimulationContext] (a test stub) has no registry and reports no owners.
+	 */
+	private val switchOwner: (DynamicRailSwitch) -> String? by lazy {
+		when (val context = env) {
+			is SimulationContext -> context.scope.get<PathReservationRegistry>()::getSwitchOwner
+			else -> { _ -> null }
+		}
+	}
 
 	// ── Block cache built once at construction ─────────────────────────────
 
@@ -247,6 +281,17 @@ class DefaultNetworkPerceptionPort(
 			sectionId = sectionIdByBlock[this].orEmpty()
 		)
 
+	// ── Switches (Issue #1468) ────────────────────────────────────────────
+
+	/**
+	 * The [SwitchReading] of every switch, read live on the simulation thread: values only, so no
+	 * [DynamicRailSwitch] leaves the thread (#1467 spec §2).
+	 */
+	private fun allSwitchReadings(): List<SwitchReading> =
+		switchCache.map { (name, switch) ->
+			SwitchReading(name = name, conf = switch.conf, locked = switch.locked, ownerTrainId = switchOwner(switch))
+		}
+
 	// ── NetworkPerceptionPort — train positions ───────────────────────────
 
 	override fun trainPosition(trainId: String): TrainPositionReading? {
@@ -358,8 +403,8 @@ class DefaultNetworkPerceptionPort(
 	 * (0.1% of a 342 ms `shuntingLoop 300` run), so retaining the complete, thread-safe
 	 * snapshot is intentional.
 	 *
-	 * Calls each `allXxx()` bulk query in sequence.  Because kDisco runs on a single
-	 * simulation thread, all five calls observe the same simulation state — no events
+	 * Calls each `allXxx()` bulk query in sequence, then samples the switches (Issue #1468).
+	 * Because kDisco runs on a single simulation thread, all six calls observe the same simulation state — no events
 	 * interleave between them during a normal tick. The result is published via
 	 * [latestCaptured] so off-thread [snapshot] callers see a consistent picture.
 	 *
@@ -374,7 +419,8 @@ class DefaultNetworkPerceptionPort(
 				blocks = allBlockOccupancies(),
 				trainPositions = allTrainPositions(),
 				timetables = allTrainTimetables(),
-				trainPerceptions = allTrainPerceptions()
+				trainPerceptions = allTrainPerceptions(),
+				switches = allSwitchReadings()
 			)
 		latestCaptured = captured
 		return captured

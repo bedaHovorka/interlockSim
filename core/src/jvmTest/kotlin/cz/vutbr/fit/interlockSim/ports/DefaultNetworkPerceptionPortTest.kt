@@ -9,16 +9,22 @@
  */
 package cz.vutbr.fit.interlockSim.ports
 
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.containsExactly
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
+import assertk.assertions.messageContains
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -35,6 +41,9 @@ import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.core.qualifier.named
+import org.koin.dsl.koinApplication
+import org.koin.dsl.module
 
 /**
  * Unit tests for [DefaultNetworkPerceptionPort].
@@ -906,5 +915,52 @@ class DefaultNetworkPerceptionPortTest {
 				SemaphoreReading("zA", Signal.FREE, authorizedFrom = "F", authorizedTo = "A")
 			)
 		}
+	}
+
+	// ── Switch readings (Issue #1468) ──────────────────────────────────────
+
+	@Nested
+	@DisplayName("switch readings")
+	inner class SwitchReadings {
+		private fun lockedUnnamedSwitch(): DynamicRailSwitch =
+			mockk<DynamicRailSwitch>(relaxed = true).also {
+				every { it.name } returns ""
+				every { it.conf } returns RailSwitch.Conf.BRANCH
+				every { it.locked } returns true
+			}
+
+		@Test
+		@DisplayName("a stub environment that is not a SimulationContext samples the switch with no owner")
+		fun stubEnvironmentReportsNoOwner() {
+			val stub = env(cells = mapOf((1 to 0) to lockedUnnamedSwitch()))
+			val port = DefaultNetworkPerceptionPort(stub, activeTrains = { emptyList() })
+
+			assertThat(port.captureSnapshot().switches).containsExactly(
+				SwitchReading(name = "SW_1_0", conf = RailSwitch.Conf.BRANCH, locked = true, ownerTrainId = null)
+			)
+		}
+
+		@Test
+		@DisplayName("a SimulationContext whose scope has no PathReservationRegistry fails the capture loudly")
+		fun contextWithoutRegistryFailsLoudly() {
+			val stub = env(cells = mapOf((1 to 0) to lockedUnnamedSwitch()))
+			// A real, empty Koin scope: get() throws, getOrNull() would return null.
+			val emptyScope =
+				koinApplication { modules(module { scope(named(EMPTY_SCOPE)) { } }) }
+					.koin
+					.createScope(EMPTY_SCOPE, named(EMPTY_SCOPE))
+			val context = mockk<SimulationContext>(relaxed = true)
+			every { context.getRailWayNetGrid() } returns stub.getRailWayNetGrid()
+			every { context.getGraph() } returns stub.getGraph()
+			every { context.scope } returns emptyScope
+			val port = DefaultNetworkPerceptionPort(context, activeTrains = { emptyList() })
+
+			// Koin's no-definition error names the missing type.
+			assertFailure { port.captureSnapshot() }.messageContains("PathReservationRegistry")
+		}
+	}
+
+	private companion object {
+		const val EMPTY_SCOPE = "noRegistry"
 	}
 }

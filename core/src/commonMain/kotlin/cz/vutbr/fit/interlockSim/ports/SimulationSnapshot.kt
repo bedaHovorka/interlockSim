@@ -29,6 +29,7 @@ package cz.vutbr.fit.interlockSim.ports
  * | [trainPositions]| [NetworkPerceptionPort.allTrainPositions] | Position and velocity of every active train |
  * | [timetables]    | [NetworkPerceptionPort.allTrainTimetables] | Route and schedule of every active train |
  * | [trainPerceptions] | [NetworkPerceptionPort.allTrainPerceptions] | First-person perception of every active train |
+ * | [switches]      | `DynamicRailSwitch.conf`/`locked`, `PathReservationRegistry.getSwitchOwner` | Position, lock and owner of every switch |
  *
  * ## Design note
  *
@@ -61,6 +62,9 @@ package cz.vutbr.fit.interlockSim.ports
  *   train (SP2a.1 Issue #552). Includes signal ahead, speed limit, kinematics, timetable
  *   event, and dwell state. Defaults to [emptyList] for backwards compatibility with
  *   snapshots captured before SP2a.1.
+ * @property switches  Position, lock and owning train of every switch in the network, one
+ *   [SwitchReading] each, in grid scan order (Issue #1468, Goal 9B SP4.2). Defaults to [emptyList]
+ *   for snapshots built by hand and for [EMPTY].
  *
  * @since Issue #543 (SP0.4 — Goal 10 observable simulation state)
  */
@@ -70,13 +74,17 @@ data class SimulationSnapshot(
 	val blocks: List<BlockOccupancyReading>,
 	val trainPositions: List<TrainPositionReading>,
 	val timetables: List<TimetableReading>,
-	val trainPerceptions: List<TrainPerceptionReading> = emptyList()
+	val trainPerceptions: List<TrainPerceptionReading> = emptyList(),
+	val switches: List<SwitchReading> = emptyList()
 ) {
 	// ── Map-backed lookups (#967) ──────────────────────────────────────────
 	//
 	// Declared in the class body, so they stay out of the data class's equals/hashCode/toString/copy.
 	// Each map is built once per instance, on the first lookup, which is O(1) from then on.
 	// On a duplicate key the first reading wins, exactly like the firstOrNull scans these replace.
+	// EXCEPTION — the switch map (Issue #1468 review): the switch facet follows the actuator's
+	// documented last-wins duplicate-name contract (DefaultNetworkActuatorPort), so a duplicate
+	// switch name resolves to the scan-last reading, not the first one.
 
 	private val semaphoreByName: Map<String, SemaphoreReading> by lazy {
 		semaphores.associateFirstBy { it.name }
@@ -96,6 +104,12 @@ data class SimulationSnapshot(
 
 	private val trainPerceptionByTrainId: Map<String, TrainPerceptionReading> by lazy {
 		trainPerceptions.associateFirstBy { it.trainId }
+	}
+
+	private val switchByName: Map<String, SwitchReading> by lazy {
+		// The switch-facet exception: last wins, like the actuator's documented duplicate-name
+		// contract (Issue #1473) — NOT first-wins like the other facets of this class above.
+		switches.associateBy { it.name }
 	}
 
 	/**
@@ -127,6 +141,13 @@ data class SimulationSnapshot(
 	 * [trainId], or `null` if no such active train appears in this snapshot.
 	 */
 	fun trainPerception(trainId: String): TrainPerceptionReading? = trainPerceptionByTrainId[trainId]
+
+	/**
+	 * Returns the [SwitchReading] whose [SwitchReading.name] matches [switchName], or `null` if this
+	 * snapshot contains no such switch. On a duplicate switch name the scan-last reading wins — the
+	 * actuator's documented contract for the switch facet (the other lookup facets are first-wins).
+	 */
+	fun switchReading(switchName: String): SwitchReading? = switchByName[switchName]
 
 	companion object {
 		/**
