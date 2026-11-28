@@ -46,8 +46,8 @@ The review record (the sign-off findings and how each was resolved) is on the is
 
 ## Part 1 — threading, timing and replay (#1474)
 
-Leaf #1474 (SP5.1, parent #1439). Author role: traffic-simulation-expert. Reviewers: traffic-simulation-expert,
-kotlin-tech-lead, qa-engineer. This part follows the signed-off specs #1456, #1463, #1467, #1475, #1486 and #1488.
+Leaf #1474 (SP5.1, parent #1439). Author role: traffic-simulation-expert. Reviewers: kotlin-tech-lead,
+qa-engineer. This part follows the signed-off specs #1456, #1463, #1467, #1475, #1486 and #1488.
 Where a later leaf decides a detail, the text says "Decided in #NNNN".
 
 **Summary.**
@@ -56,7 +56,8 @@ Where a later leaf decides a detail, the text says "Decided in #NNNN".
   translated against) and D (the tick of the drain). It never waits for anyone.
 - The staleness bound is **K = 2 control steps** (4.0 simulated s). The replay ring buffer holds
   **K + 1 = 3 snapshots**.
-- The R9 emergency channel is exempt from `STALE_SNAPSHOT` under three conditions.
+- The R9 emergency channel is exempt from `STALE_SNAPSHOT` under three conditions. It is drained first at every
+  drain, and its post tick P (`emergencyPostedTick`) gives D − P ≤ 1 (#1450 ruling, §4).
 - The control tick stays the retry clock, and the routing thread has no retry loop.
 - The scripted CI source implements **`HighLevelCommandSource`**. The run record names the source in the run-level
   field **`commandSource`**.
@@ -199,12 +200,16 @@ The rules that follow from this order:
   when it receives the batch, so N ≥ O.
 - **D** is the tick of the drain that takes the batch.
 - **seq** is assigned by the simulation thread at drain, in FIFO drain order.
+- **P** (`emergencyPostedTick`, emergency commands only) is the tick the emergency queue stamps at `post`, read
+  from `latestObservation` under the queue lock (§4).
 
-All of them are written on the simulation thread. The dispatcher cycle starts only after a `SnapshotSignal` wake,
+O, N, D and seq are written on the simulation thread. P is the simulation thread's published tick, copied by the
+emergency queue under its lock. The dispatcher cycle starts only after a `SnapshotSignal` wake,
 so every batch has O ≥ 1. An arm that has the translator but no `snapshotCaptureHook` would plan on
 `SimulationSnapshot.EMPTY`. That is a wiring error and fails at wiring time (#1467 §3).
 
-**Commit.** At D the simulation thread takes each low-level command in seq order:
+**Commit.** At D the simulation thread first drains the emergency queue (§4), then takes each low-level command of
+the main queue in seq order:
 - If D−N > K, it refuses the command with `STALE_SNAPSHOT`: class REPLAN, stage COMMIT, payload `Stale(n, d, k)`.
   The run record gets **one denial event per low-level command of the stale batch** (this closes the #1463 open
   point).
@@ -270,11 +275,15 @@ These cases are counted on their own:
 - A **refused cycle**: every command was refused.
 - A **stale cycle**: the whole batch was refused with `STALE_SNAPSHOT`.
 - An **undrained cycle**: the run ended with the batch still queued. Its commands are recorded with no D.
-- A **timed-out cycle**: the deadline hit before the cycle completed. Nothing is handed over and the batch is
-  dropped (#1486 §2.7). It is a silent cycle with cause timeout, author `TIMEOUT_NOOP`.
+- A **timed-out cycle**: the deadline hit before the cycle completed. Nothing of its routing batch is handed
+  over, and the batch is dropped (#1486 §2.7). An emergency command the cycle already posted (§4, #1486 §2.6) is
+  not withdrawn: it commits at its D like any other. The cycle is a silent cycle with cause timeout, author
+  `TIMEOUT_NOOP`, only when it posted no emergency command. A timed-out cycle that posted one is not silent, and
+  its emergency commands are `LLM` actions. This is the rule for a cut cycle that already emitted (§1b.1).
 
 **What is recorded.**
-- Per command: seq, cycle id, O, N, D, outcome and code. Decided in #1482 (stream fields) and #1476 (schema).
+- Per command: seq, cycle id, O, N, D, outcome and code. Decided in #1482 (stream fields) and #1476 (schema). An
+  emergency command also carries P (`emergencyPostedTick`, required).
 - Per denial: the #1463 `denials[]` event. It carries `n`, `d` and `o` for `STALE_SNAPSHOT` and
   `PRECONDITION_CHANGED`.
 - Per run:
@@ -285,6 +294,8 @@ These cases are counted on their own:
   - the D−N and D−O distributions. Undrained commands (no D) are left out of both distributions and counted only
     as undrained;
   - the counts of partial, refused, stale and undrained cycles;
+  - for emergency commands, the D−N distribution, the R9 latency-breach count (D−N > 1) and the defect count
+    D − P > 1 (keys decided in #1476);
   - the pacing controller's rate distribution and the time it spends at its minimum speed (QA 6; key decided in
     #1476).
 
@@ -361,13 +372,33 @@ dispatcher.
   `EmergencyHold`.
 - These commands go to a separate low-level emergency queue as soon as the tool runs. They are not part of the
   routing batch.
-- They are drained at the next D and resolved from the #1469 route record at D, so they read no snapshot.
-- Their N is the cycle's tick. D−N is recorded for every emergency command, and D−N > 1 counts as an R9 latency
-  breach. The key is decided in #1476.
-- The latency is at most one control step: 2.0 simulated s, about 40 m at 20 m/s (estimate).
-- Nothing calls `Process.reactivate` or schedules a kDisco event from another thread.
-- Whether kDisco needs cross-thread submission is decided in #1450. #1484 adds `EmergencyStopNextDrainTest` and
-  `EmergencyLatencyRecordedTest`.
+- They are drained at **every** control-step drain, **first**, before the main low-level batch. This does not
+  depend on what the main queue holds: an empty main queue or a stale main batch never delays or drops an
+  emergency command (#1450 ruling; #1484 implements it). They are resolved from the #1469 route record at D, so
+  they read no snapshot.
+- **P, the post tick.** `post` reads `latestObservation.tick` inside the same atomicfu lock the drain takes
+  (#1478). It stores the value in the command as `emergencyPostedTick` (P). A tick the poster reads before it
+  enqueues is not enough, because the poster can be preempted between the read and the enqueue while the
+  simulation thread publishes and drains twice. With the stamp under the lock, a post ordered before drain t has
+  P ∈ {t − 1, t}. So the commit drain satisfies **D − P ≤ 1** exactly: D = P when the post lands between steps 4
+  and 6 of step P (§2), else D = P + 1. D − P > 1 is a defect. `emergencyPostedTick` is therefore required in the
+  record (key for #1476, stream field for #1482).
+- **N, the cycle's tick.** D−N is recorded for every emergency command, and D−N > 1 counts as an R9 latency
+  breach. D−N measures the whole chain from observation to commit, LLM thinking time included. A high count is
+  therefore a pacing finding, like `staleRefusals`, not an engine defect. The key is decided in #1476.
+- **Accepted latency (#1450 ruling): at most one control step, 2.0 simulated s, measured from the arrival of the
+  command in the emergency queue to its commit at D.**
+  - The LLM's thinking time is outside this bound.
+  - In one control step a train runs 48 m at the 24 m/s line speed of both stations' tracks, and 80 m at 40 m/s
+    on the Praha hl.n. north approach. These are computed from the station XML, not measured.
+  - Wall time is not bounded: a GUI pause freezes simulated time, and the command commits at the first drain
+    after resume.
+- Nothing calls `Process.reactivate` or schedules a kDisco event from another thread. Goal 9B needs no kDisco API
+  for cross-thread submission (#1450 ruling: not needed). Goal 9C (R15) revisits it, together with a shorter
+  emergency step.
+- #1484 adds `EmergencyStopNextDrainTest`, `EmergencyLatencyRecordedTest`,
+  `EmergencyStopAppliedAtFirstDrainAfterPostTest`, `EmergencyChannelNoEngineCallArchitectureTest` and
+  `EmergencyLatencyBudgetTripwireTest` (#1450 ruling).
 - The channel skips the SEMI_AUTO row.
 
 **SEMI_AUTO (requirement 7; settled).** K stays 2 in SEMI_AUTO; there is no separate bound.
@@ -420,7 +451,8 @@ dispatcher.
 
 ### 6. Replay
 
-The record holds, per command: seq, cycle id, O, N, D, author, the high-level command and its outcome. The stream
+The record holds, per command: seq, cycle id, O, N, D, author, the high-level command and its outcome, and for an
+emergency command P. The stream
 fields and their schema number are decided in #1482.
 
 How replay runs:
@@ -428,7 +460,8 @@ How replay runs:
 - On every tick it keeps the last K + 1 published snapshots.
 - At tick D it takes each recorded routing command with that D, in seq order, re-runs the translator inline against
   the kept snapshot N, and then drains.
-- Emergency commands are re-posted at their D with no snapshot.
+- Emergency commands are re-posted at their D with no snapshot, ahead of that D's routing commands (the drain
+  order of §4). P is taken from the record, never re-stamped. Replay checks D − P ≤ 1.
 - Stale refusals are reproduced from N and D.
 
 This is sound only if the translator is a pure function of (snapshot, route table, command):
@@ -516,8 +549,10 @@ the buffer. A threaded CI run cannot choose N either. So #1480 adds a **test-onl
     minimum;
   - the run record holds the rate distribution and the time spent at minimum speed (§3.2).
 - **Replay memory.** 3 snapshots, about 45–75 KiB (estimate). It grows only if K grows.
-- **Emergency latency.** Up to one control step. Breaches (D−N > 1) are counted. This is accepted unless #1450
-  rules otherwise. A change to braking physics re-opens it (the #1486 B1 tripwire).
+- **Emergency latency.** At most one control step (2.0 simulated s) from arrival in the emergency queue,
+  guaranteed by D − P ≤ 1 (#1450 ruling). D−N > 1 is counted as an R9 latency breach, which is a pacing finding.
+  D − P > 1 is a defect. A change to braking physics re-opens the question (the #1486 B1 tripwire). Goal 9C
+  (R15) revisits cross-thread submission.
 - **Non-suspending spin.** Only process exit ends it (§7 b).
 - **SEMI_AUTO window.** The operator has 1–2 drains: 2–4 simulated s, which is 2–4 wall s at 1× and 0.2–0.4 s at
   10×, unless they pause the GUI. This is accepted together with the measures in §4.
@@ -545,7 +580,7 @@ leak: a translator can reach all three through `SimulationContext` or `NetworkAc
 | Requirement or rule | Test | Leaf | Tag |
 |---|---|---|---|
 | R1 `STALE_SNAPSHOT` at D−N > K | `StaleSnapshotTypeTest` (D−N = 2 commits, 3 refuses; one event per command of the batch) | #1464 type, #1480 raise | unit |
-| R1 amendment: emergency exempt, D−N recorded | `EmergencyLatencyRecordedTest` | #1484 | unit |
+| R1 amendment: emergency exempt, D−N recorded | `EmergencyLatencyRecordedTest` (D−N and P recorded; D−N > 1 counted) | #1484 | unit |
 | R2 a pre-check is not the verdict; refusals in the next observation | `CommitRefusalInNextObservationTest` (a tool pre-check passes at O, the command is refused at D, and the refusal line appears in cycle O+1's observation) | #1481 | `integration-test` |
 | R3 one batch, one snapshot, never split | `BatchNeverSplitAcrossDrainsTest` | #1478 / #1480 | unit |
 | R4 distributions and counters in the run record | `RunRecordTimingDistributionsReadBackTest` (D−N, D−O, `staleRefusals` total and by author, `commitRefusalsByCode`, the cycle counters, undrained left out of D−N) | #1476 keys, #1482 writes | unit |
@@ -553,7 +588,9 @@ leak: a translator can reach all three through `SimulationContext` or `NetworkAc
 | R6 watchdog budget | `WatchdogBudgetFakeTimeTest` (a slow legal run at minimum speed does not fire; frozen simulated time fires; the grace period calls the exit seam) | #1485 | unit |
 | R6 real stop of a spin | `WatchdogProcessExitChildJvmTest` (exit code and end cause only) | #1485 | `integration-test` |
 | R7 SEMI_AUTO subject to K | `SemiAutoRowStaleAfterKTest` (approval at D = N + 3 is refused `STALE_SNAPSHOT`, author `OPERATOR`) and `SemiAutoRowAgeFrozenWhilePausedTest` (pause, approve, resume, and the row commits). Both count control steps, never wall time | #1440 | unit |
-| R8 emergency at the next drain | `EmergencyStopNextDrainTest` and the test #1450 names | #1484 | unit |
+| R8 emergency at the next drain | `EmergencyStopNextDrainTest` and `EmergencyStopAppliedAtFirstDrainAfterPostTest` (a two-latch `ControlStepListener` hook; `emergencyPostedTick` = P and D = P + 1; the `EmergencyHold` twin; a stale main batch and an emergency command at the same D: the batch is refused with `STALE_SNAPSHOT` and the emergency command commits first) | #1484 | unit |
+| R8 no engine call from the emergency queue | `EmergencyChannelNoEngineCallArchitectureTest` (`:core` jvmTest source scan of the queue file) | #1484 | unit |
+| R9 latency budget | `EmergencyLatencyBudgetTripwireTest` (tripwire: step 2.0 s, deceleration 3.0, max line speeds 24.0 and 40.0 read from the station XML) | #1484 | unit |
 | R8 inline timing | O = N = D for every inline command, the #895 bracket byte-equal, `ControlArmGoldenOutcomeTest` | #1480 | `integration-test` |
 | R8 threaded stamps | O ≤ N ≤ D for every command; nothing takes the old path | #1481 | `integration-test` |
 | R8 replay | `ReplayRailwayOutcomeTest` (lagged translator, m ∈ {0..3}, plus the missing-snapshot case), `DenialsReplayByteEqualTest` | #1482 | `integration-test` |
@@ -578,14 +615,16 @@ changes and are not listed here.
   - the per-author `staleRefusals` split;
   - the pacing rate distribution and the time at minimum speed;
   - the R9 latency-breach key;
+  - the required `emergencyPostedTick` key;
   - the operator-rejected key;
   - the schema number.
 - **#1478:** the package of the queue types and of `ActionAuthor`. The batch-atomic post and drain use atomicfu in
-  commonMain.
-- **#1482:** the command-stream fields (seq, cycle id, O, N, D) and the definition of byte-equal.
+  commonMain. The emergency queue's lock uses the same atomicfu idiom, and `post` stamps P under it.
+- **#1482:** the command-stream fields (seq, cycle id, O, N, D), the `emergencyPostedTick` stream field and the
+  definition of byte-equal.
 - **#1483:** the removal of `ActuatorCommandQueue` and the `Goal9C7ArchitectureTest` rename.
+- **#1484:** the drain order (emergency queue first, at every drain) and the five emergency tests of §4.
 - **#1485:** the margin, the grace period and the end-run mechanism, under the injected-seam rule (§7).
-- **#1450:** whether kDisco needs cross-thread event submission, and the latency test.
 - **#1440 (SP6):** the non-modal rewrite of `SemiAutoApprovalGateway` and `SemiAutoApprovalDialog`.
 - **SP10 (#1444), operator display (QA 3):**
   - `MetricsDashboardPanel` (`DashboardReading`) lines for p95 D−N, p95 D−O, the stale refusal count and the commit
@@ -648,7 +687,8 @@ cycle goes under exactly one cause.
 
 `THINKING_TRUNCATED` is a sub-cause of `TIMEOUT_NOOP`, as #1342 rules, and is never counted twice. This keeps the
 rule above correct as worded. A cut cycle that already emitted a command is not silent: those commands are `LLM`
-actions. Today the `TimeoutNoOpCause` KDoc says that no producer reports `TIMEOUT_NOOP`. In today's
+actions. The same holds for a timed-out cycle that already posted an emergency command (ADR part 1 §3.2): the
+emergency queue keeps it when the routing batch is dropped, and it commits at its D with author `LLM`. Today the `TimeoutNoOpCause` KDoc says that no producer reports `TIMEOUT_NOOP`. In today's
 `KoogAgentPlanAdapter`, a timeout, an exception, an open breaker and a silent non-idle cycle all run `runFallback`.
 So **until #1413 a silence is not free.** It breaks a clean run through C8. So do three consecutive failures: each
 calls `LlmCircuitBreaker.recordFailure`, and the open breaker skips to `runFallback`. The next cycle after a silent
@@ -690,7 +730,7 @@ hold ends (#1486 §2.5).
 | C10 | Route-target choice made by the interlocking's own order when no target is named: `ReservationTargetPolicy.pick` (through `chosenTargetName`), `reservePathToAnyNextSemaphore`, `reservePathToAnyTargets`. | `SAFETY_NET` (confirmed) | The dispatcher always chooses the start and the end of a route (R5). An order the kernel picks is a choice the dispatcher did not make. | `request_route` with an explicit `toEndpointName`. The translator passes a named target through unchanged. |
 | C11 | `InOutWorker` entry reservation **when an InOut has more than one entry target** (`ReservationTargetDiscovery.findNextSemaphoresVia` returns more than one; `EntryProbeSingleTargetTest` fails). | `SAFETY_NET` | #1456 Q1: the kernel's order then picks, as in C10. This holds until the translator names entry targets (SP7). | `approve_train` with a named entry target (SP7). |
 | C12 | SEMI_AUTO operator approval. | `OPERATOR` | Legal, but the run is not autonomous (`ActionAuthor.OPERATOR` KDoc). | — (mode choice) |
-| C13 | A restricting command the R9 emergency path issues by itself (signal to STOP, hold, cancel). No producer today. | `EMERGENCY_SYSTEM` | The system, not the dispatcher, acted. | The LLM's own restricting command (author `LLM`). |
+| C13 | A restricting command the R9 emergency path issues by itself: a hold (`EmergencyHold`, #1486 §2.6). No producer today. | `EMERGENCY_SYSTEM` | The system, not the dispatcher, acted. | The LLM's own restricting command (author `LLM`). |
 | C14 | Watchdog stop (§1b.5). | `WATCHDOG` | It ends the run; the run is never clean. | Any command carried out within the trigger-2 bound. |
 | C15 | Rule-based control arm (`RuleBasedDispatcher`, `RuleBasedEmissionStrategy`). | `RULE_BASED` | Not an LLM run. It is judged by `ExitPassBars` and #895, not by the clean rule. | — |
 
@@ -749,8 +789,8 @@ too, so `releasePhantom` (C6) frees the route in the same control step.
 
 | Verdict (symbol) | Where it runs today | End cause |
 |---|---|---|
-| `DeadlockWatchdog` → `SimulationStalled` → `errorStop` | **only `MultiTrainLoop`**. In `ShuntingLoop` (shuntingLoopAI, cervenyUjezdAI) the 180 s horizon and #1485 trigger 2 are the stops | existing |
-| `Train.OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS` (180 s) → `errorStop` | every loop | existing |
+| `DeadlockWatchdog` → `SimulationStalled` → `errorStop` | **only `MultiTrainLoop`**. In `ShuntingLoop` (shuntingLoopAI, cervenyUjezdAI) the 180 s horizon (suspended while a hold is live on the train; #1486 §2.5) and #1485 trigger 2 are the stops | existing |
+| `Train.OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS` (180 s) → `errorStop`, suspended while a hold is live on the train (#1486 §2.5) | every loop | existing |
 | Other `errorStop`s: `MAX_ORIGIN_NO_PATH_RETRIES`, `MAX_MID_JOURNEY_NO_PATH_RETRIES`, the `InOutWorker` exception stop | every loop | existing |
 | #1485 trigger 1 and trigger 2 (§1b.1) | new | `WATCHDOG_TIMEOUT`, `DISPATCHER_IDLE` (names to confirm in #1485); author `WATCHDOG` |
 | #612 **live** conflict: `CandidateCommitter` emits `ReservationConflictDetected` with `atRunEnd` false → `DefaultCollisionDetectionService.handleReservationConflictDetected` → CRITICAL → `autoPauseOnCritical` | every context run | own end cause (O4) |
@@ -792,7 +832,8 @@ All named tests belong to other leaves; this section adds no code.
   One test shows that a deferred expiry is counted once.
 - #1476: a silent-cycle test over all four causes, including `THINKING_TRUNCATED` (the MockWebServer
   `done_reason=length` reply of #1342), where the run stays clean. One test shows that a cut cycle which already
-  emitted counts its actions under `LLM`.
+  emitted counts its actions under `LLM`. One test shows that a timed-out cycle that already posted an
+  `EmergencyCancel` is not silent and counts it under `LLM`.
 - #1413: an architecture tripwire. The LLM runtime does not reference `RuleBasedDispatcher`, the fallback types or
   `ExpiredRouteQuarantine`.
 - SP6 (#1440): the proof of §1b.6, including the per-block E2 check.
@@ -811,9 +852,11 @@ All named tests belong to other leaves; this section adds no code.
     A defect it finds is filed at that replan.
 - **O3 — #1476:** whether `LLM_EXCEPTION` and the open-breaker skip get their own silent-cycle causes after #1413.
   Also the counter key names for C1–C15. #1413 removes the breaker → `runFallback` branch, so after it an open
-  breaker gives only silent cycles.
+  breaker gives only silent cycles. Also the cycle-outcome key of a timed-out cycle that posted an emergency
+  command (not `TIMEOUT_NOOP` / `DEADLINE_MISS`).
 - **O4 — #1476 / #1485:** the end cause of the live conflict auto-pause. A headless pause that never resumes would
-  otherwise fire trigger 1.
+  otherwise fire trigger 1. Also for #1485: the idle-work predicate counts a held train with no route as
+  actionable work, so a hold that never clears still ends the run (#1486 §2.5).
 - **O5 — #1413:** fix the stale `ShuntingLoop.approveQueuedTrain` comment.
 - **O6 — #1249:** the YOUR ROUTES block shows the remaining time per route (`expires_in_s` does not occur in
   `:dispatcher-agent` main code today), including the routes of queued and exited owners.
@@ -832,8 +875,8 @@ questions. Each such case is marked.
   `reroute`, `cancel_route`, `renew_route`, `hold_train`, `release_hold` and `no_op`. The frozen prompt variants
   keep **surface V1**: today's 4 tools, with today's behaviour.
 - A **route id** is `R<n>`. Each `PathReservationRegistry` instance assigns it on every successful commit.
-- A **hold** is a hold at a signal. Its latch is set by the occupancy event, and its release is evaluated at the
-  control step. While a hold is live, it stops the expiry clocks of the held train's routes.
+- A **hold** is a hold at a signal. Its latch is initialised from live occupancy when the hold is installed and
+  then set by the occupancy event, and its release is evaluated at the control step. While a hold is live, it stops the expiry clocks of the held train's routes.
 - A **cancel** is a per-route, approach-locked release. Its chain of later routes is worked out at commit and is
   carried out all or nothing.
 - The **emergency channel** accepts only restricting commands and reads no snapshot. An emergency on an entered
@@ -925,7 +968,7 @@ Class letters: N = NEVER, R = REPLAN, W = WAIT.
 | `reroute(train, target)` | **Changed**: adds `via` | `reroute(train, target, via?)` | The train holds a live route it has **not entered**, and the target differs from the held one. The cancel half is the §2.4 chain cancel. The result lists every id released. | `NO_ROUTE_HELD` R, `TRAIN_ON_RESERVED_BLOCK` R (entered), `ROUTE_ALREADY_HELD_TO_SAME_TARGET` R, every `set_route` denial. Commit: `RELEASE_REFUSED` W, on the whole chain. |
 | `cancel_route(route id)` | **Changed**: adds `emergency` | `cancel_route(route, emergency?)` | The id is live. Any owner phase is accepted (#1475 O1). For an active owner, the route is not entered. With `emergency`, an entered route is accepted for the STOP half only (§2.6). | `NO_ROUTE_HELD` R (unknown or freed id), `TRAIN_ON_RESERVED_BLOCK` R (entered; with `emergency`, the release half only). Commit: `RELEASE_REFUSED` W on the whole chain, `PRECONDITION_CHANGED` R. |
 | `renew_route(route id)` | **Kept** | `renew_route(route)` | The id is live, the owner is active or queued, and the command is not on the emergency channel. The description says: "keeps the route set against the simulator's expiry. Real routes do not expire." | `NO_ROUTE_HELD` R, `TRAIN_ALREADY_EXITED` N, `UNKNOWN_TRAIN` N (phantom owner). On the emergency channel: `DROPPED_INVALID` N. |
-| `hold_train(train, until = after_train X clears P \| sim time T)` | **Changed**: the give-way form only, with arguments renamed | `hold_train(train, for_train, clear_of)` | `train` is active and not held. `for_train` ≠ `train`, and is queued or active. `clear_of` names a signal, switch or InOut. No set route of `train` conflicts (#1487 row) with a live route of `for_train`, or with a route-table route of `for_train` that passes `clear_of`. | `UNKNOWN_TRAIN` N, `TRAIN_NOT_ADMITTED` R, `UNKNOWN_ENDPOINT` N, `BLANK_ARGUMENT` N (`for_train` = `train`), **`CONFLICT` W** (`conflictAt` = the route; alternative = `cancel_route <id>`). Commit: `DROPPED_INVALID` N (no signal left ahead). |
+| `hold_train(train, until = after_train X clears P \| sim time T)` | **Changed**: the give-way form only, with arguments renamed | `hold_train(train, for_train, clear_of)` | `train` is active and not held. `for_train` ≠ `train`, and is queued or active. `clear_of` names a signal, switch or InOut. A route-table chain from the position of `for_train` (its entry InOut when queued) to its exit passes `clear_of` (owner ruling 2026-11-28). No set route of `train` conflicts (#1487 row) with a live route of `for_train`, or with a route-table route of `for_train` that passes `clear_of`. | `UNKNOWN_TRAIN` N, `TRAIN_NOT_ADMITTED` R, `UNKNOWN_ENDPOINT` N, `BLANK_ARGUMENT` N (`for_train` = `train`), **`CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` R** (*#1463 denial candidate*: no chain of `for_train` passes `clear_of`; raised at O and again at N, recorded as `PRE_CHECK` with `tick` = N, as `AMBIGUOUS_TARGET` is), **`CONFLICT` W** (`conflictAt` = the route; alternative = `cancel_route <id>`). Commit: `DROPPED_INVALID` N (no signal left ahead, or no chain of `for_train` from its live position passes `clear_of` at D). |
 | `release_hold(train)` | **Kept** | same | The train holds a hold, and the command is not on the emergency channel. | `NO_ROUTE_HELD` R (`detail`: "no hold to release"). On the emergency channel: `DROPPED_INVALID` N. |
 | `no_op(reason)` | **Changed**: `reason` optional, at most 8 words | `no_op(reason?)` | Always legal. It is counted as a silent cycle (`TickOutcome.LLM_NO_OP`). | — |
 
@@ -976,6 +1019,7 @@ data class SetRoute(train: String, fromName: String, toName: String, routeKey: S
                     precondition: RoutePrecondition?, countsBlockTransition: Boolean = false)
 data class ReleaseRoute(routeId: String)          // the chain is worked out at commit (below)
 data class ReleaseTrainRoutes(train: String)      // V1 cancel_route only: today's by-train release
+data class RequestTrainRoute(train: String, fromName: String, toName: String) // V1 request_route only: today's endpoint request
 data class RenewRoute(routeId: String)
 data class AdmitTrain(train: String)
 data class Hold(train: String, release: HoldRelease)
@@ -987,6 +1031,16 @@ data class EmergencyHold(train: String) : Restricting             // EMERGENCY_S
 ```
 
 `ActionAuthor` moves to `:core`, next to `HighLevelCommandSource`.
+
+**`RequestTrainRoute` (V1 only).** At D it calls today's endpoint request, `NetworkActuatorPort.requestRoute(train,
+from, to)` with no precondition.
+- The kernel keeps today's candidate selection between the two named endpoints.
+- The applier keeps everything `DispatchDecisionApplier.applyRequestRoute` does today: the `appliedRequestRoutes`
+  duplicate guard, the #1304 failed-reservation count and the route-request announcement.
+- The translator passes the endpoints through unchanged, reads no route table and no ranking, and raises no
+  `AMBIGUOUS_TARGET`.
+- Like `ReservePath`'s `precondition = null`, no re-check (#1465) answers `PRECONDITION_CHANGED` where today's
+  call answers `Conflict`.
 
 **Cancel (`ReleaseRoute`) and its chain.** The cancel is the same for `cancel_route`, for the cancel half of
 `reroute` and for the release half of `EmergencyCancel`.
@@ -1067,9 +1121,16 @@ interface TrainLifecyclePort {                 // no longer a fun interface
 
 **How "until X clears P" is expressed.** It is a condition on the port, not a re-check by the translator. The
 routing thread has no retry loop and reads no live state (#1474 §3.3). The rules (TSE 3):
-- **Latch.** A per-hold latch "X has occupied a block bounded by P" is set from the occupancy event on the
-  simulation thread (`PathReservationRegistry.addBlockOccupancyListener`). Sampling every 2 s would miss an X
-  that crosses a 5 m block in well under 2 s (estimate).
+- **Latch.** A per-hold latch "X has occupied a block bounded by P" is **initialised from live occupancy when the
+  hold is installed** at drain D, on the simulation thread: it is set at once if X then occupies a block bounded
+  by P. After that it is set from the occupancy event (`PathReservationRegistry.addBlockOccupancyListener`).
+  Without the initial read, an X already standing on such a block when the hold arrives would never set the
+  latch, because its occupancy event predates the hold, and the held train would wait until X exits. Sampling
+  every 2 s would miss an X that crosses a 5 m block in well under 2 s (estimate).
+- **An X that will never pass P is refused (owner ruling 2026-11-28).** The hold is refused when no route-table
+  chain from X's position to its exit passes P: at pre-check (O and N) with `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` R
+  (a #1463 denial candidate, §2.3) and again at commit at D with `DROPPED_INVALID` N. Such a hold could otherwise
+  end only when X exits or by the #1485 idle-work trigger.
 - **Release test.** X clears P when the latch is set and X now neither occupies nor holds a block bounded by P,
   or when X has exited.
 - **Where it is evaluated.** In `ShuntingLoop.iteration`, after `expireStaleReservations` and before the
@@ -1077,8 +1138,22 @@ routing thread has no retry loop and reads no live state (#1474 §3.3). The rule
   the TSE.
 - **What the hold may not add.** No kDisco `Process`, `waitUntil` or scheduled event. With an empty hold table
   the evaluation is a no-op, so #895 stays byte-equal.
-- **Train side: no change.** A held train waits level-triggered in `Front.holdShortOfRestrictiveSignal` or in
-  `semaphoreAction` (`waitUntil(allowingSignal)`). The aspect change on the simulation thread wakes it.
+- **Train side.** A held train whose route is still set waits level-triggered in
+  `Front.holdShortOfRestrictiveSignal` or in `semaphoreAction` (`waitUntil(allowingSignal)`). The aspect change on
+  the simulation thread wakes it.
+  - A held train with **no** reserved continuation, which is the normal case after the cancel that §2.3
+    prescribes, waits in `Train.Site.actions` → `waitForPathOrReportStall`, before any signal wait. While a hold
+    is live on that train, the path-wait horizons (`OWNERSHIP_CONFLICT_WARN_HORIZON_SECONDS`, the 60 s WARN, and
+    `OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS`, the 180 s `errorStop`) do not run. After the hold ends, both
+    horizons are measured from the later of the wait start and the end of the hold, so a give-way is never ended
+    by the stall stop.
+  - The wait condition stays one level-triggered `waitUntil`, re-tested after every event, and the hold-table
+    change at the control step is such an event. No kDisco `Process` or scheduled event is added. With no hold
+    on the train the condition is today's, so unheld trains keep their bounds and #895 stays byte-equal. A
+    held train is bounded by the #1485 idle-work trigger.
+  - This hold-aware horizon was ruled by the repository owner on 2026-11-28 in the review of PR #1512; the
+    `sim/` change is made in a later leaf with traffic-simulation-expert review, heavyTest and the #895
+    bracket. It replaces the "no train-side change" statement of the signed-off #1486 review (TSE item 3).
 
 **When the hold releases.** The port clears the signal again if the train's route is still set. This is E7, the
 excluded automatic whose predecessor is the `hold_train`, with author `LLM`.
@@ -1090,8 +1165,10 @@ excluded automatic whose predecessor is the `hold_train`, with author `LLM`.
 `holdings`) stop for the held train's routes. They restart from zero when the hold ends, so a give-way is never
 ended by a counted `EXPIRY`.
 
-**The duration form.** `AtSimTime(D + d)` replaces `holdTrain(trainId, holdDurationSeconds)`. `holdTrain` is
-removed from the port.
+**The duration form.** `AtSimTime(t_D + d)` replaces `holdTrain(trainId, holdDurationSeconds)`, where t_D is the
+simulated time in seconds at drain D, read on the simulation thread when the hold commits, never the tick number
+D. The hold releases at the first control-step evaluation at or after that time, so its resolution is one control
+step (2.0 simulated s). `holdTrain` is removed from the port.
 
 **`release_hold` needs a port method**: `releaseHold`. It is not dropped.
 
@@ -1129,11 +1206,12 @@ NEVER.
 
 **What the LLM posts.** `cancel_route(route, emergency = true)` becomes `EmergencyCancel(routeId)`.
 - It is posted to the low-level emergency queue as soon as the tool runs. It is not part of the cycle's routing
-  batch, so a stale batch cannot take it down (TSE 1).
+  batch, so a stale batch cannot take it down (TSE 1). A cycle that later times out does not withdraw it.
 - `EMERGENCY_SYSTEM` (C13) may also post `EmergencyHold`, which is `Hold(train, OnRelease)`.
 
-**At commit, on the simulation thread.** The command reads no snapshot (TSE 1). The signal is looked up from the
-#1469 route record at D:
+**At commit, on the simulation thread.** The emergency queue is drained first, at every drain, before the main
+batch (#1450 ruling). The command reads no snapshot (TSE 1). The signal is looked up from the #1469 route record
+at D:
 - **Route not entered:** its start signal goes to STOP first, then the §2.4 chain cancel runs.
 - **Route entered (RCE 3):** the next signal ahead of the train goes to STOP. The release half is refused with
   `TRAIN_ON_RESERVED_BLOCK` R until a test pins that every block ahead of the train stays reserved. The STOP
@@ -1143,7 +1221,8 @@ NEVER.
 **`STALE_SNAPSHOT` (Q-TSE1, ruled).** The channel is exempt from `STALE_SNAPSHOT` under three conditions:
 1. the lowering reads no snapshot, so replay needs none;
 2. D−N is recorded for every emergency command, with N = the cycle's tick, and D−N > 1 is counted as an R9
-   latency breach (key for #1476);
+   latency breach (key for #1476). P (`emergencyPostedTick`) is stamped under the queue lock and recorded.
+   D − P ≤ 1 is guaranteed, and D − P > 1 is a defect (#1450 ruling);
 3. emergency commands are not part of the routing batch.
 
 The channel also skips the SEMI_AUTO row.
@@ -1156,15 +1235,20 @@ the V2 tools. The V1 tools map onto it as follows, keeping today's behaviour:
 | V1 `DispatchAction` | Command |
 |---|---|
 | `ApproveTrain(t)` | `ApproveTrain(t)` |
-| `RequestRoute(t, from, to, scope)` | `SetRoute(t, target = to, via = null)`. `from` is checked against `legalOriginsOf` (`ORIGIN_NOT_AT_TRAIN_POSITION` R), never used as an input. |
+| `RequestRoute(t, from, to, scope)` | Low-level `RequestTrainRoute(t, fromName = from, toName = to)`: today's endpoint request with today's candidate selection (§2.4). V1 only. The caller's `from` is passed through. Its in-turn checks stay `RequestRouteTool`'s own (`ORIGIN_NOT_AT_TRAIN_POSITION`, `TARGET_NOT_TRAIN_DESTINATION`, `TARGET_NOT_NEXT_SECTION`, `ROUTE_SPANS_ENTRY_TO_EXIT`). No `via`, no `AMBIGUOUS_TARGET`. |
 | `CancelRoute(t)` | Low-level `ReleaseTrainRoutes(t)`: today's by-train `releasePathDetailed`, which also frees the un-travelled tail of an entered route (TSE 6). V1 only. |
 | `NoOp` | `NoOp` |
+
+"Today's behaviour" means the same tool schema, the same in-turn checks and the same kernel call at commit. One
+difference is inherent to R8 and applies to every threaded command: a V1 command commits at the first drain D after
+it arrives, and is refused with `STALE_SNAPSHOT` when D−N > K (requirement 1).
 
 **`KoogAgentPlanAdapter`.**
 - Today `plan` returns `List<DispatchDecision>`. On the LLM path the list is always empty, because the tools emit
   through `SinkHolder`. After `runFallback` it holds the rule-based decisions.
 - After #1413 and #1481 the adapter produces **one high-level batch per cycle**. Tools append to the batch, and
-  the adapter posts it once at the end of the cycle. A timed-out cycle drops its batch.
+  the adapter posts it once at the end of the cycle. A timed-out cycle drops its batch. Emergency commands it
+  already posted stay in the emergency queue and commit (§2.6, ADR part 1 §3.2).
 - Emergency commands bypass the batch (§2.6).
 
 **Modes.**
@@ -1180,18 +1264,35 @@ the V2 tools. The V1 tools map onto it as follows, keeping today's behaviour:
 
 ### Named tests
 
-- **#1483:** the fixture conversions (§2.5); `TrainLifecyclePortHoldReleaseTest` (`AfterTrainClears` with X
-  passing, X exiting and X never arriving; `AtSimTime`; `releaseHold`).
+- **#1483:**
+  - the fixture conversions (§2.5);
+  - `TrainLifecyclePortHoldReleaseTest`: `AfterTrainClears` with X passing, X exiting and X never arriving; X
+    already on a block bounded by P when the hold is installed (the hold releases when X leaves P, not when X
+    exits); `AtSimTime` (a hold of d = 10 s committed at a late tick, for example tick 50, releases at t_D + 10 s,
+    not at once); `releaseHold`.
+  - `HoldClearOfNotAheadRefusedTest`: a hold whose `for_train` has no route-table chain to its exit that passes
+    `clear_of` is refused with `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` at O and at N (recorded with `tick` = N), and
+    with `DROPPED_INVALID` at commit when X passes `clear_of` between N and D.
 - **#1484:**
   - `EmergencyChannelRestrictingOnlyTest`: every non-restricting command and a lone release give
     `DROPPED_INVALID`.
   - `EmergencyCancelEnteredRouteStopsTest`: the STOP is carried out and the release is refused with
     `TRAIN_ON_RESERVED_BLOCK`.
   - `EmergencyHoldNoAutoReleaseTest`.
-  - `EmergencyLatencyRecordedTest` (D−N recorded; D−N > 1 counted).
+  - `EmergencyLatencyRecordedTest` (D−N and P recorded; D−N > 1 counted).
   - `EmergencyStopNextDrainTest`.
+  - `EmergencyStopAppliedAtFirstDrainAfterPostTest`, `EmergencyChannelNoEngineCallArchitectureTest` and
+    `EmergencyLatencyBudgetTripwireTest` (#1450 ruling; Part 1 test table).
+  - `EmergencyPostedBeforeTimeoutCommitsTest`: an `EmergencyCancel` posted by a cycle that then hits its deadline
+    commits at its D with author `LLM`, and the cycle is not recorded as `TIMEOUT_NOOP`.
   - `HoldLatchShortBlockTest`: a 5 m block crossed between two control steps still releases the hold.
-  - `HeldTrainNeverStallsTest`: a held train whose route stays set never enters `waitForPathOrReportStall`.
+  - `HeldTrainNeverStallsTest`:
+    - a held train whose route stays set never enters `waitForPathOrReportStall`;
+    - **no-route case:** a train whose route was cancelled and that is then held (fixture `AtSimTime` hold
+      longer than `OWNERSHIP_CONFLICT_ERROR_HORIZON_SECONDS`) waits beyond 180 simulated s with no WARN and no
+      `errorStop`;
+    - after the hold ends, an unextended train WARNs 60 s and stops 180 s after the hold end;
+    - an unheld train in the same fixture still stops at 180 s.
   - `HoldStopsExpiryClocksTest`.
   - `HoldTableEmptyByteEqualTest` (#895).
 - **#1469:** `RouteIdStabilityTest` (one id per successful commit, a counter per registry, no id for an aborted
@@ -1204,18 +1305,29 @@ the V2 tools. The V1 tools map onto it as follows, keeping today's behaviour:
   - `HoldTrainConflictRefusedTest`.
   - `ReservePathCountsBlockTransitionTest`, together with the #895 bracket and `ControlArmGoldenOutcomeTest`.
   - `V1CancelRouteByTrainTest`.
+  - `V1RequestRouteEndpointTranslationTest`:
+    - on a target with two legal chains from the given origin, V1 `request_route(t, from, to)` raises no
+      `AMBIGUOUS_TARGET`;
+    - the kernel receives the caller's `from` and `to` unchanged;
+    - the granted blocks equal those of today's `DispatchDecision.RequestRoute` through `DispatchDecisionApplier`
+      on the same state, pinned equal on base and head;
+    - a `from` that differs from the V2 `legalOriginsOf` pick is passed through, not replaced.
+
+    It sits next to `ToolSurfaceVersionTest` (V1 schema byte-equal), so both the schema bytes and the railway
+    outcome are pinned.
   - `SetSwitchRefusalsTest`, with the occupied case.
 - **SP11 / #1445:** `ToolSurfaceVersionTest` (V1 is byte-equal to today); `ToolResultSizeTripwireTest`.
 
 ### Open points
 
 - **P1 → #1475:** the C5 "LLM first" cell, now in part 1b (§1b.2).
-- **P2 → #1463 / #1464:** the `AMBIGUOUS_TARGET` row and the `NO_ROUTE_HELD` reuse for `release_hold` with no hold (§2.3).
+- **P2 → #1463 / #1464:** the `AMBIGUOUS_TARGET` row and the `NO_ROUTE_HELD` reuse for `release_hold` with no hold (§2.3); the candidate row `CLEAR_OF_NOT_AHEAD_OF_FOR_TRAIN` (PRE_CHECK, REPLAN, PLAIN; owner ruling 2026-11-28, §2.3, §2.5).
 - **P3 → #1476:** the new author values; the surface-version key; the operator-rejected key; the R9
-  latency-breach key.
+  latency-breach key; the `emergencyPostedTick` key.
 - **P4 → #1469:** the per-route block sets, the per-registry id counter and the per-route approach-locked
   release.
 - **P5 → owner:** whether the time form of `hold_train` returns for the LLM, as a V3 surface.
 - **P6 → future leaf (OPERATOR, MANUAL only):** *nouzové rušení závěru* as a low-level command, done only after a
   person has checked that the track is free, with one count per act on a *počítadlo nouzových obsluh* counter.
   It is never an LLM tool.
+- **P7 → #1478 / #1480:** `RequestTrainRoute` (V1 only) in the low-level vocabulary (§2.4, §2.7).
