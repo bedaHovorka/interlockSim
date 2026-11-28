@@ -61,6 +61,10 @@ class NoOpTool(
 		args["reason"]?.toString()?.takeIf { it.isNotBlank() }?.let { reason ->
 			logger.debug { "no_op: $reason" }
 		}
+		// A `no_op` a cut reply carried is part of that reply's payload (Issue #1342): refused with
+		// the other actuator tools through the shared gate, so the cycle records the cut ending
+		// instead of an emission classification.
+		cutReplyToolRefusal()?.let { return it }
 		sinkHolder.emit(DispatchAction.NoOp)
 		return ToolResult.Success("emitted no_op")
 	}

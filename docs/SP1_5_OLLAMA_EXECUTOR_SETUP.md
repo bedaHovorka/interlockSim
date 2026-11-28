@@ -142,7 +142,7 @@ Expected output: JSON list of pulled models, including `qwen2.5:7b-instruct`.
 | `modelName` | `qwen2.5:7b-instruct` | Model for LLM decisions |
 | `temperature` | `0.7` | Sampling randomness (0.0 = deterministic, 1.0 = max random) |
 | `topP` | `0.9` | Nucleus sampling cutoff |
-| `maxTokens` | `1024` | Max response length |
+| `maxTokens` | `1024` | **No effect** — never reaches Ollama (see "Output-token cap" below) |
 | `inferenceTimeout` | `30 seconds` | Max wall-clock time per LLM call |
 | `retryAttempts` | `3` | Retries on transient failure |
 
@@ -151,6 +151,51 @@ Expected output: JSON list of pulled models, including `qwen2.5:7b-instruct`.
 fail-fast validation; `temperature`/`topP`/`maxTokens`/`inferenceTimeout` are per-call
 `Prompt`/`LLModel` parameters in Koog's API and are threaded through when a `Prompt` is
 built and executed — that wiring is SP1.6 (#551), not this executor.
+
+### Output-token cap: a derived tag with `PARAMETER num_predict` (Issue #1342)
+
+`maxTokens` (and `topP`) have no effect: the pinned Koog version's Ollama client sends only
+`temperature` and `num_ctx` in `options`, and `additionalProperties` lands at the request root,
+where Ollama does not read options (`OllamaExecutorConfig.noOpSettingWarnings` warns about this at
+startup; evidence in `docs/GOAL_10_SP2C27_OLLAMA_CAPABILITY_AUDIT.md`). Lowering `maxTokens` does
+not shorten replies and does not stop a runaway generation.
+
+The cap lives in the model profile instead: build a **derived local tag** whose Modelfile sets
+`num_predict`, and point the dispatcher at that tag.
+
+```bash
+# The number comes from the #992 census of completed generation lengths for the model you use;
+# for a thinking model the cap cuts thinking and content together. Do not copy a number from
+# another model.
+cat > Modelfile.capped <<'MODELFILE'
+FROM qwen2.5:7b-instruct
+PARAMETER num_predict <cap from the #992 census>
+MODELFILE
+ollama create qwen2.5:7b-capped -f Modelfile.capped
+ollama show qwen2.5:7b-capped --parameters   # must list num_predict
+
+# Run on the derived tag: the model name comes from the 3-tier dispatcher config.
+java -ea -Dinterlocksim.dispatcher.model=qwen2.5:7b-capped -jar interlockSim.jar example shuntingLoopAI 333
+```
+
+What the dispatcher does with the cap:
+
+- **Run record.** At run start the LLM run calls `POST /api/show` for its tag
+  (`OllamaModelfileHashSource`) and records `modelProfile` in the run JSON (schema 15): the tag, the
+  SHA-256 of the returned `modelfile` and the `num_predict` value from its parameters. Two runs on
+  the same tag name but a rebuilt Modelfile therefore never look like one configuration. A failed
+  call records both figures `null` (not measured), logs one warning, and the run continues.
+  A non-positive `num_predict` (`-1` is Ollama's "no cap") records `null` too: no cap is configured.
+- **A cut generation acts on nothing.** Koog drops Ollama's `done_reason`, so `OllamaReplyObserver`
+  (a Ktor plugin on the dispatcher's own base HTTP client) reads it from every `/api/chat` reply. A
+  cycle with a `done_reason == "length"` reply is never retried and never handed to the rule-based
+  fallback; the cap stopped that generation before the model finished reasoning, so its own tool
+  calls are refused at the actuator emission and reach nothing. With no emission (a call from the
+  cut reply is not one) the tick is a `TIMEOUT_NOOP` with cause `THINKING_TRUNCATED`, counted in
+  `timeoutNoOpByCause`; a command from an earlier *complete* reply of the same cycle still stands
+  and classifies the tick as any action tick. Either way every cut cycle is counted in
+  `generationCutCycles` (schema 16, the owner ruling of the 2026-11-27 review round). The circuit
+  breaker counts every cut as a failure, so three cuts in a row open the breaker.
 
 ### Customize via Code (SP1.6+)
 
@@ -361,7 +406,8 @@ Typical latencies on qwen2.5:7b-instruct:
 **Optimization tips:**
 - Use GPU if available (100x faster than CPU)
 - Keep model loaded (don't restart Ollama between runs)
-- Reduce `maxTokens` if you don't need long responses (default 1024 is generous)
+- Cap the reply length with a derived tag's `PARAMETER num_predict` (see "Output-token cap" above);
+  `maxTokens` has no effect
 
 ### Multi-Simulation Concurrency
 
@@ -371,7 +417,7 @@ Since `OllamaSimpleExecutor` is a singleton, all simulations share one Ollama cl
 
 For parallel simulations, consider:
 - Multiple Ollama instances on different ports (future enhancement)
-- Reduced `maxTokens` to speed up inference
+- A derived tag with a lower `num_predict` (see "Output-token cap" above; `maxTokens` has no effect)
 
 ## References
 

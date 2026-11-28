@@ -123,7 +123,10 @@ abstract class KoinTestBase : KoinTest {
 	@BeforeEach
 	fun setUpKoin() {
 		startKoin {
-			modules(getTestModule())
+			// Issue #1342: the /api/show fake is loaded LAST, after whatever getTestModule() returns,
+			// so it overrides dispatcherAgentModule's Ollama-backed ModelfileHashSource in every
+			// KoinTestBase test without each test module having to remember it.
+			modules(getTestModule(), testModelfileHashSourceModule)
 		}
 	}
 

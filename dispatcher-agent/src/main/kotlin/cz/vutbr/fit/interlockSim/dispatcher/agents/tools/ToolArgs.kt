@@ -15,6 +15,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaCycleReplies
+import kotlinx.coroutines.currentCoroutineContext
 
 // Argument-extraction helpers for DomainTool implementations (SP1.6, Issue #551).
 //
@@ -63,6 +65,45 @@ internal fun trainIdParameter(description: String): DomainToolParameter =
 internal fun Map<String, Any?>.stringParam(name: String): String? = (this[name] as? String)?.takeIf { it.isNotBlank() }
 
 /**
+ * The refusal of an actuator call carried by a cut reply (Issue #1342, the fix of review finding
+ * C1): the tool call reached the gate inside Koog's tool loop while the reply whose payload it was
+ * extracted from had itself ended with `done_reason == "length"` — the cap stopped that generation
+ * before the model finished reasoning. Such a call acts on nothing: the gate refuses it and
+ * [emitOrRejectForCap] and `NoOpTool` return the refusal without ever reaching [SinkHolder], so no
+ * emission is counted, no command is posted and the cycle records the cut ending.
+ *
+ * ## Where the seal ends
+ *
+ * The gate reads [OllamaCycleReplies.lastReplyCut], per reply — not the sticky any-reply-was-cut
+ * rule the adapter reports the ending with. A decision the model made in a *complete* reply of the
+ * same cycle (after the cut reply's calls were refused, or before that reply was cut at all) was
+ * fully generated and still acts; retrying or falling back on top of it could double-dispatch.
+ * `agents.tools.RejectionRecordingTool` sees a plain error without a code here: a cut is a
+ * generation fault, not an argument the model got wrong, so it must not inflate
+ * `rejectionsByCode`'s rejectable-argument rate — the cut's own trace is the run record's
+ * generation-cut counter.
+ *
+ * ## Accepted residue
+ *
+ * The refusal travels back to the model as a tool error, so the loop may still request another
+ * turn. Stopping before it would need the stop at the reply/parse boundary, outside what the
+ * pinned Koog 1.1.1 lets this repo reach; the follow-up traffic is accepted and the circuit
+ * breaker's failure (recorded by the adapter's cut ending) bounds the stall.
+ *
+ * @return `null` when no cycle replies ride the current context with the last one cut, or the
+ *   [ToolResult.Error] the calling tool returns verbatim instead of emitting.
+ */
+internal suspend fun cutReplyToolRefusal(): ToolResult.Error? {
+	val replies = currentCoroutineContext()[OllamaCycleReplies] ?: return null
+	if (!replies.lastReplyCut) return null
+	return ToolResult.Error(
+		"The reply that carried this call was cut by the output-token cap before the model finished " +
+			"answering, so the call is not applied. End your turn now.",
+		rejection = null
+	)
+}
+
+/**
  * Emits [action] through [sinkHolder], or returns the shared per-cycle-cap rejection.
  *
  * ## Why (Issue #847, SP2c.24)
@@ -79,12 +120,16 @@ internal fun Map<String, Any?>.stringParam(name: String): String? = (this[name] 
  * `no_op` is a first-class decision (C6) and is exempt from the cap, exactly as in
  * [cz.vutbr.fit.interlockSim.dispatcher.ActionValidator.validateBatch].
  *
+ * An actuator call a cut reply carried returns [cutReplyToolRefusal]'s refusal before the cap is
+ * even consulted: it never reaches [sinkHolder] (Issue #1342).
+ *
  * @return `null` when the action was emitted; a [ToolResult.Error] to return verbatim otherwise.
  */
-internal fun emitOrRejectForCap(
+internal suspend fun emitOrRejectForCap(
 	sinkHolder: SinkHolder,
 	action: DispatchAction
 ): ToolResult.Error? {
+	cutReplyToolRefusal()?.let { return it }
 	if (sinkHolder.tryEmit(action)) return null
 	return ToolResult.Error(
 		"Per-tick action limit (${sinkHolder.maxActionsPerTick}) reached — this action was not " +

@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.ExampleNames
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelProfileRecord
 import cz.vutbr.fit.interlockSim.sim.metrics.RunEndClassification
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -178,8 +179,10 @@ class DispatcherRunSnapshotTest {
 	// ── Schema version and railway outcomes (Issue #834, SP2c.11) ────────────
 
 	@Test
-	fun `current schema version is 14`() {
-		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_REFUSED_ENTRIES)
+	fun `current schema version is 16`() {
+		assertThat(DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION).isEqualTo(SCHEMA_VERSION_WITH_GENERATION_CUT)
+		assertThat(SCHEMA_VERSION_WITH_GENERATION_CUT).isEqualTo(SCHEMA_VERSION_WITH_MODEL_PROFILE + 1)
+		assertThat(SCHEMA_VERSION_WITH_MODEL_PROFILE).isEqualTo(SCHEMA_VERSION_WITH_REFUSED_ENTRIES + 1)
 		assertThat(SCHEMA_VERSION_WITH_REFUSED_ENTRIES).isEqualTo(SCHEMA_VERSION_WITH_PERFORMANCE_ROW + 1)
 	}
 
@@ -201,6 +204,59 @@ class DispatcherRunSnapshotTest {
 		val decoded = json.decodeFromString(RailwayOutcome.serializer(), "{\"trainsExited\": 3}")
 
 		assertThat(decoded.refusedEntriesAtRunEnd).isNull()
+	}
+
+	/** Issue #1342 (schema version 15): the model profile's tag, Modelfile hash and num_predict survive. */
+	@Test
+	fun `serialization round-trips the model profile`() {
+		val profile = ModelProfileRecord(tag = "qwen2.5:7b-capped", modelfileSha256 = "ab".repeat(32), numPredict = 2048)
+		val snap = snapshotWith().copy(modelProfile = profile)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"modelfileSha256\": \"${"ab".repeat(32)}\"")
+		assertThat(encoded).contains("\"numPredict\": 2048")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.modelProfile).isEqualTo(profile)
+	}
+
+	/** Issue #1342: a version 14 file has no model profile and decodes with it absent. */
+	@Test
+	fun `a snapshot without a model profile key decodes with the profile absent`() {
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snapshotWith())
+		val withoutKey = json.parseToJsonElement(encoded).jsonObject.filterKeys { it != "modelProfile" }
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), JsonObject(withoutKey).toString())
+
+		assertThat(decoded.modelProfile).isNull()
+	}
+
+	/**
+	 * The owner ruling of 2026-11-27 on the review round (Issue #1342): a run records how many of
+	 * its cycles a cut generation hit — the structured trace a run JSON needs once the emission seal
+	 * makes a cut cycle that still acted (an earlier complete reply's command, classified by the
+	 * emissions) look like a clean action tick. A counter, not a verdict.
+	 */
+	@Test
+	fun `serialization round-trips the generation-cut counter`() {
+		val snap = snapshotWith().copy(generationCutCycles = 2L)
+
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snap)
+		assertThat(encoded).contains("\"generationCutCycles\": 2")
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), encoded)
+		assertThat(decoded.generationCutCycles).isEqualTo(2L)
+	}
+
+	/** A version 15 file has no generation-cut key; it decodes with the counter absent, not zero. */
+	@Test
+	fun `a snapshot without a generation-cut key decodes with the counter absent`() {
+		val encoded = json.encodeToString(DispatcherRunSnapshot.serializer(), snapshotWith())
+		val withoutKey = json.parseToJsonElement(encoded).jsonObject.filterKeys { it != "generationCutCycles" }
+
+		val decoded = json.decodeFromString(DispatcherRunSnapshot.serializer(), JsonObject(withoutKey).toString())
+
+		assertThat(decoded.generationCutCycles).isNull()
 	}
 
 	/** Issue #1302 (schema version 12): the skipped and offered NEXT SECTION counts survive the round-trip. */
@@ -610,6 +666,12 @@ class DispatcherRunSnapshotTest {
 
 		/** Issue #1457 added the refused entries at run end. */
 		private const val SCHEMA_VERSION_WITH_REFUSED_ENTRIES: Int = 14
+
+		/** Issue #1342 added the model profile and the THINKING_TRUNCATED cause key. */
+		private const val SCHEMA_VERSION_WITH_MODEL_PROFILE: Int = 15
+
+		/** The owner ruling on #1342's review round added the generation-cut counter. */
+		private const val SCHEMA_VERSION_WITH_GENERATION_CUT: Int = 16
 
 		private val json =
 			Json {

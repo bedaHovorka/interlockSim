@@ -33,6 +33,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.CycleHistory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelfileHashSource
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
 import cz.vutbr.fit.interlockSim.dispatcher.planner.ActionOutcomeAggregator
@@ -596,9 +597,23 @@ class ExampleRegistry {
 	/**
 	 * Overrides the Koin-scoped [DispatcherRunRecorder] (bound `DispatcherAgentModule`-wide with
 	 * arm = RULE_BASED / empty model) with the LLM_TOOL_CALLING arm and the run's actual
-	 * [RunParameters], so the per-run JSON identifies its own arm. Used by both shared helpers,
+	 * [RunParameters], so the per-run JSON identifies its own arm, and with the model profile read from
+	 * [ModelfileHashSource] at run start (Issue #1342). Used by both shared helpers,
 	 * [llmShuntingLoopExample] (console) and [llmGuiShuntingLoopExample] (GUI).
 	 * Issue #847 round 4 (R4-5) / #928.
+	 *
+	 * ⚠️ **Blocking read at example construction.** [ModelfileHashSource.fetch] runs here, inline,
+	 * bounded by its own 5 s timeout (plus DNS/connect on top): until Ollama answers, the example
+	 * does not finish constructing — on the GUI path that is the thread that calls
+	 * `ExampleRegistry`, so an unreachable Ollama (the expected state of every rule-based-only
+	 * session) costs the full bound before the run window opens. The executor module deliberately
+	 * defers its connectivity check instead ([cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor]
+	 * is lazily initialized), but the profile cannot be deferred the same way: the recorder is
+	 * declared synchronously and every snapshot must carry the profile from run start, and caching
+	 * the read would pool two runs on the same tag name but a rebuilt Modelfile — the exact
+	 * misconfiguration the record exists to expose. A 2026-11-27 review round flagged the stall and
+	 * the owner keeps it as documented; file a backlog issue before re-engineering it (an async
+	 * read that the first snapshot must await is a wiring change of its own).
 	 */
 	private fun declareLlmToolCallingRecorder(
 		scope: Scope,
@@ -613,7 +628,11 @@ class ExampleRegistry {
 				arm = DispatcherArm.LLM_TOOL_CALLING,
 				params =
 					llmRunParameters(scope.get<OllamaExecutorConfig>(), scope.get<DispatcherRunConfig>()),
-				circuitBreaker = circuitBreaker
+				circuitBreaker = circuitBreaker,
+				// Issue #1342: which Modelfile (and num_predict cap) the run's tag resolves to, read
+				// once here, at run start, before the first cycle. A failed read records it absent.
+				modelProfile =
+					scope.get<ModelfileHashSource>().fetch(scope.get<OllamaExecutorConfig>().modelName)
 			)
 		)
 	}

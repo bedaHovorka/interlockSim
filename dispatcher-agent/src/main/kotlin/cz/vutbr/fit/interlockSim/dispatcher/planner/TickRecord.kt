@@ -49,13 +49,21 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
  *   [DispatcherRunSnapshot.longestSkippedOfferStreakSimSeconds]) to absent: a count the recorder
  *   cannot vouch for must not masquerade as a measured zero (PR #1408 review round). Later
  *   successful counts do not rehabilitate the run — the rule is run-level, not per-cycle.
+ * @param generationCut Whether at least one `/api/chat` reply of this cycle was cut by the model
+ *   profile's `num_predict` (Ollama `done_reason == "length"`, Issue #1342) — independent of
+ *   [outcome]: after the emission seal a cycle whose earlier complete reply acted records
+ *   [TickOutcome.LLM_ACTIONS] (or [TickOutcome.LLM_NO_OP]) and the cut still shows here, while the
+ *   no-emission cut ending is the [TickOutcome.TIMEOUT_NOOP] tick with
+ *   [TimeoutNoOpCause.THINKING_TRUNCATED]. True only for cut cycles —
+ *   [DefaultDispatcherRunRecorder] counts them into [DispatcherRunSnapshot.generationCutCycles].
  *
  * @see PlannerTickListener
  * @see TickOutcome
  * @see DefaultDispatcherRunRecorder
  * @since Issue #842 (Goal 10 SP2c.19 — tick-outcome taxonomy); `latencyMs` added in Issue #834
  *   (SP2c.11 — real per-run inference latency); `nextSectionOffers` added in Issue #1302;
- *   `nextSectionOffersFailed` in the PR #1408 review round
+ *   `nextSectionOffersFailed` in the PR #1408 review round; `generationCut` in the Issue #1342
+ *   review round
  */
 data class TickRecord(
 	val outcome: TickOutcome,
@@ -64,7 +72,8 @@ data class TickRecord(
 	val latencyMs: Long? = null,
 	val silentNonIdleCycleIndex: Long? = null,
 	val nextSectionOffers: NextSectionOfferCount? = null,
-	val nextSectionOffersFailed: Boolean = false
+	val nextSectionOffersFailed: Boolean = false,
+	val generationCut: Boolean = false
 ) {
 	init {
 		val expectsCause = outcome == TickOutcome.TIMEOUT_NOOP

@@ -53,7 +53,8 @@ private val logger = KotlinLogging.logger {}
  *   should not be relied on to mask. Revisit empirically once the §7 benchmark harness lands
  *   (tool-call success rate at 0.28 vs. higher).
  * @property topP Nucleus sampling parameter (0.0–1.0, default 0.9)
- * @property maxTokens Maximum tokens in response (default 1024)
+ * @property maxTokens Maximum tokens in response (default 1024). Has no effect under Koog 1.1.1; the
+ *   dispatcher's output cap is `PARAMETER num_predict` in a derived tag's Modelfile (Issue #1342)
  * @property inferenceTimeout Maximum wall-clock time for inference (default 30 seconds per #532 latency constraint)
  * @property retryAttempts Number of retries on transient failure (default 3)
  * @property maxAgentIterations Maximum number of LLM/tool round-trips [ai.koog.agents.core.agent.AIAgent]
