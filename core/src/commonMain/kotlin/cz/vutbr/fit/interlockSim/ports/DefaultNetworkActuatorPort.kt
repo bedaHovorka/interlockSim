@@ -21,7 +21,9 @@ import cz.vutbr.fit.interlockSim.sim.resolveEndpoint
 import cz.vutbr.fit.interlockSim.sim.toRouteResponse
 import cz.vutbr.fit.interlockSim.sim.unresolvedEndpointDenial
 import cz.vutbr.fit.interlockSim.util.BlockIdentity
+import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.cellsByName
+import cz.vutbr.fit.interlockSim.xml.GeneratedElementName
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -342,8 +344,61 @@ class DefaultNetworkActuatorPort(
 		env.getRailWayNetGrid().cellsByName<DynamicRailSemaphore> { it.name }
 
 	/**
-	 * Scans the grid once to build a name→switch index.
+	 * Scans the grid once to build a name→switch index. A switch loaded from XML always has a name (the reader generates one for an
+	 * unnamed switch); a switch of a context built in code may be blank and is then addressed by
+	 * the same generated form, [GeneratedElementName.switchName] (Issue #1473). A generated name
+	 * that meets an explicit name of another switch fails the construction instead of giving one
+	 * name to two switches (`switchNameCollision`, the same collision the XML load rejects in
+	 * `requireGeneratedNamesUnique`), whichever switch the scan reaches first; duplicate explicit
+	 * names keep the last-wins order below, the documented contract of the index.
 	 */
-	private fun buildSwitchCache(): Map<String, DynamicRailSwitch> =
-		env.getRailWayNetGrid().cellsByName<DynamicRailSwitch> { it.name }
+	private fun buildSwitchCache(): Map<String, DynamicRailSwitch> {
+		// The same getCellAt scan as cellsOfType, keeping the position for the fallback name.
+		val grid = env.getRailWayNetGrid()
+		val result = LinkedHashMap<String, DynamicRailSwitch>()
+		// The position behind every indexed name, and behind the FALLBACK-generated names in
+		// particular, so the diagnostic of a collision can name both parties (Issue #1473).
+		val positionByName = HashMap<String, Point>()
+		val generatedPositionByName = HashMap<String, Point>()
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
+				val switch = grid.getCellAt(x, y) as? DynamicRailSwitch ?: continue
+				val position = Point(x, y)
+				val name = GeneratedElementName.switchName(switch.name, position)
+				if (switch.name.isBlank()) {
+					// The incoming name is generated, so it may not overtake any name indexed
+					// earlier: an explicit holder of the same name would lose its switch.
+					positionByName[name]?.let { throw switchNameCollision(position, name, it) }
+					generatedPositionByName[name] = position
+				} else {
+					// The incoming name is explicit, so it may only overtake another explicit
+					// indexee; a fallback name indexed earlier loses its switch, the mirror-side
+					// shape of the same collision.
+					generatedPositionByName[name]?.let { throw switchNameCollision(it, name, position) }
+				}
+				positionByName[name] = position
+				result[name] = switch
+			}
+		}
+		return result
+	}
+
+	/**
+	 * The failure for a generated name that meets the explicit name of another switch, whichever
+	 * one the grid scan reaches first (Issue #1473 review): the two switches would share the name,
+	 * so a command could move the wrong one. The message names both positions and the fix, in the
+	 * style of the XML load's `requireGeneratedNamesUnique`.
+	 */
+	private fun switchNameCollision(
+		generatedAt: Point,
+		name: String,
+		explicitAt: Point
+	): IllegalArgumentException =
+		IllegalArgumentException(
+			"The unnamed RailSwitch at ${switchPositionLabel(generatedAt)} gets the generated name $name, " +
+				"which is already the name of the element at ${switchPositionLabel(explicitAt)}; " +
+				"give the switch at ${switchPositionLabel(generatedAt)} an explicit name in code or move it to another position"
+		)
+
+	private fun switchPositionLabel(position: Point): String = "(${position.x},${position.y})"
 }

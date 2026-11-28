@@ -18,7 +18,8 @@ import cz.vutbr.fit.interlockSim.util.Point
  * Produces railway network XML conforming to data.xsd, identically
  * to the existing JVM serializer.
  *
- * A semaphore whose name is the [GeneratedSemaphoreName] of its own position is written without
+ * A semaphore whose name is the [GeneratedSemaphoreName] of its own position, and a switch whose
+ * name is the [GeneratedElementName.switchAt] of its own position (Issue #1473), is written without
  * a `name` attribute, so a loaded network saves back without names the user never wrote
  * (Issue #1273); the next load regenerates the same name. The exception is a name that another
  * node also carries: omitting it there would make the next load regenerate a name that then
@@ -102,7 +103,7 @@ class XmlContextWriter {
 
 	/**
 	 * Names that [writeNodes] will emit: the non-empty names of the nodes it writes, without the
-	 * ones a semaphore omits as its own position's [GeneratedSemaphoreName]. The writer may drop
+	 * ones a semaphore or switch omits as the generated name of its own position. The writer may drop
 	 * a generated-form name only when it is absent here — if another node writes the same name,
 	 * keeping the attribute is the only way the saved file reloads.
 	 */
@@ -119,7 +120,7 @@ class XmlContextWriter {
 			// The same rule writeNodeCell applies, without the kept-name check: a candidate cell
 			// contributes nothing, and candidates at different grid positions generate different
 			// names, so one pass is the fixed point.
-			if (cell is RailSemaphore && name == GeneratedSemaphoreName.at(point)) continue
+			if (isGeneratedName(cell, point)) continue
 			names.add(name)
 		}
 		return names
@@ -159,7 +160,7 @@ class XmlContextWriter {
 		writtenNames: Set<String>
 	) {
 		builder.append('\t')
-		builder.append('<').append(NodeCellFactory.tagNameFor(cell)).append(' ')
+		builder.append("<" + NodeCellFactory.tagNameFor(cell) + " ")
 		appendAttribute(builder, X, point.x)
 		appendAttribute(builder, Y, point.y)
 		cell.getSpatialType().let {
@@ -176,13 +177,23 @@ class XmlContextWriter {
 			appendEnumAttribute(builder, "Type", cell.type)
 		}
 		val name = cell.getName()
-		val generated =
-			cell is RailSemaphore && name == GeneratedSemaphoreName.at(point) && name !in writtenNames
+		val generated = isGeneratedName(cell, point) && name !in writtenNames
 		if (name.isNotEmpty() && !generated) {
 			appendAttribute(builder, NAME, name)
 		}
 		builder.append("/>\n")
 	}
+
+	/** Whether [cell]'s name is the generated name of its own [point] (the reader regenerates it). */
+	private fun isGeneratedName(
+		cell: NodeCell,
+		point: Point
+	): Boolean =
+		when (cell) {
+			is RailSemaphore -> cell.getName() == GeneratedSemaphoreName.at(point)
+			is RailSwitch -> cell.getName() == GeneratedElementName.switchAt(point)
+			else -> false
+		}
 
 	private fun writeTrackBlock(
 		builder: StringBuilder,

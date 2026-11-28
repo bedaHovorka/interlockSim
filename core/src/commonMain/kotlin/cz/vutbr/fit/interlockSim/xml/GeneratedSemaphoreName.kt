@@ -22,8 +22,8 @@ import cz.vutbr.fit.interlockSim.util.Point
  *
  * [XmlContextWriter] omits a semaphore name equal to [at] for the semaphore's own position, unless
  * another node in the context writes the same name, so saving a loaded network does not write
- * names the user never wrote; the next load regenerates the omitted ones. Switches are not
- * auto-named (their names are written by hand, Issue #1279).
+ * names the user never wrote; the next load regenerates the omitted ones. Unnamed switches get the
+ * switch form [GeneratedElementName.switchAt] (`SW_<x>_<y>`, Issue #1473), so the two never meet.
  *
  * The format is a file-format contract (Issue #1332): saved files with omitted names depend on the
  * next load regenerating the same name, so changing [at] would rename their signals.
