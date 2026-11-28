@@ -18,7 +18,6 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEmpty
-import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -56,8 +55,8 @@ import java.util.concurrent.TimeUnit
  *
  * Two stores exist in the `sim.conflict` package with similar names:
  * - **[DispatcherPreferenceStore]** (Issue #568) — the choice ledger: records every
- *   `(event, resolution, source)` triple applied during a run. Consumed by
- *   [DefaultAutoConflictResolutionService] to persist auto-applied selections.
+ *   `(event, resolution, source)` triple applied during a run. Only the operator-selection
+ *   UI writes to it; nothing records automatically (Issue #1453).
  * - **[StrategyPreferenceStore]** (Issue #592) — the learning counter: accumulates
  *   per-`(conflictTypeKey, strategy)` selection counts and feeds
  *   [ConflictResolutionRanker.rank]'s preference-weighted overload to promote
@@ -69,8 +68,9 @@ import java.util.concurrent.TimeUnit
  * ## Acceptance criteria verified
  *
  * - AC1: Two trains reserving the same block trigger a [ConflictDetectedEvent] before
- *   any collision; the full pipeline from event → [AutoConflictResolutionService]
- *   → [DispatcherPreferenceStore] records the auto-applied choice.
+ *   any collision; the scoped [ConflictResolver] turns the event into a non-empty, ranked
+ *   candidate list, and nothing records a choice automatically in the scoped
+ *   [DispatcherPreferenceStore].
  * - AC2: Converging-path projections trigger a [TemporalConflictEvent] within the
  *   30-second lookahead window configured on [TemporalConflictDetector].
  * - AC3: [DefaultConflictResolver] generates both [ConflictResolution.HoldTrain] and
@@ -84,10 +84,14 @@ import java.util.concurrent.TimeUnit
  * ## Scope note
  *
  * AC4 exercises [StrategyPreferenceStore] + [ConflictResolutionRanker] in isolation
- * (it does not flow through [AutoConflictResolutionService] or a live `run()`). The
- * end-to-end interaction of [AutoConflictResolutionService] with [StrategyPreferenceStore]
- * (verifying that the auto-applied choice shifts toward the learned preference across
- * repeated conflicts) is not covered by this suite.
+ * (it does not flow through a live `run()`).
+ *
+ * Until Issue #1453 (Goal 9B SP2.1) AC1 consumed the event through the headless
+ * auto-resolution picker, which took the top candidate and recorded it with source `AUTO`.
+ * The picker had no production caller and was deleted under owner ruling R1 (#1434:
+ * conflict resolution moves to the dispatcher thread); AC1 keeps the detection, generation
+ * and ranking steps. The store's `AUTO` record path stays covered by
+ * `DispatcherPreferenceStoreTest` until the store itself goes (#1454).
  *
  * @since Issue #593 (Goal 9 SP7)
  */
@@ -130,19 +134,18 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// AC1: Same-block reservation triggers ConflictDetectedEvent and the full
-	//      pipeline routes it through AutoConflictResolutionService →
-	//      DispatcherPreferenceStore.
+	// AC1: Same-block reservation triggers ConflictDetectedEvent; the scoped
+	//      ConflictResolver generates ranked candidates for it.
 	// ─────────────────────────────────────────────────────────────────────────
 
 	@Nested
-	@DisplayName("AC1 — Same-block reservation triggers ConflictDetectedEvent and auto-resolution pipeline")
+	@DisplayName("AC1 — Same-block reservation triggers ConflictDetectedEvent and ranked resolution candidates")
 	inner class Ac1SameBlockConflictDetectionPipeline {
 		/**
 		 * Two trains reserving the same block emit a [ConflictDetectedEvent] **before any
-		 * collision** (mid-run), and the event is consumed by the production-wired
-		 * [AutoConflictResolutionService] which selects the top-ranked resolution and
-		 * records it in the scoped [DispatcherPreferenceStore].
+		 * collision** (mid-run), and the production-scoped [ConflictResolver] generates a
+		 * non-empty candidate list for it, ordered by [ConflictResolutionRanker]. Nothing
+		 * records a choice in the scoped [DispatcherPreferenceStore] during the run.
 		 *
 		 * Verification plan (Issue #531):
 		 * > "Two trains reserve the same block; verify [ConflictDetectedEvent] fired before
@@ -153,23 +156,21 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 		@Test
 		@Timeout(value = 10, unit = TimeUnit.SECONDS)
 		@DisplayName(
-			"same-block reservation emits ConflictDetectedEvent and auto-resolver records choice in DispatcherPreferenceStore"
+			"same-block reservation emits ConflictDetectedEvent and the scoped resolver ranks candidates for it"
 		)
-		fun sameBlockReservation_emitsConflictDetectedEvent_andAutoResolverRecordsChoiceInDispatcherPreferenceStore() {
+		fun sameBlockReservation_emitsConflictDetectedEvent_andScopedResolverRanksCandidates() {
 			val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
 			extraContext = ctx
 
 			val conflictEvents = mutableListOf<ConflictDetectedEvent>()
-			val autoResolver = ctx.scope.get<AutoConflictResolutionService>()
+			val resolver = ctx.scope.get<ConflictResolver>()
 			val preferenceStore = ctx.scope.get<DispatcherPreferenceStore>()
-			val appliedResolutions = mutableListOf<ConflictResolution>()
+			val generatedCandidates = mutableListOf<List<ConflictResolution>>()
 
-			// Wire the full pipeline: ConflictDetectedEvent → AutoConflictResolutionService
-			// → DispatcherPreferenceStore (via the production-scoped beans)
+			// Detection → generation → ranking via the production-scoped beans.
 			ctx.onConflictDetectedEvent { event ->
 				conflictEvents.add(event)
-				val resolution = autoResolver.applyTopRanked(event)
-				if (resolution != null) appliedResolutions.add(resolution)
+				generatedCandidates.add(resolver.generateResolutions(event))
 			}
 
 			val reservationService = ctx.getRoutingServices().getPathReservationService()
@@ -207,18 +208,22 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 			ctx.setMainProcess(process)
 			ctx.run()
 
-			// Post-run: verify the full pipeline delivered exactly one conflict event
-			// and the auto-resolver recorded the choice in the DispatcherPreferenceStore.
+			// Post-run: exactly one conflict event, and the resolver generated a non-empty
+			// candidate list for it, ordered by ConflictResolutionRanker (score ascending —
+			// the store is empty here, so plain-score ordering coincides with the
+			// preference-adjusted ranking the scoped resolver actually performs).
 			assertThat(conflictEvents).hasSize(1)
-			assertThat(appliedResolutions).hasSize(1)
-			val choice = appliedResolutions[0]
-			assertThat(choice).isNotNull()
+			assertThat(generatedCandidates).hasSize(1)
+			val ranked = generatedCandidates[0]
+			assertThat(ranked).isNotEmpty()
+			for (i in 0 until ranked.size - 1) {
+				assertThat(ConflictResolutionRanker.score(ranked[i]))
+					.isLessThanOrEqualTo(ConflictResolutionRanker.score(ranked[i + 1]) + 0.0001)
+			}
 
-			// The resolution must be recorded in the DispatcherPreferenceStore.
-			val choices = preferenceStore.getChoices()
-			assertThat(choices).hasSize(1)
-			assertThat(choices[0].applied).isEqualTo(choice)
-			assertThat(choices[0].source).isEqualTo(DispatcherPreferenceStore.ApplicationSource.AUTO)
+			// No automatic writer exists: the scoped store holds no choice after the run.
+			assertThat(preferenceStore).isInstanceOf(DefaultDispatcherPreferenceStore::class)
+			assertThat(preferenceStore.getChoices()).isEmpty()
 		}
 	}
 

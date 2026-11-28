@@ -349,9 +349,10 @@ Users receive automatic detection of routing conflicts when multiple trains requ
   scoped `DispatcherPreferenceStore` (source = `OPERATOR`) and feeds
   `StrategyPreferenceStore.recordChoice`; the scoped `ConflictResolver` uses the
   preference-aware ranker overload so learned choices shift subsequent rankings.
-- `AutoConflictResolutionService` (SP5) is intentionally inert in production — it is
-  the headless wiring point for Goal 10's deliberative dispatcher and remains
-  documented-deferred (see its KDoc "Usage (SP2b pattern)").
+- `AutoConflictResolutionService` (SP5) was originally kept intentionally inert in
+  production — it was the headless wiring point for Goal 10's deliberative dispatcher and
+  remained documented-deferred (see its KDoc "Usage (SP2b pattern)"). **Reversed
+  2026-11-28** — see the dated bullet below.
 - **SP2c.4 ruling (#827, 2026-07-30):** `AutoConflictResolutionService` is **demoted to an
   information source and frozen there by test**. It has zero production call sites and is not
   reachable in `shuntingLoopAI`, so it does not violate Goal 10's "no deterministic policy
@@ -364,6 +365,13 @@ Users receive automatic detection of routing conflicts when multiple trains requ
   affordance-line feed described in the previous bullet exists only on that reference path. The
   production LLM loop is `AgentLoopDriver`, which does not construct or read either class. This
   also amends Goal 10's B2 entry in the acceptance-contract table below.
+- **2026-11-28 reversal (owner ruling R1, #1434 — Goal 9B SP2.1, #1453):** the SP2c.4
+  freeze above is **reversed**. Goal 9B moves conflict resolution to the dispatcher
+  thread, so the frozen headless picker has no role left: `AutoConflictResolutionService`
+  and `DefaultAutoConflictResolutionService` were deleted with their scoped Koin
+  bindings. Their absence is pinned by `Goal9ARemovedSymbolsTripwireTest` (`:core`).
+  Only the headless picker goes — the scoped `ConflictResolver`, the preference store
+  and the operator UI stay as recorded above.
 
 ---
 
