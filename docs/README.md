@@ -32,6 +32,7 @@ Directories covered as a single history entry (their files are not listed one by
 - [INTERLOCKING_SCOPE_LIMITATIONS.md](INTERLOCKING_SCOPE_LIMITATIONS.md) - deliberate interlocking simplifications.
 - [ENGINE_CONTINUOUS_RATIONALE.md](ENGINE_CONTINUOUS_RATIONALE.md) - why `Engine` extends `Continuous`.
 - [SIMULATION_SPEED_CONTROL.md](SIMULATION_SPEED_CONTROL.md) - live wall-clock speed control for the animated simulation.
+- [GOAL_9B_COMMAND_MODEL_ADR.md](GOAL_9B_COMMAND_MODEL_ADR.md) - Goal 9B command-model ADR: threading, timing and replay (part 1), the clean-run rule and counted automatics (part 1b), the command vocabulary and LLM tools (part 2) (#1474, #1475, #1486).
 - [FAST_SIM_BENCHMARK.md](FAST_SIM_BENCHMARK.md) - native versus JVM performance benchmark of the fast-sim binary (history, 2026-03; a measurement at that date, #418).
 - [diagrams/README.md](diagrams/README.md) - PlantUML sources (`diagrams/*.puml`) and rendered images of the context architecture.
 - [grid-parameterization-architecture.puml](grid-parameterization-architecture.puml) - PlantUML class diagram of the grid parameterization design.
