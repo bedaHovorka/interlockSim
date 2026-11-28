@@ -11,12 +11,13 @@ package cz.vutbr.fit.interlockSim.xml
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import assertk.assertions.messageContains
+import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -113,9 +114,27 @@ class XmlContextReaderSwitchAutoNameTest {
 
 		assertFailure { reader.parse(xml) }
 			.isInstanceOf<IllegalArgumentException>()
-			.messageContains("SW_20_10")
-		assertFailure { reader.parse(xml) }.messageContains("RailSwitch at (20,10)")
-		assertFailure { reader.parse(xml) }.messageContains("(15,10)")
+			.message()
+			.isNotNull()
+			.contains("SW_20_10", "RailSwitch at (20,10)", "(15,10)")
+	}
+
+	@Test
+	fun generatedSwitchNameClashingWithAnotherSwitchNameFailsTheLoadNamingTheCause() {
+		// Issue #1473 review: the switch-vs-switch shape, the one the thread pins -- the switch at
+		// (5,10) is explicitly named SW_20_10, the generated name of the unnamed switch at (20,10).
+		val xml =
+			NetworkResources.LEGACY_NETWORK_NO_NAMES_XML.replace(
+				LEGACY_SWITCH_AT_20_10,
+				"$LEGACY_SWITCH_AT_20_10\n  $LEGACY_SWITCH_AT_5_10"
+			)
+		check(xml != NetworkResources.LEGACY_NETWORK_NO_NAMES_XML) { "fixture text changed: $LEGACY_SWITCH_AT_20_10" }
+
+		assertFailure { reader.parse(xml) }
+			.isInstanceOf<IllegalArgumentException>()
+			.message()
+			.isNotNull()
+			.contains("SW_20_10", "RailSwitch at (20,10)", "(5,10)")
 	}
 
 	private fun switchAt(
@@ -147,6 +166,14 @@ class XmlContextReaderSwitchAutoNameTest {
 		/** The unnamed semaphore element of `legacy-network-no-names.xml`. */
 		const val LEGACY_SEMAPHORE_AT_15_10 =
 			"<RailSemaphore X=\"15\" Y=\"10\" SpatialType=\"HORIZONTAL\" orientation=\"true\" />"
+
+		/** The unnamed switch element of `legacy-network-no-names.xml`, at (20,10). */
+		const val LEGACY_SWITCH_AT_20_10 =
+			"<RailSwitch X=\"20\" Y=\"10\" SpatialType=\"HORIZONTAL\" Type=\"SIMPLE_LEFT_TRUE\" />"
+
+		/** The switch named the generated form, which the switch-clash variant inserts at (5,10). */
+		const val LEGACY_SWITCH_AT_5_10 =
+			"<RailSwitch X=\"5\" Y=\"10\" SpatialType=\"HORIZONTAL\" Type=\"SIMPLE_LEFT_TRUE\" name=\"SW_20_10\"/>"
 
 		private val SWITCH_TAG = Regex("<RailSwitch\\b[^>]*>")
 		private val X_ATTR = Regex("\\bX=\"(\\d+)\"")

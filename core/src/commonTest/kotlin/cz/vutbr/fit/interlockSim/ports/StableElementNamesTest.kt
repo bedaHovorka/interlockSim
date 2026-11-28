@@ -7,12 +7,17 @@
  */
 package cz.vutbr.fit.interlockSim.ports
 
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.containsExactly
 import assertk.assertions.doesNotContain
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
@@ -155,6 +160,86 @@ class StableElementNamesTest : CommonKoinTestBase() {
 		assertThat(switch.conf).isEqualTo(target)
 	}
 
+	@Test
+	fun aGeneratedSwitchNameCollidingWithAnEarlierExplicitNameFailsAtConstruction() {
+		// Copilot review (PRRT_kwDOQyJ9Cc68puGU): the fallback would name the blank switch at
+		// (20,10) SW_20_10, and that name is already the explicit name of the switch at (5,10) --
+		// the one the x-outer scan reaches first. The XML load rejects the match in
+		// requireGeneratedNamesUnique, so a context built in code must fail the same way, at
+		// construction time, instead of giving one name to two switches.
+		val ctx =
+			laneJunction(EXPLICIT_AT to COLLISION_NAME, COLLISION_AT to null)
+				.use { DefaultSimulationContext.fromEditingContext(it, get()) }
+				.tracked()
+		ctx.getInOuts()
+
+		assertFailure { DefaultNetworkActuatorPort(env = ctx) }
+			.isInstanceOf<IllegalArgumentException>()
+			.message()
+			.isNotNull()
+			.contains(COLLISION_NAME, "RailSwitch at ${label(COLLISION_AT)}", label(EXPLICIT_AT))
+	}
+
+	@Test
+	fun aGeneratedSwitchNameCollidingWithALaterExplicitNameAlsoFailsAtConstruction() {
+		// The mirror scan order: the blank switch at (5,10) claims the generated SW_5_10 first and
+		// the switch explicitly named SW_5_10 at (20,10) reaches the cache second. Last-wins would
+		// silently re-point the shared name at the explicit switch, so the mirror must fail too and
+		// the outcome must not depend on the order.
+		val ctx =
+			laneJunction(EXPLICIT_AT to null, COLLISION_AT to MIRROR_NAME)
+				.use { DefaultSimulationContext.fromEditingContext(it, get()) }
+				.tracked()
+		ctx.getInOuts()
+
+		assertFailure { DefaultNetworkActuatorPort(env = ctx) }
+			.isInstanceOf<IllegalArgumentException>()
+			.message()
+			.isNotNull()
+			.contains(MIRROR_NAME, "RailSwitch at ${label(EXPLICIT_AT)}", label(COLLISION_AT))
+	}
+
+	@Test
+	fun twoSwitchesWithTheSameExplicitNameKeepTheLastWinsOrder() {
+		// Issue #1473 review: the rejection is for the FALLBACK side only. Two explicitly
+		// same-named switches are the documented last-wins contract of the name index and must
+		// keep loading, addressed by the switch the scan met last.
+		val ctx =
+			laneJunction(EXPLICIT_AT to TWIN_NAME, COLLISION_AT to TWIN_NAME)
+				.use { DefaultSimulationContext.fromEditingContext(it, get()) }
+				.tracked()
+		ctx.getInOuts()
+		val port = DefaultNetworkActuatorPort(env = ctx)
+		val firstScanned = ctx.getRailWayNetGrid()[EXPLICIT_AT] as DynamicRailSwitch
+		val lastScanned = ctx.getRailWayNetGrid()[COLLISION_AT] as DynamicRailSwitch
+		val firstSaved = firstScanned.conf
+		val target = if (lastScanned.conf == RailSwitch.Conf.MAIN) RailSwitch.Conf.BRANCH else RailSwitch.Conf.MAIN
+
+		assertThat(port.setSwitchPosition(TWIN_NAME, target)).isTrue()
+		assertThat(lastScanned.conf, name = "the last-scanned twin answers the name").isEqualTo(target)
+		assertThat(firstScanned.conf, name = "the first-scanned twin keeps its conf").isEqualTo(firstSaved)
+	}
+
+	@Test
+	fun anExplicitSwitchNamedItsOwnPositionFormDoesNotClashWithTheBlankSwitch() {
+		// Issue #1473 review: an explicit name equal to the switch's OWN position form is not a
+		// collision, and the fallback names of other, blank switches stand next to it unchanged.
+		val ctx =
+			laneJunction(OWN_POSITION_AT to OWN_POSITION_NAME, BLANK_ELSEWHERE_AT to null)
+				.use { DefaultSimulationContext.fromEditingContext(it, get()) }
+				.tracked()
+		ctx.getInOuts()
+		val port = DefaultNetworkActuatorPort(env = ctx)
+		val explicit = ctx.getRailWayNetGrid()[OWN_POSITION_AT] as DynamicRailSwitch
+		val blank = ctx.getRailWayNetGrid()[BLANK_ELSEWHERE_AT] as DynamicRailSwitch
+		val blankSaved = blank.conf
+		val target = if (explicit.conf == RailSwitch.Conf.MAIN) RailSwitch.Conf.BRANCH else RailSwitch.Conf.MAIN
+
+		assertThat(port.setSwitchPosition(OWN_POSITION_NAME, target)).isTrue()
+		assertThat(explicit.conf, name = "the name stays with the explicitly named switch").isEqualTo(target)
+		assertThat(blank.conf, name = "the blank switch keeps its conf").isEqualTo(blankSaved)
+	}
+
 	/** The `TestTopologies.yJunctionWithSwitch` layout with an unnamed switch. */
 	private fun unnamedSwitchJunction(): DefaultEditingContext {
 		val context = DefaultEditingContext(60, 50)
@@ -172,12 +257,63 @@ class StableElementNamesTest : CommonKoinTestBase() {
 		return context
 	}
 
+	/**
+	 * A straight `entry → switch(es) → exit` lane on one shared row whose switches carry the
+	 * [placements] names at their grid positions, `null` for blank (the fallback case under
+	 * test). The lane keeps every join on the row, the simple wiring of [unnamedSwitchJunction],
+	 * and [LANE_MARGIN] leaves room between two joins for the intermediate track cells.
+	 */
+	private fun laneJunction(vararg placements: Pair<Point, String?>): DefaultEditingContext {
+		val row = placements.first().first.y
+		check(placements.all { (at, _) -> at.y == row }) { "a lane needs a single row" }
+		val switchNodes: List<Pair<Point, NodeCell>> =
+			placements.map { (at, name) ->
+				at to RailSwitch(name ?: "", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			}
+		val laneNodes: List<Pair<Point, NodeCell>> =
+			listOf(Point(switchNodes.first().first.x - LANE_MARGIN, row) to InOut("J_IN", false, Cell.SpatialType.HORIZONTAL)) +
+				switchNodes +
+				listOf(Point(switchNodes.last().first.x + LANE_MARGIN, row) to InOut("J_OUT", true, Cell.SpatialType.HORIZONTAL))
+		val context = DefaultEditingContext(60, 50)
+		for ((at, cell) in laneNodes) context.putCell(at, cell)
+		for (index in 0 until laneNodes.size - 1) {
+			val (fromAt, fromCell) = laneNodes[index]
+			val (toAt, toCell) = laneNodes[index + 1]
+			context.joinCells(fromAt, toAt, SimpleTrackBlock(fromCell, toCell, 250.0, 90.0))
+		}
+		return context
+	}
+
 	private companion object {
 		const val END_TIME: Long = 600L
 		const val SEED: Long = 1473L
 		const val UNKNOWN_BLOCK_ID = "unknown"
 		const val SWITCH_PREFIX = "SW_"
 		val JUNCTION_SWITCH_AT = Point(30, 30)
+
+		/** The gap between a lane's InOut and its nearest switch, in columns. */
+		const val LANE_MARGIN = 4
+
+		val COLLISION_AT = Point(20, 10)
+		val EXPLICIT_AT = Point(5, 10)
+
+		/** The name both parties of the first collision pin hold: the form of [COLLISION_AT]. */
+		val COLLISION_NAME = GeneratedElementName.switchAt(COLLISION_AT)
+
+		/** The form of [EXPLICIT_AT]: the name the mirror's blank switch at [EXPLICIT_AT] claims. */
+		val MIRROR_NAME = GeneratedElementName.switchAt(EXPLICIT_AT)
+
+		/** A plain non-positional name, so the duplicate-explicit pin does not meet the fallback. */
+		const val TWIN_NAME = "Twin"
+
+		val OWN_POSITION_AT = Point(30, 30)
+
+		/** What a switch named its own position form is called: the form of [OWN_POSITION_AT]. */
+		val OWN_POSITION_NAME = GeneratedElementName.switchAt(OWN_POSITION_AT)
+		val BLANK_ELSEWHERE_AT = Point(44, 30)
+
+		/** The position label of the generated-name diagnostics, `(<x>,<y>)`. */
+		private fun label(at: Point): String = "(${at.x},${at.y})"
 
 		const val CU_SWITCHES = 12
 		const val CU_SECTIONS = 32

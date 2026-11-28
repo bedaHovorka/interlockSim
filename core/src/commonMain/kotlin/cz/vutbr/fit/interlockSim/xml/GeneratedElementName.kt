@@ -20,9 +20,9 @@ import cz.vutbr.fit.interlockSim.util.Point
  * native, independent of document order, and free of the global counter of the editor's
  * `AutoNameGenerator` (`SW1`, `SW2`, ..., which depends on the order switches were drawn).
  *
- * - [XmlContextReader] gives an unnamed switch [switchAt] its position at load, with the same
- *   clash check against explicit names as for semaphores; the name is never written back:
- *   [XmlContextWriter] omits a switch name equal to [switchAt] its own position.
+ * - [XmlContextReader] gives an unnamed switch the [switchAt] form of its position at load, with
+ *   the same clash check against explicit names as for semaphores; the name is never written
+ *   back: [XmlContextWriter] omits a switch name equal to the switch's own [switchAt] value.
  * - A context built in code (tests, the editor) keeps the blank name; a consumer that addresses
  *   switches by name falls back through [switchName].
  *
