@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.each
 import assertk.assertions.isBetween
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -20,6 +21,10 @@ import assertk.assertions.isLessThan
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
@@ -37,37 +42,81 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.NavigationDecoratingContext
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.testutil.assertCapturedErrorStop
 import cz.vutbr.fit.interlockSim.testutil.assertReservationSuccess
 import cz.vutbr.fit.interlockSim.testutil.runShuntingLoop
 import io.mockk.mockk
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
+import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
 /**
  * Issue #1295: a refused entry-path setup in [InOutWorker] must not kill the run when the refusal
  * is recoverable, and must still stop it when it is a real invariant violation.
  *
- * Recoverable means exactly one case: the reservation from the real InOut is refused as
- * [ReservationResult.NonContiguousStart] while the queued train still holds a stale reservation of
- * its own (non-empty [PathReservationService.getReservedBlocks]). The worker records the denial once,
- * re-tries every [InOutWorker.STALE_ORIGIN_RETRY_SECONDS] until the reservation expiry releases the
- * stale holding, and stops the run only after [InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS]. The
- * episode also ends without stopping the run when its premise turns void by other means: the stale
- * holding was replaced by a usable entry grant from this InOut, or the train stops heading the
- * queue (round-4 arms, tested below).
+ * Issue #1457 widened "recoverable" to every [ReservationResult.NonContiguousStart]: the train waits
+ * at its InOut whether it still holds a stale reservation of its own (non-empty
+ * [PathReservationService.getReservedBlocks]) or holds nothing. The worker records the denial once,
+ * re-tries every [InOutWorker.STALE_ORIGIN_RETRY_SECONDS] of simulated time until the entry route is
+ * granted, and logs one WARNING per train once the wait passes
+ * [InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS]; it no longer stops the run there (the former FATAL pins
+ * below are converted, not deleted). The episode also ends without a WARNING when its premise turns
+ * void by other means: the stale holding was replaced by a usable entry grant from this InOut, or the
+ * train stops heading the queue (round-4 arms, tested below). [ReservationResult.GeometricallyImpossible]
+ * stays FATAL.
  */
 @Tag("integration-test")
-@DisplayName("InOutWorker recovers from a stale non-contiguous origin and keeps FATAL otherwise (Issue #1295)")
+@DisplayName("InOutWorker waits out a non-contiguous origin and keeps FATAL otherwise (Issues #1295, #1457)")
 class InOutWorkerStaleOriginTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 
 	/** Every `errorStop` that reached a worker's or a train's environment, with its simulation time. */
 	private val errorStops = mutableListOf<Pair<Double, Throwable>>()
+
+	private val rootLogger: Logger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger
+	private lateinit var appender: ListAppender<ILoggingEvent>
+
+	@BeforeEach
+	fun attachAppender() {
+		appender = ListAppender<ILoggingEvent>().also { it.start() }
+		rootLogger.addAppender(appender)
+	}
+
+	@AfterEach
+	fun detachAppender() {
+		rootLogger.detachAppender(appender)
+	}
+
+	/** The WARNING lines the worker logged for the non-contiguous wait (Issue #1457). */
+	private fun refusalWarnings(): List<String> =
+		appender.list
+			.filter { it.level == Level.WARN && EntryRefusalKind.NON_CONTIGUOUS.text in it.formattedMessage }
+			.map { it.formattedMessage }
+
+	/** The simulation time a worker log line starts with. */
+	private fun simTimeOf(line: String): Double = line.substringBefore(' ').toDouble()
+
+	/** The InOut a worker log line names (`... InOut X - ...`). */
+	private fun inOutOf(line: String): String = line.substringAfter("InOut ").substringBefore(" -")
+
+	/**
+	 * Issue #1457: every InOut whose head train was refused logs exactly one threshold WARNING, at the
+	 * 120 s bound counted from that InOut's first refusal (each refused head train is its own train).
+	 */
+	private fun assertWarnedOncePerRefusedInOutAtTheBound(firstRefusalAt: Map<String, Double>) {
+		val warnings = refusalWarnings()
+		assertThat(warnings.map(::inOutOf).sorted(), "one WARNING per refused InOut; WARN lines: $warnings")
+			.isEqualTo(firstRefusalAt.keys.sorted())
+		for (line in warnings) {
+			assertThat(simTimeOf(line) - firstRefusalAt.getValue(inOutOf(line)), line)
+				.isBetween(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS, InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS + 2.0)
+		}
+	}
 
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
@@ -117,6 +166,7 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 			}
 
 		assertThat(errorStops, "no errorStop may end the run").isEmpty()
+		assertThat(refusalWarnings(), "a wait below the threshold logs no WARNING").isEmpty()
 		assertThat(delayedTrainId, "a queued train must have been seeded").isNotNull()
 		val deniedAt = requireNotNull(denialSeenAt) { "the stale-origin denial was never recorded" }
 		val reservedAt = requireNotNull(entryReservedAt) { "the delayed train never got its entry route" }
@@ -156,9 +206,10 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
-	@DisplayName("NonContiguousStart with no reservation held still stops the run at the first refusal")
-	fun nonContiguousStartWithoutHeldBlocksStaysFatal() {
-		var firstRefusalAt: Double? = null
+	@DisplayName("NonContiguousStart with no reservation held waits with simulated time advancing (Issue #1457)")
+	fun nonContiguousStartWithoutHeldBlocksWaitsWithSimulatedTimeAdvancing() {
+		// Issue #1457 converted this pin: it asserted the FATAL errorStop at the first refusal.
+		val refusalTimesByInOut = mutableMapOf<String, MutableList<Double>>()
 		val context =
 			loadContext { env, inOut, real ->
 				InOutWorker(
@@ -166,7 +217,7 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 					inOut,
 					pathReservationService =
 						refusing(real) {
-							if (firstRefusalAt == null) firstRefusalAt = Process.time()
+							refusalTimesByInOut.getOrPut(inOut.name) { mutableListOf() } += Process.time()
 							ReservationResult.NonContiguousStart(inOut.name, "injected by the test")
 						}
 				)
@@ -174,23 +225,29 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 
 		runShuntingLoop(context, END_TIME)
 
-		val (stoppedAt, error) = errorStops.single()
-		assertThat(error).isInstanceOf(SimulationException::class)
-		assertCapturedErrorStop(errorStops.map { it.second }, "non-contiguous")
-		assertThat(stoppedAt).isEqualTo(requireNotNull(firstRefusalAt))
+		assertThat(errorStops, "a non-contiguous refusal must not stop the run").isEmpty()
+		assertThat(refusalTimesByInOut.keys, "some InOut refused its head train").isNotEmpty()
+		for ((name, refusalTimes) in refusalTimesByInOut) {
+			assertThat(refusalTimes.size, "the refusal at $name is re-attempted").isGreaterThan(2)
+			assertThat(refusalTimes.zipWithNext { a, b -> b - a }, "simulated time advances between attempts at $name")
+				.each { it.isGreaterThanOrEqualTo(InOutWorker.STALE_ORIGIN_RETRY_SECONDS) }
+			assertThat(refusalTimes.last(), "the wait at $name lasts to the end time")
+				.isGreaterThanOrEqualTo(END_TIME - 2 * InOutWorker.STALE_ORIGIN_RETRY_SECONDS)
+		}
 	}
 
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
-	@DisplayName("a stale reservation that never expires stops the run at the 120 s bound")
-	fun staleReservationThatNeverExpiresStopsTheRunAtTheBound() {
-		var firstRefusalAt: Double? = null
+	@DisplayName("a stale reservation that never expires logs one WARNING at the 120 s bound and the run goes on")
+	fun staleReservationThatNeverExpiresWarnsOnceAtTheBound() {
+		// Issue #1457 converted this pin: it asserted the FATAL errorStop at the 120 s bound.
+		val firstRefusalAt = mutableMapOf<String, Double>()
 		val heldBlock = mockk<DynamicTrackBlock>()
 		val context =
 			loadContext { env, inOut, real ->
 				val refusingService =
 					refusing(real) {
-						if (firstRefusalAt == null) firstRefusalAt = Process.time()
+						firstRefusalAt.getOrPut(inOut.name) { Process.time() }
 						ReservationResult.NonContiguousStart(inOut.name, "injected by the test")
 					}
 				InOutWorker(
@@ -203,37 +260,37 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 				)
 			}
 
-		runShuntingLoop(context, END_TIME)
+		val loop = runShuntingLoop(context, END_TIME)
 
-		val (stoppedAt, error) = errorStops.single()
-		assertThat(error).isInstanceOf(SimulationException::class)
-		assertCapturedErrorStop(errorStops.map { it.second }, "stale reservation not expired")
-		assertThat(stoppedAt - requireNotNull(firstRefusalAt))
-			.isBetween(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS, InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS + 2.0)
+		assertThat(errorStops, "the bound is a WARNING threshold, not a stop").isEmpty()
+		assertWarnedOncePerRefusedInOutAtTheBound(firstRefusalAt)
 		assertThat(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS).isEqualTo(120.0)
+		assertThat(loop.getTrainsExited(), "the refused InOut keeps its train").isEqualTo(0)
 	}
 
 	/**
 	 * Issue #1295 review fix: after the first denial the entry path stays unavailable (another train
 	 * blocks it), so the worker can no longer re-attempt the reservation — and with the bare
 	 * `waitUntil(pathFree)` the denial-driven deadline check could never run again, parking the
-	 * worker past the episode's 120 s bound. The deadline must stay armed and stop the run at the
-	 * bound exactly as when further denials keep arriving (the test above). Ordinary contention
+	 * worker past the episode's 120 s bound. The threshold must stay armed and fire at the bound
+	 * exactly as when further denials keep arriving (the test above); since Issue #1457 it logs the
+	 * one WARNING instead of stopping the run. Ordinary contention
 	 * without a stale-origin episode stays on the plain `waitUntil` and must remain untimed-out —
 	 * that branch is what the healthy scenarios in this file already cover, since every run here
 	 * starts with no episode running.
 	 */
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
-	@DisplayName("an entry path that stays unavailable keeps the stale-origin deadline armed")
-	fun staleOriginDeadlineSurvivesAnUnavailableEntryPath() {
-		var firstRefusalAt: Double? = null
+	@DisplayName("an entry path that stays unavailable keeps the stale-origin WARNING threshold armed")
+	fun staleOriginThresholdSurvivesAnUnavailableEntryPath() {
+		// Issue #1457 converted this pin: it asserted the FATAL errorStop at the 120 s bound.
+		val firstRefusalAt = mutableMapOf<String, Double>()
 		val heldBlock = mockk<DynamicTrackBlock>()
 		val context =
 			loadContext { env, inOut, real ->
 				val refusingService =
 					refusing(real) {
-						if (firstRefusalAt == null) firstRefusalAt = Process.time()
+						firstRefusalAt.getOrPut(inOut.name) { Process.time() }
 						ReservationResult.NonContiguousStart(inOut.name, "injected by the test")
 					}
 				InOutWorker(
@@ -249,20 +306,15 @@ class InOutWorkerStaleOriginTest : KoinTestBase() {
 							override fun isPathToAnyNextSemaphoreAvailable(
 								start: PathSeparator,
 								next: TrackSection?
-							): Boolean = firstRefusalAt == null
+							): Boolean = inOut.name !in firstRefusalAt
 						}
 				)
 			}
 
 		runShuntingLoop(context, END_TIME)
 
-		assertThat(errorStops, "the run must still stop on the stale-origin deadline despite the unavailable path")
-			.isNotEmpty()
-		val (stoppedAt, error) = errorStops.single()
-		assertThat(error).isInstanceOf(SimulationException::class)
-		assertCapturedErrorStop(errorStops.map { it.second }, "stale reservation not expired")
-		assertThat(stoppedAt - requireNotNull(firstRefusalAt))
-			.isBetween(InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS, InOutWorker.STALE_ORIGIN_MAX_WAIT_SECONDS + 2.0)
+		assertThat(errorStops, "the bound is a WARNING threshold, not a stop").isEmpty()
+		assertWarnedOncePerRefusedInOutAtTheBound(firstRefusalAt)
 	}
 
 	/**

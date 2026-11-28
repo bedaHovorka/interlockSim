@@ -119,13 +119,13 @@ class ReservePathToAnyDedupTest : PathReservationServiceTestBase() {
 			service.releasePath("train1")
 
 			val precomputed = navigator.findAllSwitchConstrainedPaths(zA, inOutB)
-			counting.calls.clear()
+			counting.reset()
 			val viaOverload = service.reservePath("train1", zA, inOutB, 100, lazyOf(precomputed))
 
 			assertThat(viaOverload).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val overloadBlocks = (viaOverload as PathReservationService.ReservationResult.Success).reservedBlocks
 			assertThat(overloadBlocks).isEqualTo(publicBlocks)
-			assertThat(counting.calls.toMap(), name = "enumerations inside the overload").isEqualTo(emptyMap())
+			assertThat(counting.calls, name = "enumerations inside the overload").isEqualTo(emptyMap())
 		}
 
 		@Test

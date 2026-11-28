@@ -26,7 +26,9 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.PreparedEntryJourney
 import cz.vutbr.fit.interlockSim.dispatcher.agents.SinkHolder
 import cz.vutbr.fit.interlockSim.dispatcher.agents.StationCapacity
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelfileHashSource
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaModelfileHashSource
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationProjector
 import cz.vutbr.fit.interlockSim.dispatcher.observation.DispatcherObservationSource
@@ -119,6 +121,7 @@ internal fun ruleBasedRunParameters(runConfig: DispatcherRunConfig): RunParamete
  * | [DispatcherRunConfig] | singleton | [DispatcherRunConfig.fromProperties] |
  * | [OllamaExecutorConfig] | singleton | [OllamaExecutorConfig.default] |
  * | [OllamaSimpleExecutor] | singleton | [OllamaSimpleExecutor] |
+ * | [ModelfileHashSource] | singleton | [OllamaModelfileHashSource] |
  * | [ToolGroupRegistry] | singleton | [ToolGroupRegistry] |
  * | [NetworkPerceptionPort] | per [DefaultSimulationContext] | [DefaultNetworkPerceptionPort] |
  * | [NetworkActuatorPort] | per [DefaultSimulationContext] | [DefaultNetworkActuatorPort] |
@@ -219,6 +222,11 @@ val dispatcherAgentModule: Module =
 		single<OllamaSimpleExecutor> { OllamaSimpleExecutor(get()) } withOptions {
 			onClose { it?.close() }
 		}
+
+		// Issue #1342: reads the LLM run's model profile (the derived tag's Modelfile hash and
+		// num_predict) from Ollama's /api/show once at run start. Stateless: each fetch builds and
+		// closes its own short-lived client, so one instance serves every context.
+		single<ModelfileHashSource> { OllamaModelfileHashSource(get<OllamaExecutorConfig>().ollamaEndpoint) }
 
 		// Tool group registry (singleton).
 		// Registry logic is stateless; it just coordinates tool assembly per context.

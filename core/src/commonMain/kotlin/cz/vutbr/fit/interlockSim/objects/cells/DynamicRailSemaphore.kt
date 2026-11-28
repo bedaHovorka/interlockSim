@@ -78,8 +78,10 @@ sealed class DynamicRailSemaphore(
 	/**
 	 * Dynamic property: Current signal state (mutable, changes during simulation)
 	 *
-	 * Initial state is STOP for safety.
+	 * Initial state is STOP for safety. Single writer (the simulation thread); @Volatile publishes it
+	 * to the Swing EDT renderer and other reader threads (Issue #1128).
 	 */
+	@kotlin.concurrent.Volatile
 	open var signal: Signal = Signal.STOP
 		set(newSignal) {
 			val oldSignal = field
@@ -370,6 +372,8 @@ private class ConstantSemaphore(
 	static: RailSemaphore,
 	signal: Signal
 ) : DynamicRailSemaphore(static) {
+	// @Volatile to match the base property, so the read side stays uniform (Issue #1128)
+	@kotlin.concurrent.Volatile
 	override var signal: Signal = signal
 		set(_) {
 			// Ignore changes: constant semaphore signal must not change

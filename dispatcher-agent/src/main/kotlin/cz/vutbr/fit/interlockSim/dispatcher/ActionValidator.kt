@@ -14,6 +14,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.observation.QueuedTrainView
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainPhase
 import cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.sim.RouteRequestAdmission
+import cz.vutbr.fit.interlockSim.sim.RouteRequestAdmission.LegalOrigins
 
 /**
  * Pure, pre-execution validator for [DispatchAction] values (SP2c.3, Issue #826).
@@ -63,10 +65,12 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  *
  * ## Limitation of [RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION]
  *
- * This check is limited to HELD trains whose [cz.vutbr.fit.interlockSim.dispatcher.observation.TrainView.signalAheadName]
- * is non-null. For RUNNING trains the block-to-endpoint mapping requires topology data not
- * present in the observation, so no origin check is performed. The `:core` interlocking layer
- * rejects routes whose origin does not connect to the train's current block regardless.
+ * The origin rule is [RouteRequestAdmission.legalOriginsOf], shared with `RequestRouteTool`
+ * (Issue #1414): a train standing at a signal must start there, and an approved train that has not
+ * entered yet must start at its timetable entry or at the signal its entry route reaches. A moving
+ * train gets no origin check: its signal ahead changes under the dispatcher's feet and a look-ahead
+ * extension starts at the held route's end. The `:core` interlocking layer rejects routes whose
+ * origin does not connect to the train's footprint regardless.
  *
  * @param validEndpointNames Exact set of InOut and Signal names this network recognises.
  *   Captured once at agent construction — topology is static and never changes during a run.
@@ -379,19 +383,46 @@ class ActionValidator(
 			)
 		}
 
-		if (trainInList != null &&
-			trainInList.phase == TrainPhase.HELD &&
-			trainInList.signalAheadName != null &&
-			action.fromEndpointName != trainInList.signalAheadName
-		) {
-			return rejected(
-				RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION,
-				"Train '${action.trainId}' is HELD at signal '${trainInList.signalAheadName}'; " +
-					"fromEndpointName must be '${trainInList.signalAheadName}', got '${action.fromEndpointName}'"
-			)
-		}
+		if (trainInList != null) validateRequestRouteOrigin(action, trainInList)?.let { return it }
 
 		return null
+	}
+
+	/**
+	 * The origin rule shared with `RequestRouteTool`: [RouteRequestAdmission.legalOriginsOf] over the
+	 * same facts the tool reads from the snapshot, here from the train's [TrainView] (Issue #1414).
+	 * A queued train never reaches this check (it is refused as not admitted first), so the rule is
+	 * one of the two active cases or none (a moving train).
+	 */
+	private fun validateRequestRouteOrigin(
+		action: DispatchAction.RequestRoute,
+		train: TrainView
+	): ValidationVerdict.Rejected? {
+		val facts =
+			RouteRequestAdmission.OriginFacts(
+				isQueued = false,
+				isActive = true,
+				frontSectionName = train.frontSectionName,
+				timetableOriginName = train.originInOutName,
+				signalAheadName = train.signalAheadName,
+				velocity = train.velocityMps
+			)
+		val rule = RouteRequestAdmission.legalOriginsOf(facts, inOutNames) ?: return null
+		if (rule.accepts(action.fromEndpointName)) return null
+		val where =
+			when (rule) {
+				is LegalOrigins.AtSignal -> "is standing at signal '${rule.signal}'"
+				is LegalOrigins.AtEntry -> "is approved but has not entered the network yet (it enters at '${rule.entryInOut}')"
+				// Exhausts the sealed interface; unreachable for this caller: with isQueued
+				// hardcoded to false above, the rule can never be AtInOut (the rule returns it
+				// for a non-active train only).
+				is LegalOrigins.AtInOut -> "has not entered the network yet"
+			}
+		return rejected(
+			RejectionCode.ORIGIN_NOT_AT_TRAIN_POSITION,
+			"Train '${action.trainId}' $where; fromEndpointName must be " +
+				rule.names.joinToString(" or ") { "'$it'" } + ", got '${action.fromEndpointName}'"
+		)
 	}
 
 	/**

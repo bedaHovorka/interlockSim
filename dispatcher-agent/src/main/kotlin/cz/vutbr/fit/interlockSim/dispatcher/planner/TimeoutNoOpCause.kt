@@ -46,5 +46,16 @@ enum class TimeoutNoOpCause {
 	 * be distinguished from a dead model without an explicit, mandatory `no_op` emission
 	 * (SP2c.6), so it must never be scored as [TickOutcome.LLM_NO_OP].
 	 */
-	EMPTY_UNPARSEABLE
+	EMPTY_UNPARSEABLE,
+
+	/**
+	 * The generation was cut by the model profile's `num_predict` cap (Ollama `done_reason ==
+	 * "length"`, read by `OllamaReplyObserver`) and the cycle emitted nothing (Issue #1342). For a
+	 * thinking model the cap cuts thinking and content together, so nothing usable came back.
+	 *
+	 * Under R7 nothing acts after it: `KoogAgentPlanAdapter` neither retries the cycle nor runs the
+	 * rule-based fallback, and the circuit breaker counts it as a failure. A cut cycle that already
+	 * emitted keeps its emissions and is classified by them, not by this cause.
+	 */
+	THINKING_TRUNCATED
 }

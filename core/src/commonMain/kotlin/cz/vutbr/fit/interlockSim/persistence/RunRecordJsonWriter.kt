@@ -86,7 +86,7 @@ data class RecordedRun(
  */
 object RunRecordJsonWriter {
 	/** The run JSON schema this writer produces; equal to `DispatcherRunSnapshot.CURRENT_SCHEMA_VERSION`. */
-	const val SCHEMA_VERSION: Int = 13
+	const val SCHEMA_VERSION: Int = 16
 
 	/** The arm of a run that wired the synchronous rule-based dispatcher. */
 	const val ARM_RULE_BASED: String = "RULE_BASED"
@@ -223,6 +223,12 @@ object RunRecordJsonWriter {
 			)
 			put("example", run.example)
 			putAbsent("processWallSeconds")
+			// Schema 15 (Issue #1342): a run without an LLM has no model profile.
+			putAbsent("modelProfile")
+			// Schema 16 (Issue #1342): a run without an LLM made no LLM calls — a measured zero, the
+			// same figure a JVM recorder publishes for the run (RunRecordJsonReadBackTest compares
+			// the whole snapshots).
+			put("generationCutCycles", 0L)
 		}
 	}
 
@@ -294,6 +300,19 @@ object RunRecordJsonWriter {
 			put("realTimeRatio", performance?.realTimeRatio)
 			put("routeSearchBudgetExceeded", performance?.routeSearchBudgetExceeded?.toLong())
 			put("reservePathCalls", performance?.reservePathCalls?.toLong())
+			// Issue #1457 (schema version 14), as RunRecordOutcomes.toRefusedEntryOutcome maps it.
+			putJsonArray("refusedEntriesAtRunEnd") {
+				record.refusedEntriesAtRunEnd.forEach { entry ->
+					add(
+						buildJsonObject {
+							put("trainId", entry.trainId)
+							put("inOut", entry.inOutName)
+							put("kind", entry.kind.name)
+							put("since", entry.since)
+						}
+					)
+				}
+			}
 		}
 
 	private fun stall(record: RunRecord): JsonElement {

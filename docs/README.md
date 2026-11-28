@@ -60,6 +60,7 @@ Start with [GRID_PARAMETERIZATION_README.md](GRID_PARAMETERIZATION_README.md), t
 
 ## Goal 9B demand list
 
+- [PRAHA_PEAK_TIMETABLE.md](PRAHA_PEAK_TIMETABLE.md) - the Praha hl.n. peak-hour timetable 07:00-08:00 derived from the public timetable and scaled by the track-count ratio: sourced facts, estimates, line-to-InOut mapping, switch-legal changes, simplifications, turnaround share and the arrival-disturbance ranges (Goal 9B SP13.1, #1489).
 - [goal9b-demands/SP1-fail-fast-harness.md](goal9b-demands/SP1-fail-fast-harness.md) - reservation cost per entry attempt and attempt counts on Praha (Goal 1B SP1, #1148).
 - [goal9b-demands/SP2-station-abstraction.md](goal9b-demands/SP2-station-abstraction.md) - which station facts a dispatcher takes from the topology (capacity rule, platform tracks, entry/exit blocks) and which still come from per-scenario configuration (Goal 1B SP2, #1149).
 - [goal9b-demands/SP3-cerveny-ujezd-scenario.md](goal9b-demands/SP3-cerveny-ujezd-scenario.md) - the Červený Újezd scenario runs deterministically on the `Station` abstraction and launches by name (CLI, GUI, native); the run's Goal 9B demands D1–D6 (route conflict set, line-clear consent, shunting, per-line capacity, agent capacity, signal names) (Goal 1B SP3, #1150).

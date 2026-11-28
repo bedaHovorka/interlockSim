@@ -454,7 +454,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 			val offers = discovery.findNextSemaphoresVia(start, next)
 			// Offer validation ran inside the discovery (Issue #1390 review round) and consumed
 			// enumerations; this pin is about evaluateTargets' laziness, so counting starts after it.
-			counting.evaluations = 0
+			counting.reset()
 			val candidates = discovery.evaluateTargets(start, offers, null)
 			assertThat(counting.evaluations, name = "evaluations before iterating").isEqualTo(0)
 
@@ -469,7 +469,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 			val (start, next) = zAForwardSection()
 			assertThat(discovery.findNextSemaphoresVia(start, next).map { separatorLabel(it) })
 				.containsExactly("doB1", "doB2")
-			counting.evaluations = 0
+			counting.reset()
 
 			assertThat(discovery.isAnyNextTargetAvailable(start, next)).isTrue()
 
@@ -481,7 +481,7 @@ class ReservationTargetDiscoveryTest : PathReservationServiceTestBase() {
 		@Test
 		@DisplayName("findReservationTargetCandidates evaluates every target of the same two")
 		fun candidatesEvaluateEveryTarget() {
-			counting.evaluations = 0
+			counting.reset()
 
 			val candidates = discovery.findReservationTargetCandidates(separator("zA") as OrientedPathSeparator, null)
 

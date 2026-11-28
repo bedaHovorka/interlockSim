@@ -216,7 +216,8 @@ class DispatcherObservationProjector(
 					signalAheadAspect = perception.signalAheadAspect,
 					distanceToSignalAheadMetres = perception.distanceToSignalAheadMetres,
 					waitingSinceSimTime = waitStart,
-					waitSeconds = waitStart?.let { simTime - it } ?: 0.0
+					waitSeconds = waitStart?.let { simTime - it } ?: 0.0,
+					originInOutName = snapshot.trainTimetable(perception.trainId)?.originInOutName
 				)
 			}
 

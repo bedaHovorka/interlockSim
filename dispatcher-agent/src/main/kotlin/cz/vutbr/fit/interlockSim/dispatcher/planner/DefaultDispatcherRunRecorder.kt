@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelProfileRecord
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -100,9 +101,23 @@ import java.util.concurrent.atomic.AtomicReference
  * [finish] copy it atomically: no observer ever sees offered hops without their skipped offers,
  * or the flag flipped while the sums lag.
  *
+ * ## Cut generations (Issue #1342)
+ *
+ * [onTick] counts every tick whose [TickRecord.generationCut] is set into
+ * [DispatcherRunSnapshot.generationCutCycles] — the cycles of the run whose reply a `num_predict`
+ * cut hit, whatever their recorded outcome. The no-emission cut ending is already visible as
+ * `timeoutNoOpByCause[THINKING_TRUNCATED]`; the counter is the run JSON's structured trace for the
+ * mixed cycles the emission seal leaves behind: a command from an earlier complete reply classified
+ * their tick (as for any partial emission), and the cut still shows here. A counter, not a verdict:
+ * `0` means every run with the field wrote after the cut detection ran and saw none (the
+ * rule-based arm makes no LLM calls at all); `null` means not measured — a run JSON written before
+ * schema 16, or a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot whose child JVM never reported it.
+ *
  * @param runId Opaque unique identifier (typically a UUID or `yyyyMMdd-HHmmss-<short-uuid>`).
  * @param arm Which dispatcher implementation arm is active.
  * @param params Fixed run parameters captured at run start.
+ * @param modelProfile The LLM run's model profile read at run start (Issue #1342), copied into every
+ *   snapshot as [DispatcherRunSnapshot.modelProfile]; `null` for a run with no LLM.
  *
  * @since Issue #845 (SP2c.22 — run identity and per-run JSON persistence)
  */
@@ -110,7 +125,8 @@ class DefaultDispatcherRunRecorder(
 	override val runId: String,
 	private val arm: DispatcherArm,
 	private val params: RunParameters,
-	private val circuitBreaker: LlmCircuitBreaker? = null
+	private val circuitBreaker: LlmCircuitBreaker? = null,
+	private val modelProfile: ModelProfileRecord? = null
 ) : DispatcherRunRecorder {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -128,6 +144,11 @@ class DefaultDispatcherRunRecorder(
 
 	private val timeoutNoOpByCause: ConcurrentHashMap<String, AtomicLong> =
 		concurrentEnumCounters(TimeoutNoOpCause.entries) { it.name }
+
+	// Issue #1342 (owner ruling of 2026-11-27): every cycle whose reply was cut, whatever the
+	// outcome its emissions classified — the run JSON's structured trace of the mixed cycles, which
+	// the THINKING_TRUNCATED cause of timeoutNoOpByCause does not reach (see generationCutCycles).
+	private val generationCutCycles = AtomicLong(0L)
 
 	// ── Latency tracking ─────────────────────────────────────────────────────
 
@@ -225,6 +246,7 @@ class DefaultDispatcherRunRecorder(
 	override fun onTick(record: TickRecord) {
 		ticksByOutcome.getValue(record.outcome.name).incrementAndGet()
 		record.timeoutNoOpCause?.let { cause -> timeoutNoOpByCause.getValue(cause.name).incrementAndGet() }
+		if (record.generationCut) generationCutCycles.incrementAndGet()
 		record.latencyMs?.let { latencySamplesMs.add(it) }
 		record.silentNonIdleCycleIndex?.let { silentNonIdleCycleIndices.add(it) }
 		updateOfferState(record)
@@ -500,7 +522,9 @@ class DefaultDispatcherRunRecorder(
 			offeredNextSectionHops = if (offersMeasured) offeredSum else null,
 			skippedNextSectionOffersStandingAtSignal = if (offersMeasured) standingSum else null,
 			longestSkippedOfferStreakCycles = if (offersMeasured) streakCycles else null,
-			longestSkippedOfferStreakSimSeconds = if (offersMeasured) streakSimSeconds else null
+			longestSkippedOfferStreakSimSeconds = if (offersMeasured) streakSimSeconds else null,
+			modelProfile = modelProfile,
+			generationCutCycles = generationCutCycles.get()
 		)
 	}
 

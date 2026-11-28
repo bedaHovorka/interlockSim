@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.planner
 import cz.vutbr.fit.interlockSim.dispatcher.ApplyFailureCode
 import cz.vutbr.fit.interlockSim.dispatcher.RejectionCode
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ActionAuthor
+import cz.vutbr.fit.interlockSim.dispatcher.executor.ModelProfileRecord
 import kotlinx.serialization.Serializable
 
 /**
@@ -24,7 +25,7 @@ import kotlinx.serialization.Serializable
  *
  * [schemaVersion] is incremented whenever fields are added or removed, or when an enum
  * vocabulary used by a stored field changes, so that the SP2c.23 aggregator can detect and
- * handle old JSON files without crashing. Current version: **12** (version 2 added
+ * handle old JSON files without crashing. Current version: **16** (version 2 added
  * [railwayOutcome], Issue #834/SP2c.11; version 3 added [loggedFatalSimExceptionCount] and
  * [loggedFatalSimExceptionFirstMessage] under the now-superseded names; version 5 renamed those
  * fields to their current names, Issue #913; version 6 added [actionableTickRate], Issue #927;
@@ -35,7 +36,10 @@ import kotlinx.serialization.Serializable
  * [staleOriginRefusalsAfterSilentCycle], Issue #1365, persisted the run record figures in
  * [railwayOutcome], Issue #676; version 12 added the skipped NEXT SECTION offer figures
  * from [skippedNextSectionOffers] to [longestSkippedOfferStreakSimSeconds], Issue #1302; version 13
- * added the performance row and [example], Issue #1306).
+ * added the performance row and [example], Issue #1306; version 14 added
+ * [RailwayOutcome.refusedEntriesAtRunEnd], Issue #1457; version 15 added [modelProfile] and the
+ * [TimeoutNoOpCause.THINKING_TRUNCATED] cause key, Issue #1342; version 16 added
+ * [generationCutCycles], the owner ruling of the #1342 review round).
  *
  * ### Compatibility with version 1 and 2 files — decided, not discovered
  *
@@ -205,6 +209,18 @@ import kotlinx.serialization.Serializable
  *   from launching the child JVM to its exit: JVM start, network loading, the run and its persistence
  *   (Issue #1306). The kernel-only wall is [RailwayOutcome.wallSeconds]. Present for an aborted run
  *   too (a timed-out run carries its timeout); `null` outside a sweep and in files before version 12.
+ * @property modelProfile The derived Ollama tag the LLM run used, its Modelfile hash and its
+ *   `num_predict` cap, read from `/api/show` at run start (Issue #1342). `null` for a run with no LLM
+ *   (the rule-based arms), a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot, and files before version 15.
+ * @property generationCutCycles The cycles of the run whose reply the model profile's `num_predict`
+ *   cut (Ollama `done_reason == "length"`, read per cycle by `OllamaReplyObserver`), whatever their
+ *   recorded outcome — the owner ruling of the #1342 review round. The no-emission cut ending shows
+ *   as `timeoutNoOpByCause[THINKING_TRUNCATED]`; the counter is the structured trace for the mixed
+ *   cycles the emission seal leaves behind: a command from an earlier complete reply classified
+ *   their tick, and the cut still shows here. A counter, not a verdict: `0` means measured as none
+ *   (the rule-based arm makes no LLM calls); `null` means *not measured* — a run JSON written
+ *   before this field existed, or a synthetic `TIMEOUT_ABORT` / `CRASH` snapshot whose child JVM
+ *   never reported it.
  *
  * @see DispatcherRunRecorder
  * @see RunSnapshotStore
@@ -265,7 +281,9 @@ data class DispatcherRunSnapshot(
 	val longestSkippedOfferStreakCycles: Long? = null,
 	val longestSkippedOfferStreakSimSeconds: Double? = null,
 	val example: String? = null,
-	val processWallSeconds: Double? = null
+	val processWallSeconds: Double? = null,
+	val modelProfile: ModelProfileRecord? = null,
+	val generationCutCycles: Long? = null
 ) {
 	companion object {
 		/**
@@ -348,10 +366,26 @@ data class DispatcherRunSnapshot(
 		 *   [processWallSeconds]. Every new field
 		 *   defaults to `null`, so every version 1-12 file still decodes, with them absent; no existing
 		 *   field changed meaning.
+		 * - **14** — Issue #1457 (Goal 9B SP3.2), [railwayOutcome] gained
+		 *   [RailwayOutcome.refusedEntriesAtRunEnd]: the trains a non-contiguous entry refusal kept
+		 *   waiting at their InOut to the end of the run, which used to end the run with a FATAL
+		 *   `SimulationException` instead. It defaults to `null`, so every version 1-13 file still
+		 *   decodes, with it absent (not measured).
+		 * - **15** — Issue #1342, added [modelProfile] (the derived Ollama tag, the SHA-256 of its
+		 *   Modelfile and its `num_predict`) and the [TimeoutNoOpCause.THINKING_TRUNCATED] key of
+		 *   [timeoutNoOpByCause], counting cycles whose generation the cap cut. [modelProfile]
+		 *   defaults to `null`, so every version 1-14 file still decodes, with it absent; their
+		 *   cause map lacks the new key, which means not measured — older runs could not see a cut
+		 *   generation, so a cut there ended as a silent cycle, a failure or a fallback.
+		 * - **16** — Issue #1342 (the owner ruling of the 2026-11-27 review round), added
+		 *   [generationCutCycles]: the cycles a cut generation hit, whatever the tick outcome their
+		 *   emissions classified. It defaults to `null`, so every version 1-15 file still decodes,
+		 *   with it absent (not measured) — the cuts before it shipped are only named in the cause
+		 *   map above, and only for their no-emission endings.
 		 *
 		 * A bump also changes `RunRecordJsonWriter.SCHEMA_VERSION` (`:core`) and its keys (Issue #1327).
 		 */
-		const val CURRENT_SCHEMA_VERSION: Int = 13
+		const val CURRENT_SCHEMA_VERSION: Int = 16
 
 		/**
 		 * Schema version that introduced [actionableTickRate] (Issue #927). Snapshots decoded

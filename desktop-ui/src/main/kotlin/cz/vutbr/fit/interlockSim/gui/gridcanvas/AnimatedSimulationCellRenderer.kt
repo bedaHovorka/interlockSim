@@ -73,8 +73,11 @@ private val logger = KotlinLogging.logger {}
  * - No synchronization needed (single-threaded rendering)
  * - Two reads bypass the captured state and come live from the cell (Issue #1008):
  *   [DynamicInOut.occupied], a @Volatile field written by the simulation thread, and, only when
- *   no switch state was captured, [DynamicRailSwitch.locked] — a plain field, the same fallback
- *   as the switch configuration
+ *   no switch state was captured, [DynamicRailSwitch.locked] — a @Volatile field (Issue #1128),
+ *   the same fallback as the switch configuration. `conf` and `locked` are two separate volatile
+ *   reads, so one frame can show one new and one old value; that is cosmetic for painting. An
+ *   off-thread reader that acts on switch state must use the planning snapshot instead
+ *   (#1438, #1468)
  *
  * ## Performance
  *

@@ -123,6 +123,10 @@ import kotlinx.serialization.Serializable
  * @property routeSearchBudgetExceeded Route searches stopped at their node budget (Issue #1151).
  * @property reservePathCalls Public route requests of `PathReservationService`, each counted once:
  *   `reservePath`, `reservePathToAny` and `reservePathToAnyNextSemaphore` (`RunPerformance.reservePathCalls`).
+ * @property refusedEntriesAtRunEnd The trains still waiting at their InOut on a refused entry route when
+ *   the run ended (`RunRecord.refusedEntriesAtRunEnd`, schema version 14, Issue #1457), sorted by train
+ *   name; an empty list is a measured none. `null` in older files and in a run that had not ended when
+ *   it was read — *not measured*.
  *
  * @see DispatcherRunSnapshot.railwayOutcome
  * @since Issue #834 (SP2c.11 — record what the railway achieved, not just decision hygiene)
@@ -156,7 +160,8 @@ data class RailwayOutcome(
 	val simulationSeconds: Double? = null,
 	val realTimeRatio: Double? = null,
 	val routeSearchBudgetExceeded: Long? = null,
-	val reservePathCalls: Long? = null
+	val reservePathCalls: Long? = null,
+	val refusedEntriesAtRunEnd: List<RefusedEntryOutcome>? = null
 ) {
 	companion object {
 		/**

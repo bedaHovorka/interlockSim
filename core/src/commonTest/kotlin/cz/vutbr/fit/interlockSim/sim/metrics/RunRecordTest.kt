@@ -15,8 +15,10 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.startsWith
+import cz.vutbr.fit.interlockSim.sim.EntryRefusalKind
 import cz.vutbr.fit.interlockSim.sim.FailedReservationKind
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.RefusedEntry
 import kotlin.test.Test
 
 /**
@@ -117,5 +119,17 @@ class RunRecordTest {
 
 		assertThat(line).contains("stall none")
 		assertThat(line).contains("capacity shown none of topology 4")
+		assertThat(line).contains("refused entries 0")
+	}
+
+	/** Issue #1457: the record names each train a refused entry kept waiting, its InOut and the reason. */
+	@Test
+	fun `the summary line names the trains still refused entry at run end`() {
+		val refused = RefusedEntry("Train #10", "east_exit_1", EntryRefusalKind.NON_CONTIGUOUS, since = 2.0)
+		val record = checkNotNull(ended.copy(refusedEntriesAtRunEnd = listOf(refused)).toRunRecord())
+
+		assertThat(record.refusedEntriesAtRunEnd).isEqualTo(listOf(refused))
+		assertThat(record.summaryLine())
+			.contains("refused entries 1 [Train #10 at east_exit_1 since t=2.0 (entry refused: non-contiguous)]")
 	}
 }

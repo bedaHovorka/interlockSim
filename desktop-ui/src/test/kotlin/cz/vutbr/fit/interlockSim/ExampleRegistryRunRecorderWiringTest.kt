@@ -13,12 +13,14 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherArm
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherRunRecorder
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RunSnapshotStore
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TEST_MODELFILE_SHA256
 import cz.vutbr.fit.interlockSim.testutil.createExampleContext
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
@@ -73,6 +75,9 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 
 		assertThat(snapshot.arm, "recorded arm").isEqualTo(DispatcherArm.LLM_TOOL_CALLING)
 		assertThat(snapshot.params.model, "recorded model").isNotEmpty()
+		// Issue #1342: the model profile is read at run start from the bound ModelfileHashSource.
+		assertThat(snapshot.modelProfile?.tag, "model profile tag").isEqualTo(snapshot.params.model)
+		assertThat(snapshot.modelProfile?.modelfileSha256, "model profile hash").isEqualTo(TEST_MODELFILE_SHA256)
 	}
 
 	@Test
@@ -108,6 +113,7 @@ class ExampleRegistryRunRecorderWiringTest : KoinTestBase() {
 		val recorder = checkNotNull(context.scope.getOrNull<DispatcherRunRecorder>())
 
 		assertThat(recorder.snapshot().arm, "recorded arm").isEqualTo(DispatcherArm.RULE_BASED)
+		assertThat(recorder.snapshot().modelProfile, "a rule-based run has no model profile").isNull()
 	}
 
 	/**

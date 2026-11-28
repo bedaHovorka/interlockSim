@@ -1,6 +1,6 @@
 # CLAUDE.md — :core-test
 
-**Last Updated:** 2026-11-01
+**Last Updated:** 2026-11-27
 
 Guidance for Claude Code when working in `:core-test`. Repo-wide rules live in
 the [root CLAUDE.md](../CLAUDE.md).
@@ -25,8 +25,15 @@ tripwire of Issue #1011 (see Contents).
 - `src/commonMain/kotlin/.../testutil/` — `CommonTestFixtures`, `TestTopologies`,
   `TestContextBuilder`, `MockSimulationContext`, `CommonKoinTestBase`,
   `SharedSimulationTestScopesModule` (shared Koin test bindings, Issue #1029),
-  `ContextTracker`, `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
-  (sampling-regression helpers), and others.
+  `ContextTracker`, `FaultInjectionProcessFixture` (a kDisco process that holds until simulated time `failAt`
+  — absolute, not a duration: a delayed activation holds only the remaining stretch, and an activation after
+  the target is rejected — and throws a configurable throwable, default a FATAL `SimulationException`; Issue
+  #1451, pinned by `FaultInjectionProcessFixtureTest` in `jvmTest`; the default fault is built when thrown, so
+  its model time equals `failAt`, while a read before the throw returns an uncached preview; on Kotlin/Native
+  an uncaught process exception kills the test process, so native tests configure a `CancellationException`, as
+  `:core` commonTest `FaultInjectionProcessFixtureThrowTimeTest` does), `ShuntingLoopRuns`, `ArrivalTally`, `runSampled`/`sameStatic`/`separatorLabel`
+  (sampling-regression helpers), `PrahaPeakTimetable` (the Goal 9B SP13.1 Praha hl.n.
+  peak-hour test data, Issue #1489, see `docs/PRAHA_PEAK_TIMETABLE.md`), and others.
 - `src/jvmMain/kotlin/.../testutil/` — JVM-only helpers (`TestFixtures`,
   `NavigationDecoratingContext`, `FirstTrainOwnershipConflict` (holds one train in an
   ownership-conflict wait, Issues #943/#1244), `TrainErrorStopMessages` (the `Train`
