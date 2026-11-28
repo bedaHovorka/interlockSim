@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.CandidateTarget
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
@@ -36,8 +37,13 @@ import kotlin.reflect.full.primaryConstructor
  * arguments and nullable types. It does not walk declared fields: those include the `$delegate`
  * `Lazy` fields of the [SimulationSnapshot] lookup maps, which derive only from captured lists.
  *
- * Each SP4 facet extends [EXPECTED_READING_TYPES] (#1468 adds [SwitchReading]); a facet that adds a
- * reading type without listing it here fails, so the list stays the reviewed inventory.
+ * Each SP4 facet extends [EXPECTED_READING_TYPES] (#1468 adds [SwitchReading], #1470 adds
+ * [ContentionReading]); a facet that adds a reading type without listing it here fails, so the list
+ * stays the reviewed inventory.
+ *
+ * Issue #1470 (Goal 9B SP4.4) adds [ContentionReading]. Its "no `DynamicTrackBlock`" criterion is the
+ * violation check: a `DynamicTrackBlock` anywhere in the walk is neither a value leaf nor a reading
+ * data class, so it is reported; [aReadingThatHoldsALiveBlockIsRejected] proves it.
  */
 class PlanningSnapshotValueTypeArchitectureTest {
 	private data class Walk(
@@ -113,6 +119,12 @@ class PlanningSnapshotValueTypeArchitectureTest {
 			.contains(SwitchReading::class)
 	}
 
+	@Test
+	fun theContentionFacetIsPartOfTheSnapshot() {
+		assertThat(walk(DispatchLoopSnapshot::class).reached, name = "reachable data classes")
+			.contains(ContentionReading::class)
+	}
+
 	/** Proves the walker fails on a live object: a reading that holds a [DynamicRailSwitch]. */
 	@Test
 	fun aReadingThatHoldsALiveSwitchIsRejected() {
@@ -123,10 +135,26 @@ class PlanningSnapshotValueTypeArchitectureTest {
 			.contains(DynamicRailSwitch::class.qualifiedName.orEmpty())
 	}
 
+	/** Proves the walker fails on a live track section: a reading that holds a [DynamicTrackBlock]. */
+	@Test
+	fun aReadingThatHoldsALiveBlockIsRejected() {
+		val walk = walk(LiveBlockHoldingReading::class)
+
+		assertThat(walk.violations, name = "violations for a live-block reading").isNotEmpty()
+		assertThat(walk.violations.joinToString(), name = "violation text")
+			.contains(DynamicTrackBlock::class.qualifiedName.orEmpty())
+	}
+
 	/** Not a real reading: a fixture for [aReadingThatHoldsALiveSwitchIsRejected]. */
 	private data class LiveSwitchHoldingReading(
 		val name: String,
 		val switches: List<DynamicRailSwitch?>
+	)
+
+	/** Not a real reading: a fixture for [aReadingThatHoldsALiveBlockIsRejected]. */
+	private data class LiveBlockHoldingReading(
+		val sectionId: String,
+		val block: DynamicTrackBlock?
 	)
 
 	private companion object {
@@ -157,7 +185,8 @@ class PlanningSnapshotValueTypeArchitectureTest {
 				TrainPositionReading::class,
 				TimetableReading::class,
 				TrainPerceptionReading::class,
-				SwitchReading::class // #1468
+				SwitchReading::class, // #1468
+				ContentionReading::class // #1470
 			)
 	}
 }

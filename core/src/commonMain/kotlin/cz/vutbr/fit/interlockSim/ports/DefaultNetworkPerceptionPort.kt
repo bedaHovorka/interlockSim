@@ -45,6 +45,8 @@ import cz.vutbr.fit.interlockSim.util.switchesByStableName
  * - **Switches** (Issue #1468) — every [DynamicRailSwitch] cell, scanned once at construction
  *   with its grid position; position and lock are read live from the switch, the owning train from
  *   [PathReservationRegistry.getSwitchOwner] of the context's scope.
+ * - **Open contentions** — read from `RoutingServices.getContentionQuery()` at capture
+ *   time and mapped to values (Issue #1470); see [captureSnapshot].
  * - **Train positions and timetables** — derived from the [activeTrains] supplier,
  *   which must provide the list of currently approved, running trains at the moment
  *   of each query.  Trains in the unapproved queue are intentionally excluded
@@ -362,6 +364,35 @@ class DefaultNetworkPerceptionPort(
 		)
 	}
 
+	// ── Open contentions (Issue #1470) ────────────────────────────────────
+
+	/**
+	 * Every open blocked-path contention as a [ContentionReading], in the order
+	 * `ContentionQuery.openContentions` reports them (Issue #1470, Goal 9B SP4.4).
+	 *
+	 * Reads `RoutingServices.getContentionQuery()` once, on the simulation thread like every other
+	 * facet; the query is read-only, so the capture changes no tracking and emits no event. The live
+	 * `OpenContention.block` never leaves this method: it is mapped to its
+	 * [BlockOccupancyReading.sectionId] through [sectionIdByBlock], the same table the [blocks][SimulationSnapshot.blocks]
+	 * facet uses, so the two facets join by section id.
+	 *
+	 * @throws IllegalStateException if a contention names a block outside the network graph: it has
+	 *   no section id, and a blank one would silently break the join.
+	 */
+	private fun allContentions(): List<ContentionReading> =
+		env.getRoutingServices().getContentionQuery().openContentions().map { contention ->
+			ContentionReading(
+				waitingTrainId = contention.trainId,
+				sectionId =
+					checkNotNull(sectionIdByBlock[contention.block]) {
+						"Open contention of train ${contention.trainId} is on block " +
+							"${blockId(contention.block)}, which is not in this network's graph and has no section id"
+					},
+				ownerTrainId = contention.owner,
+				sinceSimTime = contention.since
+			)
+		}
+
 	// ── Full snapshot ─────────────────────────────────────────────────────
 
 	/**
@@ -403,8 +434,9 @@ class DefaultNetworkPerceptionPort(
 	 * (0.1% of a 342 ms `shuntingLoop 300` run), so retaining the complete, thread-safe
 	 * snapshot is intentional.
 	 *
-	 * Calls each `allXxx()` bulk query in sequence, then samples the switches (Issue #1468).
-	 * Because kDisco runs on a single simulation thread, all six calls observe the same simulation state — no events
+	 * Calls each `allXxx()` bulk query in sequence, then samples the switches (Issue #1468) and reads
+	 * the open contentions (Issue #1470). Because kDisco runs on a single simulation thread, all the
+	 * calls observe the same simulation state — no events
 	 * interleave between them during a normal tick. The result is published via
 	 * [latestCaptured] so off-thread [snapshot] callers see a consistent picture.
 	 *
@@ -420,7 +452,8 @@ class DefaultNetworkPerceptionPort(
 				trainPositions = allTrainPositions(),
 				timetables = allTrainTimetables(),
 				trainPerceptions = allTrainPerceptions(),
-				switches = allSwitchReadings()
+				switches = allSwitchReadings(),
+				contentions = allContentions()
 			)
 		latestCaptured = captured
 		return captured

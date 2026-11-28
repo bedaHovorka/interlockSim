@@ -30,6 +30,7 @@ package cz.vutbr.fit.interlockSim.ports
  * | [timetables]    | [NetworkPerceptionPort.allTrainTimetables] | Route and schedule of every active train |
  * | [trainPerceptions] | [NetworkPerceptionPort.allTrainPerceptions] | First-person perception of every active train |
  * | [switches]      | `DynamicRailSwitch.conf`/`locked`, `PathReservationRegistry.getSwitchOwner` | Position, lock and owner of every switch |
+ * | [contentions]   | `RoutingServices.getContentionQuery()` | Which train waits for which section, held by whom |
  *
  * ## Design note
  *
@@ -65,6 +66,11 @@ package cz.vutbr.fit.interlockSim.ports
  * @property switches  Position, lock and owning train of every switch in the network, one
  *   [SwitchReading] each, in grid scan order (Issue #1468, Goal 9B SP4.2). Defaults to [emptyList]
  *   for snapshots built by hand and for [EMPTY].
+ * @property contentions  Every open blocked-path contention, in the order
+ *   `ContentionQuery.openContentions` reports them (first observed first): which train waits for
+ *   which track section ([ContentionReading.sectionId], the join key to [blocks]) and which train
+ *   holds it (Issue #1470, Goal 9B SP4.4). Values only, never the live `DynamicTrackBlock`.
+ *   Defaults to [emptyList]: a snapshot built by hand, or before the first capture, has none.
  *
  * @since Issue #543 (SP0.4 — Goal 10 observable simulation state)
  */
@@ -75,7 +81,8 @@ data class SimulationSnapshot(
 	val trainPositions: List<TrainPositionReading>,
 	val timetables: List<TimetableReading>,
 	val trainPerceptions: List<TrainPerceptionReading> = emptyList(),
-	val switches: List<SwitchReading> = emptyList()
+	val switches: List<SwitchReading> = emptyList(),
+	val contentions: List<ContentionReading> = emptyList()
 ) {
 	// ── Map-backed lookups (#967) ──────────────────────────────────────────
 	//
